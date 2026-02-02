@@ -1,7 +1,7 @@
 // src/app/components/tabs/RevenueForecastTab.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -31,9 +31,9 @@ interface RevenueForecastTabProps {
 }
 
 export default function RevenueForecastTab({ income }: RevenueForecastTabProps) {
-  const [alpha, setAlpha] = useState(0.6);
-  const [beta, setBeta] = useState(0.3);
   const [forecastYears, setForecastYears] = useState(5);
+  const [optimizedParams, setOptimizedParams] = useState<{ alpha: number; beta: number; mse: number } | null>(null);
+  const [isOptimizing, setIsOptimizing] = useState(false);
 
   // ────────────────────────────────────────────────
   // Preparar datos históricos (orden cronológico ascendente)
@@ -50,6 +50,94 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       }));
   }, [income]);
 
+  // ────────────────────────────────────────────────
+  // Función para calcular Holt con alpha y beta dados
+  // Retorna los valores fitted (para comparar con histórico) y el MSE
+  // ────────────────────────────────────────────────
+  const calculateHolt = (revenues: number[], alpha: number, beta: number) => {
+    if (revenues.length < 2) return { fitted: [], mse: Infinity, level: 0, trend: 0 };
+
+    // Inicialización
+    let level = revenues[0];
+    let trend = revenues[1] - revenues[0];
+
+    const fitted: number[] = [level]; // El primer valor fitted es el nivel inicial
+
+    // Calcular valores fitted para cada punto histórico
+    for (let t = 1; t < revenues.length; t++) {
+      const prevLevel = level;
+      // Predicción para este punto (antes de ver el dato real)
+      const prediction = prevLevel + trend;
+      fitted.push(prediction);
+
+      // Actualizar nivel y tendencia después de ver el dato real
+      level = alpha * revenues[t] + (1 - alpha) * (prevLevel + trend);
+      trend = beta * (level - prevLevel) + (1 - beta) * trend;
+    }
+
+    // Calcular MSE (Mean Squared Error) entre fitted y actuals
+    let sumSquaredError = 0;
+    for (let i = 1; i < revenues.length; i++) {
+      const error = revenues[i] - fitted[i];
+      sumSquaredError += error * error;
+    }
+    const mse = sumSquaredError / (revenues.length - 1);
+
+    return { fitted, mse, level, trend };
+  };
+
+  // ────────────────────────────────────────────────
+  // Optimizar alpha y beta para minimizar MSE
+  // ────────────────────────────────────────────────
+  useEffect(() => {
+    if (historical.length < 3) return;
+
+    setIsOptimizing(true);
+    const revenues = historical.map((d) => d.revenue);
+
+    let bestAlpha = 0.5;
+    let bestBeta = 0.5;
+    let bestMSE = Infinity;
+
+    // Grid search: probar combinaciones de alpha y beta
+    const step = 0.05;
+    for (let alpha = 0.05; alpha <= 0.95; alpha += step) {
+      for (let beta = 0.05; beta <= 0.95; beta += step) {
+        const { mse } = calculateHolt(revenues, alpha, beta);
+        if (mse < bestMSE) {
+          bestMSE = mse;
+          bestAlpha = alpha;
+          bestBeta = beta;
+        }
+      }
+    }
+
+    // Refinamiento con step más pequeño alrededor del mejor encontrado
+    const fineStep = 0.01;
+    const alphaStart = Math.max(0.01, bestAlpha - 0.1);
+    const alphaEnd = Math.min(0.99, bestAlpha + 0.1);
+    const betaStart = Math.max(0.01, bestBeta - 0.1);
+    const betaEnd = Math.min(0.99, bestBeta + 0.1);
+
+    for (let alpha = alphaStart; alpha <= alphaEnd; alpha += fineStep) {
+      for (let beta = betaStart; beta <= betaEnd; beta += fineStep) {
+        const { mse } = calculateHolt(revenues, alpha, beta);
+        if (mse < bestMSE) {
+          bestMSE = mse;
+          bestAlpha = alpha;
+          bestBeta = beta;
+        }
+      }
+    }
+
+    setOptimizedParams({
+      alpha: Math.round(bestAlpha * 100) / 100,
+      beta: Math.round(bestBeta * 100) / 100,
+      mse: bestMSE,
+    });
+    setIsOptimizing(false);
+  }, [historical]);
+
   if (historical.length < 3) {
     return (
       <div className="text-center py-16 text-gray-400 text-xl">
@@ -58,63 +146,60 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
     );
   }
 
+  const revenues = historical.map((d) => d.revenue);
+
   // ────────────────────────────────────────────────
-  // 1. Holt's Linear Trend
+  // 1. Holt's Linear Trend con parámetros optimizados
   // ────────────────────────────────────────────────
-  const holtForecast = useMemo(() => {
-    const revenues = historical.map((d) => d.revenue);
-    if (revenues.length < 2) return [];
+  const alpha = optimizedParams?.alpha || 0.5;
+  const beta = optimizedParams?.beta || 0.5;
 
-    let level = revenues[0];
-    let trend = revenues[1] - revenues[0];
+  const holtResult = calculateHolt(revenues, alpha, beta);
+  const { fitted: holtFitted, level: finalLevel, trend: finalTrend } = holtResult;
 
-    // Entrenamos con todos los datos históricos
-    for (let t = 1; t < revenues.length; t++) {
-      const prevLevel = level;
-      level = alpha * revenues[t] + (1 - alpha) * (prevLevel + trend);
-      trend = beta * (level - prevLevel) + (1 - beta) * trend;
-    }
+  // Forecast para los próximos años
+  const holtForecast: number[] = [];
+  let currentLevel = finalLevel;
+  let currentTrend = finalTrend;
 
-    // Forecast para los próximos años
-    const forecasts: number[] = [];
-    let currentLevel = level;
-    let currentTrend = trend;
-
-    for (let i = 1; i <= forecastYears; i++) {
-      currentLevel = currentLevel + currentTrend;
-      forecasts.push(currentLevel);
-    }
-
-    return forecasts;
-  }, [historical, alpha, beta, forecastYears]);
+  for (let i = 1; i <= forecastYears; i++) {
+    const forecast = currentLevel + currentTrend;
+    holtForecast.push(forecast);
+    currentLevel = forecast;
+  }
 
   // ────────────────────────────────────────────────
   // 2. Regresión lineal simple (por año)
   // ────────────────────────────────────────────────
-  const regressionForecast = useMemo(() => {
-    const n = historical.length;
-    if (n < 3) return [];
+  const n = historical.length;
+  const x = historical.map((_, i) => i);
+  const y = revenues;
 
-    const x = historical.map((_, i) => i); // 0,1,2,...
-    const y = historical.map((d) => d.revenue);
+  const sumX = x.reduce((a, b) => a + b, 0);
+  const sumY = y.reduce((a, b) => a + b, 0);
+  const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+  const sumX2 = x.reduce((sum, xi) => sum + xi * xi, 0);
 
-    const sumX = x.reduce((a, b) => a + b, 0);
-    const sumY = y.reduce((a, b) => a + b, 0);
-    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
-    const sumX2 = x.reduce((sum, xi) => sum + xi * xi, 0);
+  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
 
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
+  // Fitted values para regresión (en datos históricos)
+  const regressionFitted = x.map((xi) => intercept + slope * xi);
 
-    // Predecir próximos años
-    const forecasts: number[] = [];
-    for (let i = 1; i <= forecastYears; i++) {
-      const nextX = n - 1 + i;
-      forecasts.push(intercept + slope * nextX);
-    }
+  // Predecir próximos años
+  const regressionForecast: number[] = [];
+  for (let i = 1; i <= forecastYears; i++) {
+    const nextX = n - 1 + i;
+    regressionForecast.push(intercept + slope * nextX);
+  }
 
-    return forecasts;
-  }, [historical, forecastYears]);
+  // Calcular MSE de regresión
+  let regressionMSE = 0;
+  for (let i = 0; i < revenues.length; i++) {
+    const error = revenues[i] - regressionFitted[i];
+    regressionMSE += error * error;
+  }
+  regressionMSE /= revenues.length;
 
   // ────────────────────────────────────────────────
   // Preparar datos para el gráfico
@@ -143,7 +228,22 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       },
       {
         type: 'line' as const,
-        label: 'Holt Linear Trend Forecast',
+        label: 'Holt Fitted (histórico)',
+        data: [
+          ...holtFitted,
+          ...Array(forecastYears).fill(null),
+        ],
+        borderColor: 'rgba(16, 185, 129, 0.5)',
+        backgroundColor: 'rgba(16, 185, 129, 0.5)',
+        borderWidth: 2,
+        borderDash: [5, 5],
+        pointRadius: 3,
+        tension: 0.1,
+        fill: false,
+      },
+      {
+        type: 'line' as const,
+        label: 'Holt Forecast',
         data: [
           ...Array(historical.length).fill(null),
           ...holtForecast,
@@ -157,7 +257,22 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       },
       {
         type: 'line' as const,
-        label: 'Regresión Lineal Forecast',
+        label: 'Regresión Fitted (histórico)',
+        data: [
+          ...regressionFitted,
+          ...Array(forecastYears).fill(null),
+        ],
+        borderColor: 'rgba(245, 158, 11, 0.5)',
+        backgroundColor: 'rgba(245, 158, 11, 0.5)',
+        borderWidth: 2,
+        borderDash: [5, 5],
+        pointRadius: 3,
+        tension: 0.1,
+        fill: false,
+      },
+      {
+        type: 'line' as const,
+        label: 'Regresión Forecast',
         data: [
           ...Array(historical.length).fill(null),
           ...regressionForecast,
@@ -172,16 +287,42 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
     ],
   };
 
-  // ────────────────────────────────────────────────
-  // Tabla comparativa
-  // ────────────────────────────────────────────────
-  const lastHistorical = historical[historical.length - 1]?.revenue || 0;
-
   return (
     <div className="space-y-10">
-      {/* Controles */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <div>
+      {/* Info de optimización */}
+      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+        <h3 className="text-xl font-bold text-blue-400 mb-4">Parámetros Optimizados (Holt-Winters)</h3>
+        {isOptimizing ? (
+          <p className="text-gray-400">Optimizando parámetros...</p>
+        ) : optimizedParams ? (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-gray-700 p-4 rounded-lg text-center">
+              <p className="text-gray-400 text-sm mb-1">Alpha (nivel)</p>
+              <p className="text-2xl font-bold text-emerald-400">{optimizedParams.alpha.toFixed(2)}</p>
+            </div>
+            <div className="bg-gray-700 p-4 rounded-lg text-center">
+              <p className="text-gray-400 text-sm mb-1">Beta (tendencia)</p>
+              <p className="text-2xl font-bold text-emerald-400">{optimizedParams.beta.toFixed(2)}</p>
+            </div>
+            <div className="bg-gray-700 p-4 rounded-lg text-center">
+              <p className="text-gray-400 text-sm mb-1">MSE Holt</p>
+              <p className="text-2xl font-bold text-emerald-400">{optimizedParams.mse.toFixed(4)}</p>
+            </div>
+            <div className="bg-gray-700 p-4 rounded-lg text-center">
+              <p className="text-gray-400 text-sm mb-1">MSE Regresión</p>
+              <p className="text-2xl font-bold text-amber-400">{regressionMSE.toFixed(4)}</p>
+            </div>
+          </div>
+        ) : null}
+        <p className="text-sm text-gray-500 mt-4">
+          Los parámetros alpha y beta se optimizan automáticamente para minimizar el error cuadrático medio (MSE)
+          entre los valores históricos y los valores fitted del modelo Holt.
+        </p>
+      </div>
+
+      {/* Control de años */}
+      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+        <div className="max-w-xs">
           <label className="block text-gray-300 mb-2">Años a proyectar</label>
           <input
             type="number"
@@ -191,45 +332,6 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
             onChange={(e) => setForecastYears(Math.max(1, parseInt(e.target.value) || 5))}
             className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
           />
-        </div>
-
-        <div>
-          <label className="block text-gray-300 mb-2">Alpha (Holt) — suavizado nivel</label>
-          <input
-            type="number"
-            step="0.05"
-            min="0.1"
-            max="0.9"
-            value={alpha}
-            onChange={(e) => setAlpha(parseFloat(e.target.value) || 0.6)}
-            className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
-          />
-        </div>
-
-        <div>
-          <label className="block text-gray-300 mb-2">Beta (Holt) — suavizado tendencia</label>
-          <input
-            type="number"
-            step="0.05"
-            min="0.01"
-            max="0.5"
-            value={beta}
-            onChange={(e) => setBeta(parseFloat(e.target.value) || 0.3)}
-            className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
-          />
-        </div>
-
-        <div className="flex items-end">
-          <button
-            onClick={() => {
-              setAlpha(0.6);
-              setBeta(0.3);
-              setForecastYears(5);
-            }}
-            className="bg-gray-700 hover:bg-gray-600 px-5 py-2 rounded-lg text-sm"
-          >
-            Reset valores
-          </button>
         </div>
       </div>
 
@@ -278,46 +380,38 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
             <tr>
               <th className="px-6 py-4 text-left">Año</th>
               <th className="px-6 py-4 text-right">Revenue Histórico ($B)</th>
+              <th className="px-6 py-4 text-right">Holt Fitted ($B)</th>
               <th className="px-6 py-4 text-right">Holt Forecast ($B)</th>
+              <th className="px-6 py-4 text-right">Regresión Fitted ($B)</th>
               <th className="px-6 py-4 text-right">Regresión Forecast ($B)</th>
-              <th className="px-6 py-4 text-right">Crecimiento Holt</th>
-              <th className="px-6 py-4 text-right">Crecimiento Regresión</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
             {years.map((year, idx) => {
               const isHistorical = idx < historical.length;
               const histRev = isHistorical ? historical[idx].revenue : null;
-              const holtVal = idx >= historical.length ? holtForecast[idx - historical.length] : null;
-              const regVal = idx >= historical.length ? regressionForecast[idx - historical.length] : null;
-
-              const holtGrowth =
-                idx > historical.length
-                  ? ((holtForecast[idx - historical.length] / holtForecast[idx - historical.length - 1] - 1) * 100).toFixed(1)
-                  : null;
-
-              const regGrowth =
-                idx > historical.length
-                  ? ((regressionForecast[idx - historical.length] / regressionForecast[idx - historical.length - 1] - 1) * 100).toFixed(1)
-                  : null;
+              const holtFit = isHistorical ? holtFitted[idx] : null;
+              const holtFor = idx >= historical.length ? holtForecast[idx - historical.length] : null;
+              const regFit = isHistorical ? regressionFitted[idx] : null;
+              const regFor = idx >= historical.length ? regressionForecast[idx - historical.length] : null;
 
               return (
                 <tr key={year} className={isHistorical ? '' : 'bg-gray-900/50'}>
                   <td className="px-6 py-4 font-medium">{year}</td>
-                  <td className="px-6 py-4 text-right">
-                    {isHistorical ? histRev?.toFixed(2) : '—'}
-                  </td>
-                  <td className="px-6 py-4 text-right text-emerald-400">
-                    {holtVal ? holtVal.toFixed(2) : '—'}
-                  </td>
-                  <td className="px-6 py-4 text-right text-amber-400">
-                    {regVal ? regVal.toFixed(2) : '—'}
+                  <td className="px-6 py-4 text-right text-blue-400 font-semibold">
+                    {histRev ? histRev.toFixed(2) : '—'}
                   </td>
                   <td className="px-6 py-4 text-right text-emerald-300">
-                    {holtGrowth ? `${holtGrowth}%` : '—'}
+                    {holtFit ? holtFit.toFixed(2) : '—'}
+                  </td>
+                  <td className="px-6 py-4 text-right text-emerald-400 font-semibold">
+                    {holtFor ? holtFor.toFixed(2) : '—'}
                   </td>
                   <td className="px-6 py-4 text-right text-amber-300">
-                    {regGrowth ? `${regGrowth}%` : '—'}
+                    {regFit ? regFit.toFixed(2) : '—'}
+                  </td>
+                  <td className="px-6 py-4 text-right text-amber-400 font-semibold">
+                    {regFor ? regFor.toFixed(2) : '—'}
                   </td>
                 </tr>
               );
@@ -327,7 +421,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       </div>
 
       <p className="text-center text-sm text-gray-500 mt-4">
-        Proyecciones en billones de dólares ($B). Modelos simples con fines ilustrativos.
+        Proyecciones en billones de dólares ($B). El modelo Holt utiliza parámetros optimizados automáticamente.
       </p>
     </div>
   );

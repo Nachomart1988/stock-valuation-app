@@ -62,8 +62,6 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
           peerSymbols = ['MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'AVGO', 'COST'];
         }
 
-        console.log('Peers usados:', peerSymbols);
-
         const symbolsToFetch = [ticker, ...peerSymbols];
         const uniqueSymbols = [...new Set(symbolsToFetch)];
 
@@ -120,9 +118,9 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
 
         // Armar results
         const results: PeerData[] = uniqueSymbols.map((symbol) => {
-          const q = (quotesMap.get(symbol) as QuoteResponse | undefined) ?? {};
-          const p = (profilesMap.get(symbol) as ProfileResponse | undefined) ?? {};
-          const b = (balanceMap.get(symbol) as BalanceSheetResponse | undefined) ?? {};
+          const q = quotesMap.get(symbol) as QuoteResponse | undefined;
+          const p = profilesMap.get(symbol) as ProfileResponse | undefined;
+          const b = balanceMap.get(symbol) as BalanceSheetResponse | undefined;
 
           return {
             symbol,
@@ -146,15 +144,15 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
   }, [ticker]);
 
   if (loading) {
-    return <p className="text-xl text-gray-600 py-10 text-center">Cargando competidores...</p>;
+    return <p className="text-xl text-gray-300 py-10 text-center">Cargando competidores...</p>;
   }
 
   if (error) {
-    return <p className="text-xl text-red-600 py-10 text-center">Error: {error}</p>;
+    return <p className="text-xl text-red-400 py-10 text-center">Error: {error}</p>;
   }
 
   if (peerData.length === 0) {
-    return <p className="text-xl text-gray-600 py-10 text-center">No hay datos de competidores</p>;
+    return <p className="text-xl text-gray-400 py-10 text-center">No hay datos de competidores</p>;
   }
 
   const validPeerData = peerData.filter(
@@ -162,71 +160,76 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
   );
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-3xl font-bold text-gray-900">
+    <div className="space-y-10">
+      <h3 className="text-3xl font-bold text-gray-100">
         Competidores de {ticker}
       </h3>
 
       <div className="overflow-x-auto">
-        <table className="min-w-full border border-gray-200 rounded-xl shadow-sm">
-          <thead className="bg-gray-100">
+        <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+          <thead className="bg-gray-800">
             <tr>
-              <th className="px-6 py-4 text-left font-bold text-gray-800 sticky left-0 bg-gray-100 z-10 min-w-[220px]">
+              <th className="px-6 py-4 text-left font-bold text-gray-200 sticky left-0 bg-gray-800 z-10 min-w-[220px]">
                 Empresa
               </th>
-              <th className="px-6 py-4 text-center font-bold text-gray-800">Levered Beta</th>
-              <th className="px-6 py-4 text-right font-bold text-gray-800">Mkt. Val. (Equity)</th>
-              <th className="px-6 py-4 text-right font-bold text-gray-800">Deuda Total</th>
-              <th className="px-6 py-4 text-right font-bold text-gray-800">Debt / Mkt Cap</th>
+              <th className="px-6 py-4 text-center font-bold text-gray-200">Levered Beta</th>
+              <th className="px-6 py-4 text-right font-bold text-gray-200">Mkt. Val. (Equity)</th>
+              <th className="px-6 py-4 text-right font-bold text-gray-200">Deuda Total</th>
+              <th className="px-6 py-4 text-right font-bold text-gray-200">Debt / Mkt Cap</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
-            {validPeerData.map((peer) => {
-              // Cálculo manual de Debt / Mkt Cap
+          <tbody className="divide-y divide-gray-700">
+            {validPeerData.map((peer, index) => {
               let debtToMktCap: number | null = null;
               if (peer.totalDebt !== null && peer.marketCap !== null && peer.marketCap > 0) {
                 debtToMktCap = peer.totalDebt / peer.marketCap;
               }
 
+              const isMainTicker = peer.symbol === ticker;
+
               return (
                 <tr
                   key={peer.symbol}
-                  className={`hover:bg-blue-50 transition-colors ${
-                    peer.marketCap === null ? 'bg-gray-50 opacity-70' : ''
+                  className={`hover:bg-gray-700 transition-colors ${
+                    isMainTicker ? 'bg-blue-900/30 border-l-4 border-blue-500' : ''
                   }`}
                 >
-                  <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
-                    <span className="font-semibold text-gray-900">{peer.symbol}</span>
-                    <span className="text-gray-600 text-sm ml-2">
+                  <td className={`px-6 py-4 font-medium sticky left-0 z-10 border-r border-gray-700 ${
+                    isMainTicker ? 'bg-blue-900/30' : 'bg-gray-900'
+                  }`}>
+                    <span className={`font-semibold ${isMainTicker ? 'text-blue-400' : 'text-gray-100'}`}>
+                      {peer.symbol}
+                    </span>
+                    <span className="text-gray-400 text-sm ml-2">
                       ({peer.companyName || 'N/A'})
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-center text-gray-700 font-medium">
-                    {peer.beta !== null ? peer.beta.toFixed(2) : <span className="text-gray-400">—</span>}
+                  <td className="px-6 py-4 text-center text-gray-300 font-medium">
+                    {peer.beta !== null ? peer.beta.toFixed(2) : <span className="text-gray-500">—</span>}
                   </td>
                   <td className="px-6 py-4 text-right font-semibold">
                     {peer.marketCap !== null ? (
-                      <span className="text-indigo-700">
-                        ${(peer.marketCap / 1e9).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}B
+                      <span className="text-indigo-400">
+                        ${(peer.marketCap / 1e9).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}B
                       </span>
                     ) : (
-                      <span className="text-gray-400">—</span>
+                      <span className="text-gray-500">—</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-6 py-4 text-right text-gray-300">
                     {peer.totalDebt !== null ? (
-                      `$${(peer.totalDebt / 1e9).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}B`
+                      `$${(peer.totalDebt / 1e9).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}B`
                     ) : (
-                      <span className="text-gray-400">—</span>
+                      <span className="text-gray-500">—</span>
                     )}
                   </td>
                   <td className="px-6 py-4 text-right font-medium">
                     {debtToMktCap !== null ? (
-                      <span className={debtToMktCap > 0.5 ? 'text-red-600' : 'text-green-600'}>
+                      <span className={debtToMktCap > 0.5 ? 'text-red-400' : 'text-green-400'}>
                         {(debtToMktCap * 100).toFixed(1)}%
                       </span>
                     ) : (
-                      <span className="text-gray-400">—</span>
+                      <span className="text-gray-500">—</span>
                     )}
                   </td>
                 </tr>
@@ -236,8 +239,8 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
         </table>
       </div>
 
-      <p className="text-sm text-gray-500 text-center mt-4">
-        Datos de Financial Modeling Prep • Ticker principal + hasta 8 competidores
+      <p className="text-sm text-gray-500 text-center">
+        Datos de Financial Modeling Prep. Ticker principal + hasta 8 competidores.
       </p>
     </div>
   );

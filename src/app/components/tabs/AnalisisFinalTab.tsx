@@ -26,16 +26,20 @@ ChartJS.register(
 interface Props {
   ticker: string
   quote: any
-  averageVal: number | null
+  sharedAverageVal: number | null
 }
 
-export default function AnalisisFinalTab({ ticker, quote, averageVal }: Props) {
-  const [margenError, setMargenError] = useState(15)
+export default function AnalisisFinalTab({
+  ticker,
+  quote,
+  sharedAverageVal,
+}: Props) {
+  const [margenSeguridad, setMargenSeguridad] = useState(15)
   const [años, setAños] = useState(3)
   const [historical, setHistorical] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const precioEstimado = averageVal ? averageVal * (1 - margenError / 100) : null
+  const precioEstimado = sharedAverageVal ? sharedAverageVal * (1 - margenSeguridad / 100) : null
   const currentPrice = quote?.price || null
   const upside = precioEstimado && currentPrice
     ? ((precioEstimado - currentPrice) / currentPrice) * 100
@@ -62,17 +66,40 @@ export default function AnalisisFinalTab({ ticker, quote, averageVal }: Props) {
       try {
         setLoading(true)
         const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY
-        if (!apiKey) return
+        if (!apiKey) {
+          console.error('[AnalisisFinal] No API key found')
+          return
+        }
 
-        const res = await fetch(
-          `https://financialmodelingprep.com/api/v3/historical-price-full/${ticker}?timeseries=${años * 365}&apikey=${apiKey}`
-        )
+        // Calcular fechas según años seleccionados
+        const today = new Date()
+        const yearsAgo = new Date(today.getFullYear() - años, today.getMonth(), today.getDate())
+        const fromDate = yearsAgo.toISOString().split('T')[0]
+        const toDate = today.toISOString().split('T')[0]
+
+        const url = `https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${ticker}&from=${fromDate}&to=${toDate}&apikey=${apiKey}`
+        console.log('[AnalisisFinal] Fetching historical data...')
+
+        const res = await fetch(url)
+        if (!res.ok) {
+          console.error('[AnalisisFinal] API error:', res.status)
+          return
+        }
+
         const json = await res.json()
-        if (json.historical) {
-          setHistorical(json.historical.reverse()) // más reciente a la derecha
+        console.log('[AnalisisFinal] Data received:', json.length, 'records')
+
+        if (Array.isArray(json) && json.length > 0) {
+          const sorted = json
+            .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+            .map((item: any) => ({
+              date: item.date,
+              close: item.price || item.close,
+            }))
+          setHistorical(sorted)
         }
       } catch (err) {
-        console.error(err)
+        console.error('[AnalisisFinal] Error:', err)
       } finally {
         setLoading(false)
       }
@@ -88,26 +115,30 @@ export default function AnalisisFinalTab({ ticker, quote, averageVal }: Props) {
         label: 'Precio cierre',
         data: historical.map(d => d.close),
         borderColor: 'rgb(75, 192, 192)',
+        backgroundColor: 'rgba(75, 192, 192, 0.1)',
         tension: 0.1,
-      },
-      {
-        label: 'Precio target promedio',
-        data: new Array(historical.length).fill(averageVal),
-        borderColor: 'rgb(0, 255, 0)',
-        borderDash: [5, 5],
+        fill: true,
         pointRadius: 0,
       },
-      {
-        label: `Estimado conservador (${margenError}%)`,
+      ...(sharedAverageVal ? [{
+        label: 'Valuación promedio',
+        data: new Array(historical.length).fill(sharedAverageVal),
+        borderColor: 'rgb(168, 85, 247)',
+        borderDash: [5, 5],
+        pointRadius: 0,
+      }] : []),
+      ...(precioEstimado ? [{
+        label: `Precio compra sugerido (${margenSeguridad}% margen)`,
         data: new Array(historical.length).fill(precioEstimado),
-        borderColor: 'rgb(0, 100, 255)',
-        borderDash: [5, 5],
+        borderColor: 'rgb(34, 197, 94)',
+        borderDash: [10, 5],
         pointRadius: 0,
-      },
+        borderWidth: 2,
+      }] : []),
       {
         label: 'Precio actual',
         data: new Array(historical.length).fill(currentPrice),
-        borderColor: 'rgb(255, 99, 132)',
+        borderColor: 'rgb(239, 68, 68)',
         borderDash: [5, 5],
         pointRadius: 0,
       },
@@ -115,53 +146,116 @@ export default function AnalisisFinalTab({ ticker, quote, averageVal }: Props) {
   }
 
   return (
-    <div className="p-6 bg-gray-900 rounded-xl">
-      <h2 className="text-2xl font-bold mb-6">Análisis Final - {ticker}</h2>
+    <div className="space-y-8">
+      <h2 className="text-3xl font-bold text-gray-100">Análisis Final - {ticker}</h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      {/* Mensaje si no hay averageVal */}
+      {!sharedAverageVal && (
+        <div className="bg-yellow-900/30 border border-yellow-600 rounded-xl p-4 text-center">
+          <p className="text-yellow-400">
+            Ve a la pestaña <strong>Valuaciones</strong> para calcular el promedio de valuación. Los valores se actualizarán automáticamente aquí.
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-sm mb-1">Margen de seguridad (%)</label>
+          <label className="block text-lg font-medium text-gray-300 mb-2">Margen de seguridad (%)</label>
           <input
             type="number"
-            value={margenError}
-            onChange={e => setMargenError(Number(e.target.value) || 15)}
-            className="w-full p-2 bg-gray-800 border border-gray-700 rounded"
+            value={margenSeguridad}
+            onChange={e => setMargenSeguridad(Number(e.target.value) || 15)}
+            className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg text-gray-100 text-lg"
           />
         </div>
 
         <div>
-          <label className="block text-sm mb-1">Años históricos</label>
+          <label className="block text-lg font-medium text-gray-300 mb-2">Años históricos</label>
           <input
             type="number"
             min={1}
             max={5}
             value={años}
             onChange={e => setAños(Math.max(1, Math.min(5, Number(e.target.value) || 3)))}
-            className="w-full p-2 bg-gray-800 border border-gray-700 rounded"
+            className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg text-gray-100 text-lg"
           />
         </div>
+      </div>
 
-        <div className="flex flex-col justify-center">
-          <div className={`text-3xl font-bold ${color}`}>
+      {/* Resumen de análisis */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="bg-gray-700 p-5 rounded-xl border border-gray-600 text-center">
+          <p className="text-sm text-gray-400 mb-1">Precio Actual</p>
+          <p className="text-2xl font-bold text-blue-400">
+            {currentPrice ? `$${currentPrice.toFixed(2)}` : 'N/A'}
+          </p>
+        </div>
+        <div className="bg-gray-700 p-5 rounded-xl border border-gray-600 text-center">
+          <p className="text-sm text-gray-400 mb-1">Valuación Promedio</p>
+          <p className="text-2xl font-bold text-purple-400">
+            {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
+          </p>
+        </div>
+        <div className="bg-gray-700 p-5 rounded-xl border border-gray-600 text-center">
+          <p className="text-sm text-gray-400 mb-1">Precio Compra Sugerido</p>
+          <p className="text-2xl font-bold text-green-400">
+            {precioEstimado ? `$${precioEstimado.toFixed(2)}` : 'N/A'}
+          </p>
+        </div>
+        <div className="bg-gray-700 p-5 rounded-xl border border-gray-600 text-center">
+          <p className="text-sm text-gray-400 mb-1">Upside/Downside</p>
+          <p className={`text-2xl font-bold ${upside !== null && upside > 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {upside !== null ? `${upside.toFixed(1)}%` : 'N/A'}
+          </p>
+        </div>
+        <div className="bg-gray-700 p-5 rounded-xl border border-gray-600 text-center">
+          <p className="text-sm text-gray-400 mb-1">Veredicto</p>
+          <p className={`text-2xl font-bold ${color}`}>
             {veredicto}
-          </div>
-          {upside !== null && (
-            <div className="text-sm mt-1">
-              Upside/Downside: {upside.toFixed(1)}%
-            </div>
-          )}
+          </p>
         </div>
       </div>
 
       {loading ? (
-        <div className="text-center py-12">Cargando gráfico...</div>
+        <div className="text-center py-12 text-gray-400">Cargando gráfico...</div>
       ) : historical.length === 0 ? (
         <div className="text-center py-12 text-gray-400">No hay datos históricos disponibles</div>
       ) : (
-        <div className="h-96">
-          <Line data={chartData} options={{ maintainAspectRatio: false }} />
+        <div className="p-6 bg-gray-700 rounded-xl border border-gray-600">
+          <h4 className="text-xl font-semibold text-gray-200 mb-4">
+            Precio histórico ({años} {años === 1 ? 'año' : 'años'})
+          </h4>
+          <div className="h-96">
+            <Line
+              data={chartData}
+              options={{
+                maintainAspectRatio: false,
+                responsive: true,
+                scales: {
+                  y: {
+                    ticks: { color: '#e5e7eb' },
+                    grid: { color: '#4b5563' },
+                  },
+                  x: {
+                    ticks: { color: '#e5e7eb', maxTicksLimit: 12 },
+                    grid: { color: '#4b5563' },
+                  },
+                },
+                plugins: {
+                  legend: {
+                    labels: { color: '#e5e7eb' },
+                    position: 'top',
+                  },
+                },
+              }}
+            />
+          </div>
         </div>
       )}
+
+      <p className="text-sm text-gray-500 text-center italic">
+        Los valores se actualizan automáticamente cuando cambias los métodos de valuación en la pestaña Valuaciones.
+      </p>
     </div>
   )
 }

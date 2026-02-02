@@ -231,11 +231,11 @@ export default function CalculosTab({
         <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
           <thead className="bg-gray-800">
             <tr>
-              <th className="px-6 py-4 text-left text-gray-200 font-bold sticky left-0 bg-gray-800 z-10 min-w-[220px]">
+              <th className="px-6 py-4 text-left text-gray-200 font-bold sticky left-0 bg-gray-800 z-10 min-w-55">
                 Free Cash Flow Calculation:
               </th>
               {projections.map((p: Projection) => (
-                <th key={p.year} className="px-6 py-4 text-center text-gray-200 font-bold min-w-[140px]">
+                <th key={p.year} className="px-6 py-4 text-center text-gray-200 font-bold min-w-35">
                   {p.year}
                 </th>
               ))}
@@ -411,7 +411,7 @@ export default function CalculosTab({
             <tr>
               <td className="px-6 py-4 text-gray-300 font-medium">Discount Factor</td>
               <td className="px-6 py-4 text-right text-gray-300">
-                {projections.find(p => p.year === 2027)?.discountFactor?.toFixed(2) || '—'}
+                {projections.find((p: { year: number; }) => p.year === 2027)?.discountFactor?.toFixed(2) || '—'}
             
               </td>
             </tr>

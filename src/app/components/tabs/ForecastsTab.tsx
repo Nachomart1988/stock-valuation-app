@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 
 interface Estimate {
-  date: string;           // ej: "2026-12-31"
+  date: string;
   revenueAvg: number | null;
   revenueLow: number | null;
   revenueHigh: number | null;
@@ -41,8 +41,6 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
         if (!apiKey) throw new Error('FMP_API_KEY no configurada');
 
         const url = `https://financialmodelingprep.com/stable/analyst-estimates?symbol=${ticker}&period=annual&limit=10&apikey=${apiKey}`;
-        console.log('[Forecasts] Fetching:', url.replace(apiKey, '***'));
-
         const res = await fetch(url);
         if (!res.ok) {
           const errText = await res.text();
@@ -50,17 +48,10 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
         }
 
         const json = await res.json();
-        console.log('[Forecasts] Datos crudos (total):', json.length);
 
-        // Filtrar SOLO años futuros, ordenar ascendente (sin límite)
         const futureEstimates = json
           .filter((est: any) => new Date(est.date) > new Date())
           .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-        console.log('[Forecasts] Estimaciones futuras encontradas:', futureEstimates.length);
-        if (futureEstimates.length > 0) {
-          console.log('[Forecasts] Primeras 3:', futureEstimates.slice(0, 3));
-        }
 
         setEstimates(futureEstimates);
       } catch (err: any) {
@@ -85,276 +76,275 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
   };
 
   if (loading) {
-    return <p className="text-xl text-gray-600 py-10 text-center">Cargando forecasts...</p>;
+    return <p className="text-xl text-gray-300 py-10 text-center">Cargando forecasts...</p>;
   }
 
   if (error) {
-    return <p className="text-xl text-red-600 py-10 text-center">Error: {error}</p>;
+    return <p className="text-xl text-red-400 py-10 text-center">Error: {error}</p>;
   }
 
   if (estimates.length === 0) {
-    return <p className="text-xl text-gray-600 py-10 text-center">No hay estimaciones disponibles para los próximos años</p>;
+    return <p className="text-xl text-gray-400 py-10 text-center">No hay estimaciones disponibles para los próximos años</p>;
   }
 
-  // Años como columnas
   const years = estimates.map(est => new Date(est.date).getFullYear());
 
   return (
-    <div className="space-y-8">
-      <h3 className="text-3xl font-bold text-gray-900">
+    <div className="space-y-10">
+      <h3 className="text-3xl font-bold text-gray-100">
         Forecasts para {ticker} (Próximos {estimates.length} años)
       </h3>
 
       <div className="overflow-x-auto">
-        <table className="min-w-full border border-gray-200 rounded-xl shadow-sm">
-          <thead className="bg-gray-100">
+        <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+          <thead className="bg-gray-800">
             <tr>
-              <th className="px-6 py-4 text-left font-bold text-gray-800 sticky left-0 bg-gray-100 z-10 min-w-[220px]">
+              <th className="px-6 py-4 text-left font-bold text-gray-200 sticky left-0 bg-gray-800 z-10 min-w-[220px]">
                 Métrica
               </th>
               {years.map(year => (
-                <th key={year} className="px-6 py-4 text-center font-bold text-gray-800 min-w-[140px]">
+                <th key={year} className="px-6 py-4 text-center font-bold text-gray-200 min-w-[140px]">
                   {year}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-700">
             {/* Revenue Avg */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
                 Revenue (Avg)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-blue-400 font-semibold">
                   {formatNumber(est.revenueAvg, true)}
                 </td>
               ))}
             </tr>
 
             {/* Revenue Low */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 Revenue (Low)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.revenueLow, true)}
                 </td>
               ))}
             </tr>
 
             {/* Revenue High */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 Revenue (High)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.revenueHigh, true)}
                 </td>
               ))}
             </tr>
 
             {/* EPS Avg */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700 bg-gray-800/50">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
                 EPS (Avg)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-green-400 font-semibold">
                   {formatNumber(est.epsAvg)}
                 </td>
               ))}
             </tr>
 
             {/* EPS Low */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 EPS (Low)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.epsLow)}
                 </td>
               ))}
             </tr>
 
             {/* EPS High */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 EPS (High)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.epsHigh)}
                 </td>
               ))}
             </tr>
 
             {/* Net Income Avg */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700 bg-gray-800/50">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
                 Net Income (Avg)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-purple-400 font-semibold">
                   {formatNumber(est.netIncomeAvg, true)}
                 </td>
               ))}
             </tr>
 
             {/* Net Income Low */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 Net Income (Low)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.netIncomeLow, true)}
                 </td>
               ))}
             </tr>
 
             {/* Net Income High */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 Net Income (High)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.netIncomeHigh, true)}
                 </td>
               ))}
             </tr>
 
             {/* EBITDA Avg */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700 bg-gray-800/50">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
                 EBITDA (Avg)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-indigo-400 font-semibold">
                   {formatNumber(est.ebitdaAvg, true)}
                 </td>
               ))}
             </tr>
 
             {/* EBITDA Low */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 EBITDA (Low)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.ebitdaLow, true)}
                 </td>
               ))}
             </tr>
 
             {/* EBITDA High */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 EBITDA (High)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.ebitdaHigh, true)}
                 </td>
               ))}
             </tr>
 
             {/* EBIT Avg */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700 bg-gray-800/50">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
                 EBIT (Avg)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-cyan-400 font-semibold">
                   {formatNumber(est.ebitAvg, true)}
                 </td>
               ))}
             </tr>
 
             {/* EBIT Low */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 EBIT (Low)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.ebitLow, true)}
                 </td>
               ))}
             </tr>
 
             {/* EBIT High */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 EBIT (High)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.ebitHigh, true)}
                 </td>
               ))}
             </tr>
 
             {/* SGA Expense Avg */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700 bg-gray-800/50">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
                 SGA Expense (Avg)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-orange-400 font-semibold">
                   {formatNumber(est.sgaExpenseAvg, true)}
                 </td>
               ))}
             </tr>
 
             {/* SGA Expense Low */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 SGA Expense (Low)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.sgaExpenseLow, true)}
                 </td>
               ))}
             </tr>
 
             {/* SGA Expense High */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 SGA Expense (High)
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-400">
                   {formatNumber(est.sgaExpenseHigh, true)}
                 </td>
               ))}
             </tr>
 
             {/* # Analistas Revenue */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700 bg-gray-800/50">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
                 # Analistas Revenue
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-300">
                   {est.numAnalystsRevenue ?? '—'}
                 </td>
               ))}
             </tr>
 
             {/* # Analistas EPS */}
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr className="hover:bg-gray-700">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
                 # Analistas EPS
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right">
+                <td key={idx} className="px-6 py-4 text-right text-gray-300">
                   {est.numAnalystsEps ?? '—'}
                 </td>
               ))}
@@ -363,8 +353,8 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
         </table>
       </div>
 
-      <p className="text-sm text-gray-500 text-center">
-        Estimaciones anuales promedio de analistas • Fuente: Financial Modeling Prep • {estimates.length} años disponibles
+      <p className="text-sm text-gray-500 text-center italic">
+        Estimaciones anuales promedio de analistas. Fuente: Financial Modeling Prep. {estimates.length} años disponibles.
       </p>
     </div>
   );
