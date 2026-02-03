@@ -1,7 +1,7 @@
 'use client';
 
 import { Tab } from '@headlessui/react';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Line } from 'react-chartjs-2';
 import {
@@ -23,6 +23,8 @@ import SustainableGrowthTab from '@/app/components/tabs/SustainableGrowthTab';
 import ValuacionesTab from '@/app/components/tabs/ValuacionesTab';
 import AnalisisFinalTab from '@/app/components/tabs/AnalisisFinalTab';
 import WACCTab from '@/app/components/tabs/WACCTab';
+import CAGRTab from '@/app/components/tabs/CAGRTab';
+import NoticiasTab from '@/app/components/tabs/NoticiasTab';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -100,6 +102,10 @@ function AnalizarContent() {
           cashFlowData,
           priceTargetData,
           estimatesData,
+          // TTM data
+          incomeTTMData,
+          balanceTTMData,
+          cashFlowTTMData,
         ] = await Promise.all([
           fetchJson('quote'),
           fetchJson('profile'),
@@ -108,6 +114,10 @@ function AnalizarContent() {
           fetchJson('cash-flow-statement', '&limit=10'),
           fetchJson('price-target-summary'),
           fetchJson('analyst-estimates', '&period=annual&limit=10'),
+          // Fetch TTM statements
+          fetchJson('income-statement-ttm').catch(() => []),
+          fetchJson('balance-sheet-statement-ttm').catch(() => []),
+          fetchJson('cash-flow-statement-ttm').catch(() => []),
         ]);
 
         const dcfStandardRes = await fetch(`${base}/discounted-cash-flow${params}`, { cache: 'no-store' });
@@ -141,6 +151,10 @@ function AnalizarContent() {
           estimates: estimatesData || [],
           dcfStandard: dcfStandardData[0] || dcfStandardData,
           dcfCustom: dcfCustomData[0] || dcfCustomData,
+          // TTM data
+          incomeTTM: incomeTTMData[0] || null,
+          balanceTTM: balanceTTMData[0] || null,
+          cashFlowTTM: cashFlowTTMData[0] || null,
         });
       } catch (err) {
         setError((err as Error).message || 'Error al cargar datos');
@@ -218,12 +232,13 @@ function AnalizarContent() {
     );
   }
 
-  const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom } = data;
+  const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM } = data;
 
   const categories = [
-    'Inputs',
+    'Inicio',
+    'Noticias',
     'DuPont Analysis',
-    'Análisis General',
+    'Analisis General',
     'Income Statement',
     'Balance Sheet',
     'Cash Flow',
@@ -231,10 +246,11 @@ function AnalizarContent() {
     'Competidores',
     'Beta',
     'Forecasts',
-    'Cálculos',
+    'Calculos',
     'Revenue Forecast',
     'Sustainable Growth',
     'WACC',
+    'CAGR',
     'Valuaciones',
     'Analisis Final',
     'DCF',
@@ -271,14 +287,20 @@ function AnalizarContent() {
           </Tab.List>
 
 <Tab.Panels className="mt-2">
-  {/* Inputs */}
+  {/* Inicio (antes Inputs) */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <InputsTab
+    <InicioTab
       ticker={activeTicker}
       quote={quote}
+      profile={profile}
       sharedAverageVal={sharedAverageVal}
       onAnalizar={handleAnalizar}
     />
+  </Tab.Panel>
+
+  {/* Noticias */}
+  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
+    <NoticiasTab ticker={activeTicker} />
   </Tab.Panel>
 
   {/* DuPont Analysis */}
@@ -286,24 +308,24 @@ function AnalizarContent() {
     <DuPontTab income={income} balance={balance} />
   </Tab.Panel>
 
-  {/* Análisis General */}
+  {/* Analisis General */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
     <GeneralTab profile={profile} quote={quote} />
   </Tab.Panel>
 
   {/* Income Statement */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <FinancialStatementTab title="Income Statement" data={income} type="income" />
+    <FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} />
   </Tab.Panel>
 
   {/* Balance Sheet */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <FinancialStatementTab title="Balance Sheet" data={balance} type="balance" />
+    <FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} />
   </Tab.Panel>
 
   {/* Cash Flow */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" />
+    <FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} />
   </Tab.Panel>
 
   {/* Analistas */}
@@ -335,6 +357,8 @@ function AnalizarContent() {
       income={income}
       balance={balance}
       cashFlow={cashFlow}
+      dcfCustom={dcfCustom}
+      estimates={estimates}
     />
   </Tab.Panel>
 
@@ -350,6 +374,7 @@ function AnalizarContent() {
       balance={balance}
       cashFlow={cashFlow}
       estimates={estimates}
+      dcfCustom={dcfCustom}
     />
   </Tab.Panel>
 
@@ -364,6 +389,11 @@ function AnalizarContent() {
     />
   </Tab.Panel>
 
+  {/* CAGR */}
+  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
+    <CAGRTab ticker={activeTicker} />
+  </Tab.Panel>
+
   {/* Valuaciones → Esta es la más importante para ti */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
     <ValuacionesTab
@@ -374,6 +404,7 @@ function AnalizarContent() {
       priceTarget={priceTarget}
       profile={profile}
       quote={quote}
+      dcfCustom={dcfCustom}
       onAverageValChange={setSharedAverageVal}
     />
   </Tab.Panel>
@@ -389,7 +420,7 @@ function AnalizarContent() {
 
   {/* DCF */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <DCFTab dcfStandard={dcfStandard} dcfCustom={dcfCustom} quote={quote} />
+    <DCFTab dcfStandard={dcfStandard} dcfCustom={dcfCustom} quote={quote} income={income} />
   </Tab.Panel>
 </Tab.Panels>
         </Tab.Group>
@@ -416,14 +447,16 @@ export default function AnalizarPage() {
 // Componentes auxiliares
 // ────────────────────────────────────────────────
 
-function InputsTab({
+function InicioTab({
   ticker,
   quote,
+  profile,
   sharedAverageVal,
   onAnalizar,
 }: {
   ticker: string;
   quote: any;
+  profile: any;
   sharedAverageVal: number | null;
   onAnalizar: (ticker: string) => void;
 }) {
@@ -447,30 +480,27 @@ function InputsTab({
         setLoading(true);
         const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
         if (!apiKey) {
-          console.error('[InputsTab] No API key found');
+          console.error('[InicioTab] No API key found');
           return;
         }
 
-        // Calcular fechas para el último año
+        // Calcular fechas para el ultimo ano
         const today = new Date();
         const oneYearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
         const fromDate = oneYearAgo.toISOString().split('T')[0];
         const toDate = today.toISOString().split('T')[0];
 
         const url = `https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${ticker}&from=${fromDate}&to=${toDate}&apikey=${apiKey}`;
-        console.log('[InputsTab] Fetching historical data...');
 
         const res = await fetch(url);
         if (!res.ok) {
-          console.error('[InputsTab] API error:', res.status);
+          console.error('[InicioTab] API error:', res.status);
           return;
         }
 
         const json = await res.json();
-        console.log('[InputsTab] Data received:', json.length, 'records');
 
         if (Array.isArray(json) && json.length > 0) {
-          // Ordenar por fecha ascendente y mapear a formato esperado
           const sorted = json
             .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
             .map((item: any) => ({
@@ -480,7 +510,7 @@ function InputsTab({
           setHistorical(sorted);
         }
       } catch (err) {
-        console.error('[InputsTab] Error fetching history:', err);
+        console.error('[InicioTab] Error fetching history:', err);
       } finally {
         setLoading(false);
       }
@@ -489,167 +519,283 @@ function InputsTab({
     if (ticker) fetchHistory();
   }, [ticker]);
 
+  // Calculate price statistics
+  const priceStats = useMemo(() => {
+    if (historical.length === 0) return null;
+    const prices = historical.map(d => d.close);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+    const yearAgoPrice = prices[0];
+    const ytdChange = ((currentPrice - yearAgoPrice) / yearAgoPrice) * 100;
+    return { min, max, avg, ytdChange, yearAgoPrice };
+  }, [historical, currentPrice]);
+
+  // Improved chart configuration
   const chartData = {
-    labels: historical.map(d => d.date),
+    labels: historical.map(d => {
+      const date = new Date(d.date);
+      return date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
+    }),
     datasets: [
       {
-        label: 'Precio de cierre',
+        label: 'Precio',
         data: historical.map(d => d.close),
-        borderColor: 'rgb(75, 192, 192)',
-        backgroundColor: 'rgba(75, 192, 192, 0.1)',
-        tension: 0.1,
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: (context: any) => {
+          const ctx = context.chart.ctx;
+          const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+          gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
+          gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+          return gradient;
+        },
+        tension: 0.4,
         fill: true,
         pointRadius: 0,
+        pointHoverRadius: 6,
+        pointHoverBackgroundColor: 'rgb(59, 130, 246)',
+        pointHoverBorderColor: '#fff',
+        pointHoverBorderWidth: 2,
+        borderWidth: 3,
       },
-      {
-        label: 'Precio actual',
-        data: new Array(historical.length).fill(currentPrice),
-        borderColor: 'rgb(59, 130, 246)',
-        borderDash: [5, 5],
-        pointRadius: 0,
-      },
-      ...(precioCompraSugerido ? [{
-        label: `Precio compra sugerido (${margenPct}% bajo avg)`,
-        data: new Array(historical.length).fill(precioCompraSugerido),
-        borderColor: 'rgb(34, 197, 94)',
-        borderDash: [10, 5],
-        pointRadius: 0,
-        borderWidth: 2,
-      }] : []),
       ...(sharedAverageVal ? [{
-        label: 'Valuación promedio',
+        label: 'Valor Intrinseco',
         data: new Array(historical.length).fill(sharedAverageVal),
         borderColor: 'rgb(168, 85, 247)',
-        borderDash: [3, 3],
+        borderDash: [8, 4],
         pointRadius: 0,
+        borderWidth: 2,
+        fill: false,
+      }] : []),
+      ...(precioCompraSugerido ? [{
+        label: `Compra Sugerida (-${margenPct}%)`,
+        data: new Array(historical.length).fill(precioCompraSugerido),
+        borderColor: 'rgb(34, 197, 94)',
+        borderDash: [4, 4],
+        pointRadius: 0,
+        borderWidth: 2,
+        fill: false,
       }] : []),
     ],
   };
 
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
+    scales: {
+      y: {
+        position: 'right' as const,
+        ticks: {
+          color: '#9ca3af',
+          font: { size: 12 },
+          callback: (value: any) => `$${value.toFixed(0)}`,
+        },
+        grid: {
+          color: 'rgba(75, 85, 99, 0.3)',
+          drawBorder: false,
+        },
+        border: { display: false },
+      },
+      x: {
+        ticks: {
+          color: '#9ca3af',
+          maxTicksLimit: 12,
+          font: { size: 11 },
+        },
+        grid: { display: false },
+        border: { display: false },
+      },
+    },
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top' as const,
+        align: 'end' as const,
+        labels: {
+          color: '#e5e7eb',
+          usePointStyle: true,
+          pointStyle: 'circle',
+          padding: 20,
+          font: { size: 12 },
+        },
+      },
+      tooltip: {
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+        titleColor: '#f3f4f6',
+        bodyColor: '#d1d5db',
+        borderColor: 'rgba(75, 85, 99, 0.5)',
+        borderWidth: 1,
+        padding: 12,
+        displayColors: true,
+        callbacks: {
+          label: (context: any) => `${context.dataset.label}: $${context.parsed.y.toFixed(2)}`,
+        },
+      },
+    },
+  };
+
   return (
-    <div className="space-y-10">
-      {/* Ticker Input + Analizar Button */}
-      <div className="bg-gray-700 p-6 rounded-xl border border-gray-600">
-        <h3 className="text-2xl font-bold text-gray-100 mb-4">Buscar Ticker</h3>
-        <div className="flex gap-4 items-end">
-          <div className="flex-1">
-            <label className="block text-lg font-medium text-gray-300 mb-2">
-              Ticker
-            </label>
+    <div className="space-y-8">
+      {/* Header con company info */}
+      <div className="flex flex-col md:flex-row gap-6 items-start">
+        {/* Company Info Card */}
+        <div className="flex-1 bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl border border-gray-600">
+          <div className="flex items-center gap-4 mb-4">
+            {profile?.image && (
+              <img
+                src={profile.image}
+                alt={ticker}
+                className="w-16 h-16 rounded-xl bg-white p-1"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            )}
+            <div>
+              <h2 className="text-3xl font-bold text-white">{ticker}</h2>
+              <p className="text-gray-400">{profile?.companyName || 'Compania'}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="px-3 py-1 bg-blue-600/30 text-blue-400 rounded-full text-sm">{profile?.sector || 'N/A'}</span>
+            <span className="px-3 py-1 bg-purple-600/30 text-purple-400 rounded-full text-sm">{profile?.industry || 'N/A'}</span>
+            <span className="px-3 py-1 bg-green-600/30 text-green-400 rounded-full text-sm">{profile?.exchangeShortName || 'N/A'}</span>
+          </div>
+        </div>
+
+        {/* Ticker Search */}
+        <div className="w-full md:w-auto bg-gray-700 p-4 rounded-xl border border-gray-600">
+          <div className="flex gap-3">
             <input
               type="text"
               value={inputTicker}
               onChange={(e) => setInputTicker(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && onAnalizar(inputTicker)}
-              placeholder="Ej: AAPL, MSFT, GOOGL"
-              className="w-full px-5 py-4 border-2 border-gray-600 rounded-xl text-gray-100 text-xl bg-gray-900 focus:border-blue-500 focus:ring-blue-500 placeholder-gray-500"
+              placeholder="Buscar ticker..."
+              className="w-40 px-4 py-3 border border-gray-600 rounded-xl text-gray-100 text-lg bg-gray-900 focus:border-blue-500 focus:ring-blue-500 placeholder-gray-500"
             />
+            <button
+              onClick={() => onAnalizar(inputTicker)}
+              disabled={!inputTicker.trim()}
+              className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+            >
+              Analizar
+            </button>
           </div>
-          <button
-            onClick={() => onAnalizar(inputTicker)}
-            disabled={!inputTicker.trim()}
-            className="px-8 py-4 bg-blue-600 text-white text-xl font-bold rounded-xl hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-          >
-            Analizar
-          </button>
         </div>
-        <p className="mt-3 text-sm text-gray-400">
-          Ingresa un ticker y presiona "Analizar" para cargar los datos de esa acción en todas las pestañas.
-        </p>
       </div>
 
-      {/* Mensaje si no hay averageVal */}
-      {!sharedAverageVal && (
-        <div className="bg-yellow-900/30 border border-yellow-600 rounded-xl p-4 text-center">
-          <p className="text-yellow-400">
-            Ve a la pestaña <strong>Valuaciones</strong> para calcular el promedio de valuación. Los valores se actualizarán automáticamente aquí.
-          </p>
+      {/* Price Hero Section */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="col-span-2 md:col-span-1 bg-gradient-to-br from-blue-600 to-blue-800 p-6 rounded-2xl text-center">
+          <p className="text-blue-200 text-sm mb-1">Precio Actual</p>
+          <p className="text-4xl font-bold text-white">${currentPrice?.toFixed(2) || 'N/A'}</p>
+          {priceStats && (
+            <p className={`text-sm mt-2 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+              {priceStats.ytdChange >= 0 ? '+' : ''}{priceStats.ytdChange.toFixed(1)}% (1A)
+            </p>
+          )}
         </div>
-      )}
-
-      {/* Solo mostrar Margen de Seguridad */}
-      <div className="max-w-md">
-        <label className="block text-xl font-medium text-gray-300 mb-3">
-          Margen de Seguridad (%)
-        </label>
-        <input
-          type="number"
-          value={margenSeguridad}
-          onChange={(e) => setMargenSeguridad(e.target.value)}
-          className="w-full px-5 py-4 border-2 border-gray-700 rounded-xl text-gray-100 text-xl bg-gray-900 focus:border-blue-500 focus:ring-blue-500 placeholder-gray-500"
-          placeholder="Ej: 15"
-        />
-        <p className="mt-2 text-sm text-gray-400">
-          El precio de compra sugerido será {margenPct}% por debajo de la valuación promedio
-        </p>
-      </div>
-
-      {/* Resumen de precios */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-gray-700 p-6 rounded-xl border border-gray-600 text-center">
-          <p className="text-lg text-gray-400 mb-2">Precio Actual</p>
-          <p className="text-3xl font-bold text-blue-400">
-            ${currentPrice?.toFixed(2) || 'N/A'}
-          </p>
-        </div>
-        <div className="bg-gray-700 p-6 rounded-xl border border-gray-600 text-center">
-          <p className="text-lg text-gray-400 mb-2">Valuación Promedio</p>
-          <p className="text-3xl font-bold text-purple-400">
+        <div className="bg-gray-700 p-4 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-xs mb-1">Valor Intrinseco</p>
+          <p className="text-2xl font-bold text-purple-400">
             {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-6 rounded-xl border border-gray-600 text-center">
-          <p className="text-lg text-gray-400 mb-2">Precio Compra Sugerido</p>
-          <p className="text-3xl font-bold text-green-400">
+        <div className="bg-gray-700 p-4 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-xs mb-1">Compra Sugerida</p>
+          <p className="text-2xl font-bold text-green-400">
             {precioCompraSugerido ? `$${precioCompraSugerido.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-6 rounded-xl border border-gray-600 text-center">
-          <p className="text-lg text-gray-400 mb-2">Upside al Target</p>
-          <p className={`text-3xl font-bold ${sharedAverageVal && currentPrice ? (sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400') : 'text-gray-400'}`}>
+        <div className="bg-gray-700 p-4 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-xs mb-1">Upside</p>
+          <p className={`text-2xl font-bold ${sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400'}`}>
             {sharedAverageVal && currentPrice ? `${(((sharedAverageVal - currentPrice) / currentPrice) * 100).toFixed(1)}%` : 'N/A'}
           </p>
         </div>
+        <div className="bg-gray-700 p-4 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-xs mb-1">Margen Seguridad</p>
+          <input
+            type="number"
+            value={margenSeguridad}
+            onChange={(e) => setMargenSeguridad(e.target.value)}
+            className="w-full text-center text-xl font-bold text-amber-400 bg-transparent border-none focus:outline-none focus:ring-0"
+          />
+          <p className="text-gray-500 text-xs">%</p>
+        </div>
       </div>
 
-      {/* Gráfico de línea */}
-      {loading ? (
-        <div className="text-center py-12 text-gray-400">Cargando gráfico de precios...</div>
-      ) : historical.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">No hay datos históricos disponibles</div>
-      ) : (
-        <div className="p-8 bg-gray-800 rounded-2xl shadow-xl border border-gray-700">
-          <h4 className="text-xl font-semibold text-gray-200 mb-4">Precio histórico (último año)</h4>
-          <div className="h-96">
-            <Line
-              data={chartData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                  y: {
-                    ticks: { color: '#e5e7eb' },
-                    grid: { color: '#4b5563' },
-                  },
-                  x: {
-                    ticks: {
-                      color: '#e5e7eb',
-                      maxTicksLimit: 12,
-                    },
-                    grid: { color: '#4b5563' },
-                  },
-                },
-                plugins: {
-                  legend: {
-                    labels: { color: '#e5e7eb' },
-                    position: 'top',
-                  },
-                },
-              }}
-            />
+      {/* Aviso si no hay valuacion */}
+      {!sharedAverageVal && (
+        <div className="bg-amber-900/20 border border-amber-600/50 rounded-xl p-4 flex items-center gap-4">
+          <div className="text-amber-500 text-3xl">!</div>
+          <div>
+            <p className="text-amber-400 font-medium">Valor Intrinseco no calculado</p>
+            <p className="text-amber-400/70 text-sm">Ve a la pestana "Valuaciones" para calcular el valor intrinseco promedio.</p>
           </div>
         </div>
       )}
+
+      {/* Main Chart */}
+      {loading ? (
+        <div className="h-[500px] bg-gray-700/50 rounded-2xl flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
+            <p className="text-gray-400">Cargando grafico...</p>
+          </div>
+        </div>
+      ) : historical.length === 0 ? (
+        <div className="h-[500px] bg-gray-700/50 rounded-2xl flex items-center justify-center">
+          <p className="text-gray-400 text-xl">No hay datos historicos disponibles</p>
+        </div>
+      ) : (
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-2xl">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold text-gray-100">Precio Historico (Ultimo Ano)</h3>
+            {priceStats && (
+              <div className="flex gap-4 text-sm">
+                <span className="text-gray-400">Min: <span className="text-red-400 font-medium">${priceStats.min.toFixed(2)}</span></span>
+                <span className="text-gray-400">Max: <span className="text-green-400 font-medium">${priceStats.max.toFixed(2)}</span></span>
+                <span className="text-gray-400">Prom: <span className="text-blue-400 font-medium">${priceStats.avg.toFixed(2)}</span></span>
+              </div>
+            )}
+          </div>
+          <div className="h-[450px]">
+            <Line data={chartData} options={chartOptions} />
+          </div>
+        </div>
+      )}
+
+      {/* Market Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-sm">Market Cap</p>
+          <p className="text-xl font-semibold text-gray-100">
+            {quote?.marketCap ? `$${(quote.marketCap / 1e9).toFixed(1)}B` : 'N/A'}
+          </p>
+        </div>
+        <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-sm">P/E Ratio</p>
+          <p className="text-xl font-semibold text-gray-100">
+            {quote?.pe ? quote.pe.toFixed(2) : 'N/A'}
+          </p>
+        </div>
+        <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-sm">Beta</p>
+          <p className="text-xl font-semibold text-gray-100">
+            {profile?.beta ? profile.beta.toFixed(2) : 'N/A'}
+          </p>
+        </div>
+        <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-sm">Volumen</p>
+          <p className="text-xl font-semibold text-gray-100">
+            {quote?.volume ? (quote.volume / 1e6).toFixed(1) + 'M' : 'N/A'}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -766,12 +912,45 @@ function GeneralTab({ profile, quote }: { profile: any; quote: any }) {
   );
 }
 
-function FinancialStatementTab({ title, data, type }: { title: string; data: any[]; type: 'income' | 'balance' | 'cashFlow' }) {
-  if (data.length === 0) {
+function FinancialStatementTab({ title, data, type, ttmData }: { title: string; data: any[]; type: 'income' | 'balance' | 'cashFlow'; ttmData?: any }) {
+  if (data.length === 0 && !ttmData) {
     return <p className="text-2xl text-gray-400 text-center py-10">No hay datos disponibles para {title}</p>;
   }
 
   const sortedData = [...data].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // Combine TTM with historical data - TTM first, then historical
+  const allData = ttmData ? [{ ...ttmData, date: 'TTM', isTTM: true }, ...sortedData] : sortedData;
+
+  // Helper to get value with fallback field names (FMP can use different names)
+  const getValueWithFallback = (item: any, primaryKey: string): number | null | undefined => {
+    // Alternative field mappings for FMP API inconsistencies
+    const fieldMappings: Record<string, string[]> = {
+      'dividendsPaid': ['dividendsPaid', 'paymentOfDividends', 'commonStockDividendsPaid', 'dividendsPaidOnCommonStock', 'dividendsCommonStock'],
+      'preferredStock': ['preferredStock', 'preferredEquity', 'redeemablePreferredStock', 'convertiblePreferredStock', 'preferenceShareCapital'],
+      'eps': ['eps', 'epsTTM', 'earningsPerShare'],
+      'epsDiluted': ['epsdiluted', 'epsDiluted', 'dilutedEPS', 'earningsPerShareDiluted'],
+      'netDebt': ['netDebt', 'totalDebt'],
+    };
+
+    // Try primary key first
+    if (item[primaryKey] !== undefined && item[primaryKey] !== null && item[primaryKey] !== 0) {
+      return item[primaryKey];
+    }
+
+    // Try alternative keys
+    const alternatives = fieldMappings[primaryKey];
+    if (alternatives) {
+      for (const altKey of alternatives) {
+        if (item[altKey] !== undefined && item[altKey] !== null && item[altKey] !== 0) {
+          return item[altKey];
+        }
+      }
+    }
+
+    // Return 0 instead of undefined if all alternatives are 0 or missing
+    return item[primaryKey];
+  };
 
   // Métricas esenciales sin TTM (solo datos que varían por período)
   let metrics: { key: string; label: string; isRatio?: boolean; isPerShare?: boolean }[] = [];
@@ -822,6 +1001,7 @@ function FinancialStatementTab({ title, data, type }: { title: string; data: any
       { key: 'totalDebt', label: 'Total Debt' },
       // Equity
       { key: 'commonStock', label: 'Common Stock' },
+      { key: 'preferredStock', label: 'Preferred Stock' },
       { key: 'retainedEarnings', label: 'Retained Earnings' },
       { key: 'totalStockholdersEquity', label: 'Total Equity' },
       // Calculated
@@ -891,9 +1071,14 @@ function FinancialStatementTab({ title, data, type }: { title: string; data: any
               <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg sticky left-0 bg-gray-800 z-10 min-w-[280px]">
                 Métrica
               </th>
-              {sortedData.map((row) => (
-                <th key={row.date} className="px-6 py-5 text-center text-gray-200 font-bold text-lg min-w-[140px]">
-                  {new Date(row.date).getFullYear()}
+              {allData.map((row, i) => (
+                <th
+                  key={row.date || i}
+                  className={`px-6 py-5 text-center font-bold text-lg min-w-[140px] ${
+                    row.isTTM ? 'text-blue-400 bg-blue-900/30' : 'text-gray-200'
+                  }`}
+                >
+                  {row.isTTM ? 'TTM' : new Date(row.date).getFullYear()}
                 </th>
               ))}
             </tr>
@@ -904,9 +1089,14 @@ function FinancialStatementTab({ title, data, type }: { title: string; data: any
                 <td className="px-8 py-4 text-gray-200 font-medium text-base sticky left-0 bg-gray-900 z-10 border-r border-gray-700">
                   {metric.label}
                 </td>
-                {sortedData.map((row, i) => (
-                  <td key={i} className="px-6 py-4 text-center text-gray-100 text-base font-medium">
-                    {formatValue(row[metric.key], metric)}
+                {allData.map((row, i) => (
+                  <td
+                    key={i}
+                    className={`px-6 py-4 text-center text-base font-medium ${
+                      row.isTTM ? 'text-blue-300 bg-blue-900/10' : 'text-gray-100'
+                    }`}
+                  >
+                    {formatValue(getValueWithFallback(row, metric.key), metric)}
                   </td>
                 ))}
               </tr>
@@ -979,7 +1169,7 @@ function AnalistasTab({ priceTarget }: { priceTarget: any }) {
   );
 }
 
-function DCFTab({ dcfStandard, dcfCustom, quote }: { dcfStandard: any; dcfCustom: any; quote: any }) {
+function DCFTab({ dcfStandard, dcfCustom, quote, income }: { dcfStandard: any; dcfCustom: any; quote: any; income?: any[] }) {
   // Helper para formatear porcentajes - detecta si ya está en formato % o decimal
   const formatPercent = (value: number | undefined | null): string => {
     if (value === undefined || value === null || isNaN(value)) return 'N/A';
@@ -996,6 +1186,32 @@ function DCFTab({ dcfStandard, dcfCustom, quote }: { dcfStandard: any; dcfCustom
 
   // Obtener precio actual de quote o de dcfStandard
   const currentPrice = quote?.price || dcfStandard?.stockPrice || null;
+
+  // Get shares outstanding from multiple sources
+  const getSharesOutstanding = () => {
+    // Try quote first
+    if (quote?.sharesOutstanding && quote.sharesOutstanding > 0) {
+      return quote.sharesOutstanding;
+    }
+    // Try calculating from market cap and price
+    if (quote?.marketCap && quote?.price && quote.price > 0) {
+      return quote.marketCap / quote.price;
+    }
+    // Try from income statement (most recent)
+    if (income && income.length > 0) {
+      const sortedIncome = [...income].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const latestIncome = sortedIncome[0];
+      if (latestIncome?.weightedAverageShsOutDil && latestIncome.weightedAverageShsOutDil > 0) {
+        return latestIncome.weightedAverageShsOutDil;
+      }
+      if (latestIncome?.weightedAverageShsOut && latestIncome.weightedAverageShsOut > 0) {
+        return latestIncome.weightedAverageShsOut;
+      }
+    }
+    return null;
+  };
+
+  const sharesOutstanding = getSharesOutstanding();
 
   return (
     <div className="space-y-12">
@@ -1104,12 +1320,49 @@ function DCFTab({ dcfStandard, dcfCustom, quote }: { dcfStandard: any; dcfCustom
                     {dcfCustom.equityValue ? `$${(dcfCustom.equityValue / 1e9).toFixed(2)}B` : 'N/A'}
                   </td>
                 </tr>
+                <tr className="bg-gray-800">
+                  <td className="px-6 py-4 font-bold text-gray-100">Equity Value Per Share</td>
+                  <td className="px-6 py-4 text-right font-bold text-green-400 text-xl">
+                    {dcfCustom.equityValue && sharesOutstanding
+                      ? `$${(dcfCustom.equityValue / sharesOutstanding).toFixed(2)}`
+                      : 'N/A'}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
         ) : (
           <p className="text-xl text-gray-400 text-center py-10">No hay datos de Custom DCF disponibles</p>
         )}
+
+        {/* Resumen destacado de Equity Value Per Share */}
+        {dcfCustom?.equityValue && sharesOutstanding && (
+          <div className="mt-6 bg-gray-700 p-6 rounded-xl border border-gray-600">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Equity Value Per Share (Custom DCF)</p>
+                <p className="text-3xl font-bold text-green-400">
+                  ${(dcfCustom.equityValue / sharesOutstanding).toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Precio Actual</p>
+                <p className="text-3xl font-bold text-blue-400">
+                  ${quote?.price?.toFixed(2) || 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400 mb-1">Upside/Downside</p>
+                {quote?.price && (
+                  <p className={`text-3xl font-bold ${(dcfCustom.equityValue / sharesOutstanding) > quote.price ? 'text-green-400' : 'text-red-400'}`}>
+                    {(((dcfCustom.equityValue / sharesOutstanding) / quote.price - 1) * 100).toFixed(1)}%
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <p className="mt-4 text-sm text-gray-500 text-center">
           Cálculo avanzado con supuestos detallados (WACC, beta, crecimiento, etc.)
         </p>

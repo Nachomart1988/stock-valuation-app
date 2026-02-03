@@ -23,6 +23,7 @@ interface Props {
   priceTarget: any;
   profile: any;
   quote: any;
+  dcfCustom?: any; // Para obtener Advance DCF equity value per share
   onAverageValChange?: (val: number | null) => void;
 }
 
@@ -34,6 +35,7 @@ export default function ValuacionesTab({
   priceTarget,
   profile,
   quote,
+  dcfCustom,
   onAverageValChange,
 }: Props) {
   // ────────────────────────────────────────────────
@@ -50,23 +52,215 @@ export default function ValuacionesTab({
   const [exitMultiple, setExitMultiple] = useState<number>(12);
   const [projectedGrowthRate, setProjectedGrowthRate] = useState<number>(5);
 
-  // Parámetros Ohlson RIM
-  const [omega, setOmega] = useState<number>(0.62); // Persistencia de abnormal earnings
-  const [gamma, setGamma] = useState<number>(0.32); // Persistencia de "other info"
+  // ────────────────────────────────────────────────
+  // Cálculo de parámetros por defecto basados en datos históricos
+  // ────────────────────────────────────────────────
+
+  const calculatedDefaults = useMemo(() => {
+    const sortedIncome = [...income].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const sortedBalance = [...balance].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const sortedCashFlow = [...cashFlow].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // ═══════════════════════════════════════════════════════════════
+    // RIM OHLSON: ω (omega) y γ (gamma) via AR(1) regression
+    // ω = persistence of abnormal earnings: ROE_t = α + ω·ROE_{t-1} + ε
+    // γ = persistence of other information (analyst revisions proxy)
+    // ═══════════════════════════════════════════════════════════════
+
+    // Calculate ROE series for AR(1) regression
+    const roeSeries: number[] = [];
+    for (let i = 0; i < Math.min(sortedIncome.length, sortedBalance.length); i++) {
+      const netIncome = sortedIncome[i]?.netIncome || 0;
+      const equity = sortedBalance[i]?.totalStockholdersEquity || 1;
+      if (equity > 0 && netIncome !== 0) {
+        roeSeries.push(netIncome / equity);
+      }
+    }
+
+    // Simple AR(1) estimation: ω = Cov(ROE_t, ROE_{t-1}) / Var(ROE_{t-1})
+    let omega = 0.62; // Default
+    if (roeSeries.length >= 3) {
+      const n = roeSeries.length - 1;
+      let sumXY = 0, sumX = 0, sumY = 0, sumX2 = 0;
+      for (let i = 0; i < n; i++) {
+        const x = roeSeries[i + 1]; // ROE_{t-1}
+        const y = roeSeries[i];     // ROE_t
+        sumXY += x * y;
+        sumX += x;
+        sumY += y;
+        sumX2 += x * x;
+      }
+      const denom = n * sumX2 - sumX * sumX;
+      if (Math.abs(denom) > 0.0001) {
+        omega = (n * sumXY - sumX * sumY) / denom;
+        // Clamp omega to [0, 1] as it's a persistence parameter
+        omega = Math.max(0, Math.min(1, omega));
+      }
+    }
+
+    // Gamma: persistence of "other information"
+    // Use analyst estimate revisions as proxy, or default based on sector
+    // Tech companies tend to have lower gamma (more volatile info)
+    // Stable industries have higher gamma
+    const beta = profile?.beta || 1;
+    let gamma = 0.32; // Default
+    if (beta > 1.5) {
+      gamma = 0.2; // High beta = less persistent other info
+    } else if (beta < 0.8) {
+      gamma = 0.5; // Low beta = more persistent
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // STOCHASTIC DCF: σ (volatility) y λ (market price of risk)
+    // σ = std dev of FCF growth rates
+    // λ = Sharpe ratio = (E[R] - Rf) / σ_market ≈ beta * ERP / σ_stock
+    // ═══════════════════════════════════════════════════════════════
+
+    // Calculate FCF growth rates
+    const fcfGrowthRates: number[] = [];
+    for (let i = 0; i < sortedCashFlow.length - 1; i++) {
+      const fcfCurrent = sortedCashFlow[i]?.freeCashFlow || 0;
+      const fcfPrev = sortedCashFlow[i + 1]?.freeCashFlow || 0;
+      if (fcfPrev !== 0 && fcfCurrent !== 0) {
+        const growthRate = (fcfCurrent - fcfPrev) / Math.abs(fcfPrev);
+        // Filter out extreme values
+        if (Math.abs(growthRate) < 5) {
+          fcfGrowthRates.push(growthRate);
+        }
+      }
+    }
+
+    // Calculate standard deviation of FCF growth
+    let sigmaFCF = 0.25; // Default
+    if (fcfGrowthRates.length >= 2) {
+      const mean = fcfGrowthRates.reduce((s, v) => s + v, 0) / fcfGrowthRates.length;
+      const variance = fcfGrowthRates.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / fcfGrowthRates.length;
+      sigmaFCF = Math.sqrt(variance);
+      // Clamp to reasonable range [0.05, 1.0]
+      sigmaFCF = Math.max(0.05, Math.min(1.0, sigmaFCF));
+    }
+
+    // Lambda (market price of risk) ≈ Sharpe ratio
+    // λ = β × ERP / σ_stock where ERP ≈ 5.5%
+    const stockBeta = profile?.beta || 1;
+    const erp = 0.055; // Equity risk premium
+    const stockVolatility = sigmaFCF; // Use FCF vol as proxy for stock vol
+    let lambdaRisk = stockVolatility > 0 ? (stockBeta * erp) / stockVolatility : 0.5;
+    // Clamp to reasonable range [0.1, 1.5]
+    lambdaRisk = Math.max(0.1, Math.min(1.5, lambdaRisk));
+
+    // ═══════════════════════════════════════════════════════════════
+    // BAYESIAN NK DSGE: φπ, φy, κ, β
+    // φπ (Taylor inflation): typically 1.5-2.0 based on Fed behavior
+    // φy (Taylor output): typically 0.1-0.5
+    // κ (Phillips curve slope): 0.01-0.05, inversely related to market power
+    // β (discount factor): ~0.99 for quarterly, ~0.96 for annual
+    // ═══════════════════════════════════════════════════════════════
+
+    // φπ: Use market volatility as proxy - higher vol → more aggressive Fed
+    let phiPi = 1.5;
+    if (stockBeta > 1.3) {
+      phiPi = 1.8; // More aggressive for volatile sectors
+    } else if (stockBeta < 0.7) {
+      phiPi = 1.3; // Less aggressive for stable sectors
+    }
+
+    // φy: Output gap response - cyclical companies need higher φy
+    const sector = profile?.sector?.toLowerCase() || '';
+    let phiY = 0.25;
+    if (sector.includes('consumer') || sector.includes('industrial') || sector.includes('financial')) {
+      phiY = 0.4; // Cyclical sectors
+    } else if (sector.includes('health') || sector.includes('utilities') || sector.includes('consumer defensive')) {
+      phiY = 0.15; // Defensive sectors
+    }
+
+    // κ (Phillips curve slope): Related to pricing power
+    // Higher profit margin → more market power → lower κ
+    const latestIncome = sortedIncome[0] || {};
+    const grossMargin = latestIncome.revenue > 0
+      ? (latestIncome.grossProfit || 0) / latestIncome.revenue
+      : 0.3;
+    let kappaDSGE = 0.03; // Default
+    if (grossMargin > 0.5) {
+      kappaDSGE = 0.01; // High margin = high pricing power = low κ
+    } else if (grossMargin < 0.25) {
+      kappaDSGE = 0.05; // Low margin = low pricing power = high κ
+    }
+
+    // β (discount factor): Standard value for annual data
+    const betaDSGECalc = 0.99;
+
+    // ═══════════════════════════════════════════════════════════════
+    // HJM: σ (forward rate volatility) y a (mean reversion)
+    // σ: typically 0.01-0.02 for interest rates
+    // a: mean reversion speed, higher for short rates (0.1-0.5)
+    // ═══════════════════════════════════════════════════════════════
+
+    // Use dcfCustom risk-free rate if available, otherwise estimate
+    const riskFreeRate = dcfCustom?.riskFreeRate || 0.04;
+
+    // HJM sigma: Forward rate volatility (basis points / 100)
+    // Typically between 0.5-2% for developed markets
+    let hjmSigmaCalc = 0.015; // 1.5% default
+    if (riskFreeRate > 0.05) {
+      hjmSigmaCalc = 0.02; // Higher rates = higher vol
+    } else if (riskFreeRate < 0.02) {
+      hjmSigmaCalc = 0.01; // Lower rates = lower vol
+    }
+
+    // Mean reversion (a): Speed at which rates revert to long-term mean
+    // Higher a = faster reversion, typically 0.1-0.5 for annual data
+    // Use stock beta as proxy - high beta companies more sensitive to rate changes
+    let hjmMeanReversionCalc = 0.2; // Default
+    if (stockBeta > 1.3) {
+      hjmMeanReversionCalc = 0.1; // Slower reversion for volatile stocks
+    } else if (stockBeta < 0.7) {
+      hjmMeanReversionCalc = 0.4; // Faster reversion for stable stocks
+    }
+
+    return {
+      omega,
+      gamma,
+      sigmaFCF,
+      lambdaRisk,
+      phiPi,
+      phiY,
+      kappaDSGE,
+      betaDSGE: betaDSGECalc,
+      hjmSigma: hjmSigmaCalc,
+      hjmMeanReversion: hjmMeanReversionCalc,
+    };
+  }, [income, balance, cashFlow, profile, dcfCustom]);
+
+  // Parámetros Ohlson RIM - inicializar con valores calculados
+  const [omega, setOmega] = useState<number | null>(null);
+  const [gamma, setGamma] = useState<number | null>(null);
 
   // Parámetros Stochastic DCF
-  const [volatility, setVolatility] = useState<number>(0.25); // sigma
-  const [lambda, setLambda] = useState<number>(0.5); // risk aversion
+  const [volatility, setVolatility] = useState<number | null>(null);
+  const [lambda, setLambda] = useState<number | null>(null);
 
   // Parámetros NK DSGE (Bayesian)
-  const [phi_pi, setPhi_pi] = useState<number>(1.5); // Taylor rule inflation response
-  const [phi_y, setPhi_y] = useState<number>(0.5); // Taylor rule output gap response
-  const [betaDSGE, setBetaDSGE] = useState<number>(0.99); // Discount factor
-  const [kappa, setKappa] = useState<number>(0.3); // Phillips curve slope
+  const [phi_pi, setPhi_pi] = useState<number | null>(null);
+  const [phi_y, setPhi_y] = useState<number | null>(null);
+  const [betaDSGE, setBetaDSGE] = useState<number | null>(null);
+  const [kappa, setKappa] = useState<number | null>(null);
 
   // Parámetros HJM
-  const [hjmSigma, setHjmSigma] = useState<number>(0.01); // Volatility of forward rate
-  const [hjmMeanReversion, setHjmMeanReversion] = useState<number>(0.1); // Mean reversion speed
+  const [hjmSigma, setHjmSigma] = useState<number | null>(null);
+  const [hjmMeanReversion, setHjmMeanReversion] = useState<number | null>(null);
+
+  // Use calculated defaults when state is null
+  const effectiveOmega = omega ?? calculatedDefaults.omega;
+  const effectiveGamma = gamma ?? calculatedDefaults.gamma;
+  const effectiveVolatility = volatility ?? calculatedDefaults.sigmaFCF;
+  const effectiveLambda = lambda ?? calculatedDefaults.lambdaRisk;
+  const effectivePhiPi = phi_pi ?? calculatedDefaults.phiPi;
+  const effectivePhiY = phi_y ?? calculatedDefaults.phiY;
+  const effectiveBetaDSGE = betaDSGE ?? calculatedDefaults.betaDSGE;
+  const effectiveKappa = kappa ?? calculatedDefaults.kappaDSGE;
+  const effectiveHjmSigma = hjmSigma ?? calculatedDefaults.hjmSigma;
+  const effectiveHjmMeanReversion = hjmMeanReversion ?? calculatedDefaults.hjmMeanReversion;
 
   const [methods, setMethods] = useState<ValuationMethod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -240,7 +434,16 @@ export default function ValuacionesTab({
         // ────────────────────────────────────────────────
         // Variables base
         // ────────────────────────────────────────────────
-        const d0 = Math.abs(lastCashFlow.dividendsPaid || 0) / (lastIncome.weightedAverageShsOutDil || 1);
+        // Get dividends with fallback field names
+        const dividendsPaid = Math.abs(
+          lastCashFlow.dividendsPaid ||
+          lastCashFlow.paymentOfDividends ||
+          lastCashFlow.commonStockDividendsPaid ||
+          lastCashFlow.dividendsPaidOnCommonStock ||
+          lastCashFlow.dividendsCommonStock ||
+          0
+        );
+        const d0 = dividendsPaid / (lastIncome.weightedAverageShsOutDil || 1);
         const gs = 0.103; // Sustainable growth (placeholder)
         const ks = 0.0544; // Cost of equity (placeholder)
         const beta = profile.beta || 1;
@@ -275,9 +478,9 @@ export default function ValuacionesTab({
         // α1 = ω / (1 + r - ω)
         // α2 = (1 + r) / ((1 + r - ω)(1 + r - γ))
         // α3 = γ / (1 + r - γ)
-        const alpha1 = omega / (1 + r - omega);
-        const alpha2 = (1 + r) / ((1 + r - omega) * (1 + r - gamma));
-        const alpha3 = gamma / (1 + r - gamma);
+        const alpha1 = effectiveOmega / (1 + r - effectiveOmega);
+        const alpha2 = (1 + r) / ((1 + r - effectiveOmega) * (1 + r - effectiveGamma));
+        const alpha3 = effectiveGamma / (1 + r - effectiveGamma);
 
         const rimValue = bookValue + alpha1 * abnormalEarnings + alpha2 * analystGrowth * epsTTM + alpha3 * analystGrowth;
 
@@ -302,7 +505,7 @@ export default function ValuacionesTab({
         // ────────────────────────────────────────────────
         const fcfLast = lastCashFlow.freeCashFlow || 0;
         const terminalGrowth = glong;
-        const stochasticAdjustment = Math.exp(-lambda * Math.pow(volatility, 2) / 2);
+        const stochasticAdjustment = Math.exp(-effectiveLambda * Math.pow(effectiveVolatility, 2) / 2);
 
         // Base DCF terminal value
         const baseTVPerShare = dcfCalculation?.valuePerShare || 0;
@@ -328,12 +531,12 @@ export default function ValuacionesTab({
         // En estado estacionario: π* = 0, y* = 0
         // Risk premium = κ * |output_gap| + inflation_uncertainty
         const outputGap = revenueGrowth - 0.03; // Assuming 3% trend growth
-        const impliedInflation = kappa * outputGap;
-        const dsgeRiskPremium = Math.abs(kappa * outputGap) + 0.02; // Base 2% risk premium
+        const impliedInflation = effectiveKappa * outputGap;
+        const dsgeRiskPremium = Math.abs(effectiveKappa * outputGap) + 0.02; // Base 2% risk premium
 
         // Policy rate from Taylor rule
         const rNatural = 0.02; // Natural rate
-        const policyRate = rNatural + phi_pi * impliedInflation + phi_y * outputGap;
+        const policyRate = rNatural + effectivePhiPi * impliedInflation + effectivePhiY * outputGap;
 
         // Discount rate adjusted for DSGE risk
         const dsgeDiscountRate = Math.max(0.05, policyRate + dsgeRiskPremium);
@@ -355,8 +558,8 @@ export default function ValuacionesTab({
 
         // Simplified HJM implementation
         // Assume Vasicek-type volatility structure: σ(t,T) = σ * e^(-a(T-t))
-        const a = hjmMeanReversion;
-        const sigma = hjmSigma;
+        const a = effectiveHjmMeanReversion;
+        const sigma = effectiveHjmSigma;
 
         // Initial forward rate (use 10Y treasury as proxy)
         const f0 = 0.04; // Initial forward rate
@@ -387,6 +590,132 @@ export default function ValuacionesTab({
         const hjmTerminalValue = fcfo * Math.pow(1 + glong, 5) * (1 + glong) / (forwardRate - glong);
         const hjmPVTerminal = hjmTerminalValue * bondPrice;
         const hjmValue = hjmPV + hjmPVTerminal;
+
+        // ────────────────────────────────────────────────
+        // FCFE (Free Cash Flow to Equity) Valuation
+        // FCFE = Net Income + D&A - CapEx - ΔNWC + Net Borrowing
+        // Pₜ = FCFE_{t+1} / (r_e - g) / Shares Outstanding
+        // ────────────────────────────────────────────────
+        const netIncome = lastIncome.netIncome || 0;
+        const dna = lastIncome.depreciationAndAmortization || lastCashFlow.depreciationAndAmortization || 0;
+        const capex = Math.abs(lastCashFlow.capitalExpenditure || 0);
+        const prevTotalDebt = prevBalance.totalDebt || prevBalance.longTermDebt || 0;
+        const currentTotalDebt = lastBalance.totalDebt || lastBalance.longTermDebt || 0;
+        const netBorrowing = currentTotalDebt - prevTotalDebt;
+        const prevWC = (prevBalance.totalCurrentAssets || 0) - (prevBalance.totalCurrentLiabilities || 0);
+        const currWC = (lastBalance.totalCurrentAssets || 0) - (lastBalance.totalCurrentLiabilities || 0);
+        const deltaWC = currWC - prevWC;
+
+        // FCFE aggregate
+        const fcfeAggregate = netIncome + dna - capex - deltaWC + netBorrowing;
+        const fcfePerShare = fcfeAggregate / sharesOutstanding;
+
+        // FCFE 2-Stage: Gordon Growth on FCFE per share
+        const fcfeGrowth1 = projectedGrowthRate / 100; // High growth period
+        const re = discountRate / 100; // Cost of equity
+
+        // 2-Stage FCFE: Explicit forecast + Terminal
+        let fcfe2StageValue = 0;
+        let lastFCFE = fcfePerShare;
+        for (let t = 1; t <= n; t++) {
+          const projFCFE = lastFCFE * (1 + fcfeGrowth1);
+          const discountedFCFE = projFCFE / Math.pow(1 + re, t);
+          fcfe2StageValue += discountedFCFE;
+          lastFCFE = projFCFE;
+        }
+        // Terminal value for FCFE
+        const fcfeTerminal = re > glong ? (lastFCFE * (1 + glong)) / (re - glong) : 0;
+        const fcfeTerminalPV = fcfeTerminal / Math.pow(1 + re, n);
+        fcfe2StageValue += fcfeTerminalPV;
+
+        // 3-Stage FCFE (high growth -> transition -> stable)
+        let fcfe3StageValue = 0;
+        lastFCFE = fcfePerShare;
+        const transitionYears = h;
+        // Phase 1: High growth
+        for (let t = 1; t <= n; t++) {
+          const projFCFE = lastFCFE * (1 + fcfeGrowth1);
+          const discountedFCFE = projFCFE / Math.pow(1 + re, t);
+          fcfe3StageValue += discountedFCFE;
+          lastFCFE = projFCFE;
+        }
+        // Phase 2: Transition (declining growth from high to glong)
+        for (let t = 1; t <= transitionYears; t++) {
+          const transGrowth = fcfeGrowth1 - (fcfeGrowth1 - glong) * (t / transitionYears);
+          const projFCFE = lastFCFE * (1 + transGrowth);
+          const discountedFCFE = projFCFE / Math.pow(1 + re, n + t);
+          fcfe3StageValue += discountedFCFE;
+          lastFCFE = projFCFE;
+        }
+        // Phase 3: Terminal stable growth
+        const fcfe3Terminal = re > glong ? (lastFCFE * (1 + glong)) / (re - glong) : 0;
+        const fcfe3TerminalPV = fcfe3Terminal / Math.pow(1 + re, n + transitionYears);
+        fcfe3StageValue += fcfe3TerminalPV;
+
+        // ────────────────────────────────────────────────
+        // FCFF (Free Cash Flow to Firm) Valuation
+        // FCFF = NOPAT + D&A - CapEx - ΔNWC
+        // Pₜ = [FCFF_{t+1} / (WACC - g) - Net Debt] / Shares Outstanding
+        // ────────────────────────────────────────────────
+        const taxRate = lastIncome.incomeTaxExpense && lastIncome.incomeBeforeTax
+          ? lastIncome.incomeTaxExpense / lastIncome.incomeBeforeTax
+          : 0.25;
+        const ebit = lastIncome.operatingIncome || lastIncome.ebit || 0;
+        const nopat = ebit * (1 - taxRate);
+
+        // FCFF aggregate
+        const fcffAggregate = nopat + dna - capex - deltaWC;
+        const wacc = discountRate / 100;
+        const netDebt = currentTotalDebt - (lastBalance.cashAndCashEquivalents || 0);
+
+        // 2-Stage FCFF: Explicit forecast + Terminal
+        let fcff2StageEV = 0;
+        let lastFCFF = fcffAggregate;
+        for (let t = 1; t <= n; t++) {
+          const projFCFF = lastFCFF * (1 + fcfeGrowth1);
+          const discountedFCFF = projFCFF / Math.pow(1 + wacc, t);
+          fcff2StageEV += discountedFCFF;
+          lastFCFF = projFCFF;
+        }
+        // Terminal value for FCFF
+        const fcffTerminal = wacc > glong ? (lastFCFF * (1 + glong)) / (wacc - glong) : 0;
+        const fcffTerminalPV = fcffTerminal / Math.pow(1 + wacc, n);
+        fcff2StageEV += fcffTerminalPV;
+        // Convert to equity value per share
+        const fcff2StageEquityValue = fcff2StageEV - netDebt;
+        const fcff2StageValue = fcff2StageEquityValue / sharesOutstanding;
+
+        // 3-Stage FCFF
+        let fcff3StageEV = 0;
+        lastFCFF = fcffAggregate;
+        // Phase 1: High growth
+        for (let t = 1; t <= n; t++) {
+          const projFCFF = lastFCFF * (1 + fcfeGrowth1);
+          const discountedFCFF = projFCFF / Math.pow(1 + wacc, t);
+          fcff3StageEV += discountedFCFF;
+          lastFCFF = projFCFF;
+        }
+        // Phase 2: Transition
+        for (let t = 1; t <= transitionYears; t++) {
+          const transGrowth = fcfeGrowth1 - (fcfeGrowth1 - glong) * (t / transitionYears);
+          const projFCFF = lastFCFF * (1 + transGrowth);
+          const discountedFCFF = projFCFF / Math.pow(1 + wacc, n + t);
+          fcff3StageEV += discountedFCFF;
+          lastFCFF = projFCFF;
+        }
+        // Phase 3: Terminal
+        const fcff3Terminal = wacc > glong ? (lastFCFF * (1 + glong)) / (wacc - glong) : 0;
+        const fcff3TerminalPV = fcff3Terminal / Math.pow(1 + wacc, n + transitionYears);
+        fcff3StageEV += fcff3TerminalPV;
+        const fcff3StageEquityValue = fcff3StageEV - netDebt;
+        const fcff3StageValue = fcff3StageEquityValue / sharesOutstanding;
+
+        // ────────────────────────────────────────────────
+        // Custom Advance DCF (from API)
+        // ────────────────────────────────────────────────
+        const advanceDCFValue = dcfCustom?.equityValue && quote?.sharesOutstanding
+          ? dcfCustom.equityValue / quote.sharesOutstanding
+          : null;
 
         // ────────────────────────────────────────────────
         // Métodos tradicionales (existentes)
@@ -441,7 +770,7 @@ export default function ValuacionesTab({
             name: 'RIM (Ohlson)',
             value: rimValue > 0 && isFinite(rimValue) ? rimValue : null,
             enabled: true,
-            description: `Residual Income Model - Ohlson (ω=${omega}, γ=${gamma})`,
+            description: `Residual Income Model - Ohlson (ω=${effectiveOmega.toFixed(2)}, γ=${effectiveGamma.toFixed(2)})`,
           },
           {
             name: 'DCF',
@@ -459,25 +788,59 @@ export default function ValuacionesTab({
             name: 'Stochastic DCF',
             value: stochasticDCFValue > 0 && isFinite(stochasticDCFValue) ? stochasticDCFValue : null,
             enabled: true,
-            description: `DCF con ajuste estocástico (σ=${volatility}, λ=${lambda})`,
+            description: `DCF con ajuste estocástico (σ=${effectiveVolatility.toFixed(2)}, λ=${effectiveLambda.toFixed(2)})`,
           },
           {
             name: 'Bayesian (NK DSGE)',
             value: bayesianValue > 0 && isFinite(bayesianValue) ? bayesianValue : null,
             enabled: true,
-            description: `New Keynesian DSGE (φπ=${phi_pi}, φy=${phi_y})`,
+            description: `New Keynesian DSGE (φπ=${effectivePhiPi.toFixed(2)}, φy=${effectivePhiY.toFixed(2)}, κ=${effectiveKappa.toFixed(3)})`,
           },
           {
             name: 'HJM',
             value: hjmValue > 0 && isFinite(hjmValue) ? hjmValue : null,
             enabled: true,
-            description: `Heath-Jarrow-Morton (σ=${hjmSigma}, a=${hjmMeanReversion})`,
+            description: `Heath-Jarrow-Morton (σ=${effectiveHjmSigma.toFixed(3)}, a=${effectiveHjmMeanReversion.toFixed(2)})`,
           },
-          // Métodos placeholder para futuras implementaciones
-          { name: '2 Stages FCFF', value: 0, enabled: false, description: 'FCFF 2 etapas (no implementado)' },
-          { name: '3 Stages FCFE', value: 0, enabled: false, description: 'FCFE 3 etapas (no implementado)' },
-          { name: '3 Stages FCFF', value: 0, enabled: false, description: 'FCFF 3 etapas (no implementado)' },
-          { name: 'Graham Method 2', value: 0, enabled: false, description: 'Graham alternativo (no implementado)' },
+          // ────────────────────────────────────────────────
+          // FCFE Methods
+          // ────────────────────────────────────────────────
+          {
+            name: '2-Stage FCFE',
+            value: fcfe2StageValue > 0 && isFinite(fcfe2StageValue) ? fcfe2StageValue : null,
+            enabled: true,
+            description: `FCFE 2 etapas (Re=${(re * 100).toFixed(1)}%, g1=${(fcfeGrowth1 * 100).toFixed(1)}%)`,
+          },
+          {
+            name: '3-Stage FCFE',
+            value: fcfe3StageValue > 0 && isFinite(fcfe3StageValue) ? fcfe3StageValue : null,
+            enabled: true,
+            description: `FCFE 3 etapas (H=${transitionYears} años transición)`,
+          },
+          // ────────────────────────────────────────────────
+          // FCFF Methods
+          // ────────────────────────────────────────────────
+          {
+            name: '2-Stage FCFF',
+            value: fcff2StageValue > 0 && isFinite(fcff2StageValue) ? fcff2StageValue : null,
+            enabled: true,
+            description: `FCFF 2 etapas (WACC=${(wacc * 100).toFixed(1)}%, Net Debt=${(netDebt / 1e9).toFixed(1)}B)`,
+          },
+          {
+            name: '3-Stage FCFF',
+            value: fcff3StageValue > 0 && isFinite(fcff3StageValue) ? fcff3StageValue : null,
+            enabled: true,
+            description: `FCFF 3 etapas (WACC=${(wacc * 100).toFixed(1)}%)`,
+          },
+          // ────────────────────────────────────────────────
+          // External DCF Values
+          // ────────────────────────────────────────────────
+          {
+            name: 'Advance DCF (API)',
+            value: advanceDCFValue && advanceDCFValue > 0 && isFinite(advanceDCFValue) ? advanceDCFValue : null,
+            enabled: true,
+            description: 'Equity Value Per Share from FMP Custom DCF',
+          },
         ];
 
         setMethods(calculatedMethods);
@@ -492,12 +855,12 @@ export default function ValuacionesTab({
   }, [
     h, glong, n, sharePriceT5, sharePriceT5CAGR,
     income, balance, cashFlow, priceTarget, profile, quote,
-    omega, gamma, // RIM params
+    effectiveOmega, effectiveGamma, // RIM params
     discountRate, exitMultiple, projectedGrowthRate, // DCF params
-    volatility, lambda, // Stochastic params
-    phi_pi, phi_y, betaDSGE, kappa, // DSGE params
-    hjmSigma, hjmMeanReversion, // HJM params
-    peerPE, dcfCalculation,
+    effectiveVolatility, effectiveLambda, // Stochastic params
+    effectivePhiPi, effectivePhiY, effectiveBetaDSGE, effectiveKappa, // DSGE params
+    effectiveHjmSigma, effectiveHjmMeanReversion, // HJM params
+    peerPE, dcfCalculation, dcfCustom, // Include dcfCustom for Advance DCF
   ]);
 
   const toggleMethod = (index: number) => {
@@ -632,26 +995,37 @@ export default function ValuacionesTab({
         {/* RIM Ohlson */}
         <div className="mb-6">
           <h5 className="text-lg font-semibold text-blue-400 mb-3 text-left">RIM (Ohlson Model)</h5>
+          <p className="text-xs text-gray-500 mb-2 text-left">ω calculado via AR(1) en ROE histórico. γ basado en beta y sector.</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">ω (persistencia earnings)</label>
               <input
                 type="number"
                 step="0.01"
-                value={omega}
-                onChange={(e) => setOmega(Number(e.target.value) || 0.62)}
+                value={omega ?? effectiveOmega}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setOmega(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedDefaults.omega.toFixed(2)}`}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
               />
+              {omega === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">γ (persistencia other info)</label>
               <input
                 type="number"
                 step="0.01"
-                value={gamma}
-                onChange={(e) => setGamma(Number(e.target.value) || 0.32)}
+                value={gamma ?? effectiveGamma}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setGamma(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedDefaults.gamma.toFixed(2)}`}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
               />
+              {gamma === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
             </div>
           </div>
         </div>
@@ -659,26 +1033,37 @@ export default function ValuacionesTab({
         {/* Stochastic DCF */}
         <div className="mb-6">
           <h5 className="text-lg font-semibold text-purple-400 mb-3 text-left">Stochastic DCF</h5>
+          <p className="text-xs text-gray-500 mb-2 text-left">σ = desv. estándar del crecimiento FCF. λ = precio de riesgo (Sharpe ratio estimado).</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">σ (volatilidad)</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">σ (volatilidad FCF)</label>
               <input
                 type="number"
                 step="0.01"
-                value={volatility}
-                onChange={(e) => setVolatility(Number(e.target.value) || 0.25)}
+                value={volatility ?? effectiveVolatility}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setVolatility(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedDefaults.sigmaFCF.toFixed(2)}`}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
               />
+              {volatility === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">λ (risk aversion)</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">λ (market price of risk)</label>
               <input
                 type="number"
                 step="0.1"
-                value={lambda}
-                onChange={(e) => setLambda(Number(e.target.value) || 0.5)}
+                value={lambda ?? effectiveLambda}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setLambda(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedDefaults.lambdaRisk.toFixed(2)}`}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
               />
+              {lambda === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
             </div>
           </div>
         </div>
@@ -686,46 +1071,67 @@ export default function ValuacionesTab({
         {/* NK DSGE */}
         <div className="mb-6">
           <h5 className="text-lg font-semibold text-green-400 mb-3 text-left">Bayesian (NK DSGE)</h5>
+          <p className="text-xs text-gray-500 mb-2 text-left">Parámetros de política monetaria (Taylor rule) y curva de Phillips. κ basado en margen bruto.</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">φπ (Taylor inflation)</label>
               <input
                 type="number"
                 step="0.1"
-                value={phi_pi}
-                onChange={(e) => setPhi_pi(Number(e.target.value) || 1.5)}
+                value={phi_pi ?? effectivePhiPi}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setPhi_pi(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedDefaults.phiPi.toFixed(2)}`}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
               />
+              {phi_pi === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">φy (Taylor output)</label>
               <input
                 type="number"
                 step="0.1"
-                value={phi_y}
-                onChange={(e) => setPhi_y(Number(e.target.value) || 0.5)}
+                value={phi_y ?? effectivePhiY}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setPhi_y(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedDefaults.phiY.toFixed(2)}`}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
               />
+              {phi_y === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">κ (Phillips slope)</label>
               <input
                 type="number"
-                step="0.05"
-                value={kappa}
-                onChange={(e) => setKappa(Number(e.target.value) || 0.3)}
+                step="0.01"
+                value={kappa ?? effectiveKappa}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setKappa(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedDefaults.kappaDSGE.toFixed(3)}`}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
               />
+              {kappa === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">β (discount factor)</label>
               <input
                 type="number"
                 step="0.01"
-                value={betaDSGE}
-                onChange={(e) => setBetaDSGE(Number(e.target.value) || 0.99)}
+                value={betaDSGE ?? effectiveBetaDSGE}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setBetaDSGE(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedDefaults.betaDSGE.toFixed(2)}`}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
               />
+              {betaDSGE === null && <p className="text-xs text-blue-400 mt-1">Estándar: 0.99</p>}
             </div>
           </div>
         </div>
@@ -733,26 +1139,37 @@ export default function ValuacionesTab({
         {/* HJM */}
         <div>
           <h5 className="text-lg font-semibold text-orange-400 mb-3 text-left">HJM (Heath-Jarrow-Morton)</h5>
+          <p className="text-xs text-gray-500 mb-2 text-left">Dinámica de tasas forward. σ basado en nivel de tasas, a basado en beta del stock.</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">σ (forward rate vol)</label>
               <input
                 type="number"
                 step="0.001"
-                value={hjmSigma}
-                onChange={(e) => setHjmSigma(Number(e.target.value) || 0.01)}
+                value={hjmSigma ?? effectiveHjmSigma}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setHjmSigma(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedDefaults.hjmSigma.toFixed(3)}`}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
               />
+              {hjmSigma === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">a (mean reversion)</label>
               <input
                 type="number"
                 step="0.01"
-                value={hjmMeanReversion}
-                onChange={(e) => setHjmMeanReversion(Number(e.target.value) || 0.1)}
+                value={hjmMeanReversion ?? effectiveHjmMeanReversion}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setHjmMeanReversion(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedDefaults.hjmMeanReversion.toFixed(2)}`}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
               />
+              {hjmMeanReversion === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
             </div>
           </div>
         </div>

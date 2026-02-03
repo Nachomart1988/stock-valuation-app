@@ -6,17 +6,30 @@ import { useEffect, useState } from 'react';
 type Projection = {
   year: number;
   revenue: number;
-  revenueGrowth: number;
+  revenueGrowth: number | null;
   ebitda: number;
   ebitdaMargin: number;
   depreciation: number;
   netOpProfitAfterTax: number;
   capex: number;
-  incrementalWC: number;
+  changeInWC: number;
   unleveredFCF: number;
   discountFactor: number;
   discountedFCF: number;
+  isProjected: boolean;
 };
+
+interface CalculosTabProps {
+  ticker: string;
+  quote: any;
+  profile: any;
+  income: any[];
+  balance: any[];
+  cashFlow: any[];
+  dcfCustom?: any; // Para obtener WACC del Advance DCF
+  estimates?: any[]; // Para obtener revenue forecast
+  calculatedWacc?: number; // WACC calculado en WACCTab
+}
 
 export default function CalculosTab({
   ticker,
@@ -25,16 +38,174 @@ export default function CalculosTab({
   income,
   balance,
   cashFlow,
-}: {
-  ticker: string;
-  quote: any;
-  profile: any;
-  income: any[];
-  balance: any[];
-  cashFlow: any[];
-}) {
+  dcfCustom,
+  estimates,
+  calculatedWacc,
+}: CalculosTabProps) {
   const [calculations, setCalculations] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // ────────────────────────────────────────────────
+  // Calcular revenue growth usando Holt y Regression (como en RevenueForecastTab)
+  // ────────────────────────────────────────────────
+  const getAverageRevenueGrowth = (yearsToForecast: number = 1) => {
+    if (!income || income.length < 3) return 5; // Default 5%
+
+    // Preparar datos historicos ordenados cronologicamente
+    const historical = [...income]
+      .filter((item) => item.date && item.revenue && item.revenue > 0)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map((item) => item.revenue);
+
+    if (historical.length < 3) return 5;
+
+    // ═══════════════════════════════════════════════════════════════
+    // HOLT'S LINEAR TREND
+    // ═══════════════════════════════════════════════════════════════
+    const calculateHolt = (revenues: number[], alpha: number, beta: number) => {
+      if (revenues.length < 2) return { level: 0, trend: 0 };
+      let level = revenues[0];
+      let trend = revenues[1] - revenues[0];
+
+      for (let t = 1; t < revenues.length; t++) {
+        const prevLevel = level;
+        level = alpha * revenues[t] + (1 - alpha) * (prevLevel + trend);
+        trend = beta * (level - prevLevel) + (1 - beta) * trend;
+      }
+      return { level, trend };
+    };
+
+    // Optimizar alpha y beta (simplificado)
+    let bestAlpha = 0.5;
+    let bestBeta = 0.5;
+    let bestMSE = Infinity;
+
+    for (let alpha = 0.1; alpha <= 0.9; alpha += 0.1) {
+      for (let beta = 0.1; beta <= 0.9; beta += 0.1) {
+        const { level, trend } = calculateHolt(historical, alpha, beta);
+        // Simple MSE calculation
+        let mse = 0;
+        let tempLevel = historical[0];
+        let tempTrend = historical[1] - historical[0];
+        for (let t = 1; t < historical.length; t++) {
+          const pred = tempLevel + tempTrend;
+          mse += Math.pow(historical[t] - pred, 2);
+          const prevLevel = tempLevel;
+          tempLevel = alpha * historical[t] + (1 - alpha) * (prevLevel + tempTrend);
+          tempTrend = beta * (tempLevel - prevLevel) + (1 - beta) * tempTrend;
+        }
+        if (mse < bestMSE) {
+          bestMSE = mse;
+          bestAlpha = alpha;
+          bestBeta = beta;
+        }
+      }
+    }
+
+    const { level: holtLevel, trend: holtTrend } = calculateHolt(historical, bestAlpha, bestBeta);
+
+    // Forecast con Holt
+    let holtForecast = holtLevel + holtTrend * yearsToForecast;
+
+    // ═══════════════════════════════════════════════════════════════
+    // REGRESSION LINEAL
+    // ═══════════════════════════════════════════════════════════════
+    const n = historical.length;
+    const x = historical.map((_, i) => i);
+    const y = historical;
+
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+    const sumX2 = x.reduce((sum, xi) => sum + xi * xi, 0);
+
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    // Forecast con Regression
+    const nextX = n - 1 + yearsToForecast;
+    const regressionForecast = intercept + slope * nextX;
+
+    // ═══════════════════════════════════════════════════════════════
+    // PROMEDIO DE GROWTH RATES
+    // ═══════════════════════════════════════════════════════════════
+    const lastRevenue = historical[historical.length - 1];
+
+    // Growth rate de Holt
+    const holtGrowthRate = lastRevenue > 0 ? ((holtForecast - lastRevenue) / lastRevenue) * 100 : 0;
+
+    // Growth rate de Regression
+    const regressionGrowthRate = lastRevenue > 0 ? ((regressionForecast - lastRevenue) / lastRevenue) * 100 : 0;
+
+    // Promedio de ambos metodos
+    const avgGrowthRate = (holtGrowthRate + regressionGrowthRate) / 2;
+
+    // Clamp to reasonable range [-20%, 50%]
+    return Math.max(-20, Math.min(50, avgGrowthRate));
+  };
+
+  // Calcular average forecast revenue para proyecciones
+  const getAverageForecastRevenue = () => {
+    if (!estimates || estimates.length === 0) return null;
+
+    const futureEstimates = estimates.filter(e => {
+      const estYear = new Date(e.date).getFullYear();
+      const currentYear = new Date().getFullYear();
+      return estYear >= currentYear && e.estimatedRevenueAvg;
+    });
+
+    if (futureEstimates.length > 0) {
+      return futureEstimates[0].estimatedRevenueAvg; // Next year forecast
+    }
+    return null;
+  };
+
+  // Estados para inputs del usuario
+  const [userWacc, setUserWacc] = useState<number | null>(null);
+  const [exitMultiple, setExitMultiple] = useState<number>(12);
+  const [projectedGrowthRate, setProjectedGrowthRate] = useState<number>(getAverageRevenueGrowth());
+  const [yearsToProject, setYearsToProject] = useState<number>(5);
+
+  // Update projected growth rate when estimates change
+  useEffect(() => {
+    const avgGrowth = getAverageRevenueGrowth();
+    setProjectedGrowthRate(avgGrowth);
+  }, [estimates, income]);
+
+  // Calcular WACC promedio entre el WACC Tab y Advance DCF
+  const getAverageWacc = () => {
+    // WACC del Advance DCF (normalizar si viene en decimal)
+    let advanceDcfWacc = dcfCustom?.wacc;
+    if (advanceDcfWacc !== undefined && advanceDcfWacc !== null) {
+      // Si es menor a 1, está en decimal, convertir a porcentaje
+      if (Math.abs(advanceDcfWacc) < 1) {
+        advanceDcfWacc = advanceDcfWacc * 100;
+      }
+    }
+
+    // Si el usuario especificó un WACC manual, usarlo
+    if (userWacc !== null) {
+      return userWacc / 100;
+    }
+
+    // Calcular promedio entre WACC Tab y Advance DCF
+    const waccValues: number[] = [];
+
+    if (calculatedWacc && calculatedWacc > 0 && calculatedWacc < 50) {
+      waccValues.push(calculatedWacc);
+    }
+
+    if (advanceDcfWacc && advanceDcfWacc > 0 && advanceDcfWacc < 50) {
+      waccValues.push(advanceDcfWacc);
+    }
+
+    if (waccValues.length > 0) {
+      return (waccValues.reduce((sum, w) => sum + w, 0) / waccValues.length) / 100;
+    }
+
+    // Default: 10%
+    return 0.10;
+  };
 
   useEffect(() => {
     if (!income.length || !balance.length || !cashFlow.length) {
@@ -42,46 +213,53 @@ export default function CalculosTab({
       return;
     }
 
-    const baseYear = 2024; // Año corriente
-    const yearsBack = 3; // 3 años atrás (2021-2023)
-    const yearsForward = 3; // 3 años adelante (2025-2027)
-
-    const discountRate = 0.12; // 12%
-    const exitMultiple = 24.2; // EV/EBITDA exit multiple
-
-    // Ordenar arrays por fecha descendente
+    // Ordenar arrays por fecha descendente (más reciente primero)
     const sortedIncome = [...income].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const sortedBalance = [...balance].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const sortedCashFlow = [...cashFlow].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    const projections = [];
+    const wacc = getAverageWacc();
+    const projections: Projection[] = [];
+    const yearsToShow = Math.min(5, sortedIncome.length); // Mostrar hasta 5 años históricos
 
-    let cumulativeDiscountedFCF = 0;
+    // Año base para referencia del discount factor
+    const baseYear = new Date(sortedIncome[0]?.date).getFullYear();
 
-    // Años pasados (2021-2023)
-    for (let yearOffset = -yearsBack; yearOffset < 0; yearOffset++) {
-      const year = baseYear + yearOffset;
-      const index = -yearOffset; // 1 para 2023, 2 para 2022, 3 para 2021
+    // ────────────────────────────────────────────────
+    // Datos históricos
+    // ────────────────────────────────────────────────
+    for (let i = yearsToShow - 1; i >= 0; i--) {
+      const inc = sortedIncome[i] || {};
+      const bal = sortedBalance[i] || {};
+      const cf = sortedCashFlow[i] || {};
+      const prevInc = sortedIncome[i + 1];
 
-      const inc = sortedIncome[index] || {};
-      const bal = sortedBalance[index] || {};
-      const cf = sortedCashFlow[index] || {};
-
+      const year = new Date(inc.date).getFullYear();
       const revenue = inc.revenue || 0;
-      const revenueGrowth = 0; // No calculado para pasado
-      const ebitda = inc.ebitda || 0;
-      const ebitdaMargin = revenue ? (ebitda / revenue) * 100 : 0;
-      const depreciation = inc.depreciationAndAmortization || 0;
-      const netOpProfitAfterTax = inc.netIncome || 0;
-      const capex = cf.capitalExpenditure || 0;
-      const incrementalWC = 0; // Placeholder, calcular si tenés datos previos
+      const prevRevenue = prevInc?.revenue || 0;
+      const revenueGrowth = prevRevenue > 0 ? ((revenue - prevRevenue) / prevRevenue) * 100 : null;
 
-      const unleveredFCF = netOpProfitAfterTax + depreciation - capex - incrementalWC;
+      const ebitda = inc.ebitda || (inc.operatingIncome || 0) + (inc.depreciationAndAmortization || 0);
+      const ebitdaMargin = revenue > 0 ? (ebitda / revenue) * 100 : 0;
+      const depreciation = inc.depreciationAndAmortization || cf.depreciationAndAmortization || 0;
 
-      const discountFactor = 1; // Para pasado, no se descuenta
+      // NOPAT = EBIT * (1 - tax rate)
+      const taxRate = inc.incomeTaxExpense && inc.incomeBeforeTax
+        ? inc.incomeTaxExpense / inc.incomeBeforeTax
+        : 0.25;
+      const ebit = inc.operatingIncome || inc.ebit || (ebitda - depreciation);
+      const netOpProfitAfterTax = ebit * (1 - taxRate);
 
-      const discountedFCF = unleveredFCF * discountFactor;
-      cumulativeDiscountedFCF += discountedFCF;
+      const capex = Math.abs(cf.capitalExpenditure || cf.investmentsInPropertyPlantAndEquipment || 0);
+
+      // Change in Working Capital
+      const prevBal = sortedBalance[i + 1];
+      const currentWC = (bal.totalCurrentAssets || 0) - (bal.totalCurrentLiabilities || 0);
+      const prevWC = prevBal ? (prevBal.totalCurrentAssets || 0) - (prevBal.totalCurrentLiabilities || 0) : currentWC;
+      const changeInWC = currentWC - prevWC;
+
+      // Unlevered FCF = NOPAT + D&A - CapEx - Change in WC
+      const unleveredFCF = netOpProfitAfterTax + depreciation - capex - changeInWC;
 
       projections.push({
         year,
@@ -92,295 +270,406 @@ export default function CalculosTab({
         depreciation,
         netOpProfitAfterTax,
         capex,
-        incrementalWC,
+        changeInWC,
         unleveredFCF,
-        discountFactor,
-        discountedFCF,
+        discountFactor: 1, // No descuento para históricos
+        discountedFCF: 0, // No se cuenta para históricos
+        isProjected: false,
       });
     }
 
-    // Año corriente (2024)
-    const recentIncome = sortedIncome[0] || {};
-    const recentBalance = sortedBalance[0] || {};
-    const recentCashFlow = sortedCashFlow[0] || {};
+    // ────────────────────────────────────────────────
+    // Proyecciones futuras
+    // ────────────────────────────────────────────────
+    const lastHistorical = projections[projections.length - 1];
+    if (!lastHistorical) {
+      setLoading(false);
+      return;
+    }
 
-    const revenue2024 = recentIncome.revenue || 0;
-    const revenueGrowth2024 = 0; // No calculado
-    const ebitda2024 = recentIncome.ebitda || 0;
-    const ebitdaMargin2024 = revenue2024 ? (ebitda2024 / revenue2024) * 100 : 0;
-    const depreciation2024 = recentIncome.depreciationAndAmortization || 0;
-    const netOpProfitAfterTax2024 = recentIncome.netIncome || 0;
-    const capex2024 = recentCashFlow.capitalExpenditure || 0;
-    const incrementalWC2024 = 0; // Placeholder
+    let lastRevenue = lastHistorical.revenue;
+    const avgEbitdaMargin = projections.reduce((sum, p) => sum + p.ebitdaMargin, 0) / projections.length;
+    const avgCapexToRevenue = projections.reduce((sum, p) => sum + (p.revenue > 0 ? p.capex / p.revenue : 0), 0) / projections.length;
+    const avgDnAToRevenue = projections.reduce((sum, p) => sum + (p.revenue > 0 ? p.depreciation / p.revenue : 0), 0) / projections.length;
+    const avgWCToRevenue = projections.reduce((sum, p) => sum + (p.revenue > 0 ? Math.abs(p.changeInWC) / p.revenue : 0), 0) / projections.length;
 
-    const unleveredFCF2024 = netOpProfitAfterTax2024 + depreciation2024 - capex2024 - incrementalWC2024;
+    // Tax rate promedio
+    const avgTaxRate = 0.25;
 
-    const discountFactor2024 = 1;
+    let cumulativeDiscountedFCF = 0;
 
-    const discountedFCF2024 = unleveredFCF2024 * discountFactor2024;
-    cumulativeDiscountedFCF += discountedFCF2024;
-
-    projections.push({
-      year: baseYear,
-      revenue: revenue2024,
-      revenueGrowth: revenueGrowth2024,
-      ebitda: ebitda2024,
-      ebitdaMargin: ebitdaMargin2024,
-      depreciation: depreciation2024,
-      netOpProfitAfterTax: netOpProfitAfterTax2024,
-      capex: capex2024,
-      incrementalWC: incrementalWC2024,
-      unleveredFCF: unleveredFCF2024,
-      discountFactor: discountFactor2024,
-      discountedFCF: discountedFCF2024,
-    });
-
-    // Años futuros (2025-2027)
-    let lastRevenue = revenue2024;
-    let lastEbitda = ebitda2024;
-    const growthRate = 0.165; // 16.5%
-    const ebitdaMargin = 0.173; // 17.3%
-
-    for (let yearOffset = 1; yearOffset <= yearsForward; yearOffset++) {
-      const year = baseYear + yearOffset;
-
+    for (let i = 1; i <= yearsToProject; i++) {
+      const year = lastHistorical.year + i;
+      const growthRate = projectedGrowthRate / 100;
       const revenue = lastRevenue * (1 + growthRate);
-      const ebitda = revenue * ebitdaMargin;
-      const depreciation = 0; // Asumido 0 como en tu Excel
-      const netOpProfitAfterTax = ebitda * 0.8; // Asumiendo tax 20%
-      const capex = -86255398.40; // Constante
-      const incrementalWC = -19727152.4 * Math.pow(1.1, yearOffset - 1); // Crecimiento aproximado
+      const ebitda = revenue * (avgEbitdaMargin / 100);
+      const depreciation = revenue * avgDnAToRevenue;
+      const ebit = ebitda - depreciation;
+      const netOpProfitAfterTax = ebit * (1 - avgTaxRate);
+      const capex = revenue * avgCapexToRevenue;
+      const changeInWC = revenue * avgWCToRevenue * growthRate;
 
-      const unleveredFCF = netOpProfitAfterTax + depreciation - capex - incrementalWC;
+      const unleveredFCF = netOpProfitAfterTax + depreciation - capex - changeInWC;
 
-      const discountFactor = 1 / Math.pow(1 + discountRate, yearOffset);
-
+      // Discount Factor correcto: 1/(1+WACC)^(year - baseYear)
+      const yearsFromBase = year - baseYear;
+      const discountFactor = 1 / Math.pow(1 + wacc, yearsFromBase);
       const discountedFCF = unleveredFCF * discountFactor;
+
       cumulativeDiscountedFCF += discountedFCF;
 
       projections.push({
         year,
         revenue,
-        revenueGrowth: growthRate * 100,
+        revenueGrowth: projectedGrowthRate,
         ebitda,
-        ebitdaMargin: ebitdaMargin * 100,
+        ebitdaMargin: avgEbitdaMargin,
         depreciation,
         netOpProfitAfterTax,
         capex,
-        incrementalWC,
+        changeInWC,
         unleveredFCF,
         discountFactor,
         discountedFCF,
+        isProjected: true,
       });
 
       lastRevenue = revenue;
-      lastEbitda = ebitda;
     }
 
+    // ────────────────────────────────────────────────
+    // TTM Multiple = Current EV / TTM EBITDA
+    // ────────────────────────────────────────────────
+    const recentBalance = sortedBalance[0] || {};
+    const totalDebt = recentBalance.totalDebt || recentBalance.longTermDebt || 0;
+    const cashAndEquivalents = recentBalance.cashAndCashEquivalents || recentBalance.cashAndShortTermInvestments || 0;
+    const marketCap = quote?.marketCap || 0;
+    const currentEV = marketCap + totalDebt - cashAndEquivalents;
+    const ttmEbitda = sortedIncome[0]?.ebitda || lastHistorical.ebitda;
+
+    // TTM Multiple calculado correctamente
+    const calculatedTTMMultiple = ttmEbitda > 0 ? currentEV / ttmEbitda : exitMultiple;
+
+    // ────────────────────────────────────────────────
     // Terminal Value
-    const terminalEBITDA = projections[projections.length - 1].ebitda;
+    // ────────────────────────────────────────────────
+    const lastProjection = projections[projections.length - 1];
+    const terminalEBITDA = lastProjection.ebitda;
     const terminalValue = terminalEBITDA * exitMultiple;
-    const pvTerminalValue = terminalValue * projections[projections.length - 1].discountFactor;
+    const pvTerminalValue = terminalValue * lastProjection.discountFactor;
 
-    // Total PV
-    const totalPV = cumulativeDiscountedFCF + pvTerminalValue;
+    // Total Enterprise Value
+    const totalEV = cumulativeDiscountedFCF + pvTerminalValue;
 
-    // Shares Outstanding, Current Price, Current EV
-    const sharesOutstanding = quote.sharesOutstanding || 44045600;
-    const currentPrice = quote.price || 66.46;
-    const totalDebt = recentBalance.totalDebt || 0;
-    const cashAndSTInvestments = recentBalance.cashAndShortTermInvestments || 0;
-    const currentEV = quote.marketCap + totalDebt - cashAndSTInvestments;
+    // Equity Value
+    const impliedEquityValue = totalEV - totalDebt + cashAndEquivalents;
 
-    const impliedEquityValue = totalPV - totalDebt + cashAndSTInvestments;
-    const impliedValuePerShare = impliedEquityValue / sharesOutstanding;
-    const premium = ((impliedValuePerShare / currentPrice) - 1) * 100;
+    // Per Share
+    const sharesOutstanding =
+      quote?.sharesOutstanding ||
+      profile?.sharesOutstanding ||
+      (quote?.marketCap && quote?.price ? quote.marketCap / quote.price : 0) ||
+      sortedIncome[0]?.weightedAverageShsOut ||
+      sortedIncome[0]?.weightedAverageShsOutDil ||
+      1;
+
+    const impliedValuePerShare = sharesOutstanding > 0 ? impliedEquityValue / sharesOutstanding : 0;
+    const currentPrice = quote?.price || 0;
+    const premium = currentPrice > 0 ? ((impliedValuePerShare / currentPrice) - 1) * 100 : 0;
 
     setCalculations({
       projections,
       terminalValue,
       pvTerminalValue,
-      totalPV,
+      totalEV,
       cumulativeDiscountedFCF,
       sharesOutstanding,
       currentPrice,
       totalDebt,
-      cashAndSTInvestments,
+      cashAndEquivalents,
       currentEV,
       impliedEquityValue,
       impliedValuePerShare,
       premium,
+      avgEbitdaMargin,
+      avgCapexToRevenue: avgCapexToRevenue * 100,
+      avgDnAToRevenue: avgDnAToRevenue * 100,
+      wacc: wacc * 100,
+      ttmEbitda,
+      calculatedTTMMultiple,
+      baseYear,
     });
 
     setLoading(false);
-  }, [ticker, quote, profile, income, balance, cashFlow]);
+  }, [ticker, quote, profile, income, balance, cashFlow, dcfCustom, userWacc, exitMultiple, projectedGrowthRate, yearsToProject]);
 
   if (loading) {
     return <p className="text-xl text-gray-400 py-10 text-center">Calculando valoración...</p>;
   }
 
-  const { projections, terminalValue, pvTerminalValue, totalPV, cumulativeDiscountedFCF, sharesOutstanding, currentPrice, totalDebt, cashAndSTInvestments, currentEV, impliedEquityValue, impliedValuePerShare, premium } = calculations;
+  if (!calculations || !calculations.projections || calculations.projections.length === 0) {
+    return <p className="text-xl text-gray-400 py-10 text-center">No hay suficientes datos para realizar cálculos de valoración.</p>;
+  }
+
+  const {
+    projections,
+    terminalValue,
+    pvTerminalValue,
+    totalEV,
+    cumulativeDiscountedFCF,
+    sharesOutstanding,
+    currentPrice,
+    totalDebt,
+    cashAndEquivalents,
+    currentEV,
+    impliedEquityValue,
+    impliedValuePerShare,
+    premium,
+    avgEbitdaMargin,
+    avgCapexToRevenue,
+    avgDnAToRevenue,
+    wacc,
+    ttmEbitda,
+    calculatedTTMMultiple,
+    baseYear,
+  } = calculations;
+
+  const formatValue = (val: number | null | undefined, suffix = ''): string => {
+    if (val === null || val === undefined || isNaN(val)) return '—';
+    if (Math.abs(val) >= 1e9) return `$${(val / 1e9).toFixed(2)}B${suffix}`;
+    if (Math.abs(val) >= 1e6) return `$${(val / 1e6).toFixed(2)}M${suffix}`;
+    return `$${val.toFixed(2)}${suffix}`;
+  };
 
   return (
     <div className="space-y-10">
       <h3 className="text-3xl font-bold text-gray-100">
-        Cálculos para {ticker}
+        DCF Valuation - {ticker}
       </h3>
 
+      {/* Controles de supuestos */}
+      <div className="bg-gray-700 p-6 rounded-xl border border-gray-600">
+        <h4 className="text-xl font-bold text-gray-100 mb-4">Supuestos del Modelo</h4>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div>
+            <label className="block text-gray-300 mb-2">WACC (Discount Rate)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.5"
+                min="1"
+                max="25"
+                value={userWacc !== null ? userWacc : wacc}
+                onChange={(e) => setUserWacc(parseFloat(e.target.value) || null)}
+                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
+              />
+              <span className="text-gray-400">%</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Avg WACC Tab + Advance DCF
+            </p>
+          </div>
+          <div>
+            <label className="block text-gray-300 mb-2">Exit EV/EBITDA Multiple</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.5"
+                min="1"
+                max="50"
+                value={exitMultiple}
+                onChange={(e) => setExitMultiple(parseFloat(e.target.value) || 12)}
+                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
+              />
+              <span className="text-gray-400">x</span>
+            </div>
+          </div>
+          <div>
+            <label className="block text-gray-300 mb-2">Revenue Growth (proyectado)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.5"
+                min="-20"
+                max="50"
+                value={projectedGrowthRate}
+                onChange={(e) => setProjectedGrowthRate(parseFloat(e.target.value) || 5)}
+                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
+              />
+              <span className="text-gray-400">%</span>
+            </div>
+            <p className="text-xs text-blue-400 mt-1">Avg Holt + Regression</p>
+          </div>
+          <div>
+            <label className="block text-gray-300 mb-2">Años a proyectar</label>
+            <input
+              type="number"
+              step="1"
+              min="1"
+              max="10"
+              value={yearsToProject}
+              onChange={(e) => setYearsToProject(parseInt(e.target.value) || 5)}
+              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
+            />
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="bg-gray-800 p-3 rounded-lg">
+            <p className="text-gray-400">EBITDA Margin (avg)</p>
+            <p className="text-gray-200 font-semibold">{avgEbitdaMargin?.toFixed(1)}%</p>
+          </div>
+          <div className="bg-gray-800 p-3 rounded-lg">
+            <p className="text-gray-400">CapEx/Revenue (avg)</p>
+            <p className="text-gray-200 font-semibold">{avgCapexToRevenue?.toFixed(1)}%</p>
+          </div>
+          <div className="bg-gray-800 p-3 rounded-lg">
+            <p className="text-gray-400">D&A/Revenue (avg)</p>
+            <p className="text-gray-200 font-semibold">{avgDnAToRevenue?.toFixed(1)}%</p>
+          </div>
+          <div className="bg-gray-800 p-3 rounded-lg">
+            <p className="text-gray-400">TTM EV/EBITDA (calculado)</p>
+            <p className="text-gray-200 font-semibold">{calculatedTTMMultiple?.toFixed(1)}x</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabla de proyecciones */}
       <div className="overflow-x-auto">
         <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
           <thead className="bg-gray-800">
             <tr>
-              <th className="px-6 py-4 text-left text-gray-200 font-bold sticky left-0 bg-gray-800 z-10 min-w-55">
-                Free Cash Flow Calculation:
+              <th className="px-4 py-4 text-left text-gray-200 font-bold sticky left-0 bg-gray-800 z-10 min-w-[180px]">
+                Free Cash Flow Calculation
               </th>
               {projections.map((p: Projection) => (
-                <th key={p.year} className="px-6 py-4 text-center text-gray-200 font-bold min-w-35">
-                  {p.year}
+                <th
+                  key={p.year}
+                  className={`px-4 py-4 text-center font-bold min-w-[120px] ${p.isProjected ? 'text-blue-300 bg-gray-750' : 'text-gray-200'}`}
+                >
+                  {p.year}{p.isProjected ? 'E' : ''}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
             <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Total Revenue
+              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+                Revenue
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.revenue ? `$${(p.revenue / 1e9).toFixed(2)}B` : '—'}
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                  {formatValue(p.revenue)}
                 </td>
               ))}
             </tr>
 
             <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Total Revenue Growth Rate
+              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+                Revenue Growth
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.revenueGrowth ? `${p.revenueGrowth.toFixed(1)}%` : '—'}
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                  {p.revenueGrowth !== null ? `${p.revenueGrowth.toFixed(1)}%` : '—'}
                 </td>
               ))}
             </tr>
 
             <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 EBITDA
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.ebitda ? `$${(p.ebitda / 1e9).toFixed(2)}B` : '—'}
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                  {formatValue(p.ebitda)}
                 </td>
               ))}
             </tr>
 
             <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 EBITDA Margin
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
                   {p.ebitdaMargin ? `${p.ebitdaMargin.toFixed(1)}%` : '—'}
                 </td>
               ))}
             </tr>
 
             <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
                 Depreciation & Amortization
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.depreciation ? `$${(p.depreciation / 1e9).toFixed(2)}B` : '—'}
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                  {formatValue(p.depreciation)}
                 </td>
               ))}
             </tr>
 
             <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Net Operating Profit After-Tax (1)
+              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+                NOPAT
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.netOpProfitAfterTax ? `$${(p.netOpProfitAfterTax / 1e9).toFixed(2)}B` : '—'}
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                  {formatValue(p.netOpProfitAfterTax)}
                 </td>
               ))}
             </tr>
 
             <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Plus: Depreciation & Amortization
+              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+                Capital Expenditure
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.depreciation ? `$${(p.depreciation / 1e9).toFixed(2)}B` : '—'}
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                  {formatValue(-p.capex)}
                 </td>
               ))}
             </tr>
 
             <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Less: Capital Expenditure
+              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+                Change in Working Capital
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.capex ? `$${(p.capex / 1e9).toFixed(2)}B` : '—'}
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                  {formatValue(-p.changeInWC)}
                 </td>
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Less: Incremental Working Capital
-              </td>
-              {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.incrementalWC ? `$${(p.incrementalWC / 1e9).toFixed(2)}B` : '—'}
-                </td>
-              ))}
-            </tr>
-
-            <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+            <tr className="hover:bg-gray-800 bg-gray-800/50">
+              <td className="px-4 py-3 font-bold sticky left-0 bg-gray-800 z-10 border-r border-gray-700 text-gray-100">
                 Unlevered Free Cash Flow
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.unleveredFCF ? `$${(p.unleveredFCF / 1e9).toFixed(2)}B` : '—'}
+                <td key={i} className={`px-4 py-3 text-right font-bold ${p.isProjected ? 'text-blue-300' : 'text-gray-100'}`}>
+                  {formatValue(p.unleveredFCF)}
                 </td>
               ))}
             </tr>
 
+            {/* Discount factor y discounted FCF solo para proyecciones */}
             <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Discount Rate
+              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+                Discount Factor (WACC={wacc?.toFixed(1)}%)
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.discountFactor ? '12.0%' : '—'}
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-500'}`}>
+                  {p.isProjected ? p.discountFactor.toFixed(4) : '—'}
                 </td>
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Discount Factor
+            <tr className="hover:bg-gray-800 bg-gray-800/50">
+              <td className="px-4 py-3 font-bold sticky left-0 bg-gray-800 z-10 border-r border-gray-700 text-gray-100">
+                Discounted FCF
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.discountFactor ? p.discountFactor.toFixed(2) : '—'}
-                </td>
-              ))}
-            </tr>
-
-            <tr className="hover:bg-gray-800">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Discounted Free Cash Flow
-              </td>
-              {projections.map((p: Projection, i: number) => (
-                <td key={i} className="px-6 py-4 text-right text-gray-300">
-                  {p.discountedFCF ? `$${(p.discountedFCF / 1e9).toFixed(2)}B` : '—'}
+                <td key={i} className={`px-4 py-3 text-right font-bold ${p.isProjected ? 'text-green-400' : 'text-gray-500'}`}>
+                  {p.isProjected ? formatValue(p.discountedFCF) : '—'}
                 </td>
               ))}
             </tr>
@@ -388,87 +677,100 @@ export default function CalculosTab({
         </table>
       </div>
 
-      {/* PV Calculation */}
-      <div className="mt-12 overflow-x-auto">
-        <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
-          <thead className="bg-gray-800">
-            <tr>
-              <th className="px-6 py-4 text-left text-gray-200 font-bold">PV Calculation w/ EV/EBITDA Exit Multiple</th>
-              <th className="px-6 py-4 text-center text-gray-200 font-bold">Valor</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-700">
-            <tr>
-              <td className="px-6 py-4 text-gray-300 font-medium">Projected 2027 EBITDA</td>
-              <td className="px-6 py-4 text-right text-gray-300">
-                {projections.find((p: Projection) => p.year === 2027)?.ebitda ? `$${(projections.find((p: Projection) => p.year === 2027)!.ebitda / 1e9).toFixed(2)}B` : '—'}
-              </td>
-            </tr>
-            <tr>
-              <td className="px-6 py-4 text-gray-300 font-medium">Selected TTM Multiple</td>
-              <td className="px-6 py-4 text-right text-gray-300">24.2x</td>
-            </tr>
-            <tr>
-              <td className="px-6 py-4 text-gray-300 font-medium">Discount Factor</td>
-              <td className="px-6 py-4 text-right text-gray-300">
-                {projections.find((p: { year: number; }) => p.year === 2027)?.discountFactor?.toFixed(2) || '—'}
-            
-              </td>
-            </tr>
-            <tr>
-              <td className="px-6 py-4 text-gray-300 font-medium">Implied Terminal Value</td>
-              <td className="px-6 py-4 text-right text-gray-300">
-                {terminalValue ? `$${(terminalValue / 1e9).toFixed(2)}B` : '—'}
-              </td>
-            </tr>
-            <tr>
-              <td className="px-6 py-4 text-gray-300 font-medium">Sum of Discounted Cash Flows</td>
-              <td className="px-6 py-4 text-right text-gray-300">
-                {cumulativeDiscountedFCF ? `$${(cumulativeDiscountedFCF / 1e9).toFixed(2)}B` : '—'}
-              </td>
-            </tr>
-            <tr>
-              <td className="px-6 py-4 text-gray-300 font-medium">Total Enterprise Valuation</td>
-              <td className="px-6 py-4 text-right text-gray-300">
-                {totalPV ? `$${(totalPV / 1e9).toFixed(2)}B` : '—'}
-              </td>
-            </tr>
-            <tr>
-              <td className="px-6 py-4 text-gray-300 font-medium">Less: Total Debt</td>
-              <td className="px-6 py-4 text-right text-gray-300">
-                {totalDebt ? `$${(totalDebt / 1e9).toFixed(2)}B` : '—'}
-              </td>
-            </tr>
-            <tr>
-              <td className="px-6 py-4 text-gray-300 font-medium">Plus: Cash & ST Investments</td>
-              <td className="px-6 py-4 text-right text-gray-300">
-                {cashAndSTInvestments ? `$${(cashAndSTInvestments / 1e9).toFixed(2)}B` : '—'}
-              </td>
-            </tr>
-            <tr>
-              <td className="px-6 py-4 font-medium text-gray-100">Total Equity Valuation</td>
-              <td className="px-6 py-4 text-right font-bold text-green-400">
-                {impliedEquityValue ? `$${(impliedEquityValue / 1e9).toFixed(2)}B` : '—'}
-              </td>
-            </tr>
-            <tr>
-              <td className="px-6 py-4 font-medium text-gray-100">Implied Value Per Share</td>
-              <td className="px-6 py-4 text-right font-bold text-green-400">
-                {impliedValuePerShare ? impliedValuePerShare.toFixed(2) : '—'}
-              </td>
-            </tr>
-            <tr>
-              <td className="px-6 py-4 font-medium text-gray-100">Premium to Current Stock Price</td>
-              <td className="px-6 py-4 text-right font-bold text-green-400">
-                {premium ? `${premium.toFixed(1)}%` : '—'}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      {/* Resumen de valoración */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+          <h4 className="text-xl font-bold text-gray-100 mb-4">Enterprise Value Calculation</h4>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-gray-400">Sum of Discounted FCFs</span>
+              <span className="text-gray-200">{formatValue(cumulativeDiscountedFCF)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Terminal EBITDA ({projections[projections.length - 1]?.year})</span>
+              <span className="text-gray-200">{formatValue(projections[projections.length - 1]?.ebitda)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Exit Multiple</span>
+              <span className="text-gray-200">{exitMultiple}x</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Terminal Value (undiscounted)</span>
+              <span className="text-gray-200">{formatValue(terminalValue)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">PV of Terminal Value</span>
+              <span className="text-gray-200">{formatValue(pvTerminalValue)}</span>
+            </div>
+            <div className="flex justify-between border-t border-gray-600 pt-3">
+              <span className="text-gray-100 font-bold">Total Enterprise Value</span>
+              <span className="text-green-400 font-bold">{formatValue(totalEV)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+          <h4 className="text-xl font-bold text-gray-100 mb-4">Equity Value Calculation</h4>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-gray-400">Enterprise Value</span>
+              <span className="text-gray-200">{formatValue(totalEV)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Less: Total Debt</span>
+              <span className="text-red-400">({formatValue(totalDebt)})</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Plus: Cash & Equivalents</span>
+              <span className="text-green-400">{formatValue(cashAndEquivalents)}</span>
+            </div>
+            <div className="flex justify-between border-t border-gray-600 pt-3">
+              <span className="text-gray-100 font-bold">Implied Equity Value</span>
+              <span className="text-green-400 font-bold">{formatValue(impliedEquityValue)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Shares Outstanding</span>
+              <span className="text-gray-200">{sharesOutstanding ? (sharesOutstanding / 1e9).toFixed(3) + 'B' : 'N/A'}</span>
+            </div>
+            <div className="flex justify-between border-t border-gray-600 pt-3">
+              <span className="text-gray-100 font-bold">Implied Value Per Share</span>
+              <span className="text-green-400 font-bold text-xl">${impliedValuePerShare?.toFixed(2) || 'N/A'}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <p className="text-sm text-gray-500 text-center mt-6">
-        Cálculos basados en datos de FMP • Discount Rate: 12% • Exit Multiple: 24.2x
+      {/* Comparación con mercado */}
+      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+        <h4 className="text-xl font-bold text-gray-100 mb-4">Comparación con Mercado</h4>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+          <div className="text-center">
+            <p className="text-gray-400 text-sm mb-1">Precio Actual</p>
+            <p className="text-2xl font-bold text-blue-400">${currentPrice?.toFixed(2) || 'N/A'}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-gray-400 text-sm mb-1">Valor Intrínseco</p>
+            <p className="text-2xl font-bold text-green-400">${impliedValuePerShare?.toFixed(2) || 'N/A'}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-gray-400 text-sm mb-1">Upside/Downside</p>
+            <p className={`text-2xl font-bold ${premium > 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {premium > 0 ? '+' : ''}{premium?.toFixed(1) || 'N/A'}%
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-gray-400 text-sm mb-1">EV Actual (Mercado)</p>
+            <p className="text-2xl font-bold text-gray-300">{formatValue(currentEV)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-gray-400 text-sm mb-1">TTM EV/EBITDA</p>
+            <p className="text-2xl font-bold text-purple-400">{calculatedTTMMultiple?.toFixed(1)}x</p>
+          </div>
+        </div>
+      </div>
+
+      <p className="text-sm text-gray-500 text-center">
+        WACC usado: {wacc?.toFixed(2)}% • Exit Multiple: {exitMultiple}x • TTM Multiple (EV/EBITDA): {calculatedTTMMultiple?.toFixed(1)}x
       </p>
     </div>
   );

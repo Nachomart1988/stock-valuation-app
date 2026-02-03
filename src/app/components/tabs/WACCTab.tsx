@@ -40,7 +40,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile }: WAC
   const [marginalTaxRate, setMarginalTaxRate] = useState(25); // %
   const [selectedBetaSource, setSelectedBetaSource] = useState<'levered' | 'unlevered' | 'custom'>('levered');
   const [customBeta, setCustomBeta] = useState(1.0);
-  const [preferredEquityRate, setPreferredEquityRate] = useState(0); // % cost of preferred
+  const [preferredEquityRate, setPreferredEquityRate] = useState<number | null>(null); // % cost of preferred - null means auto-calculate
 
   // Obtener datos más recientes
   const latestIncome = useMemo(() => {
@@ -125,7 +125,23 @@ export default function WACCTab({ ticker, income, balance, quote, profile }: WAC
   const capitalStructure = useMemo(() => {
     const marketCap = quote?.marketCap || 0;
     const totalDebt = latestBalance?.totalDebt || latestBalance?.longTermDebt || 0;
-    const preferredStock = latestBalance?.preferredStock || 0;
+
+    // FMP API can return preferred stock under different field names
+    // Try multiple possible field names for preferred stock
+    const preferredStock =
+      latestBalance?.preferredStock ||
+      latestBalance?.preferredEquity ||
+      latestBalance?.redeemablePreferredStock ||
+      latestBalance?.convertiblePreferredStock ||
+      // Some APIs store it in total equity breakdown
+      latestBalance?.preferenceShareCapital ||
+      latestBalance?.preferredSecurities ||
+      // Calculate from total equity if available (totalStockholdersEquity = common + preferred)
+      // If there's a big gap between totalEquity and commonStock, it might be preferred
+      (latestBalance?.totalEquity && latestBalance?.commonStock && latestBalance?.retainedEarnings
+        ? Math.max(0, (latestBalance.totalEquity || 0) - (latestBalance.commonStock || 0) - (latestBalance.retainedEarnings || 0) - (latestBalance.accumulatedOtherComprehensiveIncomeLoss || 0))
+        : 0) ||
+      0;
 
     const totalCapital = marketCap + totalDebt + preferredStock;
 
@@ -145,12 +161,51 @@ export default function WACCTab({ ticker, income, balance, quote, profile }: WAC
   }, [quote, latestBalance]);
 
   // ═══════════════════════════════════════════════════════════════
+  // COST OF PREFERRED STOCK CALCULATION
+  // Cost of Preferred = Preferred Dividend / Preferred Stock Price
+  // If we don't have preferred price, use: Preferred Dividend / Book Value of Preferred
+  // Typical range: 5-9% for investment grade preferred
+  // ═══════════════════════════════════════════════════════════════
+
+  const calculatedCostOfPreferred = useMemo(() => {
+    // If user manually set a value, use that
+    if (preferredEquityRate !== null) {
+      return preferredEquityRate;
+    }
+
+    // If no preferred stock, return 0
+    if (capitalStructure.preferredStock === 0) {
+      return 0;
+    }
+
+    // Try to estimate cost of preferred
+    // Method 1: If we have preferred dividends from cash flow
+    const preferredDividends = Math.abs(
+      latestBalance?.preferredDividends ||
+      latestBalance?.dividendsPreferred ||
+      0
+    );
+
+    if (preferredDividends > 0 && capitalStructure.preferredStock > 0) {
+      return (preferredDividends / capitalStructure.preferredStock) * 100;
+    }
+
+    // Method 2: Use industry average for preferred stock cost
+    // Preferred stock typically yields between 5-8% for stable companies
+    // Use cost of debt + spread as proxy (preferred is between debt and equity in risk)
+    const estimatedCostOfPreferred = costOfDebtCalc.preTaxCostOfDebt + 1.5; // Add 1.5% spread over debt
+
+    // Cap at reasonable range (4-12%)
+    return Math.min(12, Math.max(4, estimatedCostOfPreferred));
+  }, [preferredEquityRate, capitalStructure.preferredStock, latestBalance, costOfDebtCalc.preTaxCostOfDebt]);
+
+  // ═══════════════════════════════════════════════════════════════
   // WEIGHTED COSTS
   // ═══════════════════════════════════════════════════════════════
 
   const weightedCostOfDebt = (capitalStructure.debtPct / 100) * costOfDebtCalc.afterTaxCostOfDebt;
   const weightedCostOfEquity = (capitalStructure.equityPct / 100) * costOfEquityCalc.costOfEquity;
-  const weightedCostOfPreferred = (capitalStructure.preferredPct / 100) * preferredEquityRate;
+  const weightedCostOfPreferred = (capitalStructure.preferredPct / 100) * calculatedCostOfPreferred;
 
   // ═══════════════════════════════════════════════════════════════
   // WACC FINAL
@@ -220,12 +275,19 @@ export default function WACCTab({ ticker, income, balance, quote, profile }: WAC
               <input
                 type="number"
                 step="0.1"
-                value={preferredEquityRate}
-                onChange={(e) => setPreferredEquityRate(parseFloat(e.target.value) || 0)}
+                value={preferredEquityRate !== null ? preferredEquityRate : calculatedCostOfPreferred}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setPreferredEquityRate(isNaN(val) ? null : val);
+                }}
+                placeholder={`Auto: ${calculatedCostOfPreferred.toFixed(2)}%`}
                 className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
               />
               <span className="text-gray-400">%</span>
             </div>
+            {capitalStructure.preferredStock > 0 && preferredEquityRate === null && (
+              <p className="text-xs text-blue-400 mt-1">Auto-calculado basado en costo de deuda + spread</p>
+            )}
           </div>
         </div>
 
@@ -366,7 +428,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile }: WAC
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Cost of Preferred</span>
-                    <span className="text-gray-200">{formatPct(preferredEquityRate)}</span>
+                    <span className="text-gray-200">{formatPct(calculatedCostOfPreferred)}</span>
                   </div>
                 </div>
               </div>
@@ -374,7 +436,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile }: WAC
               <div className="bg-orange-900/30 p-4 rounded-lg border border-orange-600">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-300">Cost of Preferred</span>
-                  <span className="text-orange-400 font-bold text-xl">{formatPct(preferredEquityRate)}</span>
+                  <span className="text-orange-400 font-bold text-xl">{formatPct(calculatedCostOfPreferred)}</span>
                 </div>
               </div>
             </div>
@@ -418,7 +480,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile }: WAC
             <div className="bg-orange-900/20 p-4 rounded-lg text-center border border-orange-700">
               <p className="text-gray-400 text-sm">Weighted Cost of Preferred</p>
               <p className="text-2xl font-bold text-orange-400">{formatPct(weightedCostOfPreferred)}</p>
-              <p className="text-xs text-gray-500">{formatPct(capitalStructure.preferredPct)} × {formatPct(preferredEquityRate)}</p>
+              <p className="text-xs text-gray-500">{formatPct(capitalStructure.preferredPct)} × {formatPct(calculatedCostOfPreferred)}</p>
             </div>
           </div>
 
@@ -463,7 +525,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile }: WAC
               </tr>
               <tr>
                 <td className="px-4 py-3 text-gray-200">Preferred</td>
-                <td className="px-4 py-3 text-right text-orange-400">{formatPct(preferredEquityRate)}</td>
+                <td className="px-4 py-3 text-right text-orange-400">{formatPct(calculatedCostOfPreferred)}</td>
                 <td className="px-4 py-3 text-right text-gray-300">{formatPct(capitalStructure.preferredPct)}</td>
                 <td className="px-4 py-3 text-right text-orange-400 font-bold">{formatPct(weightedCostOfPreferred)}</td>
               </tr>

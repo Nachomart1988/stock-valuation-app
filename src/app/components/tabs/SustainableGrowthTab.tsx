@@ -9,22 +9,61 @@ interface SGRMethod {
   enabled: boolean;
 }
 
+interface SustainableGrowthTabProps {
+  income: any[];
+  balance: any[];
+  cashFlow: any[];
+  estimates: any[];
+  dcfCustom?: any; // Para obtener WACC del Advance DCF
+  calculatedWacc?: number; // WACC calculado en WACCTab
+}
+
 export default function SustainableGrowthTab({
   income,
   balance,
   cashFlow,
   estimates,
-}: {
-  income: any[];
-  balance: any[];
-  cashFlow: any[];
-  estimates: any[];
-}) {
+  dcfCustom,
+  calculatedWacc,
+}: SustainableGrowthTabProps) {
+  // Calcular WACC promedio como default
+  const getDefaultWacc = () => {
+    const waccValues: number[] = [];
+
+    // WACC del Advance DCF
+    let advanceDcfWacc = dcfCustom?.wacc;
+    if (advanceDcfWacc !== undefined && advanceDcfWacc !== null) {
+      if (Math.abs(advanceDcfWacc) < 1) {
+        advanceDcfWacc = advanceDcfWacc * 100;
+      }
+      if (advanceDcfWacc > 0 && advanceDcfWacc < 50) {
+        waccValues.push(advanceDcfWacc);
+      }
+    }
+
+    // WACC calculado del WACCTab
+    if (calculatedWacc && calculatedWacc > 0 && calculatedWacc < 50) {
+      waccValues.push(calculatedWacc);
+    }
+
+    if (waccValues.length > 0) {
+      return waccValues.reduce((sum, w) => sum + w, 0) / waccValues.length;
+    }
+
+    return 8.5; // Default
+  };
+
   const [years, setYears] = useState<number>(7);
-  const [waccPercent, setWaccPercent] = useState<number>(8.5); // en %
+  const [waccPercent, setWaccPercent] = useState<number>(getDefaultWacc()); // en %
   const [methods, setMethods] = useState<SGRMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Update WACC when props change
+  useEffect(() => {
+    const defaultWacc = getDefaultWacc();
+    setWaccPercent(defaultWacc);
+  }, [dcfCustom, calculatedWacc]);
 
   useEffect(() => {
     const calculate = () => {
@@ -69,9 +108,22 @@ export default function SustainableGrowthTab({
         });
         const avgROE = avg(roes);
 
+        // Helper to get dividends with fallback field names
+        const getDividendsPaid = (cf: any): number => {
+          if (!cf) return 0;
+          return Math.abs(
+            cf.dividendsPaid ||
+            cf.paymentOfDividends ||
+            cf.commonStockDividendsPaid ||
+            cf.dividendsPaidOnCommonStock ||
+            cf.dividendsCommonStock ||
+            0
+          );
+        };
+
         // Payout = dividends / netIncome (skip si netIncome <=0, cap 0-2)
         const payouts = selectedIncome.map((inc, i) => {
-          const dividends = Math.abs(selectedCashFlow[i]?.dividendsPaid ?? 0);
+          const dividends = getDividendsPaid(selectedCashFlow[i]);
           const netIncome = inc.netIncome;
           if (!netIncome || netIncome <= 0) return null;
           const payout = dividends / netIncome;
@@ -120,7 +172,8 @@ export default function SustainableGrowthTab({
 
         // Annual SGR = ROIC_t * (1 - payout_t)
         const annualSGRs = selectedIncome.map((inc, i) => {
-          const payout = selectedCashFlow[i]?.dividendsPaid ? Math.abs(selectedCashFlow[i].dividendsPaid) / (inc.netIncome || 1) : 0;
+          const dividends = getDividendsPaid(selectedCashFlow[i]);
+          const payout = dividends > 0 ? dividends / (inc.netIncome || 1) : 0;
           const roic = roics[i] ?? 0;
           const sgr = roic * (1 - payout);
           return isFinite(sgr) ? sgr : null;
