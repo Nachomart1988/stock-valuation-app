@@ -20,6 +20,7 @@ interface Props {
   income: any[];
   balance: any[];
   cashFlow: any[];
+  cashFlowAsReported?: any[]; // For accurate dividend data
   priceTarget: any;
   profile: any;
   quote: any;
@@ -32,6 +33,7 @@ export default function ValuacionesTab({
   income,
   balance,
   cashFlow,
+  cashFlowAsReported,
   priceTarget,
   profile,
   quote,
@@ -492,16 +494,39 @@ export default function ValuacionesTab({
         // ────────────────────────────────────────────────
         // Variables base
         // ────────────────────────────────────────────────
-        // Get dividends with fallback field names
-        const dividendsPaid = Math.abs(
-          lastCashFlow.dividendsPaid ||
-          lastCashFlow.paymentOfDividends ||
-          lastCashFlow.commonStockDividendsPaid ||
-          lastCashFlow.dividendsPaidOnCommonStock ||
-          lastCashFlow.dividendsCommonStock ||
-          0
-        );
-        const d0 = dividendsPaid / (lastIncome.weightedAverageShsOutDil || 1);
+        // Get dividends - FIRST try from as-reported data (most accurate), then fallback
+        let dividendsPaid = 0;
+
+        // Try cashFlowAsReported first (paymentsofdividends field)
+        if (cashFlowAsReported && cashFlowAsReported.length > 0) {
+          // Sort by fiscal year descending to get most recent
+          const sortedAsReported = [...cashFlowAsReported].sort((a, b) => b.fiscalYear - a.fiscalYear);
+          const latestAsReported = sortedAsReported[0];
+          if (latestAsReported?.data?.paymentsofdividends) {
+            dividendsPaid = latestAsReported.data.paymentsofdividends;
+            console.log(`[Valuaciones] Dividends from as-reported (FY${latestAsReported.fiscalYear}): $${(dividendsPaid / 1e9).toFixed(2)}B`);
+          }
+        }
+
+        // Fallback to regular cash flow fields if as-reported not available
+        if (dividendsPaid === 0) {
+          dividendsPaid = Math.abs(
+            lastCashFlow.dividendsPaid ||
+            lastCashFlow.paymentOfDividends ||
+            lastCashFlow.commonStockDividendsPaid ||
+            lastCashFlow.dividendsPaidOnCommonStock ||
+            lastCashFlow.dividendsCommonStock ||
+            0
+          );
+          if (dividendsPaid > 0) {
+            console.log(`[Valuaciones] Dividends from regular CF: $${(dividendsPaid / 1e9).toFixed(2)}B`);
+          }
+        }
+
+        // Calculate dividend per share (D0)
+        const sharesForDividend = lastIncome.weightedAverageShsOutDil || quote?.sharesOutstanding || 1;
+        const d0 = dividendsPaid / sharesForDividend;
+        console.log(`[Valuaciones] D0 (Dividend per share): $${d0.toFixed(4)} (Total: $${(dividendsPaid / 1e9).toFixed(2)}B / ${(sharesForDividend / 1e9).toFixed(2)}B shares)`);
         const gs = 0.103; // Sustainable growth (placeholder)
         const ks = 0.0544; // Cost of equity (placeholder)
         const beta = profile.beta || 1;

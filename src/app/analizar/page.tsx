@@ -613,6 +613,7 @@ function AnalizarContent() {
       income={income}
       balance={balance}
       cashFlow={cashFlow}
+      cashFlowAsReported={cashFlowAsReported}
       priceTarget={priceTarget}
       profile={profile}
       quote={quote}
