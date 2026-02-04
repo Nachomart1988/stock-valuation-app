@@ -28,24 +28,31 @@ import NoticiasTab from '@/app/components/tabs/NoticiasTab';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
-// Helper function to extract value from SEC JSON structure
-function extractSECValue(data: any[], key: string): number | null {
-  if (!data) return null;
+// Helper function to extract ALL values from SEC JSON structure for a given key
+function extractAllSECValues(data: any[], key: string): number[] {
+  const values: number[] = [];
+  if (!data) return values;
   for (const item of data) {
     if (item[key]) {
-      const values = item[key];
-      if (Array.isArray(values)) {
-        // Return first non-empty numeric value
-        for (const val of values) {
-          if (typeof val === 'number') return val;
-          if (typeof val === 'string' && !isNaN(parseFloat(val)) && val.trim() !== '') {
-            return parseFloat(val);
+      const itemValues = item[key];
+      if (Array.isArray(itemValues)) {
+        for (const val of itemValues) {
+          if (typeof val === 'number') {
+            values.push(val);
+          } else if (typeof val === 'string' && !isNaN(parseFloat(val)) && val.trim() !== '' && val.trim() !== ' ') {
+            values.push(parseFloat(val));
           }
         }
       }
     }
   }
-  return null;
+  return values;
+}
+
+// Helper function to extract first value from SEC JSON structure
+function extractSECValue(data: any[], key: string): number | null {
+  const values = extractAllSECValues(data, key);
+  return values.length > 0 ? values[0] : null;
 }
 
 // Extract supplemental data from SEC Financial Reports
@@ -58,9 +65,12 @@ function extractSECData(reports: any[]): any {
     additionalMetrics: {},
   };
 
+  console.log('[SEC Data] Processing', reports.length, 'reports');
+
   for (const report of reports) {
     if (!report || !report.year) continue;
     const year = report.year;
+    console.log('[SEC Data] Processing year:', year);
 
     // Extract Dividends per share from various sections
     // Look in CONSOLIDATED STATEMENTS OF SHAREHOLDERS EQUITY or specific dividend sections
@@ -70,16 +80,26 @@ function extractSECData(reports: any[]): any {
       const sectionData = report[section];
       if (!Array.isArray(sectionData)) continue;
 
-      // Dividends per share
-      const dpsValue = extractSECValue(sectionData, 'Dividends and dividend equivalents declared per share or RSU (in dollars per share or RSU)');
-      if (dpsValue !== null) {
-        result.dividendsPerShare[year] = dpsValue;
+      // Dividends per share - get the MAX value (annual total from all quarters)
+      const allDpsValues = extractAllSECValues(sectionData, 'Dividends and dividend equivalents declared per share or RSU (in dollars per share or RSU)');
+      if (allDpsValues.length > 0) {
+        // Take the highest value which is typically the annual dividend
+        const maxDps = Math.max(...allDpsValues);
+        if (!result.dividendsPerShare[year] || maxDps > result.dividendsPerShare[year]) {
+          result.dividendsPerShare[year] = maxDps;
+          console.log(`[SEC Data] Year ${year} - Dividends per share: $${maxDps}`);
+        }
       }
 
-      // Payments for dividends (from Cash Flow section)
-      const divPaidValue = extractSECValue(sectionData, 'Payments for dividends and dividend equivalents');
-      if (divPaidValue !== null) {
-        result.dividendsPaid[year] = Math.abs(divPaidValue);
+      // Payments for dividends (from Cash Flow section) - get the value with largest absolute value
+      const allDivPaidValues = extractAllSECValues(sectionData, 'Payments for dividends and dividend equivalents');
+      if (allDivPaidValues.length > 0) {
+        // Take the largest absolute value (dividends paid is negative in cash flow)
+        const maxAbsDivPaid = Math.max(...allDivPaidValues.map(v => Math.abs(v)));
+        if (!result.dividendsPaid[year] || maxAbsDivPaid > result.dividendsPaid[year]) {
+          result.dividendsPaid[year] = maxAbsDivPaid;
+          console.log(`[SEC Data] Year ${year} - Dividends paid: $${maxAbsDivPaid}M`);
+        }
       }
 
       // Operating lease ROU assets
@@ -1118,14 +1138,42 @@ function FinancialStatementTab({ title, data, type, ttmData, secData }: { title:
   const allData = ttmData ? [{ ...ttmData, date: 'TTM', isTTM: true }, ...sortedData] : sortedData;
 
   // Helper function to get SEC data by year
-  const getSECValue = (year: string | number, dataType: string, field: string): number | null => {
-    if (!secData) return null;
+  const getSECValue = (year: string | number, dataType: string, field?: string): number | null => {
+    if (!secData) {
+      return null;
+    }
     const yearKey = String(year);
     const typeData = secData[dataType];
-    if (!typeData) return null;
-    // Try exact year and nearby years
-    if (typeData[yearKey]?.[field] !== undefined) return typeData[yearKey][field];
-    if (typeData[yearKey] !== undefined && typeof typeData[yearKey] === 'number') return typeData[yearKey];
+    if (!typeData) {
+      return null;
+    }
+
+    // If field is provided, look for nested object: secData[dataType][year][field]
+    if (field) {
+      if (typeData[yearKey]?.[field] !== undefined) {
+        return typeData[yearKey][field];
+      }
+    } else {
+      // No field, look for direct value: secData[dataType][year]
+      if (typeData[yearKey] !== undefined && typeof typeData[yearKey] === 'number') {
+        return typeData[yearKey];
+      }
+    }
+
+    // Try fiscal year offset (e.g., 2023 FY might end in Sep 2023, so data might be stored as 2022 or 2024)
+    const nearbyYears = [parseInt(yearKey) - 1, parseInt(yearKey) + 1].map(String);
+    for (const nearbyYear of nearbyYears) {
+      if (field) {
+        if (typeData[nearbyYear]?.[field] !== undefined) {
+          return typeData[nearbyYear][field];
+        }
+      } else {
+        if (typeData[nearbyYear] !== undefined && typeof typeData[nearbyYear] === 'number') {
+          return typeData[nearbyYear];
+        }
+      }
+    }
+
     return null;
   };
 
@@ -1161,13 +1209,21 @@ function FinancialStatementTab({ title, data, type, ttmData, secData }: { title:
 
     // SEC data fields - these come from financial-reports-json endpoint
     if (primaryKey === 'dividendsPerShare' && itemYear) {
-      const secValue = getSECValue(itemYear, 'dividendsPerShare', itemYear.toString());
-      if (secValue !== null) return secValue;
+      // dividendsPerShare is stored as secData.dividendsPerShare[year] = value
+      const secValue = getSECValue(itemYear, 'dividendsPerShare');
+      if (secValue !== null) {
+        console.log(`[SEC getValueWithFallback] dividendsPerShare for ${itemYear}: $${secValue}`);
+        return secValue;
+      }
     }
 
     if (primaryKey === 'secDividendsPaid' && itemYear) {
-      const secValue = getSECValue(itemYear, 'dividendsPaid', itemYear.toString());
-      if (secValue !== null) return secValue;
+      // dividendsPaid is stored as secData.dividendsPaid[year] = value (in millions)
+      const secValue = getSECValue(itemYear, 'dividendsPaid');
+      if (secValue !== null) {
+        console.log(`[SEC getValueWithFallback] dividendsPaid for ${itemYear}: $${secValue}M`);
+        return secValue * 1000000; // Convert millions to actual value
+      }
     }
 
     // Lease data from SEC
@@ -1215,8 +1271,11 @@ function FinancialStatementTab({ title, data, type, ttmData, secData }: { title:
 
     // For dividendsPaid, also try SEC data as last resort
     if (primaryKey === 'dividendsPaid' && itemYear) {
-      const secValue = getSECValue(itemYear, 'dividendsPaid', itemYear.toString());
-      if (secValue !== null) return secValue;
+      const secValue = getSECValue(itemYear, 'dividendsPaid');
+      if (secValue !== null) {
+        console.log(`[SEC Fallback] dividendsPaid for ${itemYear}: $${secValue}M`);
+        return secValue * 1000000; // SEC data is in millions
+      }
     }
 
     // Return 0 instead of undefined if all alternatives are 0 or missing
