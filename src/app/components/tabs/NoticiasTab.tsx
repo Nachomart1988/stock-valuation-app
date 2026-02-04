@@ -25,6 +25,8 @@ interface PressRelease {
 }
 
 export default function NoticiasTab({ ticker }: NoticiasTabProps) {
+  console.log('[NoticiasTab] Component rendered with ticker prop:', ticker);
+
   const [companyNews, setCompanyNews] = useState<NewsItem[]>([]);
   const [pressReleases, setPressReleases] = useState<PressRelease[]>([]);
   const [loadingNews, setLoadingNews] = useState(true);

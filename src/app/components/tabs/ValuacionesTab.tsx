@@ -57,8 +57,9 @@ export default function ValuacionesTab({
 
   // Calculate default WACC as average of WACC tab calculation and Advance DCF WACC
   const calculatedDefaultWACC = useMemo(() => {
-    // Get WACC from dcfCustom (Advance DCF)
-    const advanceDcfWacc = dcfCustom?.wacc ? dcfCustom.wacc * 100 : null;
+    // Get WACC from dcfCustom (Advance DCF) - API returns WACC already as percentage (e.g., 8.88 means 8.88%)
+    // Do NOT multiply by 100, it's already in percentage form
+    const advanceDcfWacc = dcfCustom?.wacc ? dcfCustom.wacc : null;
 
     // Simple WACC calculation (similar to WACCTab)
     const sortedIncome = [...income].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -253,14 +254,15 @@ export default function ValuacionesTab({
     // ═══════════════════════════════════════════════════════════════
 
     // Use dcfCustom risk-free rate if available, otherwise estimate
-    const riskFreeRate = dcfCustom?.riskFreeRate || 0.04;
+    // API returns riskFreeRate as percentage (e.g., 3.83 = 3.83%), convert to decimal
+    const riskFreeRate = dcfCustom?.riskFreeRate ? dcfCustom.riskFreeRate / 100 : 0.04;
 
     // HJM sigma: Forward rate volatility (basis points / 100)
     // Typically between 0.5-2% for developed markets
     let hjmSigmaCalc = 0.015; // 1.5% default
-    if (riskFreeRate > 0.05) {
+    if (riskFreeRate > 0.05) { // 5%
       hjmSigmaCalc = 0.02; // Higher rates = higher vol
-    } else if (riskFreeRate < 0.02) {
+    } else if (riskFreeRate < 0.02) { // 2%
       hjmSigmaCalc = 0.01; // Lower rates = lower vol
     }
 
@@ -618,7 +620,9 @@ export default function ValuacionesTab({
         const sigma = effectiveHjmSigma;
 
         // Initial forward rate (use risk-free rate as base)
-        const f0 = dcfCustom?.riskFreeRate || 0.04;
+        // API returns riskFreeRate as percentage (e.g., 3.83 = 3.83%), convert to decimal
+        const apiRiskFreeRate = dcfCustom?.riskFreeRate;
+        const f0 = apiRiskFreeRate ? apiRiskFreeRate / 100 : 0.04;
 
         // Calculate HJM drift (no-arbitrage)
         // α(t,T) = σ² * (1 - e^(-a(T-t))) / a
@@ -631,34 +635,35 @@ export default function ValuacionesTab({
         // For HJM valuation, we use the DCF approach but with stochastic rate adjustment
         // The key insight: HJM adjusts the discount rate based on term structure dynamics
 
-        // HJM-adjusted discount rate = base rate + risk premium from interest rate volatility
-        // Risk premium ≈ σ² × T / 2 (convexity adjustment)
-        const hjmRiskPremium = 0.5 * Math.pow(sigma, 2) * T;
-        const hjmDiscountRate = forwardRate + hjmRiskPremium;
+        // HJM-adjusted discount rate = base rate + cost of equity premium
+        // For equities, we need to add equity risk premium to the risk-free rate
+        const equityRiskPremium = (profile?.beta || 1) * 0.055; // Beta * market risk premium (~5.5%)
+        const hjmEquityRate = forwardRate + equityRiskPremium;
 
         // Ensure the discount rate is materially higher than growth rate
-        const effectiveHjmDiscountRate = Math.max(hjmDiscountRate, glong + 0.02);
+        const effectiveHjmDiscountRate = Math.max(hjmEquityRate, glong + 0.03);
 
         // HJM valuation: FCF stream discounted with HJM-derived rates
+        // Use the same FCF growth rate as DCF model for consistency
+        const hjmGrowthRate = projectedGrowthRate / 100;
         let hjmPV = 0;
         for (let t = 1; t <= n; t++) {
-          // Time-varying forward rate
-          const fRate = f0 + sigma * sigma * (1 - Math.exp(-a * t)) / a;
-          const adjustedRate = Math.max(fRate + hjmRiskPremium, 0.03);
-          const discount = Math.exp(-adjustedRate * t);
-          const projectedFCF = fcfo * Math.pow(1 + glong, t);
+          // Time-varying forward rate with equity premium
+          const fRate = f0 + sigma * sigma * (1 - Math.exp(-a * t)) / a + equityRiskPremium;
+          const adjustedRate = Math.max(fRate, 0.05); // Minimum 5% discount rate for equities
+          const discount = 1 / Math.pow(1 + adjustedRate, t);
+          const projectedFCF = fcfo * Math.pow(1 + hjmGrowthRate, t);
           hjmPV += projectedFCF * discount;
         }
 
         // Terminal value with HJM discount
-        // Ensure denominator is positive and reasonable
+        // Use Gordon Growth with HJM-derived discount rate
         const terminalDenom = Math.max(effectiveHjmDiscountRate - glong, 0.02);
-        const hjmTerminalFCF = fcfo * Math.pow(1 + glong, n) * (1 + glong);
+        const hjmTerminalFCF = fcfo * Math.pow(1 + hjmGrowthRate, n) * (1 + glong);
         const hjmTerminalValue = hjmTerminalFCF / terminalDenom;
 
-        // Discount terminal value back to present using average forward rate
-        const avgForwardRate = Math.max(0.03, (f0 + forwardRate) / 2 + hjmRiskPremium);
-        const hjmPVTerminal = hjmTerminalValue * Math.exp(-avgForwardRate * n);
+        // Discount terminal value back to present
+        const hjmPVTerminal = hjmTerminalValue / Math.pow(1 + effectiveHjmDiscountRate, n);
 
         const hjmValue = hjmPV + hjmPVTerminal;
 
@@ -1038,7 +1043,7 @@ export default function ValuacionesTab({
             />
             {discountRate === null && (
               <p className="text-xs text-blue-400 mt-1">
-                Auto: Promedio WACC Tab ({((calculatedDefaultWACC * 2 - (dcfCustom?.wacc ? dcfCustom.wacc * 100 : calculatedDefaultWACC))).toFixed(1)}%) + Advance DCF ({dcfCustom?.wacc ? (dcfCustom.wacc * 100).toFixed(1) : 'N/A'}%)
+                Auto: Promedio WACC Tab ({((calculatedDefaultWACC * 2 - (dcfCustom?.wacc || calculatedDefaultWACC))).toFixed(1)}%) + Advance DCF ({dcfCustom?.wacc ? dcfCustom.wacc.toFixed(1) : 'N/A'}%)
               </p>
             )}
           </div>

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(timeout 5 bash -c 'curl -s http://localhost:3000 > /dev/null && echo \"\"Server running\"\" || echo \"\"Server not ready\"\"')"
+    ]
+  }
+}

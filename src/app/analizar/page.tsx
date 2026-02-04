@@ -70,7 +70,8 @@ function extractSECData(reports: any[]): any {
   for (const report of reports) {
     if (!report || !report.year) continue;
     const year = report.year;
-    console.log('[SEC Data] Processing year:', year);
+    const symbol = report.symbol || 'unknown';
+    console.log(`[SEC Data] Processing year: ${year}, symbol: ${symbol}`);
 
     // Extract Dividends per share from various sections
     // Look in CONSOLIDATED STATEMENTS OF SHAREHOLDERS EQUITY or specific dividend sections
@@ -284,6 +285,8 @@ function AnalizarContent() {
           incomeTTMData,
           balanceTTMData,
           cashFlowTTMData,
+          // As-reported data for dividends
+          cashFlowAsReportedData,
         ] = await Promise.all([
           fetchJson('quote'),
           fetchJson('profile'),
@@ -296,6 +299,8 @@ function AnalizarContent() {
           fetchJson('income-statement-ttm').catch(() => []),
           fetchJson('balance-sheet-statement-ttm').catch(() => []),
           fetchJson('cash-flow-statement-ttm').catch(() => []),
+          // Fetch as-reported cash flow for accurate dividends data
+          fetchJson('cash-flow-statement-as-reported', '&limit=10').catch(() => []),
         ]);
 
         const dcfStandardRes = await fetch(`${base}/discounted-cash-flow${params}`, { cache: 'no-store' });
@@ -321,10 +326,13 @@ function AnalizarContent() {
         // Fetch SEC Financial Reports for additional data (dividends per share, leases, etc.)
         // Fetch for last 5 years
         const currentYear = new Date().getFullYear();
+        console.log(`[SEC Fetch] Fetching SEC data for ticker: ${activeTicker}, years: ${currentYear} to ${currentYear - 5}`);
         const secReportsPromises = [];
         for (let year = currentYear; year >= currentYear - 5; year--) {
+          const secUrl = `${base}/financial-reports-json?symbol=${activeTicker}&year=${year}&period=FY&apikey=${apiKey}`;
+          console.log(`[SEC Fetch] URL: ${secUrl.replace(apiKey, 'API_KEY_HIDDEN')}`);
           secReportsPromises.push(
-            fetch(`${base}/financial-reports-json?symbol=${activeTicker}&year=${year}&period=FY&apikey=${apiKey}`, { cache: 'no-store' })
+            fetch(secUrl, { cache: 'no-store' })
               .then(res => res.ok ? res.json() : null)
               .catch(() => null)
           );
@@ -335,6 +343,10 @@ function AnalizarContent() {
         const secSupplementalData = extractSECData(secReportsData.filter(Boolean));
 
         console.log('[AnalizarContent] Data loaded for', activeTicker, '- Income records:', incomeData.length, '- Balance records:', balanceData.length);
+        console.log('[AnalizarContent] Cash Flow As-Reported records:', cashFlowAsReportedData?.length || 0);
+        if (cashFlowAsReportedData?.length > 0) {
+          console.log('[AnalizarContent] First CF As-Reported:', cashFlowAsReportedData[0]);
+        }
         setData({
           quote: quoteData[0] || {},
           profile: profileData[0] || {},
@@ -351,6 +363,8 @@ function AnalizarContent() {
           cashFlowTTM: cashFlowTTMData[0] || null,
           // SEC supplemental data
           secData: secSupplementalData,
+          // As-reported cash flow for dividends
+          cashFlowAsReported: cashFlowAsReportedData || [],
         });
       } catch (err) {
         setError((err as Error).message || 'Error al cargar datos');
@@ -428,7 +442,7 @@ function AnalizarContent() {
     );
   }
 
-  const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM, secData } = data;
+  const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM, secData, cashFlowAsReported } = data;
 
   const categories = [
     'Inicio',
@@ -489,6 +503,7 @@ function AnalizarContent() {
       ticker={activeTicker}
       quote={quote}
       profile={profile}
+      incomeTTM={incomeTTM}
       sharedAverageVal={sharedAverageVal}
       onAnalizar={handleAnalizar}
     />
@@ -521,7 +536,7 @@ function AnalizarContent() {
 
   {/* Cash Flow */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} secData={secData} />
+    <FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} secData={secData} cashFlowAsReported={cashFlowAsReported} />
   </Tab.Panel>
 
   {/* Analistas */}
@@ -569,6 +584,7 @@ function AnalizarContent() {
       income={income}
       balance={balance}
       cashFlow={cashFlow}
+      cashFlowAsReported={cashFlowAsReported}
       estimates={estimates}
       dcfCustom={dcfCustom}
     />
@@ -647,12 +663,14 @@ function InicioTab({
   ticker,
   quote,
   profile,
+  incomeTTM,
   sharedAverageVal,
   onAnalizar,
 }: {
   ticker: string;
   quote: any;
   profile: any;
+  incomeTTM: any;
   sharedAverageVal: number | null;
   onAnalizar: (ticker: string) => void;
 }) {
@@ -835,47 +853,47 @@ function InicioTab({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       {/* Header con company info */}
-      <div className="flex flex-col md:flex-row gap-6 items-start">
+      <div className="flex flex-col md:flex-row gap-8 items-start">
         {/* Company Info Card */}
-        <div className="flex-1 bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl border border-gray-600">
-          <div className="flex items-center gap-4 mb-4">
+        <div className="flex-1 bg-gradient-to-br from-gray-700 to-gray-800 p-8 rounded-2xl border border-gray-600">
+          <div className="flex items-center gap-6 mb-6">
             {profile?.image && (
               <img
                 src={profile.image}
                 alt={ticker}
-                className="w-16 h-16 rounded-xl bg-white p-1"
+                className="w-24 h-24 rounded-xl bg-white p-2"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
             )}
             <div>
-              <h2 className="text-3xl font-bold text-white">{ticker}</h2>
-              <p className="text-gray-400">{profile?.companyName || 'Compania'}</p>
+              <h2 className="text-5xl font-bold text-white">{ticker}</h2>
+              <p className="text-xl text-gray-400">{profile?.companyName || 'Compania'}</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="px-3 py-1 bg-blue-600/30 text-blue-400 rounded-full text-sm">{profile?.sector || 'N/A'}</span>
-            <span className="px-3 py-1 bg-purple-600/30 text-purple-400 rounded-full text-sm">{profile?.industry || 'N/A'}</span>
-            <span className="px-3 py-1 bg-green-600/30 text-green-400 rounded-full text-sm">{profile?.exchangeShortName || 'N/A'}</span>
+          <div className="flex flex-wrap gap-3">
+            <span className="px-4 py-2 bg-blue-600/30 text-blue-400 rounded-full text-lg">{profile?.sector || 'N/A'}</span>
+            <span className="px-4 py-2 bg-purple-600/30 text-purple-400 rounded-full text-lg">{profile?.industry || 'N/A'}</span>
+            <span className="px-4 py-2 bg-green-600/30 text-green-400 rounded-full text-lg">{profile?.exchangeShortName || 'N/A'}</span>
           </div>
         </div>
 
         {/* Ticker Search */}
-        <div className="w-full md:w-auto bg-gray-700 p-4 rounded-xl border border-gray-600">
-          <div className="flex gap-3">
+        <div className="w-full md:w-auto bg-gray-700 p-6 rounded-xl border border-gray-600">
+          <div className="flex gap-4">
             <input
               type="text"
               value={inputTicker}
               onChange={(e) => setInputTicker(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && onAnalizar(inputTicker)}
               placeholder="Buscar ticker..."
-              className="w-40 px-4 py-3 border border-gray-600 rounded-xl text-gray-100 text-lg bg-gray-900 focus:border-blue-500 focus:ring-blue-500 placeholder-gray-500"
+              className="w-48 px-5 py-4 border border-gray-600 rounded-xl text-gray-100 text-xl bg-gray-900 focus:border-blue-500 focus:ring-blue-500 placeholder-gray-500"
             />
             <button
               onClick={() => onAnalizar(inputTicker)}
               disabled={!inputTicker.trim()}
-              className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+              className="px-8 py-4 bg-blue-600 text-white text-lg font-semibold rounded-xl hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
             >
               Analizar
             </button>
@@ -884,40 +902,41 @@ function InicioTab({
       </div>
 
       {/* Price Hero Section */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <div className="col-span-2 md:col-span-1 bg-gradient-to-br from-blue-600 to-blue-800 p-6 rounded-2xl text-center">
-          <p className="text-blue-200 text-base mb-1">Precio Actual</p>
-          <p className="text-4xl font-bold text-white">${currentPrice?.toFixed(2) || 'N/A'}</p>
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
+        <div className="col-span-2 md:col-span-1 bg-gradient-to-br from-blue-600 to-blue-800 p-8 rounded-2xl text-center">
+          <p className="text-blue-200 text-lg mb-2">Precio Actual</p>
+          <p className="text-5xl font-bold text-white">${currentPrice?.toFixed(2) || 'N/A'}</p>
           {priceStats && (
-            <p className={`text-base mt-2 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+            <p className={`text-lg mt-3 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
               {priceStats.ytdChange >= 0 ? '+' : ''}{priceStats.ytdChange.toFixed(1)}% (1A)
             </p>
           )}
         </div>
-        <div className="bg-gray-700 p-5 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-sm mb-1">Valor Intrinseco</p>
-          <p className="text-3xl font-bold text-purple-400">
+        <div className="bg-gray-700 p-6 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-base mb-2">Valor Intrinseco</p>
+          <p className="text-4xl font-bold text-purple-400">
             {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-5 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-sm mb-1">Compra Sugerida</p>
-          <p className="text-3xl font-bold text-green-400">
+        <div className="bg-gray-700 p-6 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-base mb-2">Compra Sugerida</p>
+          <p className="text-4xl font-bold text-green-400">
             {precioCompraSugerido ? `$${precioCompraSugerido.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-5 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-sm mb-1">Upside</p>
-          <p className={`text-3xl font-bold ${sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400'}`}>
+        <div className="bg-gray-700 p-6 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-base mb-2">Upside</p>
+          <p className={`text-4xl font-bold ${sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400'}`}>
             {sharedAverageVal && currentPrice ? `${(((sharedAverageVal - currentPrice) / currentPrice) * 100).toFixed(1)}%` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-5 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-sm mb-1">P/E Ratio</p>
-          <p className="text-3xl font-bold text-cyan-400">
+        <div className="bg-gray-700 p-6 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-base mb-2">P/E Ratio</p>
+          <p className="text-4xl font-bold text-cyan-400">
             {(() => {
-              // Calculate P/E from current price / TTM EPS
-              const ttmEPS = quote?.eps || (profile?.ttmEPS);
+              // Calculate P/E from current price / TTM EPS (from income statement TTM)
+              const ttmEPS = incomeTTM?.eps || incomeTTM?.epsdiluted || quote?.eps || profile?.ttmEPS;
+              console.log('[InicioTab P/E] currentPrice:', currentPrice, 'ttmEPS:', ttmEPS, 'incomeTTM:', incomeTTM);
               if (currentPrice && ttmEPS && ttmEPS > 0) {
                 return (currentPrice / ttmEPS).toFixed(1);
               }
@@ -925,88 +944,88 @@ function InicioTab({
             })()}
           </p>
         </div>
-        <div className="bg-gray-700 p-5 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-sm mb-1">Margen Seguridad</p>
+        <div className="bg-gray-700 p-6 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-base mb-2">Margen Seguridad</p>
           <input
             type="number"
             value={margenSeguridad}
             onChange={(e) => setMargenSeguridad(e.target.value)}
-            className="w-full text-center text-2xl font-bold text-amber-400 bg-transparent border-none focus:outline-none focus:ring-0"
+            className="w-full text-center text-3xl font-bold text-amber-400 bg-transparent border-none focus:outline-none focus:ring-0"
           />
-          <p className="text-gray-500 text-sm">%</p>
+          <p className="text-gray-500 text-base">%</p>
         </div>
       </div>
 
       {/* Aviso si no hay valuacion */}
       {!sharedAverageVal && (
-        <div className="bg-amber-900/20 border border-amber-600/50 rounded-xl p-4 flex items-center gap-4">
-          <div className="text-amber-500 text-3xl">!</div>
+        <div className="bg-amber-900/20 border border-amber-600/50 rounded-xl p-6 flex items-center gap-6">
+          <div className="text-amber-500 text-5xl">!</div>
           <div>
-            <p className="text-amber-400 font-medium">Valor Intrinseco no calculado</p>
-            <p className="text-amber-400/70 text-sm">Ve a la pestana "Valuaciones" para calcular el valor intrinseco promedio.</p>
+            <p className="text-amber-400 font-semibold text-xl">Valor Intrinseco no calculado</p>
+            <p className="text-amber-400/70 text-lg">Ve a la pestana "Valuaciones" para calcular el valor intrinseco promedio.</p>
           </div>
         </div>
       )}
 
       {/* Main Chart */}
       {loading ? (
-        <div className="h-[500px] bg-gray-700/50 rounded-2xl flex items-center justify-center">
+        <div className="h-[550px] bg-gray-700/50 rounded-2xl flex items-center justify-center">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4"></div>
-            <p className="text-gray-400">Cargando grafico...</p>
+            <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mb-6"></div>
+            <p className="text-gray-400 text-xl">Cargando grafico...</p>
           </div>
         </div>
       ) : historical.length === 0 ? (
-        <div className="h-[500px] bg-gray-700/50 rounded-2xl flex items-center justify-center">
-          <p className="text-gray-400 text-xl">No hay datos historicos disponibles</p>
+        <div className="h-[550px] bg-gray-700/50 rounded-2xl flex items-center justify-center">
+          <p className="text-gray-400 text-2xl">No hay datos historicos disponibles</p>
         </div>
       ) : (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-2xl">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-semibold text-gray-100">Precio Historico (Ultimo Ano)</h3>
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-8 rounded-2xl border border-gray-700 shadow-2xl">
+          <div className="flex justify-between items-center mb-8">
+            <h3 className="text-2xl font-semibold text-gray-100">Precio Historico (Ultimo Ano)</h3>
             {priceStats && (
-              <div className="flex gap-4 text-sm">
-                <span className="text-gray-400">Min: <span className="text-red-400 font-medium">${priceStats.min.toFixed(2)}</span></span>
-                <span className="text-gray-400">Max: <span className="text-green-400 font-medium">${priceStats.max.toFixed(2)}</span></span>
-                <span className="text-gray-400">Prom: <span className="text-blue-400 font-medium">${priceStats.avg.toFixed(2)}</span></span>
+              <div className="flex gap-6 text-lg">
+                <span className="text-gray-400">Min: <span className="text-red-400 font-semibold">${priceStats.min.toFixed(2)}</span></span>
+                <span className="text-gray-400">Max: <span className="text-green-400 font-semibold">${priceStats.max.toFixed(2)}</span></span>
+                <span className="text-gray-400">Prom: <span className="text-blue-400 font-semibold">${priceStats.avg.toFixed(2)}</span></span>
               </div>
             )}
           </div>
-          <div className="h-[450px]">
+          <div className="h-[500px]">
             <Line data={chartData} options={chartOptions} />
           </div>
         </div>
       )}
 
       {/* Market Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="bg-gray-700/50 p-5 rounded-xl border border-gray-600">
-          <p className="text-gray-400 text-base">Market Cap</p>
-          <p className="text-2xl font-semibold text-gray-100">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+        <div className="bg-gray-700/50 p-6 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-lg mb-1">Market Cap</p>
+          <p className="text-3xl font-semibold text-gray-100">
             {quote?.marketCap ? `$${(quote.marketCap / 1e9).toFixed(1)}B` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700/50 p-5 rounded-xl border border-gray-600">
-          <p className="text-gray-400 text-base">EPS (TTM)</p>
-          <p className="text-2xl font-semibold text-gray-100">
-            {quote?.eps ? `$${quote.eps.toFixed(2)}` : 'N/A'}
+        <div className="bg-gray-700/50 p-6 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-lg mb-1">EPS (TTM)</p>
+          <p className="text-3xl font-semibold text-gray-100">
+            {incomeTTM?.eps ? `$${incomeTTM.eps.toFixed(2)}` : (quote?.eps ? `$${quote.eps.toFixed(2)}` : 'N/A')}
           </p>
         </div>
-        <div className="bg-gray-700/50 p-5 rounded-xl border border-gray-600">
-          <p className="text-gray-400 text-base">Beta</p>
-          <p className="text-2xl font-semibold text-gray-100">
+        <div className="bg-gray-700/50 p-6 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-lg mb-1">Beta</p>
+          <p className="text-3xl font-semibold text-gray-100">
             {profile?.beta ? profile.beta.toFixed(2) : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700/50 p-5 rounded-xl border border-gray-600">
-          <p className="text-gray-400 text-base">Div Yield</p>
-          <p className="text-2xl font-semibold text-gray-100">
+        <div className="bg-gray-700/50 p-6 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-lg mb-1">Div Yield</p>
+          <p className="text-3xl font-semibold text-gray-100">
             {profile?.lastDiv && currentPrice ? `${((profile.lastDiv / currentPrice) * 100).toFixed(2)}%` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700/50 p-5 rounded-xl border border-gray-600">
-          <p className="text-gray-400 text-base">Volumen</p>
-          <p className="text-2xl font-semibold text-gray-100">
+        <div className="bg-gray-700/50 p-6 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-lg mb-1">Volumen</p>
+          <p className="text-3xl font-semibold text-gray-100">
             {quote?.volume ? (quote.volume / 1e6).toFixed(1) + 'M' : 'N/A'}
           </p>
         </div>
@@ -1127,7 +1146,7 @@ function GeneralTab({ profile, quote }: { profile: any; quote: any }) {
   );
 }
 
-function FinancialStatementTab({ title, data, type, ttmData, secData }: { title: string; data: any[]; type: 'income' | 'balance' | 'cashFlow'; ttmData?: any; secData?: any }) {
+function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAsReported }: { title: string; data: any[]; type: 'income' | 'balance' | 'cashFlow'; ttmData?: any; secData?: any; cashFlowAsReported?: any[] }) {
   if (data.length === 0 && !ttmData) {
     return <p className="text-2xl text-gray-400 text-center py-10">No hay datos disponibles para {title}</p>;
   }
@@ -1172,6 +1191,29 @@ function FinancialStatementTab({ title, data, type, ttmData, secData }: { title:
           return typeData[nearbyYear];
         }
       }
+    }
+
+    return null;
+  };
+
+  // Helper to get dividends from cash-flow-statement-as-reported
+  const getDividendsFromAsReported = (itemDate: string): number | null => {
+    if (!cashFlowAsReported || cashFlowAsReported.length === 0) {
+      return null;
+    }
+
+    // Extract year from date (e.g., "2024-09-27" -> 2024)
+    const itemYear = new Date(itemDate).getFullYear();
+
+    // Find matching record by fiscal year
+    const matchingRecord = cashFlowAsReported.find((cf: any) => {
+      return cf.fiscalYear === itemYear || cf.fiscalYear === itemYear + 1;
+    });
+
+    if (matchingRecord?.data?.paymentsofdividends) {
+      const dividends = matchingRecord.data.paymentsofdividends;
+      console.log(`[AsReported] Found dividends for ${itemYear}: $${dividends}`);
+      return dividends;
     }
 
     return null;
@@ -1254,6 +1296,15 @@ function FinancialStatementTab({ title, data, type, ttmData, secData }: { title:
       if (currentVal > 0 || nonCurrentVal > 0) return currentVal + nonCurrentVal;
     }
 
+    // For dividendsPaid, try as-reported data FIRST (most accurate source)
+    if (primaryKey === 'dividendsPaid' && item.date) {
+      const asReportedDividends = getDividendsFromAsReported(item.date);
+      if (asReportedDividends !== null && asReportedDividends > 0) {
+        // Return as negative (cash outflow) to match standard format
+        return -asReportedDividends;
+      }
+    }
+
     // Try primary key first
     if (item[primaryKey] !== undefined && item[primaryKey] !== null && item[primaryKey] !== 0) {
       return item[primaryKey];
@@ -1274,7 +1325,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData }: { title:
       const secValue = getSECValue(itemYear, 'dividendsPaid');
       if (secValue !== null) {
         console.log(`[SEC Fallback] dividendsPaid for ${itemYear}: $${secValue}M`);
-        return secValue * 1000000; // SEC data is in millions
+        return -secValue * 1000000; // SEC data is in millions, negative for outflow
       }
     }
 
