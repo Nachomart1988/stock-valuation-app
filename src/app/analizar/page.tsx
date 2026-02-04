@@ -330,7 +330,7 @@ function AnalizarContent() {
 
   {/* Analistas */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <AnalistasTab priceTarget={priceTarget} />
+    <AnalistasTab priceTarget={priceTarget} ticker={activeTicker} />
   </Tab.Panel>
 
   {/* Competidores */}
@@ -688,43 +688,56 @@ function InicioTab({
       </div>
 
       {/* Price Hero Section */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div className="col-span-2 md:col-span-1 bg-gradient-to-br from-blue-600 to-blue-800 p-6 rounded-2xl text-center">
-          <p className="text-blue-200 text-sm mb-1">Precio Actual</p>
+          <p className="text-blue-200 text-base mb-1">Precio Actual</p>
           <p className="text-4xl font-bold text-white">${currentPrice?.toFixed(2) || 'N/A'}</p>
           {priceStats && (
-            <p className={`text-sm mt-2 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+            <p className={`text-base mt-2 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
               {priceStats.ytdChange >= 0 ? '+' : ''}{priceStats.ytdChange.toFixed(1)}% (1A)
             </p>
           )}
         </div>
-        <div className="bg-gray-700 p-4 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-xs mb-1">Valor Intrinseco</p>
-          <p className="text-2xl font-bold text-purple-400">
+        <div className="bg-gray-700 p-5 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-sm mb-1">Valor Intrinseco</p>
+          <p className="text-3xl font-bold text-purple-400">
             {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-4 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-xs mb-1">Compra Sugerida</p>
-          <p className="text-2xl font-bold text-green-400">
+        <div className="bg-gray-700 p-5 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-sm mb-1">Compra Sugerida</p>
+          <p className="text-3xl font-bold text-green-400">
             {precioCompraSugerido ? `$${precioCompraSugerido.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-4 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-xs mb-1">Upside</p>
-          <p className={`text-2xl font-bold ${sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400'}`}>
+        <div className="bg-gray-700 p-5 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-sm mb-1">Upside</p>
+          <p className={`text-3xl font-bold ${sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400'}`}>
             {sharedAverageVal && currentPrice ? `${(((sharedAverageVal - currentPrice) / currentPrice) * 100).toFixed(1)}%` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-4 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-xs mb-1">Margen Seguridad</p>
+        <div className="bg-gray-700 p-5 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-sm mb-1">P/E Ratio</p>
+          <p className="text-3xl font-bold text-cyan-400">
+            {(() => {
+              // Calculate P/E from current price / TTM EPS
+              const ttmEPS = quote?.eps || (profile?.ttmEPS);
+              if (currentPrice && ttmEPS && ttmEPS > 0) {
+                return (currentPrice / ttmEPS).toFixed(1);
+              }
+              return quote?.pe?.toFixed(1) || 'N/A';
+            })()}
+          </p>
+        </div>
+        <div className="bg-gray-700 p-5 rounded-xl text-center border border-gray-600">
+          <p className="text-gray-400 text-sm mb-1">Margen Seguridad</p>
           <input
             type="number"
             value={margenSeguridad}
             onChange={(e) => setMargenSeguridad(e.target.value)}
-            className="w-full text-center text-xl font-bold text-amber-400 bg-transparent border-none focus:outline-none focus:ring-0"
+            className="w-full text-center text-2xl font-bold text-amber-400 bg-transparent border-none focus:outline-none focus:ring-0"
           />
-          <p className="text-gray-500 text-xs">%</p>
+          <p className="text-gray-500 text-sm">%</p>
         </div>
       </div>
 
@@ -770,28 +783,34 @@ function InicioTab({
       )}
 
       {/* Market Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
-          <p className="text-gray-400 text-sm">Market Cap</p>
-          <p className="text-xl font-semibold text-gray-100">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="bg-gray-700/50 p-5 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-base">Market Cap</p>
+          <p className="text-2xl font-semibold text-gray-100">
             {quote?.marketCap ? `$${(quote.marketCap / 1e9).toFixed(1)}B` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
-          <p className="text-gray-400 text-sm">P/E Ratio</p>
-          <p className="text-xl font-semibold text-gray-100">
-            {quote?.pe ? quote.pe.toFixed(2) : 'N/A'}
+        <div className="bg-gray-700/50 p-5 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-base">EPS (TTM)</p>
+          <p className="text-2xl font-semibold text-gray-100">
+            {quote?.eps ? `$${quote.eps.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
-          <p className="text-gray-400 text-sm">Beta</p>
-          <p className="text-xl font-semibold text-gray-100">
+        <div className="bg-gray-700/50 p-5 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-base">Beta</p>
+          <p className="text-2xl font-semibold text-gray-100">
             {profile?.beta ? profile.beta.toFixed(2) : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
-          <p className="text-gray-400 text-sm">Volumen</p>
-          <p className="text-xl font-semibold text-gray-100">
+        <div className="bg-gray-700/50 p-5 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-base">Div Yield</p>
+          <p className="text-2xl font-semibold text-gray-100">
+            {profile?.lastDiv && currentPrice ? `${((profile.lastDiv / currentPrice) * 100).toFixed(2)}%` : 'N/A'}
+          </p>
+        </div>
+        <div className="bg-gray-700/50 p-5 rounded-xl border border-gray-600">
+          <p className="text-gray-400 text-base">Volumen</p>
+          <p className="text-2xl font-semibold text-gray-100">
             {quote?.volume ? (quote.volume / 1e6).toFixed(1) + 'M' : 'N/A'}
           </p>
         </div>
@@ -926,12 +945,31 @@ function FinancialStatementTab({ title, data, type, ttmData }: { title: string; 
   const getValueWithFallback = (item: any, primaryKey: string): number | null | undefined => {
     // Alternative field mappings for FMP API inconsistencies
     const fieldMappings: Record<string, string[]> = {
-      'dividendsPaid': ['dividendsPaid', 'paymentOfDividends', 'commonStockDividendsPaid', 'dividendsPaidOnCommonStock', 'dividendsCommonStock'],
+      'dividendsPaid': ['dividendsPaid', 'paymentOfDividends', 'commonStockDividendsPaid', 'dividendsPaidOnCommonStock', 'dividendsCommonStock', 'cashDividendsPaid'],
       'preferredStock': ['preferredStock', 'preferredEquity', 'redeemablePreferredStock', 'convertiblePreferredStock', 'preferenceShareCapital'],
       'eps': ['eps', 'epsTTM', 'earningsPerShare'],
       'epsDiluted': ['epsdiluted', 'epsDiluted', 'dilutedEPS', 'earningsPerShareDiluted'],
-      'netDebt': ['netDebt', 'totalDebt'],
+      'netDebt': ['netDebt'],
     };
+
+    // Calculated fields
+    if (primaryKey === 'workingCapital') {
+      const currentAssets = item.totalCurrentAssets || 0;
+      const currentLiabilities = item.totalCurrentLiabilities || 0;
+      if (currentAssets > 0 || currentLiabilities > 0) {
+        return currentAssets - currentLiabilities;
+      }
+      return null;
+    }
+
+    if (primaryKey === 'netDebt') {
+      const totalDebt = item.totalDebt || item.longTermDebt || 0;
+      const cash = item.cashAndCashEquivalents || item.cashAndShortTermInvestments || 0;
+      if (totalDebt > 0 || cash > 0) {
+        return totalDebt - cash;
+      }
+      return null;
+    }
 
     // Try primary key first
     if (item[primaryKey] !== undefined && item[primaryKey] !== null && item[primaryKey] !== 0) {
@@ -1111,45 +1149,96 @@ function FinancialStatementTab({ title, data, type, ttmData }: { title: string; 
   );
 }
 
-function AnalistasTab({ priceTarget }: { priceTarget: any }) {
+function AnalistasTab({ priceTarget, ticker }: { priceTarget: any; ticker: string }) {
+  const [grades, setGrades] = useState<any[]>([]);
+  const [loadingGrades, setLoadingGrades] = useState(true);
+
+  // Fetch analyst grades
+  useEffect(() => {
+    const fetchGrades = async () => {
+      if (!ticker) return;
+
+      try {
+        setLoadingGrades(true);
+        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
+        if (!apiKey) return;
+
+        const res = await fetch(
+          `https://financialmodelingprep.com/stable/grades?symbol=${ticker}&apikey=${apiKey}`
+        );
+
+        if (res.ok) {
+          const data = await res.json();
+          setGrades(Array.isArray(data) ? data.slice(0, 20) : []);
+        }
+      } catch (err) {
+        console.error('Error fetching grades:', err);
+      } finally {
+        setLoadingGrades(false);
+      }
+    };
+
+    fetchGrades();
+  }, [ticker]);
+
+  // Count grades by type
+  const gradeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    grades.forEach((g) => {
+      const grade = g.newGrade || g.grade || 'Unknown';
+      counts[grade] = (counts[grade] || 0) + 1;
+    });
+    return counts;
+  }, [grades]);
+
+  // Get color for grade
+  const getGradeColor = (grade: string) => {
+    const g = grade.toLowerCase();
+    if (g.includes('buy') || g.includes('outperform') || g.includes('overweight')) return 'text-green-400 bg-green-900/30';
+    if (g.includes('sell') || g.includes('underperform') || g.includes('underweight')) return 'text-red-400 bg-red-900/30';
+    if (g.includes('hold') || g.includes('neutral') || g.includes('equal')) return 'text-yellow-400 bg-yellow-900/30';
+    return 'text-gray-400 bg-gray-700';
+  };
+
   return (
-    <div className="space-y-12">
+    <div className="space-y-10">
+      {/* Price Targets Section */}
       <section className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-700">
-        <h3 className="text-3xl font-bold text-gray-100 mb-6">Resumen de Price Targets (Analistas)</h3>
+        <h3 className="text-3xl font-bold text-gray-100 mb-6">Price Targets de Analistas</h3>
         {priceTarget && Object.keys(priceTarget).length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden">
               <thead className="bg-gray-700">
                 <tr>
-                  <th className="px-6 py-4 text-left font-bold text-gray-100">Período</th>
-                  <th className="px-6 py-4 text-center font-bold text-gray-100">Cantidad de Analistas</th>
-                  <th className="px-6 py-4 text-center font-bold text-gray-100">Precio Objetivo Promedio ($)</th>
+                  <th className="px-6 py-4 text-left font-bold text-gray-100">Periodo</th>
+                  <th className="px-6 py-4 text-center font-bold text-gray-100">Analistas</th>
+                  <th className="px-6 py-4 text-center font-bold text-gray-100">Precio Objetivo Promedio</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700">
                 <tr>
-                  <td className="px-6 py-4 font-medium text-gray-300">Último Mes</td>
+                  <td className="px-6 py-4 font-medium text-gray-300">Ultimo Mes</td>
                   <td className="px-6 py-4 text-center text-gray-300">{priceTarget.lastMonthCount || 'N/A'}</td>
                   <td className="px-6 py-4 text-center text-green-400 font-bold">
                     ${priceTarget.lastMonthAvgPriceTarget?.toFixed(2) || 'N/A'}
                   </td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-4 font-medium text-gray-300">Último Trimestre</td>
+                  <td className="px-6 py-4 font-medium text-gray-300">Ultimo Trimestre</td>
                   <td className="px-6 py-4 text-center text-gray-300">{priceTarget.lastQuarterCount || 'N/A'}</td>
                   <td className="px-6 py-4 text-center text-green-400 font-bold">
                     ${priceTarget.lastQuarterAvgPriceTarget?.toFixed(2) || 'N/A'}
                   </td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-4 font-medium text-gray-300">Último Año</td>
+                  <td className="px-6 py-4 font-medium text-gray-300">Ultimo Año</td>
                   <td className="px-6 py-4 text-center text-gray-300">{priceTarget.lastYearCount || 'N/A'}</td>
                   <td className="px-6 py-4 text-center text-green-400 font-bold">
                     ${priceTarget.lastYearAvgPriceTarget?.toFixed(2) || 'N/A'}
                   </td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-4 font-medium text-gray-300">Histórico (All Time)</td>
+                  <td className="px-6 py-4 font-medium text-gray-300">Historico (All Time)</td>
                   <td className="px-6 py-4 text-center text-gray-300">{priceTarget.allTimeCount || 'N/A'}</td>
                   <td className="px-6 py-4 text-center text-green-400 font-bold">
                     ${priceTarget.allTimeAvgPriceTarget?.toFixed(2) || 'N/A'}
@@ -1161,10 +1250,74 @@ function AnalistasTab({ priceTarget }: { priceTarget: any }) {
         ) : (
           <p className="text-xl text-gray-400 text-center py-10">No hay datos de Price Targets disponibles</p>
         )}
-        <p className="mt-4 text-sm text-gray-500 text-center">
-          Fuentes: {priceTarget.publishers || 'Benzinga, TipRanks, MarketWatch, etc.'}
-        </p>
       </section>
+
+      {/* Analyst Grades Summary */}
+      <section className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-700">
+        <h3 className="text-3xl font-bold text-gray-100 mb-6">Calificaciones de Analistas (Grades)</h3>
+
+        {loadingGrades ? (
+          <div className="text-center py-10">
+            <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent"></div>
+            <p className="mt-4 text-gray-400">Cargando calificaciones...</p>
+          </div>
+        ) : grades.length === 0 ? (
+          <p className="text-xl text-gray-400 text-center py-10">No hay calificaciones disponibles</p>
+        ) : (
+          <>
+            {/* Grade Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+              {Object.entries(gradeCounts).sort((a, b) => b[1] - a[1]).map(([grade, count]) => (
+                <div key={grade} className={`p-4 rounded-xl text-center ${getGradeColor(grade)}`}>
+                  <p className="text-2xl font-bold">{count}</p>
+                  <p className="text-sm font-medium">{grade}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Recent Grades Table */}
+            <h4 className="text-xl font-semibold text-gray-200 mb-4">Calificaciones Recientes</h4>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden">
+                <thead className="bg-gray-700">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-gray-100">Fecha</th>
+                    <th className="px-4 py-3 text-left text-gray-100">Firma</th>
+                    <th className="px-4 py-3 text-center text-gray-100">Anterior</th>
+                    <th className="px-4 py-3 text-center text-gray-100">Nuevo</th>
+                    <th className="px-4 py-3 text-center text-gray-100">Accion</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {grades.slice(0, 15).map((g, idx) => (
+                    <tr key={idx} className="hover:bg-gray-700/50">
+                      <td className="px-4 py-3 text-gray-400 text-sm">
+                        {new Date(g.date).toLocaleDateString('es-ES')}
+                      </td>
+                      <td className="px-4 py-3 text-gray-200 font-medium">{g.gradingCompany || 'N/A'}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-1 rounded text-xs ${getGradeColor(g.previousGrade || '')}`}>
+                          {g.previousGrade || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${getGradeColor(g.newGrade || '')}`}>
+                          {g.newGrade || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-300 text-sm">{g.action || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+
+      <p className="text-sm text-gray-500 text-center">
+        Fuentes: {priceTarget?.publishers || 'Benzinga, TipRanks, MarketWatch, etc.'}
+      </p>
     </div>
   );
 }

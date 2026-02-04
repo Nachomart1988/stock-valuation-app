@@ -30,11 +30,25 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
   const [loadingNews, setLoadingNews] = useState(true);
   const [loadingPRs, setLoadingPRs] = useState(true);
   const [activeTab, setActiveTab] = useState<'news' | 'prs'>('news');
+  const [currentTicker, setCurrentTicker] = useState(ticker);
+
+  // Reset when ticker changes
+  useEffect(() => {
+    if (ticker !== currentTicker) {
+      setCurrentTicker(ticker);
+      setCompanyNews([]);
+      setPressReleases([]);
+      setLoadingNews(true);
+      setLoadingPRs(true);
+    }
+  }, [ticker, currentTicker]);
 
   // Fetch company news
   useEffect(() => {
     const fetchCompanyNews = async () => {
       if (!ticker) return;
+
+      console.log('[NoticiasTab] Fetching news for ticker:', ticker);
 
       try {
         setLoadingNews(true);
@@ -64,6 +78,8 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
   useEffect(() => {
     const fetchPressReleases = async () => {
       if (!ticker) return;
+
+      console.log('[NoticiasTab] Fetching press releases for ticker:', ticker);
 
       try {
         setLoadingPRs(true);

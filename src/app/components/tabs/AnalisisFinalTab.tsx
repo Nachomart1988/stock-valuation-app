@@ -146,105 +146,159 @@ export default function AnalisisFinalTab({
   }
 
   return (
-    <div className="space-y-8">
-      <h2 className="text-3xl font-bold text-gray-100">Análisis Final - {ticker}</h2>
+    <div className="space-y-10">
+      <h2 className="text-4xl font-bold text-gray-100">Analisis Final - {ticker}</h2>
 
       {/* Mensaje si no hay averageVal */}
       {!sharedAverageVal && (
-        <div className="bg-yellow-900/30 border border-yellow-600 rounded-xl p-4 text-center">
-          <p className="text-yellow-400">
-            Ve a la pestaña <strong>Valuaciones</strong> para calcular el promedio de valuación. Los valores se actualizarán automáticamente aquí.
+        <div className="bg-yellow-900/30 border border-yellow-600 rounded-2xl p-6 text-center">
+          <p className="text-yellow-400 text-lg">
+            Ve a la pestana <strong>Valuaciones</strong> para calcular el promedio de valuacion. Los valores se actualizaran automaticamente aqui.
           </p>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-lg font-medium text-gray-300 mb-2">Margen de seguridad (%)</label>
-          <input
-            type="number"
-            value={margenSeguridad}
-            onChange={e => setMargenSeguridad(Number(e.target.value) || 15)}
-            className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg text-gray-100 text-lg"
-          />
-        </div>
+      {/* Hero Section - Veredicto Principal */}
+      <div className={`rounded-2xl p-8 text-center border-2 ${
+        veredicto === 'Barata' ? 'bg-green-900/20 border-green-500' :
+        veredicto === 'Justa' ? 'bg-yellow-900/20 border-yellow-500' :
+        veredicto === 'Cara' ? 'bg-red-900/20 border-red-500' :
+        'bg-gray-800 border-gray-600'
+      }`}>
+        <p className="text-xl text-gray-400 mb-2">Veredicto</p>
+        <p className={`text-6xl font-black mb-4 ${color}`}>
+          {veredicto}
+        </p>
+        {upside !== null && (
+          <p className={`text-3xl font-bold ${upside > 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {upside > 0 ? '+' : ''}{upside.toFixed(1)}% Potencial
+          </p>
+        )}
+      </div>
 
-        <div>
-          <label className="block text-lg font-medium text-gray-300 mb-2">Años históricos</label>
-          <input
-            type="number"
-            min={1}
-            max={5}
-            value={años}
-            onChange={e => setAños(Math.max(1, Math.min(5, Number(e.target.value) || 3)))}
-            className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg text-gray-100 text-lg"
-          />
+      {/* Inputs */}
+      <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
+        <h4 className="text-xl font-bold text-gray-200 mb-4">Parametros</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-lg font-medium text-gray-300 mb-2">Margen de seguridad (%)</label>
+            <input
+              type="number"
+              value={margenSeguridad}
+              onChange={e => setMargenSeguridad(Number(e.target.value) || 15)}
+              className="w-full p-4 bg-gray-900 border border-gray-600 rounded-xl text-gray-100 text-xl font-semibold"
+            />
+          </div>
+
+          <div>
+            <label className="block text-lg font-medium text-gray-300 mb-2">Anos historicos</label>
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={años}
+              onChange={e => setAños(Math.max(1, Math.min(5, Number(e.target.value) || 3)))}
+              className="w-full p-4 bg-gray-900 border border-gray-600 rounded-xl text-gray-100 text-xl font-semibold"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Resumen de análisis */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="bg-gray-700 p-5 rounded-xl border border-gray-600 text-center">
-          <p className="text-sm text-gray-400 mb-1">Precio Actual</p>
-          <p className="text-2xl font-bold text-blue-400">
+      {/* Resumen de análisis - Larger cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-gradient-to-br from-blue-900/40 to-blue-800/20 p-6 rounded-2xl border border-blue-600/50 text-center">
+          <p className="text-lg text-blue-300 mb-2">Precio Actual</p>
+          <p className="text-4xl font-black text-blue-400">
             {currentPrice ? `$${currentPrice.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-5 rounded-xl border border-gray-600 text-center">
-          <p className="text-sm text-gray-400 mb-1">Valuación Promedio</p>
-          <p className="text-2xl font-bold text-purple-400">
+        <div className="bg-gradient-to-br from-purple-900/40 to-purple-800/20 p-6 rounded-2xl border border-purple-600/50 text-center">
+          <p className="text-lg text-purple-300 mb-2">Valuacion Promedio</p>
+          <p className="text-4xl font-black text-purple-400">
             {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-5 rounded-xl border border-gray-600 text-center">
-          <p className="text-sm text-gray-400 mb-1">Precio Compra Sugerido</p>
-          <p className="text-2xl font-bold text-green-400">
+        <div className="bg-gradient-to-br from-green-900/40 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
+          <p className="text-lg text-green-300 mb-2">Precio Compra Sugerido</p>
+          <p className="text-4xl font-black text-green-400">
             {precioEstimado ? `$${precioEstimado.toFixed(2)}` : 'N/A'}
           </p>
+          <p className="text-sm text-gray-500 mt-1">({margenSeguridad}% margen)</p>
         </div>
-        <div className="bg-gray-700 p-5 rounded-xl border border-gray-600 text-center">
-          <p className="text-sm text-gray-400 mb-1">Upside/Downside</p>
-          <p className={`text-2xl font-bold ${upside !== null && upside > 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {upside !== null ? `${upside.toFixed(1)}%` : 'N/A'}
-          </p>
-        </div>
-        <div className="bg-gray-700 p-5 rounded-xl border border-gray-600 text-center">
-          <p className="text-sm text-gray-400 mb-1">Veredicto</p>
-          <p className={`text-2xl font-bold ${color}`}>
-            {veredicto}
+        <div className={`p-6 rounded-2xl border text-center ${
+          upside !== null && upside > 0
+            ? 'bg-gradient-to-br from-green-900/40 to-emerald-800/20 border-green-600/50'
+            : 'bg-gradient-to-br from-red-900/40 to-rose-800/20 border-red-600/50'
+        }`}>
+          <p className="text-lg text-gray-300 mb-2">Upside/Downside</p>
+          <p className={`text-4xl font-black ${upside !== null && upside > 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {upside !== null ? `${upside > 0 ? '+' : ''}${upside.toFixed(1)}%` : 'N/A'}
           </p>
         </div>
       </div>
 
+      {/* Chart Section */}
       {loading ? (
-        <div className="text-center py-12 text-gray-400">Cargando gráfico...</div>
+        <div className="text-center py-16">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+          <p className="mt-4 text-gray-400 text-lg">Cargando grafico...</p>
+        </div>
       ) : historical.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">No hay datos históricos disponibles</div>
+        <div className="text-center py-16 text-gray-400">
+          <p className="text-2xl">No hay datos historicos disponibles</p>
+        </div>
       ) : (
-        <div className="p-6 bg-gray-700 rounded-xl border border-gray-600">
-          <h4 className="text-xl font-semibold text-gray-200 mb-4">
-            Precio histórico ({años} {años === 1 ? 'año' : 'años'})
+        <div className="bg-gray-800 rounded-2xl border border-gray-700 p-8">
+          <h4 className="text-2xl font-bold text-gray-200 mb-6">
+            Precio Historico ({años} {años === 1 ? 'ano' : 'anos'})
           </h4>
-          <div className="h-96">
+          <div className="h-[450px]">
             <Line
               data={chartData}
               options={{
                 maintainAspectRatio: false,
                 responsive: true,
+                interaction: {
+                  mode: 'index',
+                  intersect: false,
+                },
                 scales: {
                   y: {
-                    ticks: { color: '#e5e7eb' },
-                    grid: { color: '#4b5563' },
+                    ticks: {
+                      color: '#9ca3af',
+                      font: { size: 12 },
+                      callback: (value) => `$${value}`,
+                    },
+                    grid: { color: '#374151' },
                   },
                   x: {
-                    ticks: { color: '#e5e7eb', maxTicksLimit: 12 },
-                    grid: { color: '#4b5563' },
+                    ticks: {
+                      color: '#9ca3af',
+                      maxTicksLimit: 12,
+                      font: { size: 11 },
+                    },
+                    grid: { color: '#374151' },
                   },
                 },
                 plugins: {
                   legend: {
-                    labels: { color: '#e5e7eb' },
+                    labels: {
+                      color: '#e5e7eb',
+                      font: { size: 13 },
+                      padding: 20,
+                    },
                     position: 'top',
+                  },
+                  tooltip: {
+                    backgroundColor: '#1f2937',
+                    titleColor: '#f9fafb',
+                    bodyColor: '#d1d5db',
+                    borderColor: '#4b5563',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                      label: (context) => `${context.dataset.label}: $${context.parsed.y?.toFixed(2) ?? 'N/A'}`,
+                    },
                   },
                 },
               }}
@@ -253,8 +307,31 @@ export default function AnalisisFinalTab({
         </div>
       )}
 
-      <p className="text-sm text-gray-500 text-center italic">
-        Los valores se actualizan automáticamente cuando cambias los métodos de valuación en la pestaña Valuaciones.
+      {/* Legend explanation */}
+      <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
+        <h4 className="text-xl font-bold text-gray-200 mb-4">Interpretacion</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-base">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-1 bg-cyan-400 rounded"></div>
+            <span className="text-gray-300"><strong>Precio Cierre:</strong> Precio historico de la accion</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-1 bg-purple-500 rounded" style={{ borderStyle: 'dashed' }}></div>
+            <span className="text-gray-300"><strong>Valuacion Promedio:</strong> Valor intrinseco calculado</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-1 bg-green-500 rounded" style={{ borderStyle: 'dashed' }}></div>
+            <span className="text-gray-300"><strong>Precio Compra:</strong> Con margen de seguridad aplicado</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-1 bg-red-500 rounded" style={{ borderStyle: 'dashed' }}></div>
+            <span className="text-gray-300"><strong>Precio Actual:</strong> Cotizacion actual del mercado</span>
+          </div>
+        </div>
+      </div>
+
+      <p className="text-center text-sm text-gray-500">
+        Los valores se actualizan automaticamente cuando cambias los metodos de valuacion en la pestana Valuaciones.
       </p>
     </div>
   )

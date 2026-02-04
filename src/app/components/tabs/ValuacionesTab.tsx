@@ -44,13 +44,69 @@ export default function ValuacionesTab({
   const [h, setH] = useState<number>(5);
   const [glong, setGlong] = useState<number>(0.04);
   const [n, setN] = useState<number>(5);
-  const [sharePriceT5, setSharePriceT5] = useState<number>(0);
-  const [sharePriceT5CAGR, setSharePriceT5CAGR] = useState<number>(0.1);
+  const [sharePriceTxCAGR, setSharePriceTxCAGR] = useState<number>(10); // CAGR in % for terminal share price
 
   // Parámetros adicionales para modelos avanzados
-  const [discountRate, setDiscountRate] = useState<number>(10); // WACC en %
+  const [discountRate, setDiscountRate] = useState<number | null>(null); // WACC en %, null = auto-calculate
   const [exitMultiple, setExitMultiple] = useState<number>(12);
   const [projectedGrowthRate, setProjectedGrowthRate] = useState<number>(5);
+
+  // Calculate Share Price TX based on current price and CAGR
+  const currentPrice = quote?.price || 0;
+  const sharePriceT5 = currentPrice * Math.pow(1 + sharePriceTxCAGR / 100, n);
+
+  // Calculate default WACC as average of WACC tab calculation and Advance DCF WACC
+  const calculatedDefaultWACC = useMemo(() => {
+    // Get WACC from dcfCustom (Advance DCF)
+    const advanceDcfWacc = dcfCustom?.wacc ? dcfCustom.wacc * 100 : null;
+
+    // Simple WACC calculation (similar to WACCTab)
+    const sortedIncome = [...income].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const sortedBalance = [...balance].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const lastIncome = sortedIncome[0] || {};
+    const lastBalance = sortedBalance[0] || {};
+
+    // Cost of equity using CAPM: Re = Rf + β(Rm - Rf)
+    const riskFreeRate = 0.04; // 4% default
+    const marketReturn = 0.10; // 10% default
+    const beta = profile?.beta || 1;
+    const costOfEquity = riskFreeRate + beta * (marketReturn - riskFreeRate);
+
+    // Cost of debt
+    const interestExpense = Math.abs(lastIncome.interestExpense || 0);
+    const totalDebt = lastBalance.totalDebt || lastBalance.longTermDebt || 0;
+    const costOfDebt = totalDebt > 0 ? interestExpense / totalDebt : 0.05;
+
+    // Tax rate
+    const taxRate = lastIncome.incomeTaxExpense && lastIncome.incomeBeforeTax
+      ? Math.max(0, Math.min(0.4, lastIncome.incomeTaxExpense / lastIncome.incomeBeforeTax))
+      : 0.25;
+
+    // Market value of equity
+    const marketCap = quote?.marketCap || (quote?.price && quote?.sharesOutstanding ? quote.price * quote.sharesOutstanding : 0);
+
+    // Weights
+    const totalValue = marketCap + totalDebt;
+    const weightEquity = totalValue > 0 ? marketCap / totalValue : 0.7;
+    const weightDebt = totalValue > 0 ? totalDebt / totalValue : 0.3;
+
+    // WACC calculation
+    const calculatedWacc = (weightEquity * costOfEquity + weightDebt * costOfDebt * (1 - taxRate)) * 100;
+
+    // Average of calculated WACC and Advance DCF WACC
+    if (advanceDcfWacc && calculatedWacc > 0) {
+      return (advanceDcfWacc + calculatedWacc) / 2;
+    } else if (advanceDcfWacc) {
+      return advanceDcfWacc;
+    } else if (calculatedWacc > 0) {
+      return calculatedWacc;
+    }
+    return 10; // Fallback default
+  }, [income, balance, quote, profile, dcfCustom]);
+
+  // Effective WACC (user input or auto-calculated)
+  const effectiveDiscountRate = discountRate ?? calculatedDefaultWACC;
 
   // ────────────────────────────────────────────────
   // Cálculo de parámetros por defecto basados en datos históricos
@@ -380,7 +436,7 @@ export default function ValuacionesTab({
       const nopat = ebit * (1 - avgTaxRate);
       const capex = revenue * avgCapexToRevenue;
       const unleveredFCF = nopat + depreciation - capex;
-      const discountFactor = 1 / Math.pow(1 + discountRate / 100, i);
+      const discountFactor = 1 / Math.pow(1 + effectiveDiscountRate / 100, i);
       cumulativeDiscountedFCF += unleveredFCF * discountFactor;
       lastRevenue = revenue;
       lastEbitda = ebitda;
@@ -388,7 +444,7 @@ export default function ValuacionesTab({
 
     // Terminal value
     const terminalValue = lastEbitda * exitMultiple;
-    const pvTerminalValue = terminalValue / Math.pow(1 + discountRate / 100, 5);
+    const pvTerminalValue = terminalValue / Math.pow(1 + effectiveDiscountRate / 100, 5);
     const totalEV = cumulativeDiscountedFCF + pvTerminalValue;
 
     // Equity value
@@ -410,7 +466,7 @@ export default function ValuacionesTab({
       valuePerShare: equityValue / sharesOutstanding,
       totalEV,
     };
-  }, [income, balance, cashFlow, quote, profile, discountRate, exitMultiple, projectedGrowthRate]);
+  }, [income, balance, cashFlow, quote, profile, effectiveDiscountRate, exitMultiple, projectedGrowthRate]);
 
   // ────────────────────────────────────────────────
   // Cálculo principal de valuaciones
@@ -558,37 +614,52 @@ export default function ValuacionesTab({
 
         // Simplified HJM implementation
         // Assume Vasicek-type volatility structure: σ(t,T) = σ * e^(-a(T-t))
-        const a = effectiveHjmMeanReversion;
+        const a = Math.max(0.01, effectiveHjmMeanReversion); // Ensure a > 0
         const sigma = effectiveHjmSigma;
 
-        // Initial forward rate (use 10Y treasury as proxy)
-        const f0 = 0.04; // Initial forward rate
+        // Initial forward rate (use risk-free rate as base)
+        const f0 = dcfCustom?.riskFreeRate || 0.04;
 
         // Calculate HJM drift (no-arbitrage)
         // α(t,T) = σ² * (1 - e^(-a(T-t))) / a
-        const T = 5; // 5-year horizon
+        const T = n; // Use projection years
         const hjmDrift = Math.pow(sigma, 2) * (1 - Math.exp(-a * T)) / a;
 
-        // Forward rate at time T
-        const forwardRate = f0 + hjmDrift;
+        // Forward rate at time T (capped to reasonable range)
+        const forwardRate = Math.min(0.15, Math.max(0.02, f0 + hjmDrift));
 
-        // Bond price factor (discount based on term structure)
-        // P(0,T) = exp(-∫[0,T] f(0,s)ds) adjusted for convexity
-        const convexityAdjustment = 0.5 * Math.pow(sigma, 2) * T * T;
-        const bondPrice = Math.exp(-forwardRate * T + convexityAdjustment);
+        // For HJM valuation, we use the DCF approach but with stochastic rate adjustment
+        // The key insight: HJM adjusts the discount rate based on term structure dynamics
 
-        // HJM valuation: FCF stream discounted with stochastic rates
+        // HJM-adjusted discount rate = base rate + risk premium from interest rate volatility
+        // Risk premium ≈ σ² × T / 2 (convexity adjustment)
+        const hjmRiskPremium = 0.5 * Math.pow(sigma, 2) * T;
+        const hjmDiscountRate = forwardRate + hjmRiskPremium;
+
+        // Ensure the discount rate is materially higher than growth rate
+        const effectiveHjmDiscountRate = Math.max(hjmDiscountRate, glong + 0.02);
+
+        // HJM valuation: FCF stream discounted with HJM-derived rates
         let hjmPV = 0;
-        for (let t = 1; t <= 5; t++) {
+        for (let t = 1; t <= n; t++) {
+          // Time-varying forward rate
           const fRate = f0 + sigma * sigma * (1 - Math.exp(-a * t)) / a;
-          const discount = Math.exp(-fRate * t);
+          const adjustedRate = Math.max(fRate + hjmRiskPremium, 0.03);
+          const discount = Math.exp(-adjustedRate * t);
           const projectedFCF = fcfo * Math.pow(1 + glong, t);
           hjmPV += projectedFCF * discount;
         }
 
         // Terminal value with HJM discount
-        const hjmTerminalValue = fcfo * Math.pow(1 + glong, 5) * (1 + glong) / (forwardRate - glong);
-        const hjmPVTerminal = hjmTerminalValue * bondPrice;
+        // Ensure denominator is positive and reasonable
+        const terminalDenom = Math.max(effectiveHjmDiscountRate - glong, 0.02);
+        const hjmTerminalFCF = fcfo * Math.pow(1 + glong, n) * (1 + glong);
+        const hjmTerminalValue = hjmTerminalFCF / terminalDenom;
+
+        // Discount terminal value back to present using average forward rate
+        const avgForwardRate = Math.max(0.03, (f0 + forwardRate) / 2 + hjmRiskPremium);
+        const hjmPVTerminal = hjmTerminalValue * Math.exp(-avgForwardRate * n);
+
         const hjmValue = hjmPV + hjmPVTerminal;
 
         // ────────────────────────────────────────────────
@@ -612,7 +683,7 @@ export default function ValuacionesTab({
 
         // FCFE 2-Stage: Gordon Growth on FCFE per share
         const fcfeGrowth1 = projectedGrowthRate / 100; // High growth period
-        const re = discountRate / 100; // Cost of equity
+        const re = effectiveDiscountRate / 100; // Cost of equity
 
         // 2-Stage FCFE: Explicit forecast + Terminal
         let fcfe2StageValue = 0;
@@ -665,7 +736,7 @@ export default function ValuacionesTab({
 
         // FCFF aggregate
         const fcffAggregate = nopat + dna - capex - deltaWC;
-        const wacc = discountRate / 100;
+        const wacc = effectiveDiscountRate / 100;
         const netDebt = currentTotalDebt - (lastBalance.cashAndCashEquivalents || 0);
 
         // 2-Stage FCFF: Explicit forecast + Terminal
@@ -776,7 +847,7 @@ export default function ValuacionesTab({
             name: 'DCF',
             value: dcfValue > 0 && isFinite(dcfValue) ? dcfValue : null,
             enabled: true,
-            description: `DCF interno (WACC=${discountRate}%, Exit=${exitMultiple}x)`,
+            description: `DCF interno (WACC=${effectiveDiscountRate.toFixed(1)}%, Exit=${exitMultiple}x)`,
           },
           {
             name: 'EPS*Benchmark',
@@ -853,10 +924,10 @@ export default function ValuacionesTab({
 
     calculate();
   }, [
-    h, glong, n, sharePriceT5, sharePriceT5CAGR,
+    h, glong, n, sharePriceT5, sharePriceTxCAGR,
     income, balance, cashFlow, priceTarget, profile, quote,
     effectiveOmega, effectiveGamma, // RIM params
-    discountRate, exitMultiple, projectedGrowthRate, // DCF params
+    effectiveDiscountRate, exitMultiple, projectedGrowthRate, // DCF params
     effectiveVolatility, effectiveLambda, // Stochastic params
     effectivePhiPi, effectivePhiY, effectiveBetaDSGE, effectiveKappa, // DSGE params
     effectiveHjmSigma, effectiveHjmMeanReversion, // HJM params
@@ -895,10 +966,10 @@ export default function ValuacionesTab({
           Inputs básicos
           ──────────────────────────────────────────────── */}
       <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <h4 className="text-xl font-bold text-gray-100 mb-4 text-left">Parámetros Básicos (DDM/FCF)</h4>
+        <h4 className="text-xl font-bold text-gray-100 mb-4 text-left">Parametros Basicos (DDM/FCF)</h4>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">H (años transición)</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">H (anos transicion)</label>
             <input
               type="number"
               value={h}
@@ -917,7 +988,7 @@ export default function ValuacionesTab({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">N (años proyección)</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">N (anos proyeccion)</label>
             <input
               type="number"
               value={n}
@@ -926,23 +997,22 @@ export default function ValuacionesTab({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Share Price t5</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">CAGR Share Price TX (%)</label>
             <input
               type="number"
-              value={sharePriceT5}
-              onChange={(e) => setSharePriceT5(Number(e.target.value) || 0)}
+              step="1"
+              value={sharePriceTxCAGR}
+              onChange={(e) => setSharePriceTxCAGR(Number(e.target.value) || 10)}
               className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
             />
+            <p className="text-xs text-gray-500 mt-1">Crecimiento anual esperado del precio</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">T5 CAGR</label>
-            <input
-              type="number"
-              step="0.01"
-              value={sharePriceT5CAGR}
-              onChange={(e) => setSharePriceT5CAGR(Number(e.target.value) || 0.1)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-            />
+            <label className="block text-sm font-medium text-gray-300 mb-1">Share Price T{n}</label>
+            <div className="px-3 py-2 border border-gray-600 rounded-lg bg-gray-700 text-gray-100 font-semibold">
+              ${sharePriceT5.toFixed(2)}
+            </div>
+            <p className="text-xs text-blue-400 mt-1">= ${currentPrice.toFixed(2)} × (1+{sharePriceTxCAGR}%)^{n}</p>
           </div>
         </div>
       </div>
@@ -951,17 +1021,26 @@ export default function ValuacionesTab({
           Parámetros DCF
           ──────────────────────────────────────────────── */}
       <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <h4 className="text-xl font-bold text-gray-100 mb-4 text-left">Parámetros DCF</h4>
+        <h4 className="text-xl font-bold text-gray-100 mb-4 text-left">Parametros DCF</h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Discount Rate (WACC) %</label>
             <input
               type="number"
               step="0.5"
-              value={discountRate}
-              onChange={(e) => setDiscountRate(Number(e.target.value) || 10)}
+              value={discountRate ?? effectiveDiscountRate}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                setDiscountRate(isNaN(val) ? null : val);
+              }}
+              placeholder={`Auto: ${calculatedDefaultWACC.toFixed(2)}%`}
               className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
             />
+            {discountRate === null && (
+              <p className="text-xs text-blue-400 mt-1">
+                Auto: Promedio WACC Tab ({((calculatedDefaultWACC * 2 - (dcfCustom?.wacc ? dcfCustom.wacc * 100 : calculatedDefaultWACC))).toFixed(1)}%) + Advance DCF ({dcfCustom?.wacc ? (dcfCustom.wacc * 100).toFixed(1) : 'N/A'}%)
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Exit Multiple (EV/EBITDA)</label>
