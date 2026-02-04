@@ -28,6 +28,164 @@ import NoticiasTab from '@/app/components/tabs/NoticiasTab';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
+// Helper function to extract value from SEC JSON structure
+function extractSECValue(data: any[], key: string): number | null {
+  if (!data) return null;
+  for (const item of data) {
+    if (item[key]) {
+      const values = item[key];
+      if (Array.isArray(values)) {
+        // Return first non-empty numeric value
+        for (const val of values) {
+          if (typeof val === 'number') return val;
+          if (typeof val === 'string' && !isNaN(parseFloat(val)) && val.trim() !== '') {
+            return parseFloat(val);
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// Extract supplemental data from SEC Financial Reports
+function extractSECData(reports: any[]): any {
+  const result: any = {
+    dividendsPerShare: {},
+    dividendsPaid: {},
+    leaseData: {},
+    revenueBySegment: {},
+    additionalMetrics: {},
+  };
+
+  for (const report of reports) {
+    if (!report || !report.year) continue;
+    const year = report.year;
+
+    // Extract Dividends per share from various sections
+    // Look in CONSOLIDATED STATEMENTS OF SHAREHOLDERS EQUITY or specific dividend sections
+    const sections = Object.keys(report);
+
+    for (const section of sections) {
+      const sectionData = report[section];
+      if (!Array.isArray(sectionData)) continue;
+
+      // Dividends per share
+      const dpsValue = extractSECValue(sectionData, 'Dividends and dividend equivalents declared per share or RSU (in dollars per share or RSU)');
+      if (dpsValue !== null) {
+        result.dividendsPerShare[year] = dpsValue;
+      }
+
+      // Payments for dividends (from Cash Flow section)
+      const divPaidValue = extractSECValue(sectionData, 'Payments for dividends and dividend equivalents');
+      if (divPaidValue !== null) {
+        result.dividendsPaid[year] = Math.abs(divPaidValue);
+      }
+
+      // Operating lease ROU assets
+      const operatingLeaseROU = extractSECValue(sectionData, 'Operating lease right-of-use assets');
+      if (operatingLeaseROU !== null) {
+        if (!result.leaseData[year]) result.leaseData[year] = {};
+        result.leaseData[year].operatingLeaseROU = operatingLeaseROU;
+      }
+
+      // Finance lease ROU assets
+      const financeLeaseROU = extractSECValue(sectionData, 'Finance lease right-of-use assets');
+      if (financeLeaseROU !== null) {
+        if (!result.leaseData[year]) result.leaseData[year] = {};
+        result.leaseData[year].financeLeaseROU = financeLeaseROU;
+      }
+
+      // Operating lease liabilities (current)
+      const operatingLeaseLiabCurrent = extractSECValue(sectionData, 'Operating lease liabilities, current');
+      if (operatingLeaseLiabCurrent !== null) {
+        if (!result.leaseData[year]) result.leaseData[year] = {};
+        result.leaseData[year].operatingLeaseLiabilitiesCurrent = operatingLeaseLiabCurrent;
+      }
+
+      // Operating lease liabilities (non-current)
+      const operatingLeaseLiabNonCurrent = extractSECValue(sectionData, 'Operating lease liabilities, non-current');
+      if (operatingLeaseLiabNonCurrent !== null) {
+        if (!result.leaseData[year]) result.leaseData[year] = {};
+        result.leaseData[year].operatingLeaseLiabilitiesNonCurrent = operatingLeaseLiabNonCurrent;
+      }
+
+      // Finance lease liabilities (current)
+      const financeLeaseLiabCurrent = extractSECValue(sectionData, 'Finance lease liabilities, current');
+      if (financeLeaseLiabCurrent !== null) {
+        if (!result.leaseData[year]) result.leaseData[year] = {};
+        result.leaseData[year].financeLeaseLiabilitiesCurrent = financeLeaseLiabCurrent;
+      }
+
+      // Finance lease liabilities (non-current)
+      const financeLeaseLiabNonCurrent = extractSECValue(sectionData, 'Finance lease liabilities, non-current');
+      if (financeLeaseLiabNonCurrent !== null) {
+        if (!result.leaseData[year]) result.leaseData[year] = {};
+        result.leaseData[year].financeLeaseLiabilitiesNonCurrent = financeLeaseLiabNonCurrent;
+      }
+
+      // Total lease liabilities
+      const totalLeaseLiab = extractSECValue(sectionData, 'Total lease liabilities');
+      if (totalLeaseLiab !== null) {
+        if (!result.leaseData[year]) result.leaseData[year] = {};
+        result.leaseData[year].totalLeaseLiabilities = totalLeaseLiab;
+      }
+
+      // Fixed operating lease costs
+      const fixedLeaseCosts = extractSECValue(sectionData, 'Fixed operating lease costs');
+      if (fixedLeaseCosts !== null) {
+        if (!result.leaseData[year]) result.leaseData[year] = {};
+        result.leaseData[year].fixedOperatingLeaseCosts = fixedLeaseCosts;
+      }
+
+      // Variable lease costs
+      const variableLeaseCosts = extractSECValue(sectionData, 'Variable lease costs');
+      if (variableLeaseCosts !== null) {
+        if (!result.leaseData[year]) result.leaseData[year] = {};
+        result.leaseData[year].variableLeaseCosts = variableLeaseCosts;
+      }
+
+      // Revenue by segment (Products vs Services)
+      if (section.includes('STATEMENTS OF OPER')) {
+        const productsRevenue = extractSECValue(sectionData, 'Net sales');
+        // Look for Products section specifically
+        let inProducts = false;
+        let inServices = false;
+        for (const item of sectionData) {
+          if (item['Products']) inProducts = true;
+          if (item['Services']) {
+            inProducts = false;
+            inServices = true;
+          }
+          if (inProducts && item['Net sales']) {
+            const vals = item['Net sales'];
+            if (Array.isArray(vals) && typeof vals[0] === 'number') {
+              if (!result.revenueBySegment[year]) result.revenueBySegment[year] = {};
+              result.revenueBySegment[year].products = vals[0];
+            }
+          }
+          if (inServices && item['Net sales']) {
+            const vals = item['Net sales'];
+            if (Array.isArray(vals) && typeof vals[0] === 'number') {
+              if (!result.revenueBySegment[year]) result.revenueBySegment[year] = {};
+              result.revenueBySegment[year].services = vals[0];
+            }
+          }
+        }
+      }
+
+      // Interest and dividend income
+      const interestDividendIncome = extractSECValue(sectionData, 'Interest and dividend income');
+      if (interestDividendIncome !== null) {
+        if (!result.additionalMetrics[year]) result.additionalMetrics[year] = {};
+        result.additionalMetrics[year].interestAndDividendIncome = interestDividendIncome;
+      }
+    }
+  }
+
+  return result;
+}
+
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ');
 }
@@ -140,6 +298,22 @@ function AnalizarContent() {
           }
         }
 
+        // Fetch SEC Financial Reports for additional data (dividends per share, leases, etc.)
+        // Fetch for last 5 years
+        const currentYear = new Date().getFullYear();
+        const secReportsPromises = [];
+        for (let year = currentYear; year >= currentYear - 5; year--) {
+          secReportsPromises.push(
+            fetch(`${base}/financial-reports-json?symbol=${activeTicker}&year=${year}&period=FY&apikey=${apiKey}`, { cache: 'no-store' })
+              .then(res => res.ok ? res.json() : null)
+              .catch(() => null)
+          );
+        }
+        const secReportsData = await Promise.all(secReportsPromises);
+
+        // Extract SEC supplemental data
+        const secSupplementalData = extractSECData(secReportsData.filter(Boolean));
+
         console.log('[AnalizarContent] Data loaded for', activeTicker, '- Income records:', incomeData.length, '- Balance records:', balanceData.length);
         setData({
           quote: quoteData[0] || {},
@@ -155,6 +329,8 @@ function AnalizarContent() {
           incomeTTM: incomeTTMData[0] || null,
           balanceTTM: balanceTTMData[0] || null,
           cashFlowTTM: cashFlowTTMData[0] || null,
+          // SEC supplemental data
+          secData: secSupplementalData,
         });
       } catch (err) {
         setError((err as Error).message || 'Error al cargar datos');
@@ -232,7 +408,7 @@ function AnalizarContent() {
     );
   }
 
-  const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM } = data;
+  const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM, secData } = data;
 
   const categories = [
     'Inicio',
@@ -315,17 +491,17 @@ function AnalizarContent() {
 
   {/* Income Statement */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} />
+    <FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} secData={secData} />
   </Tab.Panel>
 
   {/* Balance Sheet */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} />
+    <FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} secData={secData} />
   </Tab.Panel>
 
   {/* Cash Flow */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} />
+    <FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} secData={secData} />
   </Tab.Panel>
 
   {/* Analistas */}
@@ -931,7 +1107,7 @@ function GeneralTab({ profile, quote }: { profile: any; quote: any }) {
   );
 }
 
-function FinancialStatementTab({ title, data, type, ttmData }: { title: string; data: any[]; type: 'income' | 'balance' | 'cashFlow'; ttmData?: any }) {
+function FinancialStatementTab({ title, data, type, ttmData, secData }: { title: string; data: any[]; type: 'income' | 'balance' | 'cashFlow'; ttmData?: any; secData?: any }) {
   if (data.length === 0 && !ttmData) {
     return <p className="text-2xl text-gray-400 text-center py-10">No hay datos disponibles para {title}</p>;
   }
@@ -941,8 +1117,20 @@ function FinancialStatementTab({ title, data, type, ttmData }: { title: string; 
   // Combine TTM with historical data - TTM first, then historical
   const allData = ttmData ? [{ ...ttmData, date: 'TTM', isTTM: true }, ...sortedData] : sortedData;
 
+  // Helper function to get SEC data by year
+  const getSECValue = (year: string | number, dataType: string, field: string): number | null => {
+    if (!secData) return null;
+    const yearKey = String(year);
+    const typeData = secData[dataType];
+    if (!typeData) return null;
+    // Try exact year and nearby years
+    if (typeData[yearKey]?.[field] !== undefined) return typeData[yearKey][field];
+    if (typeData[yearKey] !== undefined && typeof typeData[yearKey] === 'number') return typeData[yearKey];
+    return null;
+  };
+
   // Helper to get value with fallback field names (FMP can use different names)
-  const getValueWithFallback = (item: any, primaryKey: string): number | null | undefined => {
+  const getValueWithFallback = (item: any, primaryKey: string, itemYear?: string | number): number | null | undefined => {
     // Alternative field mappings for FMP API inconsistencies
     const fieldMappings: Record<string, string[]> = {
       'dividendsPaid': ['dividendsPaid', 'paymentOfDividends', 'commonStockDividendsPaid', 'dividendsPaidOnCommonStock', 'dividendsCommonStock', 'cashDividendsPaid'],
@@ -971,6 +1159,45 @@ function FinancialStatementTab({ title, data, type, ttmData }: { title: string; 
       return null;
     }
 
+    // SEC data fields - these come from financial-reports-json endpoint
+    if (primaryKey === 'dividendsPerShare' && itemYear) {
+      const secValue = getSECValue(itemYear, 'dividendsPerShare', itemYear.toString());
+      if (secValue !== null) return secValue;
+    }
+
+    if (primaryKey === 'secDividendsPaid' && itemYear) {
+      const secValue = getSECValue(itemYear, 'dividendsPaid', itemYear.toString());
+      if (secValue !== null) return secValue;
+    }
+
+    // Lease data from SEC
+    if (primaryKey === 'operatingLeaseROU' && itemYear) {
+      const secValue = getSECValue(itemYear, 'leaseData', 'operatingLeaseROU');
+      if (secValue !== null) return secValue;
+    }
+
+    if (primaryKey === 'financeLeaseROU' && itemYear) {
+      const secValue = getSECValue(itemYear, 'leaseData', 'financeLeaseROU');
+      if (secValue !== null) return secValue;
+    }
+
+    if (primaryKey === 'totalLeaseLiabilities' && itemYear) {
+      const secValue = getSECValue(itemYear, 'leaseData', 'totalLeaseLiabilities');
+      if (secValue !== null) return secValue;
+    }
+
+    if (primaryKey === 'operatingLeaseLiabilities' && itemYear) {
+      const currentVal = getSECValue(itemYear, 'leaseData', 'operatingLeaseLiabilitiesCurrent') || 0;
+      const nonCurrentVal = getSECValue(itemYear, 'leaseData', 'operatingLeaseLiabilitiesNonCurrent') || 0;
+      if (currentVal > 0 || nonCurrentVal > 0) return currentVal + nonCurrentVal;
+    }
+
+    if (primaryKey === 'financeLeaseLiabilities' && itemYear) {
+      const currentVal = getSECValue(itemYear, 'leaseData', 'financeLeaseLiabilitiesCurrent') || 0;
+      const nonCurrentVal = getSECValue(itemYear, 'leaseData', 'financeLeaseLiabilitiesNonCurrent') || 0;
+      if (currentVal > 0 || nonCurrentVal > 0) return currentVal + nonCurrentVal;
+    }
+
     // Try primary key first
     if (item[primaryKey] !== undefined && item[primaryKey] !== null && item[primaryKey] !== 0) {
       return item[primaryKey];
@@ -986,12 +1213,18 @@ function FinancialStatementTab({ title, data, type, ttmData }: { title: string; 
       }
     }
 
+    // For dividendsPaid, also try SEC data as last resort
+    if (primaryKey === 'dividendsPaid' && itemYear) {
+      const secValue = getSECValue(itemYear, 'dividendsPaid', itemYear.toString());
+      if (secValue !== null) return secValue;
+    }
+
     // Return 0 instead of undefined if all alternatives are 0 or missing
     return item[primaryKey];
   };
 
   // Métricas esenciales sin TTM (solo datos que varían por período)
-  let metrics: { key: string; label: string; isRatio?: boolean; isPerShare?: boolean }[] = [];
+  let metrics: { key: string; label: string; isRatio?: boolean; isPerShare?: boolean; isSEC?: boolean }[] = [];
 
   if (type === 'income') {
     metrics = [
@@ -1027,6 +1260,9 @@ function FinancialStatementTab({ title, data, type, ttmData }: { title: string; 
       { key: 'goodwill', label: 'Goodwill' },
       { key: 'intangibleAssets', label: 'Intangible Assets' },
       { key: 'longTermInvestments', label: 'Long Term Investments' },
+      // Lease Assets (from SEC data)
+      { key: 'operatingLeaseROU', label: 'Operating Lease ROU Assets', isSEC: true },
+      { key: 'financeLeaseROU', label: 'Finance Lease ROU Assets', isSEC: true },
       { key: 'totalNonCurrentAssets', label: 'Total Non-Current Assets' },
       { key: 'totalAssets', label: 'Total Assets' },
       // Liabilities
@@ -1034,6 +1270,10 @@ function FinancialStatementTab({ title, data, type, ttmData }: { title: string; 
       { key: 'shortTermDebt', label: 'Short Term Debt' },
       { key: 'totalCurrentLiabilities', label: 'Total Current Liabilities' },
       { key: 'longTermDebt', label: 'Long Term Debt' },
+      // Lease Liabilities (from SEC data)
+      { key: 'operatingLeaseLiabilities', label: 'Operating Lease Liabilities', isSEC: true },
+      { key: 'financeLeaseLiabilities', label: 'Finance Lease Liabilities', isSEC: true },
+      { key: 'totalLeaseLiabilities', label: 'Total Lease Liabilities', isSEC: true },
       { key: 'totalNonCurrentLiabilities', label: 'Total Non-Current Liabilities' },
       { key: 'totalLiabilities', label: 'Total Liabilities' },
       { key: 'totalDebt', label: 'Total Debt' },
@@ -1064,6 +1304,7 @@ function FinancialStatementTab({ title, data, type, ttmData }: { title: string; 
       { key: 'netDebtIssuance', label: 'Net Debt Issuance' },
       { key: 'commonStockRepurchased', label: 'Stock Repurchased' },
       { key: 'dividendsPaid', label: 'Dividends Paid' },
+      { key: 'dividendsPerShare', label: 'Dividends Per Share (SEC)', isPerShare: true, isSEC: true },
       { key: 'netCashProvidedByFinancingActivities', label: 'Financing Cash Flow' },
       // Summary
       { key: 'netChangeInCash', label: 'Net Change in Cash' },
@@ -1123,28 +1364,34 @@ function FinancialStatementTab({ title, data, type, ttmData }: { title: string; 
           </thead>
           <tbody className="divide-y divide-gray-700">
             {metrics.map((metric) => (
-              <tr key={metric.key} className="hover:bg-gray-700/50 transition">
-                <td className="px-8 py-4 text-gray-200 font-medium text-base sticky left-0 bg-gray-900 z-10 border-r border-gray-700">
+              <tr key={metric.key} className={`hover:bg-gray-700/50 transition ${metric.isSEC ? 'bg-purple-900/10' : ''}`}>
+                <td className={`px-8 py-4 font-medium text-base sticky left-0 z-10 border-r border-gray-700 ${metric.isSEC ? 'bg-purple-900/20 text-purple-300' : 'bg-gray-900 text-gray-200'}`}>
                   {metric.label}
+                  {metric.isSEC && <span className="ml-2 text-xs text-purple-400" title="Data from SEC 10-K/10-Q filings">*</span>}
                 </td>
-                {allData.map((row, i) => (
-                  <td
-                    key={i}
-                    className={`px-6 py-4 text-center text-base font-medium ${
-                      row.isTTM ? 'text-blue-300 bg-blue-900/10' : 'text-gray-100'
-                    }`}
-                  >
-                    {formatValue(getValueWithFallback(row, metric.key), metric)}
-                  </td>
-                ))}
+                {allData.map((row, i) => {
+                  // Get the year for SEC data lookup
+                  const itemYear = row.isTTM ? new Date().getFullYear() : new Date(row.date).getFullYear();
+                  return (
+                    <td
+                      key={i}
+                      className={`px-6 py-4 text-center text-base font-medium ${
+                        row.isTTM ? 'text-blue-300 bg-blue-900/10' : metric.isSEC ? 'text-purple-200' : 'text-gray-100'
+                      }`}
+                    >
+                      {formatValue(getValueWithFallback(row, metric.key, itemYear), metric)}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="text-base text-gray-400 text-center">
-        Datos ordenados del más reciente (izquierda) al más antiguo (derecha).
-      </p>
+      <div className="flex justify-between items-center text-base text-gray-400">
+        <p>Datos ordenados del mas reciente (izquierda) al mas antiguo (derecha).</p>
+        <p className="text-purple-400 text-sm">* Datos adicionales de SEC 10-K filings</p>
+      </div>
     </div>
   );
 }
