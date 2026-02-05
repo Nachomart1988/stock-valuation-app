@@ -25,49 +25,47 @@ interface PressRelease {
 }
 
 export default function NoticiasTab({ ticker }: NoticiasTabProps) {
-  console.log('[NoticiasTab] Component rendered with ticker prop:', ticker);
-
   const [companyNews, setCompanyNews] = useState<NewsItem[]>([]);
   const [pressReleases, setPressReleases] = useState<PressRelease[]>([]);
   const [loadingNews, setLoadingNews] = useState(true);
   const [loadingPRs, setLoadingPRs] = useState(true);
   const [activeTab, setActiveTab] = useState<'news' | 'prs'>('news');
-  const [currentTicker, setCurrentTicker] = useState(ticker);
+  const [fetchedTicker, setFetchedTicker] = useState<string>('');
 
-  // Reset when ticker changes
-  useEffect(() => {
-    if (ticker !== currentTicker) {
-      setCurrentTicker(ticker);
-      setCompanyNews([]);
-      setPressReleases([]);
-      setLoadingNews(true);
-      setLoadingPRs(true);
-    }
-  }, [ticker, currentTicker]);
-
-  // Fetch company news
+  // Fetch company news - always re-fetch when ticker changes
   useEffect(() => {
     const fetchCompanyNews = async () => {
       if (!ticker) return;
+
+      // Skip if we already fetched for this ticker
+      if (ticker === fetchedTicker && companyNews.length > 0) return;
 
       console.log('[NoticiasTab] Fetching news for ticker:', ticker);
 
       try {
         setLoadingNews(true);
+        setCompanyNews([]); // Clear old data
         const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) return;
+        if (!apiKey) {
+          console.error('[NoticiasTab] No API key found');
+          return;
+        }
 
-        // Get stock-specific news
-        const res = await fetch(
-          `https://financialmodelingprep.com/stable/news/stock?symbol=${ticker}&page=0&limit=20&apikey=${apiKey}`
-        );
+        const url = `https://financialmodelingprep.com/stable/news/stock?symbol=${ticker}&page=0&limit=20&apikey=${apiKey}`;
+        console.log('[NoticiasTab] Fetching URL:', url.replace(apiKey, 'API_KEY'));
+
+        const res = await fetch(url, { cache: 'no-store' });
 
         if (res.ok) {
           const data = await res.json();
+          console.log('[NoticiasTab] News response for', ticker, ':', data?.length || 0, 'items');
           setCompanyNews(Array.isArray(data) ? data : []);
+          setFetchedTicker(ticker);
+        } else {
+          console.error('[NoticiasTab] News fetch failed:', res.status);
         }
       } catch (err) {
-        console.error('Error fetching company news:', err);
+        console.error('[NoticiasTab] Error fetching company news:', err);
       } finally {
         setLoadingNews(false);
       }
@@ -76,7 +74,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
     fetchCompanyNews();
   }, [ticker]);
 
-  // Fetch press releases
+  // Fetch press releases - always re-fetch when ticker changes
   useEffect(() => {
     const fetchPressReleases = async () => {
       if (!ticker) return;
@@ -85,20 +83,22 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
 
       try {
         setLoadingPRs(true);
+        setPressReleases([]); // Clear old data
         const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
         if (!apiKey) return;
 
-        // Get press releases for the specific stock
-        const res = await fetch(
-          `https://financialmodelingprep.com/stable/news/press-releases?symbol=${ticker}&page=0&limit=15&apikey=${apiKey}`
-        );
+        const url = `https://financialmodelingprep.com/stable/news/press-releases?symbol=${ticker}&page=0&limit=15&apikey=${apiKey}`;
+        console.log('[NoticiasTab] Fetching PR URL:', url.replace(apiKey, 'API_KEY'));
+
+        const res = await fetch(url, { cache: 'no-store' });
 
         if (res.ok) {
           const data = await res.json();
+          console.log('[NoticiasTab] PR response for', ticker, ':', data?.length || 0, 'items');
           setPressReleases(Array.isArray(data) ? data : []);
         }
       } catch (err) {
-        console.error('Error fetching press releases:', err);
+        console.error('[NoticiasTab] Error fetching press releases:', err);
       } finally {
         setLoadingPRs(false);
       }

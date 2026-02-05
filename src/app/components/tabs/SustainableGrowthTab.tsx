@@ -9,7 +9,7 @@ interface SGRMethod {
   enabled: boolean;
   formula: string;
   inputs: { label: string; value: string }[];
-  category: 'classic' | 'advanced' | 'analyst';
+  category: 'topdown' | 'bottomup' | 'classic' | 'advanced' | 'analyst';
 }
 
 interface SustainableGrowthTabProps {
@@ -370,16 +370,31 @@ export default function SustainableGrowthTab({
         const sgrHistorical = revenueCAGR;
 
         const calculatedMethods: SGRMethod[] = [
+          // Top-Down Analysis (main method)
           {
-            name: 'SGR Clasico',
+            name: 'Top-Down (ROE × Retention)',
             value: sgrClassic,
             enabled: true,
-            category: 'classic',
+            category: 'topdown',
             formula: 'ROE × (1 - Payout Ratio)',
             inputs: [
               { label: 'ROE Promedio', value: formatPercent(avgROE) },
               { label: 'Payout Ratio', value: formatPercent(avgPayout) },
               { label: 'Retention Ratio', value: formatPercent(avgRetention) },
+            ],
+          },
+          // Bottom-Up Analysis (DuPont)
+          {
+            name: 'Bottom-Up (DuPont)',
+            value: sgrDupont,
+            enabled: true,
+            category: 'bottomup',
+            formula: 'Net Margin × Asset Turnover × Leverage × Retention',
+            inputs: [
+              { label: 'Net Margin', value: formatPercent(avgNetMargin) },
+              { label: 'Asset Turnover', value: formatNumber(avgAssetTurnover) + 'x' },
+              { label: 'Leverage', value: formatNumber(avgLeverage) + 'x' },
+              { label: 'Retention', value: formatPercent(avgRetention) },
             ],
           },
           {
@@ -416,19 +431,6 @@ export default function SustainableGrowthTab({
               { label: 'ROIC Promedio', value: formatPercent(avgROIC) },
               { label: 'NOPAT Promedio', value: formatMoney(avgNOPAT) },
               { label: 'Invested Capital', value: formatMoney(avgInvestedCapital) },
-              { label: 'Retention', value: formatPercent(avgRetention) },
-            ],
-          },
-          {
-            name: 'SGR DuPont',
-            value: sgrDupont,
-            enabled: true,
-            category: 'advanced',
-            formula: 'Net Margin × Asset Turnover × Leverage × Retention',
-            inputs: [
-              { label: 'Net Margin', value: formatPercent(avgNetMargin) },
-              { label: 'Asset Turnover', value: formatNumber(avgAssetTurnover) + 'x' },
-              { label: 'Leverage', value: formatNumber(avgLeverage) + 'x' },
               { label: 'Retention', value: formatPercent(avgRetention) },
             ],
           },
@@ -496,6 +498,8 @@ export default function SustainableGrowthTab({
     : null;
 
   // Group methods by category
+  const topdownMethods = methods.filter(m => m.category === 'topdown');
+  const bottomupMethods = methods.filter(m => m.category === 'bottomup');
   const classicMethods = methods.filter(m => m.category === 'classic');
   const advancedMethods = methods.filter(m => m.category === 'advanced');
   const analystMethods = methods.filter(m => m.category === 'analyst');
@@ -541,12 +545,25 @@ export default function SustainableGrowthTab({
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          TOP-DOWN ANALYSIS
+          TOP-DOWN ANALYSIS (with checkbox to include in average)
           ═══════════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-6 rounded-xl border border-blue-700">
-        <h4 className="text-2xl font-bold text-blue-400 mb-4">Analisis Top-Down</h4>
+      <div className={`bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-6 rounded-xl border ${topdownMethods[0]?.enabled ? 'border-blue-500' : 'border-gray-600 opacity-60'}`}>
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-2xl font-bold text-blue-400">Analisis Top-Down</h4>
+          {topdownMethods[0] && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={topdownMethods[0].enabled}
+                onChange={() => toggleMethod(methods.indexOf(topdownMethods[0]))}
+                className="w-5 h-5 text-blue-600 focus:ring-blue-500 border-gray-600 rounded"
+              />
+              <span className="text-sm text-gray-300">Incluir en promedio</span>
+            </label>
+          )}
+        </div>
         <p className="text-gray-400 mb-4">
-          Partimos desde la rentabilidad total de la empresa (ROE) y vemos cuánto puede crecer reinvirtiendo sus ganancias.
+          Partimos desde la rentabilidad total de la empresa (ROE) y vemos cuanto puede crecer reinvirtiendo sus ganancias.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div className="bg-gray-800/50 p-4 rounded-lg text-center">
@@ -567,7 +584,7 @@ export default function SustainableGrowthTab({
           </div>
           <div className="bg-blue-900/50 p-4 rounded-lg text-center border border-blue-600">
             <p className="text-sm text-blue-300">SGR Top-Down</p>
-            <p className="text-2xl font-bold text-blue-400">
+            <p className="text-3xl font-bold text-blue-400">
               {intermediateValues.avgROE !== null
                 ? ((intermediateValues.avgROE * intermediateValues.avgRetention) * 100).toFixed(1) + '%'
                 : 'N/A'}
@@ -582,10 +599,23 @@ export default function SustainableGrowthTab({
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          BOTTOM-UP ANALYSIS (DuPont)
+          BOTTOM-UP ANALYSIS (DuPont) with checkbox
           ═══════════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border border-green-700">
-        <h4 className="text-2xl font-bold text-green-400 mb-4">Analisis Bottom-Up (DuPont Extendido)</h4>
+      <div className={`bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border ${bottomupMethods[0]?.enabled ? 'border-green-500' : 'border-gray-600 opacity-60'}`}>
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-2xl font-bold text-green-400">Analisis Bottom-Up (DuPont Extendido)</h4>
+          {bottomupMethods[0] && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={bottomupMethods[0].enabled}
+                onChange={() => toggleMethod(methods.indexOf(bottomupMethods[0]))}
+                className="w-5 h-5 text-green-600 focus:ring-green-500 border-gray-600 rounded"
+              />
+              <span className="text-sm text-gray-300">Incluir en promedio</span>
+            </label>
+          )}
+        </div>
         <p className="text-gray-400 mb-4">
           Descomponemos el crecimiento en sus componentes operativos para identificar drivers y areas de mejora.
         </p>
@@ -620,7 +650,7 @@ export default function SustainableGrowthTab({
           </div>
           <div className="bg-green-900/50 p-3 rounded-lg text-center border border-green-600">
             <p className="text-xs text-green-300">= SGR DuPont</p>
-            <p className="text-xl font-bold text-green-400">
+            <p className="text-2xl font-bold text-green-400">
               {intermediateValues.avgNetMargin !== null && intermediateValues.avgAssetTurnover !== null && intermediateValues.avgLeverage !== null
                 ? ((intermediateValues.avgNetMargin * intermediateValues.avgAssetTurnover * intermediateValues.avgLeverage * intermediateValues.avgRetention) * 100).toFixed(1) + '%'
                 : 'N/A'}

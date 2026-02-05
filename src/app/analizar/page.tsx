@@ -287,6 +287,8 @@ function AnalizarContent() {
           cashFlowTTMData,
           // As-reported data for dividends
           cashFlowAsReportedData,
+          // Dividend history for per-share calculations
+          dividendsData,
         ] = await Promise.all([
           fetchJson('quote'),
           fetchJson('profile'),
@@ -301,6 +303,8 @@ function AnalizarContent() {
           fetchJson('cash-flow-statement-ttm').catch(() => []),
           // Fetch as-reported cash flow for accurate dividends data
           fetchJson('cash-flow-statement-as-reported', '&limit=10').catch(() => []),
+          // Fetch dividend history for per-share dividend data
+          fetchJson('dividends', '&limit=20').catch(() => []),
         ]);
 
         const dcfStandardRes = await fetch(`${base}/discounted-cash-flow${params}`, { cache: 'no-store' });
@@ -344,8 +348,9 @@ function AnalizarContent() {
 
         console.log('[AnalizarContent] Data loaded for', activeTicker, '- Income records:', incomeData.length, '- Balance records:', balanceData.length);
         console.log('[AnalizarContent] Cash Flow As-Reported records:', cashFlowAsReportedData?.length || 0);
-        if (cashFlowAsReportedData?.length > 0) {
-          console.log('[AnalizarContent] First CF As-Reported:', cashFlowAsReportedData[0]);
+        console.log('[AnalizarContent] Dividends records:', dividendsData?.length || 0);
+        if (dividendsData?.length > 0) {
+          console.log('[AnalizarContent] Latest dividend:', dividendsData[0]);
         }
         setData({
           quote: quoteData[0] || {},
@@ -365,6 +370,8 @@ function AnalizarContent() {
           secData: secSupplementalData,
           // As-reported cash flow for dividends
           cashFlowAsReported: cashFlowAsReportedData || [],
+          // Dividend history per share
+          dividends: dividendsData || [],
         });
       } catch (err) {
         setError((err as Error).message || 'Error al cargar datos');
@@ -442,7 +449,7 @@ function AnalizarContent() {
     );
   }
 
-  const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM, secData, cashFlowAsReported } = data;
+  const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM, secData, cashFlowAsReported, dividends } = data;
 
   const categories = [
     'Inicio',
@@ -614,6 +621,7 @@ function AnalizarContent() {
       balance={balance}
       cashFlow={cashFlow}
       cashFlowAsReported={cashFlowAsReported}
+      dividends={dividends}
       priceTarget={priceTarget}
       profile={profile}
       quote={quote}
