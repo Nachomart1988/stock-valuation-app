@@ -30,52 +30,69 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
   const [loadingNews, setLoadingNews] = useState(true);
   const [loadingPRs, setLoadingPRs] = useState(true);
   const [activeTab, setActiveTab] = useState<'news' | 'prs'>('news');
-  const [fetchedTicker, setFetchedTicker] = useState<string>('');
 
-  // Fetch company news - always re-fetch when ticker changes
+  // Fetch company news - re-fetch when ticker changes
   useEffect(() => {
-    const fetchCompanyNews = async () => {
-      if (!ticker) return;
+    let isMounted = true;
 
-      // Skip if we already fetched for this ticker
-      if (ticker === fetchedTicker && companyNews.length > 0) return;
+    const fetchCompanyNews = async () => {
+      if (!ticker) {
+        console.log('[NoticiasTab] No ticker provided');
+        setLoadingNews(false);
+        return;
+      }
 
       console.log('[NoticiasTab] Fetching news for ticker:', ticker);
 
       try {
         setLoadingNews(true);
-        setCompanyNews([]); // Clear old data
+        setCompanyNews([]); // Clear old data immediately
+
         const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
         if (!apiKey) {
           console.error('[NoticiasTab] No API key found');
+          setLoadingNews(false);
           return;
         }
 
-        const url = `https://financialmodelingprep.com/stable/news/stock?symbol=${ticker}&page=0&limit=20&apikey=${apiKey}`;
+        const url = `https://financialmodelingprep.com/stable/news/stock?symbols=${ticker}&limit=20&apikey=${apiKey}`;
         console.log('[NoticiasTab] Fetching URL:', url.replace(apiKey, 'API_KEY'));
 
-        const res = await fetch(url, { cache: 'no-store' });
+        const res = await fetch(url);
+
+        if (!isMounted) return;
 
         if (res.ok) {
           const data = await res.json();
-          console.log('[NoticiasTab] News response for', ticker, ':', data?.length || 0, 'items');
-          setCompanyNews(Array.isArray(data) ? data : []);
-          setFetchedTicker(ticker);
+          console.log('[NoticiasTab] News response for', ticker, ':', data?.length || 0, 'items', data);
+          if (Array.isArray(data)) {
+            setCompanyNews(data);
+          } else {
+            console.error('[NoticiasTab] Unexpected response format:', data);
+            setCompanyNews([]);
+          }
         } else {
-          console.error('[NoticiasTab] News fetch failed:', res.status);
+          const errorText = await res.text();
+          console.error('[NoticiasTab] News fetch failed:', res.status, errorText);
+          setCompanyNews([]);
         }
       } catch (err) {
         console.error('[NoticiasTab] Error fetching company news:', err);
+        if (isMounted) setCompanyNews([]);
       } finally {
-        setLoadingNews(false);
+        if (isMounted) setLoadingNews(false);
       }
     };
 
     fetchCompanyNews();
+
+    return () => { isMounted = false; };
   }, [ticker]);
 
-  // Fetch press releases - always re-fetch when ticker changes
+  // Fetch press releases - re-fetch when ticker changes
   useEffect(() => {
+    let isMounted = true;
+
     const fetchPressReleases = async () => {
       if (!ticker) return;
 
@@ -83,16 +100,20 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
 
       try {
         setLoadingPRs(true);
-        setPressReleases([]); // Clear old data
+        setPressReleases([]); // Clear old data immediately
+
         const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
         if (!apiKey) return;
 
-        const url = `https://financialmodelingprep.com/stable/news/press-releases?symbol=${ticker}&page=0&limit=15&apikey=${apiKey}`;
+        const url = `https://financialmodelingprep.com/stable/news/press-releases?symbol=${ticker}&limit=15&apikey=${apiKey}`;
         console.log('[NoticiasTab] Fetching PR URL:', url.replace(apiKey, 'API_KEY'));
 
-        const res = await fetch(url, { cache: 'no-store' });
+        const res = await fetch(url, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
 
-        if (res.ok) {
+        if (res.ok && isMounted) {
           const data = await res.json();
           console.log('[NoticiasTab] PR response for', ticker, ':', data?.length || 0, 'items');
           setPressReleases(Array.isArray(data) ? data : []);
@@ -100,11 +121,13 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
       } catch (err) {
         console.error('[NoticiasTab] Error fetching press releases:', err);
       } finally {
-        setLoadingPRs(false);
+        if (isMounted) setLoadingPRs(false);
       }
     };
 
     fetchPressReleases();
+
+    return () => { isMounted = false; };
   }, [ticker]);
 
   const formatDate = (dateString: string) => {

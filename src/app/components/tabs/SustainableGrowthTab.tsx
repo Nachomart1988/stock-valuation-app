@@ -336,13 +336,10 @@ export default function SustainableGrowthTab({
         // Calculate SGR Methods
         // ═══════════════════════════════════════════════════════════════
 
-        // 1. Classic SGR = ROE × Retention Ratio
+        // 1. Classic SGR = ROE × Retention Ratio (using N-year averages)
         const sgrClassic = avgROE !== null ? avgROE * avgRetention : null;
 
-        // 2. SGR with Latest Values
-        const sgrLatest = latestROE !== null ? latestROE * latestRetention : null;
-
-        // 3. SGR Full Retention (ROE if 100% retained)
+        // 2. SGR Full Retention (ROE if 100% retained) - using averages
         const sgrFullRetention = avgROE;
 
         // 4. SGR ROIC-based = ROIC × Retention
@@ -370,44 +367,33 @@ export default function SustainableGrowthTab({
         const sgrHistorical = revenueCAGR;
 
         const calculatedMethods: SGRMethod[] = [
-          // Top-Down Analysis (main method)
+          // Top-Down Analysis (main method) - using N-year averages
           {
             name: 'Top-Down (ROE × Retention)',
             value: sgrClassic,
             enabled: true,
             category: 'topdown',
-            formula: 'ROE × (1 - Payout Ratio)',
+            formula: `ROE × (1 - Payout Ratio) [Promedio ${years} años]`,
             inputs: [
-              { label: 'ROE Promedio', value: formatPercent(avgROE) },
-              { label: 'Payout Ratio', value: formatPercent(avgPayout) },
-              { label: 'Retention Ratio', value: formatPercent(avgRetention) },
+              { label: `ROE Promedio (${years} años)`, value: formatPercent(avgROE) },
+              { label: 'Payout Ratio Promedio', value: formatPercent(avgPayout) },
+              { label: 'Retention Ratio Promedio', value: formatPercent(avgRetention) },
+              { label: 'Net Income Promedio', value: formatMoney(avgNetIncome) },
+              { label: 'Equity Promedio', value: formatMoney(avgEquity) },
             ],
           },
-          // Bottom-Up Analysis (DuPont)
+          // Bottom-Up Analysis (DuPont) - using N-year averages
           {
             name: 'Bottom-Up (DuPont)',
             value: sgrDupont,
             enabled: true,
             category: 'bottomup',
-            formula: 'Net Margin × Asset Turnover × Leverage × Retention',
+            formula: `Net Margin × Asset Turn × Leverage × Ret [Prom ${years}Y]`,
             inputs: [
-              { label: 'Net Margin', value: formatPercent(avgNetMargin) },
-              { label: 'Asset Turnover', value: formatNumber(avgAssetTurnover) + 'x' },
-              { label: 'Leverage', value: formatNumber(avgLeverage) + 'x' },
-              { label: 'Retention', value: formatPercent(avgRetention) },
-            ],
-          },
-          {
-            name: 'SGR Ultimo Ano',
-            value: sgrLatest,
-            enabled: true,
-            category: 'classic',
-            formula: 'ROE (ultimo) × (1 - Payout ultimo)',
-            inputs: [
-              { label: 'ROE Ultimo', value: formatPercent(latestROE) },
-              { label: 'Payout Ultimo', value: formatPercent(latestPayout) },
-              { label: 'Net Income', value: formatMoney(latestNetIncome) },
-              { label: 'Equity', value: formatMoney(latestEquity) },
+              { label: `Net Margin Prom (${years}Y)`, value: formatPercent(avgNetMargin) },
+              { label: 'Asset Turnover Prom', value: formatNumber(avgAssetTurnover) + 'x' },
+              { label: 'Leverage Promedio', value: formatNumber(avgLeverage) + 'x' },
+              { label: 'Retention Promedio', value: formatPercent(avgRetention) },
             ],
           },
           {
@@ -415,9 +401,9 @@ export default function SustainableGrowthTab({
             value: sgrFullRetention,
             enabled: true,
             category: 'classic',
-            formula: 'ROE (si 100% retenido)',
+            formula: `ROE promedio (si 100% retenido) [${years}Y]`,
             inputs: [
-              { label: 'ROE Promedio', value: formatPercent(avgROE) },
+              { label: `ROE Promedio (${years} años)`, value: formatPercent(avgROE) },
               { label: 'Supuesto', value: 'Payout = 0%' },
             ],
           },
@@ -426,12 +412,12 @@ export default function SustainableGrowthTab({
             value: sgrROIC,
             enabled: true,
             category: 'advanced',
-            formula: 'ROIC × (1 - Payout Ratio)',
+            formula: `ROIC × (1 - Payout) [Promedio ${years}Y]`,
             inputs: [
-              { label: 'ROIC Promedio', value: formatPercent(avgROIC) },
+              { label: `ROIC Promedio (${years}Y)`, value: formatPercent(avgROIC) },
               { label: 'NOPAT Promedio', value: formatMoney(avgNOPAT) },
-              { label: 'Invested Capital', value: formatMoney(avgInvestedCapital) },
-              { label: 'Retention', value: formatPercent(avgRetention) },
+              { label: 'Invested Capital Prom', value: formatMoney(avgInvestedCapital) },
+              { label: 'Retention Promedio', value: formatPercent(avgRetention) },
             ],
           },
           {
@@ -439,12 +425,12 @@ export default function SustainableGrowthTab({
             value: sgrMarginal,
             enabled: true,
             category: 'advanced',
-            formula: '(ΔNOPAT / ΔInvested Capital) × Retention',
+            formula: `(ΔNOPAT / ΔIC) × Retention [${years}Y]`,
             inputs: [
-              { label: 'ROIC Marginal', value: formatPercent(marginalROIC) },
-              { label: 'ΔNOPAT', value: formatMoney(deltaNOPAT) },
-              { label: 'ΔInvested Capital', value: formatMoney(deltaIC) },
-              { label: 'Retention', value: formatPercent(avgRetention) },
+              { label: `ROIC Marginal (${years}Y)`, value: formatPercent(marginalROIC) },
+              { label: `ΔNOPAT (${years}Y)`, value: formatMoney(deltaNOPAT) },
+              { label: `ΔInvested Capital (${years}Y)`, value: formatMoney(deltaIC) },
+              { label: 'Retention Promedio', value: formatPercent(avgRetention) },
             ],
           },
           {
@@ -452,23 +438,23 @@ export default function SustainableGrowthTab({
             value: sgrAdjusted,
             enabled: true,
             category: 'advanced',
-            formula: 'g* = g / (1 - g/WACC)',
+            formula: `g* = g / (1 - g/WACC) [${years}Y promedios]`,
             inputs: [
-              { label: 'g base (ROIC×Ret)', value: formatPercent(avgROIC !== null ? avgROIC * avgRetention : null) },
+              { label: 'g base (ROIC×Ret) Prom', value: formatPercent(avgROIC !== null ? avgROIC * avgRetention : null) },
               { label: 'WACC', value: formatPercent(wacc) },
               { label: 'Factor Ajuste', value: formatNumber(avgROIC !== null ? 1 / (1 - (avgROIC * avgRetention) / wacc) : null) + 'x' },
             ],
           },
           {
-            name: 'CAGR Revenue Historico',
+            name: `CAGR Revenue (${years} años)`,
             value: sgrHistorical,
             enabled: true,
             category: 'analyst',
-            formula: '(Revenue_final / Revenue_inicial)^(1/n) - 1',
+            formula: `(Rev_final / Rev_inicial)^(1/${years-1}) - 1`,
             inputs: [
               { label: 'Revenue Inicial', value: formatMoney(selectedIncome[0]?.revenue) },
               { label: 'Revenue Final', value: formatMoney(selectedIncome[selectedIncome.length - 1]?.revenue) },
-              { label: 'Periodos', value: (selectedIncome.length - 1).toString() + ' anos' },
+              { label: 'Periodos', value: (selectedIncome.length - 1).toString() + ' años' },
             ],
           },
         ];

@@ -25,6 +25,10 @@ import AnalisisFinalTab from '@/app/components/tabs/AnalisisFinalTab';
 import WACCTab from '@/app/components/tabs/WACCTab';
 import CAGRTab from '@/app/components/tabs/CAGRTab';
 import NoticiasTab from '@/app/components/tabs/NoticiasTab';
+import KeyMetricsTab from '@/app/components/tabs/KeyMetricsTab';
+import SegmentationTab from '@/app/components/tabs/SegmentationTab';
+import IndustryTab from '@/app/components/tabs/IndustryTab';
+import HoldersTab from '@/app/components/tabs/HoldersTab';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -453,6 +457,7 @@ function AnalizarContent() {
 
   const categories = [
     'Inicio',
+    'Key Metrics',
     'Noticias',
     'DuPont Analysis',
     'Analisis General',
@@ -471,6 +476,9 @@ function AnalizarContent() {
     'Valuaciones',
     'Analisis Final',
     'DCF',
+    'Segmentation',
+    'Industry',
+    'Holders',
   ];
 
   return (
@@ -511,9 +519,15 @@ function AnalizarContent() {
       quote={quote}
       profile={profile}
       incomeTTM={incomeTTM}
+      dividends={dividends}
       sharedAverageVal={sharedAverageVal}
       onAnalizar={handleAnalizar}
     />
+  </Tab.Panel>
+
+  {/* Key Metrics */}
+  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
+    <KeyMetricsTab ticker={activeTicker} />
   </Tab.Panel>
 
   {/* Noticias */}
@@ -528,7 +542,7 @@ function AnalizarContent() {
 
   {/* Analisis General */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <GeneralTab profile={profile} quote={quote} />
+    <GeneralTab profile={profile} quote={quote} ticker={activeTicker} />
   </Tab.Panel>
 
   {/* Income Statement */}
@@ -643,6 +657,21 @@ function AnalizarContent() {
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
     <DCFTab dcfStandard={dcfStandard} dcfCustom={dcfCustom} quote={quote} income={income} />
   </Tab.Panel>
+
+  {/* Segmentation */}
+  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
+    <SegmentationTab ticker={activeTicker} />
+  </Tab.Panel>
+
+  {/* Industry */}
+  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
+    <IndustryTab ticker={activeTicker} />
+  </Tab.Panel>
+
+  {/* Holders */}
+  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
+    <HoldersTab ticker={activeTicker} />
+  </Tab.Panel>
 </Tab.Panels>
         </Tab.Group>
       </div>
@@ -673,6 +702,7 @@ function InicioTab({
   quote,
   profile,
   incomeTTM,
+  dividends,
   sharedAverageVal,
   onAnalizar,
 }: {
@@ -680,6 +710,7 @@ function InicioTab({
   quote: any;
   profile: any;
   incomeTTM: any;
+  dividends: any[];
   sharedAverageVal: number | null;
   onAnalizar: (ticker: string) => void;
 }) {
@@ -687,6 +718,7 @@ function InicioTab({
   const [margenSeguridad, setMargenSeguridad] = useState('15');
   const [historical, setHistorical] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [technicalIndicators, setTechnicalIndicators] = useState<any>({});
 
   // Sincronizar inputTicker cuando cambia el ticker activo
   useEffect(() => {
@@ -741,6 +773,87 @@ function InicioTab({
 
     if (ticker) fetchHistory();
   }, [ticker]);
+
+  // Fetch technical indicators
+  useEffect(() => {
+    async function fetchIndicators() {
+      try {
+        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
+        if (!apiKey) return;
+
+        // Fetch RSI, Williams %R, and ADX indicators with correct FMP API parameters
+        const [rsiRes, williamsRes, adxRes, stddevRes] = await Promise.all([
+          fetch(`https://financialmodelingprep.com/stable/technical-indicators/rsi?symbol=${ticker}&periodLength=14&timeframe=1day&apikey=${apiKey}`, { cache: 'no-store' }),
+          fetch(`https://financialmodelingprep.com/stable/technical-indicators/williams?symbol=${ticker}&periodLength=14&timeframe=1day&apikey=${apiKey}`, { cache: 'no-store' }),
+          fetch(`https://financialmodelingprep.com/stable/technical-indicators/adx?symbol=${ticker}&periodLength=14&timeframe=1day&apikey=${apiKey}`, { cache: 'no-store' }),
+          fetch(`https://financialmodelingprep.com/stable/technical-indicators/standardDeviation?symbol=${ticker}&periodLength=20&timeframe=1day&apikey=${apiKey}`, { cache: 'no-store' }),
+        ]);
+
+        const indicators: any = {};
+
+        if (rsiRes.ok) {
+          const data = await rsiRes.json();
+          console.log('[InicioTab] RSI response:', data);
+          if (Array.isArray(data) && data.length > 0) {
+            indicators.rsi = data[0].rsi;
+          }
+        }
+
+        if (williamsRes.ok) {
+          const data = await williamsRes.json();
+          console.log('[InicioTab] Williams response:', data);
+          if (Array.isArray(data) && data.length > 0) {
+            indicators.williamsR = data[0].williams;
+          }
+        }
+
+        if (adxRes.ok) {
+          const data = await adxRes.json();
+          console.log('[InicioTab] ADX response:', data);
+          if (Array.isArray(data) && data.length > 0) {
+            indicators.adx = data[0].adx;
+          }
+        }
+
+        if (stddevRes.ok) {
+          const data = await stddevRes.json();
+          console.log('[InicioTab] StdDev response:', data);
+          if (Array.isArray(data) && data.length > 0) {
+            indicators.stdDev = data[0].standardDeviation;
+          }
+        }
+
+        console.log('[InicioTab] Technical indicators:', indicators);
+        setTechnicalIndicators(indicators);
+      } catch (err) {
+        console.error('[InicioTab] Error fetching technical indicators:', err);
+      }
+    }
+
+    if (ticker) fetchIndicators();
+  }, [ticker]);
+
+  // Calculate annual dividend yield from dividends data
+  const annualDividendYield = useMemo(() => {
+    if (!dividends || dividends.length === 0 || !currentPrice || currentPrice <= 0) return null;
+
+    // Sort dividends by date descending
+    const sortedDividends = [...dividends].sort((a, b) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    // Get dividend frequency (quarterly, monthly, etc.)
+    const frequency = sortedDividends[0]?.frequency || 'Quarterly';
+    const paymentsPerYear = frequency === 'Quarterly' ? 4 :
+                          frequency === 'Monthly' ? 12 :
+                          frequency === 'Semi-Annual' ? 2 : 4;
+
+    // Sum the most recent dividends to get annual total
+    const recentDividends = sortedDividends.slice(0, paymentsPerYear);
+    const annualDividend = recentDividends.reduce((sum, div) => sum + (div.dividend || div.adjDividend || 0), 0);
+
+    return (annualDividend / currentPrice) * 100;
+  }, [dividends, currentPrice]);
 
   // Calculate price statistics
   const priceStats = useMemo(() => {
@@ -911,41 +1024,39 @@ function InicioTab({
       </div>
 
       {/* Price Hero Section */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
-        <div className="col-span-2 md:col-span-1 bg-gradient-to-br from-blue-600 to-blue-800 p-8 rounded-2xl text-center">
-          <p className="text-blue-200 text-lg mb-2">Precio Actual</p>
-          <p className="text-5xl font-bold text-white">${currentPrice?.toFixed(2) || 'N/A'}</p>
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <div className="col-span-2 md:col-span-1 bg-gradient-to-br from-blue-600 to-blue-800 p-6 rounded-2xl text-center flex flex-col justify-center min-h-[140px]">
+          <p className="text-blue-200 text-sm mb-1">Precio Actual</p>
+          <p className="text-4xl font-bold text-white">${currentPrice?.toFixed(2) || 'N/A'}</p>
           {priceStats && (
-            <p className={`text-lg mt-3 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+            <p className={`text-sm mt-2 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
               {priceStats.ytdChange >= 0 ? '+' : ''}{priceStats.ytdChange.toFixed(1)}% (1A)
             </p>
           )}
         </div>
-        <div className="bg-gray-700 p-6 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-base mb-2">Valor Intrinseco</p>
-          <p className="text-4xl font-bold text-purple-400">
+        <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[140px]">
+          <p className="text-gray-400 text-sm mb-1">Valor Intrinseco</p>
+          <p className="text-3xl font-bold text-purple-400">
             {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-6 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-base mb-2">Compra Sugerida</p>
-          <p className="text-4xl font-bold text-green-400">
+        <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[140px]">
+          <p className="text-gray-400 text-sm mb-1">Compra Sugerida</p>
+          <p className="text-3xl font-bold text-green-400">
             {precioCompraSugerido ? `$${precioCompraSugerido.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-6 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-base mb-2">Upside</p>
-          <p className={`text-4xl font-bold ${sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400'}`}>
+        <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[140px]">
+          <p className="text-gray-400 text-sm mb-1">Upside</p>
+          <p className={`text-3xl font-bold ${sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400'}`}>
             {sharedAverageVal && currentPrice ? `${(((sharedAverageVal - currentPrice) / currentPrice) * 100).toFixed(1)}%` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gray-700 p-6 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-base mb-2">P/E Ratio</p>
-          <p className="text-4xl font-bold text-cyan-400">
+        <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[140px]">
+          <p className="text-gray-400 text-sm mb-1">P/E Ratio</p>
+          <p className="text-3xl font-bold text-cyan-400">
             {(() => {
-              // Calculate P/E from current price / TTM EPS (from income statement TTM)
               const ttmEPS = incomeTTM?.eps || incomeTTM?.epsdiluted || quote?.eps || profile?.ttmEPS;
-              console.log('[InicioTab P/E] currentPrice:', currentPrice, 'ttmEPS:', ttmEPS, 'incomeTTM:', incomeTTM);
               if (currentPrice && ttmEPS && ttmEPS > 0) {
                 return (currentPrice / ttmEPS).toFixed(1);
               }
@@ -953,15 +1064,15 @@ function InicioTab({
             })()}
           </p>
         </div>
-        <div className="bg-gray-700 p-6 rounded-xl text-center border border-gray-600">
-          <p className="text-gray-400 text-base mb-2">Margen Seguridad</p>
+        <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[140px]">
+          <p className="text-gray-400 text-sm mb-1">Margen Seguridad</p>
           <input
             type="number"
             value={margenSeguridad}
             onChange={(e) => setMargenSeguridad(e.target.value)}
             className="w-full text-center text-3xl font-bold text-amber-400 bg-transparent border-none focus:outline-none focus:ring-0"
           />
-          <p className="text-gray-500 text-base">%</p>
+          <p className="text-gray-500 text-xs">%</p>
         </div>
       </div>
 
@@ -1029,7 +1140,7 @@ function InicioTab({
         <div className="bg-gray-700/50 p-6 rounded-xl border border-gray-600">
           <p className="text-gray-400 text-lg mb-1">Div Yield</p>
           <p className="text-3xl font-semibold text-gray-100">
-            {profile?.lastDiv && currentPrice ? `${((profile.lastDiv / currentPrice) * 100).toFixed(2)}%` : 'N/A'}
+            {annualDividendYield !== null ? `${annualDividendYield.toFixed(2)}%` : (profile?.lastDiv && currentPrice ? `${((profile.lastDiv * 4 / currentPrice) * 100).toFixed(2)}%` : 'N/A')}
           </p>
         </div>
         <div className="bg-gray-700/50 p-6 rounded-xl border border-gray-600">
@@ -1037,6 +1148,93 @@ function InicioTab({
           <p className="text-3xl font-semibold text-gray-100">
             {quote?.volume ? (quote.volume / 1e6).toFixed(1) + 'M' : 'N/A'}
           </p>
+        </div>
+      </div>
+
+      {/* Technical Indicators */}
+      <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/30 p-6 rounded-xl border border-indigo-600">
+        <h4 className="text-2xl font-bold text-indigo-400 mb-6">Technical Indicators</h4>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {/* RSI */}
+          <div className="bg-gray-800/50 p-5 rounded-xl">
+            <p className="text-gray-400 text-base mb-2">RSI (14)</p>
+            <p className={`text-4xl font-bold ${
+              technicalIndicators.rsi !== undefined
+                ? technicalIndicators.rsi > 70 ? 'text-red-400'
+                : technicalIndicators.rsi < 30 ? 'text-green-400'
+                : 'text-gray-100'
+                : 'text-gray-500'
+            }`}>
+              {technicalIndicators.rsi?.toFixed(1) || 'N/A'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {technicalIndicators.rsi > 70 ? 'Overbought' : technicalIndicators.rsi < 30 ? 'Oversold' : 'Neutral'}
+            </p>
+          </div>
+
+          {/* Williams %R */}
+          <div className="bg-gray-800/50 p-5 rounded-xl">
+            <p className="text-gray-400 text-base mb-2">Williams %R (14)</p>
+            <p className={`text-4xl font-bold ${
+              technicalIndicators.williamsR !== undefined
+                ? technicalIndicators.williamsR < -80 ? 'text-green-400'
+                : technicalIndicators.williamsR > -20 ? 'text-red-400'
+                : 'text-gray-100'
+                : 'text-gray-500'
+            }`}>
+              {technicalIndicators.williamsR?.toFixed(1) || 'N/A'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {technicalIndicators.williamsR < -80 ? 'Oversold' : technicalIndicators.williamsR > -20 ? 'Overbought' : 'Neutral'}
+            </p>
+          </div>
+
+          {/* ADX */}
+          <div className="bg-gray-800/50 p-5 rounded-xl">
+            <p className="text-gray-400 text-base mb-2">ADX (14)</p>
+            <p className={`text-4xl font-bold ${
+              technicalIndicators.adx !== undefined
+                ? technicalIndicators.adx > 25 ? 'text-green-400'
+                : 'text-amber-400'
+                : 'text-gray-500'
+            }`}>
+              {technicalIndicators.adx?.toFixed(1) || 'N/A'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {technicalIndicators.adx > 25 ? 'Strong Trend' : 'Weak Trend'}
+            </p>
+          </div>
+
+          {/* Standard Deviation */}
+          <div className="bg-gray-800/50 p-5 rounded-xl">
+            <p className="text-gray-400 text-base mb-2">Std Dev (20)</p>
+            <p className="text-4xl font-bold text-gray-100">
+              {technicalIndicators.stdDev?.toFixed(2) || 'N/A'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Volatility Measure
+            </p>
+          </div>
+        </div>
+
+        {/* Indicator Legend */}
+        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="bg-gray-800/30 p-3 rounded-lg">
+            <p className="text-indigo-400 font-semibold mb-1">RSI</p>
+            <p className="text-gray-400">&gt;70 = Overbought, &lt;30 = Oversold</p>
+          </div>
+          <div className="bg-gray-800/30 p-3 rounded-lg">
+            <p className="text-indigo-400 font-semibold mb-1">Williams %R</p>
+            <p className="text-gray-400">&gt;-20 = Overbought, &lt;-80 = Oversold</p>
+          </div>
+          <div className="bg-gray-800/30 p-3 rounded-lg">
+            <p className="text-indigo-400 font-semibold mb-1">ADX</p>
+            <p className="text-gray-400">&gt;25 = Strong Trend, &lt;25 = Weak</p>
+          </div>
+          <div className="bg-gray-800/30 p-3 rounded-lg">
+            <p className="text-indigo-400 font-semibold mb-1">Std Dev</p>
+            <p className="text-gray-400">Higher = More Volatile</p>
+          </div>
         </div>
       </div>
     </div>
@@ -1105,7 +1303,54 @@ function DuPontTab({ income, balance }: { income: any[]; balance: any[] }) {
   );
 }
 
-function GeneralTab({ profile, quote }: { profile: any; quote: any }) {
+function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; ticker: string }) {
+  const [floatData, setFloatData] = useState<any>(null);
+  const [executives, setExecutives] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!ticker) return;
+      setLoading(true);
+
+      try {
+        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
+        if (!apiKey) return;
+
+        const [floatRes, execRes] = await Promise.all([
+          fetch(`https://financialmodelingprep.com/stable/shares-float?symbol=${ticker}&apikey=${apiKey}`),
+          fetch(`https://financialmodelingprep.com/stable/key-executives?symbol=${ticker}&apikey=${apiKey}`),
+        ]);
+
+        if (floatRes.ok) {
+          const data = await floatRes.json();
+          console.log('[GeneralTab] Float data:', data);
+          setFloatData(Array.isArray(data) ? data[0] : data);
+        }
+
+        if (execRes.ok) {
+          const data = await execRes.json();
+          console.log('[GeneralTab] Executives data:', data);
+          setExecutives(Array.isArray(data) ? data.slice(0, 10) : []);
+        }
+      } catch (err) {
+        console.error('[GeneralTab] Error fetching data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [ticker]);
+
+  const formatNumber = (num: number | null | undefined) => {
+    if (num === null || num === undefined) return 'N/A';
+    if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+    if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+    if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+    return num.toLocaleString();
+  };
+
   return (
     <div className="space-y-12">
       <section className="bg-gray-800 p-10 rounded-2xl shadow-2xl border border-gray-700">
@@ -1150,6 +1395,68 @@ function GeneralTab({ profile, quote }: { profile: any; quote: any }) {
             </p>
           </div>
         </div>
+      </section>
+
+      {/* Float & Liquidity Section */}
+      <section className="bg-gradient-to-r from-blue-900/30 to-cyan-900/30 p-10 rounded-2xl shadow-2xl border border-blue-600">
+        <h3 className="text-3xl font-bold text-blue-400 mb-8">Float & Liquidity</h3>
+        {loading ? (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+          </div>
+        ) : floatData ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="bg-gray-800/50 p-6 rounded-xl text-center">
+              <p className="text-gray-400 text-base mb-2">Float Shares</p>
+              <p className="text-3xl font-bold text-blue-400">{formatNumber(floatData.floatShares)}</p>
+            </div>
+            <div className="bg-gray-800/50 p-6 rounded-xl text-center">
+              <p className="text-gray-400 text-base mb-2">Outstanding Shares</p>
+              <p className="text-3xl font-bold text-cyan-400">{formatNumber(floatData.outstandingShares)}</p>
+            </div>
+            <div className="bg-gray-800/50 p-6 rounded-xl text-center">
+              <p className="text-gray-400 text-base mb-2">Free Float %</p>
+              <p className="text-3xl font-bold text-green-400">
+                {floatData.freeFloat ? floatData.freeFloat.toFixed(2) + '%' : 'N/A'}
+              </p>
+            </div>
+            <div className="bg-gray-800/50 p-6 rounded-xl text-center">
+              <p className="text-gray-400 text-base mb-2">Avg Volume</p>
+              <p className="text-3xl font-bold text-purple-400">{formatNumber(quote.avgVolume)}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-center">No hay datos de float disponibles</p>
+        )}
+      </section>
+
+      {/* Executives Section */}
+      <section className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 p-10 rounded-2xl shadow-2xl border border-purple-600">
+        <h3 className="text-3xl font-bold text-purple-400 mb-8">Key Executives</h3>
+        {loading ? (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div>
+          </div>
+        ) : executives.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {executives.map((exec, idx) => (
+              <div key={idx} className="bg-gray-800/50 p-5 rounded-xl flex items-center gap-4 border border-gray-700">
+                <div className="w-12 h-12 bg-purple-600/30 rounded-full flex items-center justify-center text-purple-400 text-xl font-bold">
+                  {exec.name?.charAt(0) || '?'}
+                </div>
+                <div className="flex-1">
+                  <p className="text-lg font-semibold text-gray-100">{exec.name || 'N/A'}</p>
+                  <p className="text-sm text-gray-400">{exec.title || 'N/A'}</p>
+                  {exec.pay && (
+                    <p className="text-sm text-green-400">Compensation: ${formatNumber(exec.pay)}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-400 text-center">No hay datos de ejecutivos disponibles</p>
+        )}
       </section>
     </div>
   );

@@ -322,31 +322,31 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
       </h3>
 
       {/* Input Controls */}
-      <div className="bg-gray-700 p-6 rounded-xl border border-gray-600">
-        <h4 className="text-xl font-bold text-gray-100 mb-4">Parámetros de Análisis</h4>
+      <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-600 shadow-lg">
+        <h4 className="text-2xl font-bold text-gray-100 mb-6">Parámetros de Análisis</h4>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div>
-            <label className="block text-gray-300 mb-2">Min CAGR (%)</label>
+            <label className="block text-gray-300 mb-2 font-medium">Min CAGR (%)</label>
             <input
               type="number"
               step="1"
               value={minCagr}
               onChange={(e) => setMinCagr(parseFloat(e.target.value) || -10)}
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-gray-900/80 border-2 border-red-500/50 rounded-xl px-4 py-3 text-xl font-bold text-red-400 focus:border-red-400 focus:ring-2 focus:ring-red-400/30 focus:outline-none transition-all"
             />
           </div>
           <div>
-            <label className="block text-gray-300 mb-2">Max CAGR (%)</label>
+            <label className="block text-gray-300 mb-2 font-medium">Max CAGR (%)</label>
             <input
               type="number"
               step="1"
               value={maxCagr}
               onChange={(e) => setMaxCagr(parseFloat(e.target.value) || 10)}
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-gray-900/80 border-2 border-green-500/50 rounded-xl px-4 py-3 text-xl font-bold text-green-400 focus:border-green-400 focus:ring-2 focus:ring-green-400/30 focus:outline-none transition-all"
             />
           </div>
           <div>
-            <label className="block text-gray-300 mb-2">Años a Analizar</label>
+            <label className="block text-gray-300 mb-2 font-medium">Años a Analizar</label>
             <input
               type="number"
               step="1"
@@ -354,17 +354,18 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
               max={maxYearsAvailable}
               value={yearsToAnalyze}
               onChange={(e) => setYearsToAnalyze(Math.min(parseInt(e.target.value) || 5, maxYearsAvailable))}
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
+              className="w-full bg-gray-900/80 border-2 border-blue-500/50 rounded-xl px-4 py-3 text-xl font-bold text-blue-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30 focus:outline-none transition-all"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 mt-2">
               Max disponible: {maxYearsAvailable} años
             </p>
           </div>
-          <div>
-            <label className="block text-gray-300 mb-2">Datos disponibles</label>
-            <p className="text-2xl font-bold text-blue-400 pt-2">
-              {historicalPrices.length.toLocaleString()} días
+          <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-600 flex flex-col justify-center">
+            <label className="block text-gray-400 text-sm mb-1">Datos disponibles</label>
+            <p className="text-3xl font-bold text-blue-400">
+              {historicalPrices.length.toLocaleString()}
             </p>
+            <p className="text-xs text-gray-500">días de trading</p>
           </div>
         </div>
       </div>
@@ -372,102 +373,102 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
       {/* Statistics Grid */}
       {statistics && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">52 Week High</p>
-            <p className="text-xl font-bold text-green-400">${statistics.week52High?.toFixed(2)}</p>
+          <div className="bg-gradient-to-br from-green-800/50 to-green-900/50 p-5 rounded-2xl border border-green-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">52 Week High</p>
+            <p className="text-3xl font-bold text-green-400">${statistics.week52High?.toFixed(2)}</p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">52 Week Low</p>
-            <p className="text-xl font-bold text-red-400">${statistics.week52Low?.toFixed(2)}</p>
+          <div className="bg-gradient-to-br from-red-800/50 to-red-900/50 p-5 rounded-2xl border border-red-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">52 Week Low</p>
+            <p className="text-3xl font-bold text-red-400">${statistics.week52Low?.toFixed(2)}</p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">104 Week High</p>
-            <p className="text-xl font-bold text-green-400">
+          <div className="bg-gradient-to-br from-emerald-800/50 to-emerald-900/50 p-5 rounded-2xl border border-emerald-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">104 Week High</p>
+            <p className="text-3xl font-bold text-emerald-400">
               {statistics.week104High ? `$${statistics.week104High.toFixed(2)}` : 'N/A'}
             </p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">104 Week Low</p>
-            <p className="text-xl font-bold text-red-400">
+          <div className="bg-gradient-to-br from-rose-800/50 to-rose-900/50 p-5 rounded-2xl border border-rose-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">104 Week Low</p>
+            <p className="text-3xl font-bold text-rose-400">
               {statistics.week104Low ? `$${statistics.week104Low.toFixed(2)}` : 'N/A'}
             </p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">Avg Daily Return</p>
-            <p className={`text-xl font-bold ${statistics.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-5 rounded-2xl border border-gray-600 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">Avg Daily Return</p>
+            <p className={`text-2xl font-bold ${statistics.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {statistics.avgReturn.toFixed(4)}%
             </p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">Annual Return</p>
-            <p className={`text-xl font-bold ${statistics.annualReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <div className="bg-gradient-to-br from-blue-800/50 to-blue-900/50 p-5 rounded-2xl border border-blue-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">Annual Return</p>
+            <p className={`text-3xl font-bold ${statistics.annualReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {statistics.annualReturn.toFixed(2)}%
             </p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">Daily Variance</p>
-            <p className="text-xl font-bold text-purple-400">{statistics.variance.toFixed(4)}%²</p>
+          <div className="bg-gradient-to-br from-purple-800/50 to-purple-900/50 p-5 rounded-2xl border border-purple-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">Daily Variance</p>
+            <p className="text-2xl font-bold text-purple-400">{statistics.variance.toFixed(4)}%²</p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">Annual Variance</p>
-            <p className="text-xl font-bold text-purple-400">{statistics.annualVariance.toFixed(2)}%²</p>
+          <div className="bg-gradient-to-br from-violet-800/50 to-violet-900/50 p-5 rounded-2xl border border-violet-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">Annual Variance</p>
+            <p className="text-2xl font-bold text-violet-400">{statistics.annualVariance.toFixed(2)}%²</p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">Daily Std Dev</p>
-            <p className="text-xl font-bold text-orange-400">{statistics.stdDev.toFixed(4)}%</p>
+          <div className="bg-gradient-to-br from-orange-800/50 to-orange-900/50 p-5 rounded-2xl border border-orange-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">Daily Std Dev</p>
+            <p className="text-2xl font-bold text-orange-400">{statistics.stdDev.toFixed(4)}%</p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">Annual Std Dev</p>
-            <p className="text-xl font-bold text-orange-400">{statistics.annualStdDev.toFixed(2)}%</p>
+          <div className="bg-gradient-to-br from-amber-800/50 to-amber-900/50 p-5 rounded-2xl border border-amber-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">Annual Std Dev</p>
+            <p className="text-2xl font-bold text-amber-400">{statistics.annualStdDev.toFixed(2)}%</p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">CAGR {yearsToAnalyze}Y (Avg)</p>
-            <p className={`text-xl font-bold ${(statistics.avgCagr || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <div className="bg-gradient-to-br from-cyan-800/50 to-cyan-900/50 p-5 rounded-2xl border border-cyan-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">CAGR {yearsToAnalyze}Y (Avg)</p>
+            <p className={`text-3xl font-bold ${(statistics.avgCagr || 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
               {statistics.avgCagr !== null ? `${statistics.avgCagr.toFixed(2)}%` : 'N/A'}
             </p>
           </div>
-          <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-            <p className="text-sm text-gray-400 mb-1">Valid CAGR Periods</p>
-            <p className="text-xl font-bold text-blue-400">{statistics.validCagrCount}</p>
+          <div className="bg-gradient-to-br from-indigo-800/50 to-indigo-900/50 p-5 rounded-2xl border border-indigo-700 text-center flex flex-col justify-center min-h-[120px]">
+            <p className="text-sm text-gray-300 mb-2">Valid CAGR Periods</p>
+            <p className="text-3xl font-bold text-indigo-400">{statistics.validCagrCount}</p>
           </div>
         </div>
       )}
 
       {/* CAGR Range Analysis */}
       {statistics && (
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <h4 className="text-xl font-bold text-gray-100 mb-4">CAGR Range ({yearsToAnalyze} años)</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <p className="text-gray-400 mb-2">Min CAGR Encontrado</p>
-              <p className={`text-3xl font-bold ${(statistics.minCagrFound || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+        <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-8 rounded-2xl border border-blue-500 shadow-xl">
+          <h4 className="text-2xl font-bold text-blue-400 mb-6 text-center">CAGR Range Analysis ({yearsToAnalyze} años)</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="bg-gray-800/50 p-6 rounded-xl text-center border border-red-700/50">
+              <p className="text-gray-300 mb-3 font-medium">Min CAGR Encontrado</p>
+              <p className={`text-5xl font-black ${(statistics.minCagrFound || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {statistics.minCagrFound !== null ? `${statistics.minCagrFound.toFixed(2)}%` : 'N/A'}
               </p>
             </div>
-            <div className="text-center">
-              <p className="text-gray-400 mb-2">Promedio CAGR</p>
-              <p className={`text-3xl font-bold ${(statistics.avgCagr || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            <div className="bg-gray-800/50 p-6 rounded-xl text-center border border-blue-600/50">
+              <p className="text-gray-300 mb-3 font-medium">Promedio CAGR</p>
+              <p className={`text-5xl font-black ${(statistics.avgCagr || 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
                 {statistics.avgCagr !== null ? `${statistics.avgCagr.toFixed(2)}%` : 'N/A'}
               </p>
             </div>
-            <div className="text-center">
-              <p className="text-gray-400 mb-2">Max CAGR Encontrado</p>
-              <p className={`text-3xl font-bold ${(statistics.maxCagrFound || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            <div className="bg-gray-800/50 p-6 rounded-xl text-center border border-green-700/50">
+              <p className="text-gray-300 mb-3 font-medium">Max CAGR Encontrado</p>
+              <p className={`text-5xl font-black ${(statistics.maxCagrFound || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {statistics.maxCagrFound !== null ? `${statistics.maxCagrFound.toFixed(2)}%` : 'N/A'}
               </p>
             </div>
           </div>
-          <p className="text-sm text-gray-500 mt-4 text-center">
-            Filtrado: CAGR entre {minCagr}% y {maxCagr}% • {statistics.validCagrCount} períodos válidos encontrados
+          <p className="text-sm text-gray-400 mt-6 text-center">
+            Filtrado: CAGR entre <span className="text-red-400 font-semibold">{minCagr}%</span> y <span className="text-green-400 font-semibold">{maxCagr}%</span> • <span className="text-blue-400 font-semibold">{statistics.validCagrCount}</span> períodos válidos encontrados
           </p>
         </div>
       )}
 
       {/* Chart */}
       {chartData && (
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <h4 className="text-xl font-bold text-gray-100 mb-4">Precio y CAGR (últimos 2 años)</h4>
-          <div className="h-96">
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-xl">
+          <h4 className="text-2xl font-bold text-gray-100 mb-6">Precio y CAGR (últimos 2 años)</h4>
+          <div className="h-[500px]">
             <Line
               data={chartData}
               options={{
@@ -485,10 +486,15 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
                     title: {
                       display: true,
                       text: 'Precio ($)',
-                      color: '#9ca3af',
+                      color: '#60a5fa',
+                      font: { size: 14, weight: 'bold' },
                     },
-                    ticks: { color: '#9ca3af' },
+                    ticks: {
+                      color: '#60a5fa',
+                      callback: (value: any) => '$' + value.toFixed(0),
+                    },
                     grid: { color: '#374151' },
+                    // Let Chart.js auto-calculate min/max based on data
                   },
                   y1: {
                     type: 'linear',
@@ -497,27 +503,63 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
                     title: {
                       display: true,
                       text: 'CAGR (%)',
-                      color: '#9ca3af',
+                      color: '#22c55e',
+                      font: { size: 14, weight: 'bold' },
                     },
-                    ticks: { color: '#9ca3af' },
+                    ticks: {
+                      color: '#22c55e',
+                      callback: (value: any) => value.toFixed(1) + '%',
+                    },
                     grid: { drawOnChartArea: false },
+                    // Explicitly set min/max based on CAGR filter range
+                    min: minCagr - 5,
+                    max: maxCagr + 5,
                   },
                   x: {
                     ticks: {
                       color: '#9ca3af',
                       maxTicksLimit: 12,
+                      font: { size: 11 },
                     },
-                    grid: { color: '#374151' },
+                    grid: { color: '#374151', lineWidth: 0.5 },
                   },
                 },
                 plugins: {
                   legend: {
-                    labels: { color: '#e5e7eb' },
+                    labels: {
+                      color: '#e5e7eb',
+                      font: { size: 13 },
+                      usePointStyle: true,
+                      padding: 20,
+                    },
+                    position: 'top',
+                  },
+                  tooltip: {
+                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                    titleColor: '#f3f4f6',
+                    bodyColor: '#d1d5db',
+                    borderColor: '#4b5563',
+                    borderWidth: 1,
+                    padding: 12,
+                    displayColors: true,
+                    callbacks: {
+                      label: (context: any) => {
+                        const label = context.dataset.label || '';
+                        const value = context.parsed.y;
+                        if (label.includes('CAGR')) {
+                          return value !== null ? `${label}: ${value.toFixed(2)}%` : `${label}: N/A`;
+                        }
+                        return `${label}: $${value.toFixed(2)}`;
+                      },
+                    },
                   },
                 },
               }}
             />
           </div>
+          <p className="text-sm text-gray-500 mt-4 text-center">
+            Eje izquierdo (azul): Precio • Eje derecho (verde): CAGR {yearsToAnalyze}Y
+          </p>
         </div>
       )}
 

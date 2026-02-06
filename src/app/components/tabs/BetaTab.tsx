@@ -201,6 +201,19 @@ export default function BetaTab({ ticker }: { ticker: string }) {
     return <p className="text-xl text-red-400 py-10 text-center">Error: {error}</p>;
   }
 
+  // Calculate averages
+  const validBetas = [betaApi, betaUser || null, betaCalculated].filter(b => b !== null && b !== 0) as number[];
+  const avgBeta = validBetas.length > 0 ? validBetas.reduce((a, b) => a + b, 0) / validBetas.length : null;
+
+  const calculateCAPMValue = (beta: number | null): number | null => {
+    if (beta === null || riskFreeRate === null || marketRiskPremium === null) return null;
+    return riskFreeRate + beta * (marketRiskPremium - riskFreeRate);
+  };
+
+  const validCAPMs = [calculateCAPMValue(betaApi), calculateCAPMValue(betaUser || null), calculateCAPMValue(betaCalculated)]
+    .filter(c => c !== null) as number[];
+  const avgCAPM = validCAPMs.length > 0 ? validCAPMs.reduce((a, b) => a + b, 0) / validCAPMs.length : null;
+
   return (
     <div className="space-y-10">
       <h3 className="text-3xl font-bold text-gray-100">
@@ -209,15 +222,15 @@ export default function BetaTab({ ticker }: { ticker: string }) {
 
       {/* Risk Free Rate y Market Risk Premium */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-sm text-center">
-          <h4 className="text-xl font-semibold text-gray-300 mb-2">Risk Free Rate (10Y Treasury)</h4>
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
+          <h4 className="text-lg font-semibold text-gray-400 mb-2">Risk Free Rate (10Y Treasury)</h4>
           <p className="text-5xl font-bold text-blue-400">
             {riskFreeRate !== null ? riskFreeRate.toFixed(2) + '%' : '—'}
           </p>
         </div>
 
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-sm text-center">
-          <h4 className="text-xl font-semibold text-gray-300 mb-2">Market Risk Premium</h4>
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
+          <h4 className="text-lg font-semibold text-gray-400 mb-2">Market Risk Premium</h4>
           <p className="text-5xl font-bold text-purple-400">
             {marketRiskPremium !== null ? marketRiskPremium.toFixed(2) + '%' : '—'}
           </p>
@@ -226,8 +239,8 @@ export default function BetaTab({ ticker }: { ticker: string }) {
 
       {/* Betas + CAPM */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-sm text-center">
-          <h4 className="text-xl font-semibold text-gray-300 mb-3">Beta Oficial (FMP)</h4>
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
+          <h4 className="text-lg font-semibold text-gray-400 mb-3">Beta Oficial (FMP)</h4>
           <p className="text-5xl font-bold text-indigo-400 mb-4">
             {betaApi !== null ? betaApi.toFixed(2) : '—'}
           </p>
@@ -236,26 +249,29 @@ export default function BetaTab({ ticker }: { ticker: string }) {
           </p>
         </div>
 
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-sm text-center">
-          <h4 className="text-xl font-semibold text-gray-300 mb-3">Beta Usuario</h4>
-          <input
-            type="number"
-            step="0.01"
-            value={betaUser}
-            onChange={(e) => setBetaUser(parseFloat(e.target.value) || 0)}
-            className="w-full px-4 py-3 text-2xl text-center border border-gray-600 rounded-lg focus:border-blue-500 focus:ring-blue-500 mb-4 bg-gray-900 text-gray-100"
-            placeholder="0.00"
-          />
-          <p className="text-5xl font-bold text-gray-100">
-            {betaUser.toFixed(2)}
-          </p>
-          <p className="text-lg font-medium text-gray-400 mt-2">
+        <div className="bg-gradient-to-br from-amber-900/20 to-orange-900/20 p-6 rounded-2xl border border-amber-600/50 shadow-lg text-center">
+          <h4 className="text-lg font-semibold text-amber-400 mb-3">Beta Usuario</h4>
+          <div className="relative mb-4">
+            <input
+              type="number"
+              step="0.01"
+              value={betaUser || ''}
+              onChange={(e) => setBetaUser(parseFloat(e.target.value) || 0)}
+              className="w-full px-6 py-4 text-4xl text-center font-bold rounded-xl
+                         bg-gray-900/80 border-2 border-amber-500/50
+                         text-amber-400 placeholder-gray-600
+                         focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 focus:outline-none
+                         transition-all duration-200"
+              placeholder="0.00"
+            />
+          </div>
+          <p className="text-lg font-medium text-gray-400">
             CAPM: <span className="text-blue-400">{calculateCAPM(betaUser)}</span>
           </p>
         </div>
 
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-sm text-center">
-          <h4 className="text-xl font-semibold text-gray-300 mb-3">Beta Calculado (5 años vs SPY)</h4>
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
+          <h4 className="text-lg font-semibold text-gray-400 mb-3">Beta Calculado (5Y vs SPY)</h4>
           <p className="text-5xl font-bold text-green-400 mb-4">
             {betaCalculated !== null ? betaCalculated.toFixed(2) : '—'}
           </p>
@@ -265,8 +281,33 @@ export default function BetaTab({ ticker }: { ticker: string }) {
         </div>
       </div>
 
+      {/* Average Beta and CAPM */}
+      <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-8 rounded-2xl border border-blue-500">
+        <h4 className="text-2xl font-bold text-blue-400 mb-6 text-center">Promedios</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-gray-800/50 p-6 rounded-xl text-center">
+            <p className="text-gray-400 text-lg mb-2">Average Beta</p>
+            <p className="text-5xl font-bold text-cyan-400">
+              {avgBeta !== null ? avgBeta.toFixed(2) : '—'}
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              Promedio de {validBetas.length} beta(s) disponibles
+            </p>
+          </div>
+          <div className="bg-gray-800/50 p-6 rounded-xl text-center">
+            <p className="text-gray-400 text-lg mb-2">Average CAPM</p>
+            <p className="text-5xl font-bold text-pink-400">
+              {avgCAPM !== null ? avgCAPM.toFixed(2) + '%' : '—'}
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              Costo de Equity promedio
+            </p>
+          </div>
+        </div>
+      </div>
+
       <p className="text-sm text-gray-500 text-center italic">
-        CAPM = Risk Free Rate + Beta x (Market Risk Premium - Risk Free Rate)
+        CAPM = Risk Free Rate + Beta × (Market Risk Premium - Risk Free Rate)
       </p>
     </div>
   );

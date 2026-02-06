@@ -1089,7 +1089,7 @@ export default function ValuacionesTab({
             />
             {discountRate === null && (
               <p className="text-xs text-blue-400 mt-1">
-                Auto: Promedio WACC Tab ({((calculatedDefaultWACC * 2 - (dcfCustom?.wacc || calculatedDefaultWACC))).toFixed(1)}%) + Advance DCF ({dcfCustom?.wacc ? dcfCustom.wacc.toFixed(1) : 'N/A'}%)
+                Auto: Promedio de WACC Calculado + Advance DCF API = {calculatedDefaultWACC.toFixed(2)}%
               </p>
             )}
           </div>
@@ -1112,6 +1112,37 @@ export default function ValuacionesTab({
               onChange={(e) => setProjectedGrowthRate(Number(e.target.value) || 5)}
               className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
             />
+          </div>
+        </div>
+
+        {/* WACC Breakdown */}
+        <div className="mt-4 p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+          <h5 className="text-sm font-semibold text-gray-300 mb-2">Fuentes WACC para el promedio:</h5>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Advance DCF (API):</span>
+              <span className="text-purple-400 font-semibold">
+                {dcfCustom?.wacc ? `${dcfCustom.wacc.toFixed(2)}%` : 'N/A'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">WACC Calculado (CAPM):</span>
+              <span className="text-cyan-400 font-semibold">
+                {(() => {
+                  // Recalculate the internal WACC here for display
+                  const advWacc = dcfCustom?.wacc || null;
+                  if (advWacc && calculatedDefaultWACC > 0) {
+                    const internalWacc = (calculatedDefaultWACC * 2) - advWacc;
+                    return `${internalWacc.toFixed(2)}%`;
+                  }
+                  return `${calculatedDefaultWACC.toFixed(2)}%`;
+                })()}
+              </span>
+            </div>
+          </div>
+          <div className="mt-2 pt-2 border-t border-gray-700 flex justify-between">
+            <span className="text-gray-400 font-medium">Promedio WACC Usado:</span>
+            <span className="text-blue-400 font-bold text-lg">{effectiveDiscountRate.toFixed(2)}%</span>
           </div>
         </div>
       </div>
