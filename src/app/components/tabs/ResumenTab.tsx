@@ -116,7 +116,7 @@ export default function ResumenTab({
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-        const res = await fetch('http://localhost:8000/resumen/predict', {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/resumen/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -139,7 +139,7 @@ export default function ResumenTab({
         if (err.name === 'AbortError') {
           errorMsg = 'Timeout: El servidor tardó demasiado en responder';
         } else if (err.message === 'Failed to fetch') {
-          errorMsg = 'No se pudo conectar al backend. Verifica que esté corriendo en localhost:8000';
+          errorMsg = 'No se pudo conectar al servidor backend. Verifica que esté corriendo';
         }
         setError(errorMsg);
       } finally {
@@ -185,7 +185,7 @@ export default function ResumenTab({
       <div className="text-center py-12">
         <div className="text-6xl mb-4">⚠️</div>
         <div className="text-red-400 text-xl mb-4">Error: {error}</div>
-        <p className="text-gray-500 mb-6">Verifica que el servidor backend esté corriendo en localhost:8000</p>
+        <p className="text-gray-500 mb-6">Verifica que el servidor backend esté corriendo</p>
         <div className="flex justify-center gap-4">
           <button
             onClick={() => {
@@ -201,7 +201,7 @@ export default function ResumenTab({
             Reintentar
           </button>
           <a
-            href="http://localhost:8000/health"
+            href={`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/health`}
             target="_blank"
             rel="noopener noreferrer"
             className="px-6 py-3 border border-gray-600 text-gray-300 rounded-xl font-semibold hover:bg-gray-800 transition"

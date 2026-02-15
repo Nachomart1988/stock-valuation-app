@@ -1554,7 +1554,7 @@ export default function ValuacionesTab({
             ? lastIncome.revenue / lastBalance.totalAssets : 0,
         ];
 
-        const response = await fetch('http://localhost:8000/advancevalue/predict', {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/advancevalue/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2342,7 +2342,7 @@ export default function ValuacionesTab({
               {advanceValueNetError && (
                 <div className="text-center py-4">
                   <p className="text-red-400 text-sm">⚠️ Error: {advanceValueNetError}</p>
-                  <p className="text-gray-500 text-xs mt-1">Asegúrate de que el backend esté corriendo en localhost:8000</p>
+                  <p className="text-gray-500 text-xs mt-1">Asegúrate de que el servidor backend esté corriendo</p>
                 </div>
               )}
               {advanceValueNet && (

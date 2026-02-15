@@ -100,7 +100,7 @@ export default function MarketSentimentPage() {
           losersCount: (losersData || []).length,
         });
 
-        const res = await fetch('http://localhost:8000/market-sentiment/analyze', {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/market-sentiment/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

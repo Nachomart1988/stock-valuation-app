@@ -1282,7 +1282,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
           scores: features.slice(28, 30),
         });
 
-        const response = await fetch('http://localhost:8000/companyquality/predict', {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/companyquality/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1604,7 +1604,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
           {qualityError && !qualityLoading && (
             <div className="text-center py-4">
               <p className="text-red-400 text-sm">⚠️ Error: {qualityError}</p>
-              <p className="text-gray-500 text-xs mt-1">Asegúrate de que el backend esté corriendo en localhost:8000</p>
+              <p className="text-gray-500 text-xs mt-1">Asegúrate de que el servidor backend esté corriendo</p>
             </div>
           )}
           {!qualityLoading && !qualityError && !companyQualityNet && (
