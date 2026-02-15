@@ -1,9 +1,14 @@
 // src/app/components/tabs/BetaTab.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 
-export default function BetaTab({ ticker }: { ticker: string }) {
+interface BetaTabProps {
+  ticker: string;
+  onAvgCAPMChange?: (avgCAPM: number | null) => void;
+}
+
+export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
   const [betaApi, setBetaApi] = useState<number | null>(null);
   const [betaUser, setBetaUser] = useState<number>(0);
   const [betaCalculated, setBetaCalculated] = useState<number | null>(null);
@@ -187,12 +192,43 @@ export default function BetaTab({ ticker }: { ticker: string }) {
     }
   };
 
+  // Calculate CAPM display function
+  // CAPM Formula: Ke = Rf + β × ERP
+  // FMP API returns marketRiskPremium as ERP (Rm - Rf), NOT as Rm
+  // So we don't subtract Rf from it again
   const calculateCAPM = (beta: number | null) => {
     if (beta === null || riskFreeRate === null || marketRiskPremium === null) return '—';
-    const capm = riskFreeRate + beta * (marketRiskPremium - riskFreeRate);
+    const capm = riskFreeRate + beta * marketRiskPremium;
     return capm.toFixed(2) + '%';
   };
 
+  // Calculate CAPM helper function - must be before useMemo that uses it
+  const calculateCAPMValue = (beta: number | null): number | null => {
+    if (beta === null || riskFreeRate === null || marketRiskPremium === null) return null;
+    // CAPM: Ke = Rf + β × ERP (marketRiskPremium IS the ERP, not Rm)
+    return riskFreeRate + beta * marketRiskPremium;
+  };
+
+  // Calculate averages using useMemo - MUST be before any conditional returns!
+  const { avgBeta, avgCAPM, validBetasCount } = useMemo(() => {
+    const validBetas = [betaApi, betaUser || null, betaCalculated].filter(b => b !== null && b !== 0) as number[];
+    const calculatedAvgBeta = validBetas.length > 0 ? validBetas.reduce((a, b) => a + b, 0) / validBetas.length : null;
+
+    const validCAPMs = [calculateCAPMValue(betaApi), calculateCAPMValue(betaUser || null), calculateCAPMValue(betaCalculated)]
+      .filter(c => c !== null) as number[];
+    const calculatedAvgCAPM = validCAPMs.length > 0 ? validCAPMs.reduce((a, b) => a + b, 0) / validCAPMs.length : null;
+
+    return { avgBeta: calculatedAvgBeta, avgCAPM: calculatedAvgCAPM, validBetasCount: validBetas.length };
+  }, [betaApi, betaUser, betaCalculated, riskFreeRate, marketRiskPremium]);
+
+  // Notify parent when avgCAPM changes - MUST be before any conditional returns!
+  useEffect(() => {
+    if (onAvgCAPMChange) {
+      onAvgCAPMChange(avgCAPM);
+    }
+  }, [avgCAPM, onAvgCAPMChange]);
+
+  // Now we can have conditional returns
   if (loading) {
     return <p className="text-xl text-gray-300 py-10 text-center">Cargando betas y CAPM...</p>;
   }
@@ -201,24 +237,25 @@ export default function BetaTab({ ticker }: { ticker: string }) {
     return <p className="text-xl text-red-400 py-10 text-center">Error: {error}</p>;
   }
 
-  // Calculate averages
-  const validBetas = [betaApi, betaUser || null, betaCalculated].filter(b => b !== null && b !== 0) as number[];
-  const avgBeta = validBetas.length > 0 ? validBetas.reduce((a, b) => a + b, 0) / validBetas.length : null;
-
-  const calculateCAPMValue = (beta: number | null): number | null => {
-    if (beta === null || riskFreeRate === null || marketRiskPremium === null) return null;
-    return riskFreeRate + beta * (marketRiskPremium - riskFreeRate);
-  };
-
-  const validCAPMs = [calculateCAPMValue(betaApi), calculateCAPMValue(betaUser || null), calculateCAPMValue(betaCalculated)]
-    .filter(c => c !== null) as number[];
-  const avgCAPM = validCAPMs.length > 0 ? validCAPMs.reduce((a, b) => a + b, 0) / validCAPMs.length : null;
-
   return (
-    <div className="space-y-10">
-      <h3 className="text-3xl font-bold text-gray-100">
-        Beta de {ticker}
-      </h3>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+        <div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            Beta & CAPM Analysis
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Análisis de riesgo sistemático para {ticker}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right bg-gradient-to-r from-pink-900/40 to-purple-900/40 px-4 py-2 rounded-xl border border-pink-600">
+            <p className="text-xs text-pink-400">Avg CAPM (Ks)</p>
+            <p className="text-xl font-bold text-pink-400">
+              {avgCAPM !== null ? avgCAPM.toFixed(2) + '%' : '—'}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Risk Free Rate y Market Risk Premium */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -291,7 +328,7 @@ export default function BetaTab({ ticker }: { ticker: string }) {
               {avgBeta !== null ? avgBeta.toFixed(2) : '—'}
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              Promedio de {validBetas.length} beta(s) disponibles
+              Promedio de {validBetasCount} beta(s) disponibles
             </p>
           </div>
           <div className="bg-gray-800/50 p-6 rounded-xl text-center">

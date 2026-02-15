@@ -9,10 +9,11 @@ interface SGRMethod {
   enabled: boolean;
   formula: string;
   inputs: { label: string; value: string }[];
-  category: 'topdown' | 'bottomup' | 'classic' | 'advanced' | 'analyst';
+  category: 'topdown' | 'bottomup' | 'roe' | 'roic' | 'retention' | 'historical';
 }
 
 interface SustainableGrowthTabProps {
+  ticker: string;
   income: any[];
   balance: any[];
   cashFlow: any[];
@@ -21,9 +22,11 @@ interface SustainableGrowthTabProps {
   dcfCustom?: any;
   calculatedWacc?: number;
   profile?: any;
+  onSGRChange?: (sgr: number | null) => void;
 }
 
 export default function SustainableGrowthTab({
+  ticker,
   income,
   balance,
   cashFlow,
@@ -32,6 +35,7 @@ export default function SustainableGrowthTab({
   dcfCustom,
   calculatedWacc,
   profile,
+  onSGRChange,
 }: SustainableGrowthTabProps) {
   // Get WACC - API returns it already as percentage (e.g., 8.88 means 8.88%)
   const getDefaultWacc = () => {
@@ -40,7 +44,6 @@ export default function SustainableGrowthTab({
     // WACC del Advance DCF - already in percentage form
     const advanceDcfWacc = dcfCustom?.wacc;
     if (advanceDcfWacc !== undefined && advanceDcfWacc !== null) {
-      // API returns WACC as percentage (8.88 = 8.88%), no conversion needed
       if (advanceDcfWacc > 0 && advanceDcfWacc < 50) {
         waccValues.push(advanceDcfWacc);
       }
@@ -127,14 +130,11 @@ export default function SustainableGrowthTab({
           // Try to get from cashFlowAsReported first (most accurate source)
           if (cfDate && cashFlowAsReported && cashFlowAsReported.length > 0) {
             const cfYear = new Date(cfDate).getFullYear();
-            // Find matching record by fiscal year (may be +1 due to fiscal year ending)
             const asReportedRecord = cashFlowAsReported.find((ar: any) =>
               ar.fiscalYear === cfYear || ar.fiscalYear === cfYear + 1
             );
             if (asReportedRecord?.data?.paymentsofdividends) {
-              const dividends = asReportedRecord.data.paymentsofdividends;
-              console.log(`[SGR] Found dividends from as-reported for ${cfYear}: $${(dividends / 1e9).toFixed(2)}B`);
-              return dividends;
+              return asReportedRecord.data.paymentsofdividends;
             }
           }
 
@@ -150,7 +150,7 @@ export default function SustainableGrowthTab({
         };
 
         // ═══════════════════════════════════════════════════════════════
-        // Calculate all intermediate values
+        // Calculate all intermediate values per year
         // ═══════════════════════════════════════════════════════════════
 
         // Latest values
@@ -168,41 +168,32 @@ export default function SustainableGrowthTab({
         const avgEquity = avg(equityValues.filter(e => e > 0));
         const latestEquity = latestBalance.totalStockholdersEquity || 0;
 
-        // ROE = Net Income / Equity
-        const roeValues = selectedIncome.map((inc, i) => {
+        // ROE per year = Net Income / Equity
+        const roePerYear = selectedIncome.map((inc, i) => {
           const equity = selectedBalance[i]?.totalStockholdersEquity;
           if (!equity || equity <= 0) return null;
           return inc.netIncome / equity;
         });
-        const avgROE = avg(roeValues);
-        const latestROE = latestEquity > 0 ? latestNetIncome / latestEquity : null;
+        const avgROE = avg(roePerYear);
 
-        // Dividends - pass date for as-reported lookup
+        // Dividends per year
         const dividendValues = selectedCashFlow.map(cf => getDividendsPaid(cf, cf?.date));
         const avgDividends = avg(dividendValues);
-        const latestDividends = getDividendsPaid(latestCashFlow, latestCashFlow?.date);
 
-        console.log('[SGR] Dividend values:', dividendValues);
-        console.log('[SGR] Latest dividends:', latestDividends, 'Latest Net Income:', latestNetIncome);
-
-        // Payout Ratio = Dividends / Net Income
-        const payoutValues = selectedIncome.map((inc, i) => {
+        // Retention Ratio per year = 1 - (Dividends / Net Income)
+        const retentionPerYear = selectedIncome.map((inc, i) => {
           const cf = selectedCashFlow[i];
           const dividends = getDividendsPaid(cf, cf?.date);
           const netIncome = inc.netIncome;
           if (!netIncome || netIncome <= 0) return null;
           const payout = dividends / netIncome;
-          return payout >= 0 && payout <= 2 ? payout : null;
+          if (payout < 0 || payout > 2) return null;
+          return 1 - payout;
         });
-        const avgPayout = avg(payoutValues) ?? 0;
-        const latestPayout = latestNetIncome > 0 ? latestDividends / latestNetIncome : 0;
+        const avgRetention = avg(retentionPerYear);
 
-        console.log('[SGR] Payout values:', payoutValues);
-        console.log('[SGR] Avg Payout:', avgPayout, 'Latest Payout:', latestPayout);
-
-        // Retention Ratio = 1 - Payout
-        const avgRetention = 1 - avgPayout;
-        const latestRetention = 1 - latestPayout;
+        // Payout for display
+        const avgPayout = avgRetention !== null ? 1 - avgRetention : null;
 
         // Revenue
         const revenueValues = selectedIncome.map(inc => inc.revenue);
@@ -215,7 +206,6 @@ export default function SustainableGrowthTab({
           return inc.netIncome / inc.revenue;
         });
         const avgNetMargin = avg(netMarginValues);
-        const latestNetMargin = latestRevenue > 0 ? latestNetIncome / latestRevenue : null;
 
         // Total Assets
         const assetValues = selectedBalance.map(bal => bal.totalAssets);
@@ -229,7 +219,6 @@ export default function SustainableGrowthTab({
           return inc.revenue / assets;
         });
         const avgAssetTurnover = avg(assetTurnoverValues);
-        const latestAssetTurnover = latestAssets > 0 ? latestRevenue / latestAssets : null;
 
         // Financial Leverage = Assets / Equity
         const leverageValues = selectedBalance.map(bal => {
@@ -237,56 +226,35 @@ export default function SustainableGrowthTab({
           return bal.totalAssets / bal.totalStockholdersEquity;
         });
         const avgLeverage = avg(leverageValues);
-        const latestLeverage = latestEquity > 0 ? latestAssets / latestEquity : null;
 
-        // Operating Income and Tax Rate
+        // Tax Rate per year
         const taxRateValues = selectedIncome.map(inc => {
           if (!inc.incomeBeforeTax || inc.incomeBeforeTax <= 0) return 0.21;
           return Math.max(0, Math.min(0.5, inc.incomeTaxExpense / inc.incomeBeforeTax));
         });
         const avgTaxRate = avg(taxRateValues) ?? 0.21;
-        const latestTaxRate = latestIncome.incomeBeforeTax > 0
-          ? Math.max(0, Math.min(0.5, latestIncome.incomeTaxExpense / latestIncome.incomeBeforeTax))
-          : 0.21;
 
-        // NOPAT = Operating Income * (1 - Tax Rate)
-        const nopatValues = selectedIncome.map((inc, i) => {
+        // NOPAT per year = Operating Income * (1 - Tax Rate)
+        const nopatPerYear = selectedIncome.map((inc, i) => {
           const taxRate = taxRateValues[i] ?? 0.21;
           return (inc.operatingIncome || 0) * (1 - taxRate);
         });
-        const avgNOPAT = avg(nopatValues);
-        const latestNOPAT = (latestIncome.operatingIncome || 0) * (1 - latestTaxRate);
+        const avgNOPAT = avg(nopatPerYear);
 
-        // Invested Capital = Total Assets - Current Liabilities
-        const investedCapitalValues = selectedBalance.map(bal => {
+        // Invested Capital per year = Total Assets - Current Liabilities
+        const investedCapitalPerYear = selectedBalance.map(bal => {
           return bal.totalAssets - (bal.totalCurrentLiabilities || 0);
         });
-        const avgInvestedCapital = avg(investedCapitalValues.filter(ic => ic > 0));
-        const latestInvestedCapital = latestAssets - (latestBalance.totalCurrentLiabilities || 0);
+        const avgInvestedCapital = avg(investedCapitalPerYear.filter(ic => ic > 0));
 
-        // ROIC = NOPAT / Invested Capital
-        const roicValues = selectedIncome.map((inc, i) => {
-          const ic = investedCapitalValues[i];
-          const nopat = nopatValues[i];
+        // ROIC per year = NOPAT / Invested Capital
+        const roicPerYear = selectedIncome.map((inc, i) => {
+          const ic = investedCapitalPerYear[i];
+          const nopat = nopatPerYear[i];
           if (!ic || ic <= 0) return null;
           return nopat / ic;
         });
-        const avgROIC = avg(roicValues);
-        const latestROIC = latestInvestedCapital > 0 ? latestNOPAT / latestInvestedCapital : null;
-
-        // Marginal ROIC = ΔNOPAT / ΔInvested Capital
-        let marginalROIC: number | null = null;
-        let deltaNOPAT = 0;
-        let deltaIC = 0;
-        if (selectedIncome.length > 1) {
-          const firstIdx = 0;
-          const lastIdx = selectedIncome.length - 1;
-          deltaNOPAT = nopatValues[lastIdx] - nopatValues[firstIdx];
-          deltaIC = investedCapitalValues[lastIdx] - investedCapitalValues[firstIdx];
-          if (Math.abs(deltaIC) > (avgAssets || 1) * 0.01) {
-            marginalROIC = deltaNOPAT / deltaIC;
-          }
-        }
+        const avgROIC = avg(roicPerYear);
 
         // Revenue Growth (CAGR)
         let revenueCAGR: number | null = null;
@@ -299,162 +267,199 @@ export default function SustainableGrowthTab({
           }
         }
 
-        // Analyst Estimates (if available)
-        const sortedEstimates = estimates?.length > 0
-          ? [...estimates].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-          : [];
-        const analystGrowthEstimate = sortedEstimates.length > 0
-          ? sortedEstimates[sortedEstimates.length - 1]?.estimatedRevenueAvg
-            ? (sortedEstimates[sortedEstimates.length - 1].estimatedRevenueAvg / latestRevenue - 1)
-            : null
+        // ═══════════════════════════════════════════════════════════════
+        // NEW SGR CALCULATIONS
+        // ═══════════════════════════════════════════════════════════════
+
+        // A) ROE Methods
+        // Method 1: Avg RR × Avg ROE
+        const sgrRoeMethod1 = (avgRetention !== null && avgROE !== null)
+          ? avgRetention * avgROE
           : null;
 
-        // Store intermediate values
-        setIntermediateValues({
-          avgROE, latestROE,
-          avgPayout, latestPayout,
-          avgRetention, latestRetention,
-          avgNetMargin, latestNetMargin,
-          avgAssetTurnover, latestAssetTurnover,
-          avgLeverage, latestLeverage,
-          avgROIC, latestROIC,
-          avgNOPAT, latestNOPAT,
-          avgInvestedCapital, latestInvestedCapital,
-          avgTaxRate, latestTaxRate,
-          marginalROIC, deltaNOPAT, deltaIC,
-          revenueCAGR,
-          analystGrowthEstimate,
-          avgNetIncome, latestNetIncome,
-          avgEquity, latestEquity,
-          avgDividends, latestDividends,
-          avgRevenue, latestRevenue,
-          avgAssets, latestAssets,
-          wacc,
+        // Method 2: Avg(RR_year × ROE_year) - year by year calculation
+        const roeTimesRetentionPerYear = selectedIncome.map((_, i) => {
+          const roe = roePerYear[i];
+          const rr = retentionPerYear[i];
+          if (roe === null || rr === null) return null;
+          return roe * rr;
         });
+        const sgrRoeMethod2 = avg(roeTimesRetentionPerYear);
 
-        // ═══════════════════════════════════════════════════════════════
-        // Calculate SGR Methods
-        // ═══════════════════════════════════════════════════════════════
+        // B) ROIC Methods
+        // Method 1: Avg RR × Avg ROIC
+        const sgrRoicMethod1 = (avgRetention !== null && avgROIC !== null)
+          ? avgRetention * avgROIC
+          : null;
 
-        // 1. Classic SGR = ROE × Retention Ratio (using N-year averages)
-        const sgrClassic = avgROE !== null ? avgROE * avgRetention : null;
+        // Method 2: Avg(RR_year × ROIC_year) - year by year calculation
+        const roicTimesRetentionPerYear = selectedIncome.map((_, i) => {
+          const roic = roicPerYear[i];
+          const rr = retentionPerYear[i];
+          if (roic === null || rr === null) return null;
+          return roic * rr;
+        });
+        const sgrRoicMethod2 = avg(roicTimesRetentionPerYear);
 
-        // 2. SGR Full Retention (ROE if 100% retained) - using averages
-        const sgrFullRetention = avgROE;
+        // SGR Full Retention (if 100% retained)
+        const sgrFullRetentionROE = avgROE;
+        const sgrFullRetentionROIC = avgROIC;
 
-        // 4. SGR ROIC-based = ROIC × Retention
-        const sgrROIC = avgROIC !== null ? avgROIC * avgRetention : null;
-
-        // 5. SGR DuPont = Net Margin × Asset Turnover × Leverage × Retention
-        const sgrDupont = avgNetMargin !== null && avgAssetTurnover !== null && avgLeverage !== null
+        // DuPont = Net Margin × Asset Turnover × Leverage × Retention
+        const sgrDupont = avgNetMargin !== null && avgAssetTurnover !== null && avgLeverage !== null && avgRetention !== null
           ? avgNetMargin * avgAssetTurnover * avgLeverage * avgRetention
           : null;
 
-        // 6. SGR Marginal ROIC
-        const sgrMarginal = marginalROIC !== null ? marginalROIC * avgRetention : null;
-
-        // 7. SGR Adjusted for Debt/WACC
-        let sgrAdjusted: number | null = null;
-        if (avgROIC !== null && wacc > 0) {
-          const base = avgROIC * avgRetention;
-          const denom = 1 - (base / wacc);
-          if (denom > 0 && isFinite(base / denom)) {
-            sgrAdjusted = base / denom;
-          }
-        }
-
-        // 8. Revenue CAGR (historical growth)
+        // Historical CAGR
         const sgrHistorical = revenueCAGR;
 
+        // Store intermediate values
+        setIntermediateValues({
+          avgROE,
+          avgPayout,
+          avgRetention,
+          avgNetMargin,
+          avgAssetTurnover,
+          avgLeverage,
+          avgROIC,
+          avgNOPAT,
+          avgInvestedCapital,
+          avgTaxRate,
+          revenueCAGR,
+          avgNetIncome,
+          avgEquity,
+          avgDividends,
+          avgRevenue,
+          avgAssets,
+          wacc,
+          roePerYear,
+          roicPerYear,
+          retentionPerYear,
+          roeTimesRetentionPerYear,
+          roicTimesRetentionPerYear,
+          years: selectedIncome.length,
+        });
+
+        // ═══════════════════════════════════════════════════════════════
+        // Build Methods Array
+        // ═══════════════════════════════════════════════════════════════
+
         const calculatedMethods: SGRMethod[] = [
-          // Top-Down Analysis (main method) - using N-year averages
+          // Top-Down Analysis (DuPont breakdown for context)
           {
             name: 'Top-Down (ROE × Retention)',
-            value: sgrClassic,
+            value: sgrRoeMethod1,
             enabled: true,
             category: 'topdown',
-            formula: `ROE × (1 - Payout Ratio) [Promedio ${years} años]`,
+            formula: `Avg RR × Avg ROE [${years}Y]`,
             inputs: [
-              { label: `ROE Promedio (${years} años)`, value: formatPercent(avgROE) },
-              { label: 'Payout Ratio Promedio', value: formatPercent(avgPayout) },
-              { label: 'Retention Ratio Promedio', value: formatPercent(avgRetention) },
-              { label: 'Net Income Promedio', value: formatMoney(avgNetIncome) },
+              { label: `ROE Promedio (${years}Y)`, value: formatPercent(avgROE) },
+              { label: 'Retention Promedio', value: formatPercent(avgRetention) },
+              { label: 'Net Income Prom', value: formatMoney(avgNetIncome) },
               { label: 'Equity Promedio', value: formatMoney(avgEquity) },
             ],
           },
-          // Bottom-Up Analysis (DuPont) - using N-year averages
+          // Bottom-Up Analysis (DuPont)
           {
             name: 'Bottom-Up (DuPont)',
             value: sgrDupont,
             enabled: true,
             category: 'bottomup',
-            formula: `Net Margin × Asset Turn × Leverage × Ret [Prom ${years}Y]`,
+            formula: `Margin × Turn × Leverage × Ret [${years}Y]`,
             inputs: [
-              { label: `Net Margin Prom (${years}Y)`, value: formatPercent(avgNetMargin) },
-              { label: 'Asset Turnover Prom', value: formatNumber(avgAssetTurnover) + 'x' },
-              { label: 'Leverage Promedio', value: formatNumber(avgLeverage) + 'x' },
-              { label: 'Retention Promedio', value: formatPercent(avgRetention) },
+              { label: 'Net Margin Prom', value: formatPercent(avgNetMargin) },
+              { label: 'Asset Turnover', value: formatNumber(avgAssetTurnover) + 'x' },
+              { label: 'Leverage Prom', value: formatNumber(avgLeverage) + 'x' },
+              { label: 'Retention Prom', value: formatPercent(avgRetention) },
             ],
           },
+          // ROE Method 1: Avg RR × Avg ROE
           {
-            name: 'SGR Retencion Total',
-            value: sgrFullRetention,
+            name: 'ROE: Avg(RR) × Avg(ROE)',
+            value: sgrRoeMethod1,
             enabled: true,
-            category: 'classic',
-            formula: `ROE promedio (si 100% retenido) [${years}Y]`,
+            category: 'roe',
+            formula: `Promedio RR × Promedio ROE [${years}Y]`,
             inputs: [
-              { label: `ROE Promedio (${years} años)`, value: formatPercent(avgROE) },
+              { label: `Avg Retention (${years}Y)`, value: formatPercent(avgRetention) },
+              { label: `Avg ROE (${years}Y)`, value: formatPercent(avgROE) },
+              { label: 'Net Income Prom', value: formatMoney(avgNetIncome) },
+              { label: 'Equity Promedio', value: formatMoney(avgEquity) },
+            ],
+          },
+          // ROE Method 2: Avg(RR_year × ROE_year)
+          {
+            name: 'ROE: Avg(RR×ROE) año a año',
+            value: sgrRoeMethod2,
+            enabled: true,
+            category: 'roe',
+            formula: `Avg(RR_i × ROE_i) para i=1..${years}`,
+            inputs: roeTimesRetentionPerYear.map((val, i) => ({
+              label: `Año ${i + 1}: RR×ROE`,
+              value: formatPercent(val),
+            })),
+          },
+          // ROIC Method 1: Avg RR × Avg ROIC
+          {
+            name: 'ROIC: Avg(RR) × Avg(ROIC)',
+            value: sgrRoicMethod1,
+            enabled: true,
+            category: 'roic',
+            formula: `Promedio RR × Promedio ROIC [${years}Y]`,
+            inputs: [
+              { label: `Avg Retention (${years}Y)`, value: formatPercent(avgRetention) },
+              { label: `Avg ROIC (${years}Y)`, value: formatPercent(avgROIC) },
+              { label: 'NOPAT Promedio', value: formatMoney(avgNOPAT) },
+              { label: 'Invested Capital Prom', value: formatMoney(avgInvestedCapital) },
+            ],
+          },
+          // ROIC Method 2: Avg(RR_year × ROIC_year)
+          {
+            name: 'ROIC: Avg(RR×ROIC) año a año',
+            value: sgrRoicMethod2,
+            enabled: true,
+            category: 'roic',
+            formula: `Avg(RR_i × ROIC_i) para i=1..${years}`,
+            inputs: roicTimesRetentionPerYear.map((val, i) => ({
+              label: `Año ${i + 1}: RR×ROIC`,
+              value: formatPercent(val),
+            })),
+          },
+          // Full Retention ROE
+          {
+            name: 'SGR Ret. Total (ROE)',
+            value: sgrFullRetentionROE,
+            enabled: true,
+            category: 'retention',
+            formula: `ROE promedio si Payout=0% [${years}Y]`,
+            inputs: [
+              { label: `ROE Promedio (${years}Y)`, value: formatPercent(avgROE) },
               { label: 'Supuesto', value: 'Payout = 0%' },
             ],
           },
+          // Full Retention ROIC
           {
-            name: 'SGR basado en ROIC',
-            value: sgrROIC,
+            name: 'SGR Ret. Total (ROIC)',
+            value: sgrFullRetentionROIC,
             enabled: true,
-            category: 'advanced',
-            formula: `ROIC × (1 - Payout) [Promedio ${years}Y]`,
+            category: 'retention',
+            formula: `ROIC promedio si Payout=0% [${years}Y]`,
             inputs: [
               { label: `ROIC Promedio (${years}Y)`, value: formatPercent(avgROIC) },
-              { label: 'NOPAT Promedio', value: formatMoney(avgNOPAT) },
-              { label: 'Invested Capital Prom', value: formatMoney(avgInvestedCapital) },
-              { label: 'Retention Promedio', value: formatPercent(avgRetention) },
+              { label: 'Supuesto', value: 'Payout = 0%' },
             ],
           },
+          // Historical CAGR
           {
-            name: 'SGR ROIC Marginal',
-            value: sgrMarginal,
-            enabled: true,
-            category: 'advanced',
-            formula: `(ΔNOPAT / ΔIC) × Retention [${years}Y]`,
-            inputs: [
-              { label: `ROIC Marginal (${years}Y)`, value: formatPercent(marginalROIC) },
-              { label: `ΔNOPAT (${years}Y)`, value: formatMoney(deltaNOPAT) },
-              { label: `ΔInvested Capital (${years}Y)`, value: formatMoney(deltaIC) },
-              { label: 'Retention Promedio', value: formatPercent(avgRetention) },
-            ],
-          },
-          {
-            name: 'SGR Ajustada WACC',
-            value: sgrAdjusted,
-            enabled: true,
-            category: 'advanced',
-            formula: `g* = g / (1 - g/WACC) [${years}Y promedios]`,
-            inputs: [
-              { label: 'g base (ROIC×Ret) Prom', value: formatPercent(avgROIC !== null ? avgROIC * avgRetention : null) },
-              { label: 'WACC', value: formatPercent(wacc) },
-              { label: 'Factor Ajuste', value: formatNumber(avgROIC !== null ? 1 / (1 - (avgROIC * avgRetention) / wacc) : null) + 'x' },
-            ],
-          },
-          {
-            name: `CAGR Revenue (${years} años)`,
+            name: `CAGR Revenue (${years}Y)`,
             value: sgrHistorical,
             enabled: true,
-            category: 'analyst',
-            formula: `(Rev_final / Rev_inicial)^(1/${years-1}) - 1`,
+            category: 'historical',
+            formula: `(Rev_final / Rev_inicial)^(1/${years - 1}) - 1`,
             inputs: [
               { label: 'Revenue Inicial', value: formatMoney(selectedIncome[0]?.revenue) },
               { label: 'Revenue Final', value: formatMoney(selectedIncome[selectedIncome.length - 1]?.revenue) },
-              { label: 'Periodos', value: (selectedIncome.length - 1).toString() + ' años' },
+              { label: 'Períodos', value: (selectedIncome.length - 1).toString() + ' años' },
             ],
           },
         ];
@@ -470,7 +475,7 @@ export default function SustainableGrowthTab({
     };
 
     calculate();
-  }, [years, waccPercent, income, balance, cashFlow, estimates]);
+  }, [years, waccPercent, income, balance, cashFlow, estimates, cashFlowAsReported]);
 
   const toggleMethod = (index: number) => {
     setMethods(prev =>
@@ -483,26 +488,67 @@ export default function SustainableGrowthTab({
     ? activeMethods.reduce((sum, m) => sum + (m.value || 0), 0) / activeMethods.length
     : null;
 
+  // Notify parent of SGR change
+  useEffect(() => {
+    if (onSGRChange) {
+      onSGRChange(averageSGR);
+    }
+  }, [averageSGR, onSGRChange]);
+
   // Group methods by category
   const topdownMethods = methods.filter(m => m.category === 'topdown');
   const bottomupMethods = methods.filter(m => m.category === 'bottomup');
-  const classicMethods = methods.filter(m => m.category === 'classic');
-  const advancedMethods = methods.filter(m => m.category === 'advanced');
-  const analystMethods = methods.filter(m => m.category === 'analyst');
+  const roeMethods = methods.filter(m => m.category === 'roe');
+  const roicMethods = methods.filter(m => m.category === 'roic');
+  const retentionMethods = methods.filter(m => m.category === 'retention');
+  const historicalMethods = methods.filter(m => m.category === 'historical');
 
-  if (loading) return <p className="text-xl text-gray-300 py-10 text-center">Calculando SGR...</p>;
-  if (error) return <p className="text-xl text-red-400 py-10 text-center">Error: {error}</p>;
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <div className="relative">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-green-500 border-t-transparent"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-lg font-bold text-green-400">📈</span>
+          </div>
+        </div>
+        <p className="text-xl text-gray-300">Calculando tasa de crecimiento sostenible...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-900/30 border border-red-500 rounded-xl p-6 text-center">
+        <p className="text-xl text-red-400">❌ Error: {error}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-10">
-      <h3 className="text-3xl font-bold text-gray-100">
-        Sustainable Growth Rate Analysis
-      </h3>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+        <div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+            Sustainable Growth Rate
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Análisis de tasa de crecimiento sostenible para {ticker}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
+            <p className="text-xs text-green-400">Avg SGR</p>
+            <p className="text-xl font-bold text-green-400">
+              {averageSGR !== null ? (averageSGR * 100).toFixed(2) + '%' : '—'}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Inputs */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-lg font-medium text-gray-300 mb-2">Periodo historico (anos)</label>
+          <label className="block text-lg font-medium text-gray-300 mb-2">Periodo histórico (años)</label>
           <select
             value={years}
             onChange={(e) => setYears(Number(e.target.value))}
@@ -531,11 +577,11 @@ export default function SustainableGrowthTab({
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          TOP-DOWN ANALYSIS (with checkbox to include in average)
+          TOP-DOWN ANALYSIS
           ═══════════════════════════════════════════════════════════════ */}
       <div className={`bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-6 rounded-xl border ${topdownMethods[0]?.enabled ? 'border-blue-500' : 'border-gray-600 opacity-60'}`}>
         <div className="flex items-center justify-between mb-4">
-          <h4 className="text-2xl font-bold text-blue-400">Analisis Top-Down</h4>
+          <h4 className="text-2xl font-bold text-blue-400">Análisis Top-Down</h4>
           {topdownMethods[0] && (
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -549,7 +595,7 @@ export default function SustainableGrowthTab({
           )}
         </div>
         <p className="text-gray-400 mb-4">
-          Partimos desde la rentabilidad total de la empresa (ROE) y vemos cuanto puede crecer reinvirtiendo sus ganancias.
+          Partimos desde la rentabilidad total de la empresa (ROE) y vemos cuánto puede crecer reinvirtiendo sus ganancias.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div className="bg-gray-800/50 p-4 rounded-lg text-center">
@@ -566,30 +612,25 @@ export default function SustainableGrowthTab({
           </div>
           <div className="bg-gray-800/50 p-4 rounded-lg text-center">
             <p className="text-sm text-gray-400">=</p>
-            <p className="text-sm text-gray-500">SGR Clasico</p>
+            <p className="text-sm text-gray-500">SGR Clásico</p>
           </div>
           <div className="bg-blue-900/50 p-4 rounded-lg text-center border border-blue-600">
             <p className="text-sm text-blue-300">SGR Top-Down</p>
             <p className="text-3xl font-bold text-blue-400">
-              {intermediateValues.avgROE !== null
-                ? ((intermediateValues.avgROE * intermediateValues.avgRetention) * 100).toFixed(1) + '%'
+              {topdownMethods[0]?.value !== null
+                ? ((topdownMethods[0].value || 0) * 100).toFixed(1) + '%'
                 : 'N/A'}
             </p>
           </div>
         </div>
-        <p className="text-xs text-gray-500">
-          Interpretacion: La empresa puede crecer {intermediateValues.avgROE !== null
-            ? ((intermediateValues.avgROE * intermediateValues.avgRetention) * 100).toFixed(1)
-            : '?'}% anual de forma sostenible sin aumentar su deuda ni emitir acciones.
-        </p>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          BOTTOM-UP ANALYSIS (DuPont) with checkbox
+          BOTTOM-UP ANALYSIS (DuPont)
           ═══════════════════════════════════════════════════════════════ */}
       <div className={`bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border ${bottomupMethods[0]?.enabled ? 'border-green-500' : 'border-gray-600 opacity-60'}`}>
         <div className="flex items-center justify-between mb-4">
-          <h4 className="text-2xl font-bold text-green-400">Analisis Bottom-Up (DuPont Extendido)</h4>
+          <h4 className="text-2xl font-bold text-green-400">Análisis Bottom-Up (DuPont Extendido)</h4>
           {bottomupMethods[0] && (
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -603,7 +644,7 @@ export default function SustainableGrowthTab({
           )}
         </div>
         <p className="text-gray-400 mb-4">
-          Descomponemos el crecimiento en sus componentes operativos para identificar drivers y areas de mejora.
+          Descomponemos el crecimiento en sus componentes operativos para identificar drivers y áreas de mejora.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           <div className="bg-gray-800/50 p-3 rounded-lg text-center">
@@ -632,71 +673,98 @@ export default function SustainableGrowthTab({
             <p className="text-xl font-bold text-cyan-400">
               {intermediateValues.avgRetention !== null ? (intermediateValues.avgRetention * 100).toFixed(0) + '%' : 'N/A'}
             </p>
-            <p className="text-xs text-gray-500">Reinversion</p>
+            <p className="text-xs text-gray-500">Reinversión</p>
           </div>
           <div className="bg-green-900/50 p-3 rounded-lg text-center border border-green-600">
             <p className="text-xs text-green-300">= SGR DuPont</p>
             <p className="text-2xl font-bold text-green-400">
-              {intermediateValues.avgNetMargin !== null && intermediateValues.avgAssetTurnover !== null && intermediateValues.avgLeverage !== null
-                ? ((intermediateValues.avgNetMargin * intermediateValues.avgAssetTurnover * intermediateValues.avgLeverage * intermediateValues.avgRetention) * 100).toFixed(1) + '%'
+              {bottomupMethods[0]?.value !== null
+                ? ((bottomupMethods[0].value || 0) * 100).toFixed(1) + '%'
                 : 'N/A'}
             </p>
           </div>
         </div>
-        <div className="text-xs text-gray-500 space-y-1">
-          <p>• Net Margin: Cuanto beneficio queda de cada dolar de ventas</p>
-          <p>• Asset Turnover: Cuantas ventas genera cada dolar de activos</p>
-          <p>• Leverage: Cuanto de los activos esta financiado con deuda vs equity</p>
-          <p>• Retention: Porcentaje de ganancias reinvertidas (no pagadas como dividendo)</p>
-        </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          CLASSIC METHODS
+          ROE METHODS (2 variants)
           ═══════════════════════════════════════════════════════════════ */}
-      <div>
-        <h4 className="text-xl font-semibold text-gray-200 mb-4">Metodos Clasicos</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {classicMethods.map((method, index) => (
+      <div className="bg-gradient-to-r from-indigo-900/30 to-violet-900/30 p-6 rounded-xl border border-indigo-600">
+        <h4 className="text-2xl font-bold text-indigo-400 mb-4">Métodos basados en ROE</h4>
+        <p className="text-gray-400 mb-4">
+          SGR = Retention Rate × ROE. Dos variantes: usando promedios o calculando año por año.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {roeMethods.map((method) => (
             <MethodCard
               key={method.name}
               method={method}
               index={methods.indexOf(method)}
               onToggle={toggleMethod}
+              color="indigo"
             />
           ))}
         </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          ADVANCED METHODS
+          ROIC METHODS (2 variants)
           ═══════════════════════════════════════════════════════════════ */}
-      <div>
-        <h4 className="text-xl font-semibold text-gray-200 mb-4">Metodos Avanzados</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {advancedMethods.map((method, index) => (
+      <div className="bg-gradient-to-r from-amber-900/30 to-orange-900/30 p-6 rounded-xl border border-amber-600">
+        <h4 className="text-2xl font-bold text-amber-400 mb-4">Métodos basados en ROIC</h4>
+        <p className="text-gray-400 mb-4">
+          SGR = Retention Rate × ROIC. Mismas variantes que ROE pero usando ROIC (retorno sobre capital invertido).
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {roicMethods.map((method) => (
             <MethodCard
               key={method.name}
               method={method}
               index={methods.indexOf(method)}
               onToggle={toggleMethod}
+              color="amber"
             />
           ))}
         </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          HISTORICAL/ANALYST METHODS
+          FULL RETENTION METHODS
           ═══════════════════════════════════════════════════════════════ */}
-      <div>
-        <h4 className="text-xl font-semibold text-gray-200 mb-4">Crecimiento Historico</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {analystMethods.map((method, index) => (
+      <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 p-6 rounded-xl border border-purple-600">
+        <h4 className="text-2xl font-bold text-purple-400 mb-4">SGR con Retención Total (Payout = 0%)</h4>
+        <p className="text-gray-400 mb-4">
+          Crecimiento máximo teórico si la empresa reinvierte el 100% de sus ganancias.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {retentionMethods.map((method) => (
             <MethodCard
               key={method.name}
               method={method}
               index={methods.indexOf(method)}
               onToggle={toggleMethod}
+              color="purple"
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          HISTORICAL CAGR
+          ═══════════════════════════════════════════════════════════════ */}
+      <div className="bg-gradient-to-r from-cyan-900/30 to-teal-900/30 p-6 rounded-xl border border-cyan-600">
+        <h4 className="text-2xl font-bold text-cyan-400 mb-4">Crecimiento Histórico</h4>
+        <p className="text-gray-400 mb-4">
+          CAGR real de ingresos en el período analizado.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {historicalMethods.map((method) => (
+            <MethodCard
+              key={method.name}
+              method={method}
+              index={methods.indexOf(method)}
+              onToggle={toggleMethod}
+              color="cyan"
             />
           ))}
         </div>
@@ -713,7 +781,7 @@ export default function SustainableGrowthTab({
           {averageSGR !== null ? (averageSGR * 100).toFixed(2) + '%' : '—'}
         </p>
         <p className="text-xl text-blue-300 mt-4">
-          (basado en {activeMethods.length} metodos activos)
+          (basado en {activeMethods.length} métodos activos)
         </p>
 
         {/* Comparison with WACC */}
@@ -738,7 +806,7 @@ export default function SustainableGrowthTab({
       </div>
 
       <p className="text-sm text-gray-500 text-center italic">
-        Desmarca metodos para excluirlos del promedio. Cada tarjeta muestra los inputs usados en el calculo.
+        Desmarca métodos para excluirlos del promedio. Cada tarjeta muestra los inputs usados en el cálculo.
       </p>
     </div>
   );
@@ -748,13 +816,24 @@ export default function SustainableGrowthTab({
 function MethodCard({
   method,
   index,
-  onToggle
+  onToggle,
+  color = 'blue'
 }: {
   method: SGRMethod;
   index: number;
   onToggle: (index: number) => void;
+  color?: 'blue' | 'green' | 'indigo' | 'amber' | 'purple' | 'cyan';
 }) {
   const [showDetails, setShowDetails] = useState(false);
+
+  const colorClasses = {
+    blue: 'text-blue-400 border-blue-600',
+    green: 'text-green-400 border-green-600',
+    indigo: 'text-indigo-400 border-indigo-600',
+    amber: 'text-amber-400 border-amber-600',
+    purple: 'text-purple-400 border-purple-600',
+    cyan: 'text-cyan-400 border-cyan-600',
+  };
 
   return (
     <div
@@ -768,7 +847,7 @@ function MethodCard({
             type="checkbox"
             checked={method.enabled}
             onChange={() => onToggle(index)}
-            className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-600 rounded cursor-pointer"
+            className={`w-4 h-4 focus:ring-2 border-gray-600 rounded cursor-pointer`}
           />
           <h4 className="text-lg font-semibold text-gray-100">{method.name}</h4>
         </div>
@@ -780,7 +859,7 @@ function MethodCard({
         </button>
       </div>
 
-      <p className="text-4xl font-bold text-blue-400 text-center mb-2">
+      <p className={`text-4xl font-bold ${colorClasses[color].split(' ')[0]} text-center mb-2`}>
         {method.value !== null && isFinite(method.value) ? (method.value * 100).toFixed(2) + '%' : '—'}
       </p>
 
@@ -789,7 +868,7 @@ function MethodCard({
       </p>
 
       {showDetails && (
-        <div className="mt-3 pt-3 border-t border-gray-700 space-y-1">
+        <div className="mt-3 pt-3 border-t border-gray-700 space-y-1 max-h-40 overflow-y-auto">
           {method.inputs.map((input, i) => (
             <div key={i} className="flex justify-between text-xs">
               <span className="text-gray-400">{input.label}:</span>

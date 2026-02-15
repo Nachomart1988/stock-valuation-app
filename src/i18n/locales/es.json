@@ -1,0 +1,237 @@
+{
+  "common": {
+    "analyze": "Analizar",
+    "analyzing": "Analizando...",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "export": "Exportar",
+    "download": "Descargar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "reset": "Resetear",
+    "apply": "Aplicar",
+    "yes": "Sí",
+    "no": "No",
+    "or": "o",
+    "and": "y"
+  },
+  "nav": {
+    "home": "Inicio",
+    "features": "Características",
+    "market": "Mercado",
+    "pricing": "Precios",
+    "about": "Nosotros",
+    "login": "Iniciar Sesión",
+    "register": "Registrarse",
+    "logout": "Cerrar Sesión",
+    "account": "Mi Cuenta"
+  },
+  "hero": {
+    "badge": "20+ Modelos de Valuación Profesional",
+    "title": "Valuación de Acciones",
+    "titleHighlight": "Con Inputs Personalizables",
+    "description": "DCF Multi-Etapa, DDM (2-Stage, 3-Stage, H-Model), Graham, RIM Ohlson, FCFE/FCFF, Monte Carlo, NK DSGE, HJM y más.",
+    "descriptionHighlight": "Todos los inputs son editables",
+    "descriptionEnd": "para ajustar a tu tesis de inversión.",
+    "placeholder": "Ingresa un ticker (ej: AAPL, TSLA)",
+    "analyzeButton": "Analizar Gratis",
+    "noRegister": "Sin registro requerido para probar. Análisis completo en segundos."
+  },
+  "stats": {
+    "models": "Modelos de Valuación",
+    "editableInputs": "Inputs Editables",
+    "analysisTabs": "Tabs de Análisis",
+    "monteCarloSims": "Simulaciones Monte Carlo"
+  },
+  "market": {
+    "title": "Mercado en Tiempo Real",
+    "description": "Las acciones más activas del día y las últimas noticias financieras",
+    "neuralAnalysis": "Ver Análisis Neural del Mercado",
+    "topGainers": "Top Gainers",
+    "topLosers": "Top Losers",
+    "latestNews": "Últimas Noticias",
+    "noData": "No hay datos disponibles"
+  },
+  "features": {
+    "title": "Características Principales",
+    "description": "Herramientas profesionales de análisis financiero al alcance de todos",
+    "neuralEngine": {
+      "title": "Motor Neural de 12 Capas",
+      "description": "Análisis profundo que combina NLP, Monte Carlo, flujo institucional y más para recomendaciones precisas."
+    },
+    "valuations": {
+      "title": "Valuaciones Múltiples",
+      "description": "DCF, DDM, Graham, Owner Earnings, EV/EBITDA, PEG y más modelos de valuación integrados."
+    },
+    "quality": {
+      "title": "Análisis de Calidad",
+      "description": "5 dimensiones: Rentabilidad, Fortaleza Financiera, Eficiencia, Crecimiento y Moat competitivo."
+    },
+    "sentiment": {
+      "title": "Sentimiento de Noticias",
+      "description": "Análisis NLP de noticias financieras con lexicons especializados bullish/bearish."
+    },
+    "monteCarlo": {
+      "title": "Simulación Monte Carlo",
+      "description": "5000 simulaciones para estimar probabilidades y rangos de precios objetivo."
+    },
+    "technical": {
+      "title": "Análisis Técnico",
+      "description": "Pivots, soportes, resistencias, Fibonacci y patrones de precio automatizados."
+    },
+    "institutional": {
+      "title": "Flujo Institucional",
+      "description": "Seguimiento de movimientos de fondos institucionales y \"smart money\"."
+    },
+    "journal": {
+      "title": "Diario del Inversor",
+      "description": "Registra tus operaciones, calcula P&L y analiza tu rendimiento histórico."
+    },
+    "forecasts": {
+      "title": "Forecasts de Analistas",
+      "description": "Consenso de analistas de Wall Street con estimaciones de revenue y EPS."
+    }
+  },
+  "howItWorks": {
+    "title": "Cómo Funciona",
+    "description": "Tres simples pasos para obtener análisis profesionales",
+    "step1": {
+      "title": "Ingresa el Ticker",
+      "description": "Escribe el símbolo de la acción que deseas analizar (ej: AAPL, TSLA, MELI)."
+    },
+    "step2": {
+      "title": "Análisis Automático",
+      "description": "Nuestro motor neural procesa 12 capas de análisis en segundos."
+    },
+    "step3": {
+      "title": "Recomendación Final",
+      "description": "Recibe una recomendación clara con precio objetivo, riesgos y catalizadores."
+    }
+  },
+  "modules": {
+    "title": "21 Módulos de Análisis",
+    "description": "Cada módulo está diseñado para darte una perspectiva única de la empresa"
+  },
+  "pricing": {
+    "title": "Planes y Precios",
+    "description": "Elige el plan que mejor se adapte a tus necesidades",
+    "monthly": "Mensual",
+    "annual": "Anual",
+    "perMonth": "/mes",
+    "perYear": "/año",
+    "mostPopular": "Más Popular",
+    "save": "Ahorras",
+    "viewFullComparison": "Ver comparación completa de planes",
+    "free": {
+      "name": "Free",
+      "cta": "Empezar Gratis"
+    },
+    "pro": {
+      "name": "Pro",
+      "cta": "Elegir Pro"
+    },
+    "elite": {
+      "name": "Elite",
+      "cta": "Elegir Elite"
+    },
+    "features": {
+      "analysisPerDay": "análisis por día",
+      "unlimitedAnalysis": "Análisis ilimitados",
+      "basicTabs": "Pestañas básicas",
+      "allTabs": "Todas las 21+ pestañas",
+      "realTimeData": "Datos en tiempo real",
+      "neuralSummary": "Resumen Neural con IA",
+      "valuationModels": "modelos de valuación",
+      "customInputs": "Inputs personalizables",
+      "exportPdfExcel": "Exportación PDF + Excel",
+      "emailSupport": "Soporte por email",
+      "prioritySupport": "Soporte prioritario",
+      "vipSupport": "Soporte VIP (<2h)",
+      "apiAccess": "API de acceso",
+      "customReports": "Reportes personalizados",
+      "webinars": "Webinars privados",
+      "consulting": "Consultoría 1-on-1"
+    }
+  },
+  "about": {
+    "title": "Quiénes Somos",
+    "description1": "Somos un equipo de ingenieros financieros y desarrolladores de software apasionados por democratizar el acceso a herramientas de análisis profesional.",
+    "description2": "Nuestra misión es proporcionar a inversores individuales las mismas herramientas analíticas que utilizan los fondos de inversión institucionales, pero de una manera accesible y fácil de entender.",
+    "description3": "Combinamos inteligencia artificial, análisis fundamental y técnico para ofrecer recomendaciones de inversión respaldadas por datos y metodologías probadas.",
+    "mission": {
+      "title": "Misión",
+      "description": "Democratizar el análisis financiero profesional"
+    },
+    "vision": {
+      "title": "Visión",
+      "description": "Ser la plataforma #1 de análisis para retail"
+    },
+    "innovation": {
+      "title": "Innovación",
+      "description": "IA y machine learning aplicados a finanzas"
+    },
+    "trust": {
+      "title": "Confianza",
+      "description": "Transparencia en metodologías y datos"
+    }
+  },
+  "cta": {
+    "title": "Comienza a Analizar Hoy",
+    "description": "Únete a miles de inversores que ya utilizan StockAnalyzer para tomar decisiones informadas.",
+    "createAccount": "Crear Cuenta Gratis",
+    "tryWithoutRegister": "Probar Sin Registro"
+  },
+  "footer": {
+    "company": "Compañía",
+    "aboutUs": "Nosotros",
+    "blog": "Blog",
+    "careers": "Careers",
+    "press": "Prensa",
+    "product": "Producto",
+    "features": "Características",
+    "pricing": "Precios",
+    "api": "API",
+    "integrations": "Integraciones",
+    "resources": "Recursos",
+    "documentation": "Documentación",
+    "guides": "Guías",
+    "faq": "FAQ",
+    "support": "Soporte",
+    "legal": "Legal",
+    "privacy": "Privacidad",
+    "terms": "Términos",
+    "cookies": "Cookies",
+    "licenses": "Licencias",
+    "copyright": "Todos los derechos reservados.",
+    "disclaimer": "Disclaimer: La información proporcionada por StockAnalyzer es únicamente con fines educativos e informativos. No constituye asesoramiento financiero, de inversión o de cualquier otro tipo. Siempre consulta con un profesional financiero antes de tomar decisiones de inversión."
+  },
+  "tabs": {
+    "inicio": "Inicio",
+    "general": "General",
+    "calculos": "Cálculos",
+    "beta": "Beta",
+    "wacc": "WACC",
+    "cagr": "CAGR",
+    "sgr": "SGR",
+    "valuaciones": "Valuaciones",
+    "keyMetrics": "Key Metrics",
+    "dupont": "DuPont",
+    "forecasts": "Forecasts",
+    "revenueForecast": "Revenue Forecast",
+    "competidores": "Competidores",
+    "industry": "Industry",
+    "holders": "Holders",
+    "pivots": "Pivots",
+    "noticias": "Noticias",
+    "segmentation": "Segmentation",
+    "analisisFinal": "Análisis Final",
+    "diarioInversor": "Diario Inversor",
+    "resumenMaestro": "Resumen Maestro"
+  }
+}

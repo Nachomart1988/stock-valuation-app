@@ -289,9 +289,25 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
 
   return (
     <div className="space-y-10">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+        <div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+            Revenue Forecast
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Proyección de ingresos con modelo Holt-Winters optimizado</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right bg-gradient-to-r from-emerald-900/40 to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+            <p className="text-xs text-emerald-400">Años Proyectados</p>
+            <p className="text-xl font-bold text-emerald-400">{forecastYears}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Info de optimización */}
       <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <h3 className="text-xl font-bold text-blue-400 mb-4">Parámetros Optimizados (Holt-Winters)</h3>
+        <h3 className="text-xl font-bold text-emerald-400 mb-4">Parámetros Optimizados (Holt-Winters)</h3>
         {isOptimizing ? (
           <p className="text-gray-400">Optimizando parámetros...</p>
         ) : optimizedParams ? (

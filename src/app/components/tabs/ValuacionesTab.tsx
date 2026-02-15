@@ -1,7 +1,187 @@
 // src/app/components/tabs/ValuacionesTab.tsx
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+
+// ────────────────────────────────────────────────
+// HELPER FUNCTIONS FOR MULTI-STAGE VALUATION MODELS
+// These are pure functions, defined outside the component to avoid re-creation
+// ────────────────────────────────────────────────
+
+// Calculate Present Value of a Growing Annuity (works for any g, even g > k)
+// Formula: V = Σ(t=1 to n)[CF₀×(1+g)^t / (1+k)^t]
+// Using geometric series: CF₀ × (1+g)/(k-g) × [1 - ((1+g)/(1+k))^n]
+// Special case when k ≈ g: CF₀ × n × (1+g)/(1+k)
+function calcPVGrowingAnnuity(cf0: number, g: number, k: number, periods: number): number {
+  if (Math.abs(k - g) < 0.0001) {
+    // When k ≈ g, use simplified formula
+    return cf0 * periods * (1 + g) / (1 + k);
+  }
+  // Standard formula
+  const growthFactor = (1 + g) / (1 + k);
+  return cf0 * (1 + g) / (k - g) * (1 - Math.pow(growthFactor, periods));
+}
+
+// Calculate Terminal Value PV using Gordon Growth Model (requires k > gTerminal)
+function calcTerminalValuePV(cfAtN: number, gTerminal: number, k: number, periods: number): number {
+  if (k <= gTerminal) return 0; // Invalid - would be infinite
+  // Safe denominator clamp to avoid extreme values when k is very close to gTerminal
+  const safeDenom = Math.max(k - gTerminal, 0.005); // Minimum 0.5% spread
+  const terminalValue = cfAtN * (1 + gTerminal) / safeDenom;
+  return terminalValue / Math.pow(1 + k, periods);
+}
+
+// Collapsible Section Component
+function CollapsibleSection({
+  title,
+  icon,
+  defaultOpen = false,
+  children,
+  badge,
+}: {
+  title: string;
+  icon?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+  badge?: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="border border-gray-700 rounded-xl overflow-hidden bg-gray-800/50 backdrop-blur">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-5 py-4 flex items-center justify-between bg-gradient-to-r from-gray-800 to-gray-900 hover:from-gray-700 hover:to-gray-800 transition-all"
+      >
+        <div className="flex items-center gap-3">
+          {icon && <span className="text-xl">{icon}</span>}
+          <span className="text-lg font-semibold text-gray-100">{title}</span>
+          {badge}
+        </div>
+        <svg
+          className={`w-5 h-5 text-gray-400 transform transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div
+        className={`transition-all duration-300 ease-in-out ${
+          isOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
+        }`}
+      >
+        <div className="p-5 bg-gray-900/30">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// Model Card Component with explanation for null values AND collapsible inputs editor
+function ModelCard({
+  name,
+  value,
+  enabled,
+  description,
+  onToggle,
+  nullReason,
+  highlight = false,
+  inputs,
+  onInputChange,
+}: {
+  name: string;
+  value: number | null;
+  enabled: boolean;
+  description?: string;
+  onToggle: () => void;
+  nullReason?: string;
+  highlight?: boolean;
+  inputs?: { label: string; key: string; value: number; step?: number; min?: number; max?: number }[];
+  onInputChange?: (key: string, value: number) => void;
+}) {
+  const [showInputs, setShowInputs] = useState(false);
+  const isValidValue = value !== null && value > 0 && isFinite(value);
+
+  return (
+    <div
+      className={`relative p-5 rounded-2xl border-2 transition-all duration-200 ${
+        enabled
+          ? highlight
+            ? 'bg-gradient-to-br from-blue-900/40 to-purple-900/40 border-blue-500 shadow-lg shadow-blue-500/20'
+            : 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-600 hover:border-gray-500'
+          : 'bg-gray-900/50 border-gray-800 opacity-60'
+      }`}
+    >
+      {/* Toggle checkbox */}
+      <div className="absolute top-3 right-3 flex items-center gap-2">
+        {inputs && inputs.length > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowInputs(!showInputs); }}
+            className={`p-1 rounded transition-all ${showInputs ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+            title="Editar inputs"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        )}
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={onToggle}
+          className="w-5 h-5 text-blue-600 focus:ring-blue-500 border-gray-600 rounded cursor-pointer accent-blue-500"
+        />
+      </div>
+
+      {/* Name */}
+      <h4 className={`text-sm font-medium mb-3 pr-16 ${enabled ? 'text-gray-200' : 'text-gray-500'}`}>
+        {name}
+      </h4>
+
+      {/* Value */}
+      <p className={`text-3xl font-bold ${enabled ? isValidValue ? 'text-blue-400' : 'text-gray-600' : 'text-gray-700'}`}>
+        {isValidValue ? `$${value.toFixed(2)}` : '—'}
+      </p>
+
+      {/* Null reason or description */}
+      {!isValidValue && nullReason && enabled && (
+        <p className="text-xs text-amber-400 mt-2 bg-amber-900/30 px-2 py-1 rounded-lg">
+          ⚠️ {nullReason}
+        </p>
+      )}
+      {isValidValue && description && !showInputs && (
+        <p className="text-xs text-gray-500 mt-2 truncate" title={description}>
+          {description}
+        </p>
+      )}
+
+      {/* Collapsible Inputs Editor */}
+      {showInputs && inputs && inputs.length > 0 && onInputChange && (
+        <div className="mt-3 pt-3 border-t border-gray-700 space-y-2">
+          <p className="text-xs text-blue-400 font-semibold mb-2">📝 Ajustar Inputs:</p>
+          {inputs.map((input) => (
+            <div key={input.key} className="flex items-center gap-2">
+              <label className="text-xs text-gray-400 flex-1 truncate" title={input.label}>
+                {input.label}
+              </label>
+              <input
+                type="number"
+                step={input.step || 0.01}
+                min={input.min}
+                max={input.max}
+                value={input.value}
+                onChange={(e) => onInputChange(input.key, parseFloat(e.target.value) || 0)}
+                className="w-20 px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded text-gray-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface ValuationMethod {
   name: string;
@@ -26,7 +206,12 @@ interface Props {
   profile: any;
   quote: any;
   dcfCustom?: any; // Para obtener Advance DCF equity value per share
+  sustainableGrowthRate?: number | null; // SGR promedio del SustainableGrowthTab
+  avgCAPMFromBeta?: number | null; // Average CAPM from BetaTab - THIS IS THE Ks TO USE!
   onAverageValChange?: (val: number | null) => void;
+  onAdvanceValueNetChange?: (data: any) => void; // Callback for ResumenTab
+  keyMetricsTTM?: any; // TTM Key Metrics from FMP (includes grahamNumber, grahamNetNet, etc.)
+  ownerEarnings?: any[]; // Owner Earnings (Buffett method) from FMP
 }
 
 export default function ValuacionesTab({
@@ -40,7 +225,12 @@ export default function ValuacionesTab({
   profile,
   quote,
   dcfCustom,
+  sustainableGrowthRate,
+  avgCAPMFromBeta,
   onAverageValChange,
+  onAdvanceValueNetChange,
+  keyMetricsTTM,
+  ownerEarnings,
 }: Props) {
   // ────────────────────────────────────────────────
   // Estados para parámetros del modelo
@@ -54,6 +244,31 @@ export default function ValuacionesTab({
   const [discountRate, setDiscountRate] = useState<number | null>(null); // WACC en %, null = auto-calculate
   const [exitMultiple, setExitMultiple] = useState<number>(12);
   const [projectedGrowthRate, setProjectedGrowthRate] = useState<number>(5);
+
+  // Estados adicionales para inputs editables de modelos de valuación
+  const [userD0, setUserD0] = useState<number | null>(null); // Override for D0 (dividend)
+  const [userKs, setUserKs] = useState<number | null>(null); // Override for Ks (cost of equity) as decimal
+  const [userGs, setUserGs] = useState<number | null>(null); // Override for gs (short-term growth) as decimal
+  const [userEps, setUserEps] = useState<number | null>(null); // Override for EPS
+  const [userBookValue, setUserBookValue] = useState<number | null>(null); // Override for Book Value
+  const [userPeerPE, setUserPeerPE] = useState<number | null>(null); // Override for Peer P/E
+  const [userNetDebt, setUserNetDebt] = useState<number | null>(null); // Override for Net Debt (in billions)
+
+  // Estados para variables calculadas (usadas en getModelInputs)
+  const [calcD0, setCalcD0] = useState<number>(0);
+  const [calcKs, setCalcKs] = useState<number>(0.10);
+  const [calcGs, setCalcGs] = useState<number>(0.08);
+  const [calcFcfo, setCalcFcfo] = useState<number>(0);
+  const [calcEpsTTM, setCalcEpsTTM] = useState<number>(0);
+  const [calcBookValue, setCalcBookValue] = useState<number>(0);
+  const [calcRoe, setCalcRoe] = useState<number>(0);
+  const [calcFcfe, setCalcFcfe] = useState<number>(0);
+  const [calcFcff, setCalcFcff] = useState<number>(0);
+  const [calcNetDebt, setCalcNetDebt] = useState<number>(0);
+  const [calcNetIncome, setCalcNetIncome] = useState<number>(0);
+  const [calcDA, setCalcDA] = useState<number>(0);
+  const [calcCapex, setCalcCapex] = useState<number>(0);
+  const [calcAvgPeerPE, setCalcAvgPeerPE] = useState<number>(20);
 
   // Calculate Share Price TX based on current price and CAGR
   const currentPrice = quote?.price || 0;
@@ -333,6 +548,21 @@ export default function ValuacionesTab({
   const [loadingPeers, setLoadingPeers] = useState(true);
 
   // ────────────────────────────────────────────────
+  // AdvanceValue Net (Neural Ensemble)
+  // Connects to FastAPI backend running PyTorch model
+  // ────────────────────────────────────────────────
+  const [advanceValueNet, setAdvanceValueNet] = useState<{
+    fair_value: number;
+    confidence_interval: [number, number];
+    signal: string;
+    upside_pct?: number;
+    experts_used?: number;
+    base_ensemble?: number;
+  } | null>(null);
+  const [advanceValueNetLoading, setAdvanceValueNetLoading] = useState(false);
+  const [advanceValueNetError, setAdvanceValueNetError] = useState<string | null>(null);
+
+  // ────────────────────────────────────────────────
   // Fetch P/E de competidores para EPS*Benchmark
   // ────────────────────────────────────────────────
   useEffect(() => {
@@ -475,6 +705,55 @@ export default function ValuacionesTab({
   }, [income, balance, cashFlow, quote, profile, effectiveDiscountRate, exitMultiple, projectedGrowthRate]);
 
   // ────────────────────────────────────────────────
+  // Monte Carlo DCF Simulation
+  // Runs 2000 simulations with random noise on growth and WACC
+  // ────────────────────────────────────────────────
+  const monteCarloDCF = useMemo(() => {
+    if (!dcfCalculation || !dcfCalculation.valuePerShare) return null;
+
+    const simulations = 2000;
+    const results: number[] = [];
+    const baseValuePerShare = dcfCalculation.valuePerShare;
+
+    // Get base parameters
+    const baseGrowth = projectedGrowthRate / 100;
+    const baseWacc = effectiveDiscountRate / 100;
+    const terminalGrowth = glong;
+
+    for (let i = 0; i < simulations; i++) {
+      // Add random noise: ±4% on growth, ±1.5% on WACC
+      const gNoise = (Math.random() - 0.5) * 0.04;
+      const waccNoise = (Math.random() - 0.5) * 0.015;
+
+      const simulatedG = Math.max(0.01, baseGrowth + gNoise);
+      const simulatedWacc = Math.max(0.06, baseWacc + waccNoise);
+      const simulatedTerminalG = Math.max(0.01, Math.min(terminalGrowth + (Math.random() - 0.5) * 0.02, simulatedWacc - 0.01));
+
+      // Simple DCF adjustment based on parameter changes
+      // Approximate impact: value scales inversely with (WACC - g)
+      const baseDenom = Math.max(baseWacc - terminalGrowth, 0.01);
+      const simDenom = Math.max(simulatedWacc - simulatedTerminalG, 0.01);
+      const growthAdjustment = Math.pow((1 + simulatedG) / (1 + baseGrowth), 5);
+      const waccAdjustment = baseDenom / simDenom;
+
+      const simulatedValue = baseValuePerShare * growthAdjustment * waccAdjustment;
+      if (simulatedValue > 0 && isFinite(simulatedValue) && simulatedValue < baseValuePerShare * 5) {
+        results.push(simulatedValue);
+      }
+    }
+
+    if (results.length < 100) return null; // Not enough valid simulations
+
+    results.sort((a, b) => a - b);
+    const mean = results.reduce((a, b) => a + b, 0) / results.length;
+    const p10 = results[Math.floor(results.length * 0.1)];
+    const p50 = results[Math.floor(results.length * 0.5)];
+    const p90 = results[Math.floor(results.length * 0.9)];
+
+    return { mean, p10, p50, p90, simCount: results.length };
+  }, [dcfCalculation, projectedGrowthRate, effectiveDiscountRate, glong]);
+
+  // ────────────────────────────────────────────────
   // Cálculo principal de valuaciones
   // ────────────────────────────────────────────────
   useEffect(() => {
@@ -549,8 +828,47 @@ export default function ValuacionesTab({
           d0 = dividendsPaid / sharesForDividend;
           console.log(`[Valuaciones] Fallback D0: $${d0.toFixed(4)} (Total: $${(dividendsPaid / 1e9).toFixed(2)}B / ${(sharesForDividend / 1e9).toFixed(2)}B shares)`);
         }
-        const gs = 0.103; // Sustainable growth (placeholder)
-        const ks = 0.0544; // Cost of equity (placeholder)
+        // Use SGR from SustainableGrowthTab if available, otherwise calculate fallback
+        // NOTE: gs CAN be > ks in multi-stage models because it's only for a finite period (n years)
+        // Only the terminal growth rate (glong) must be < ks for the perpetuity formula
+        const gs = sustainableGrowthRate !== null && sustainableGrowthRate !== undefined
+          ? sustainableGrowthRate
+          : 0.08; // Fallback 8% if SGR not calculated yet
+
+        // Cost of equity (Ks) from CAPM
+        // PRIORITY: Use avgCAPMFromBeta which is the AVERAGE CAPM calculated in BetaTab
+        // This includes: Official Beta (FMP), User Beta, and Calculated Beta (5Y vs SPY)
+        // avgCAPMFromBeta is in percentage format (e.g., 10.5 = 10.5%), convert to decimal
+
+        // Fallback chain:
+        // 1. avgCAPMFromBeta (best - average of all CAPM sources from BetaTab)
+        // 2. dcfCustom.costOfEquity (FMP API value)
+        // 3. Manual CAPM calculation
+        const riskFreeRateForKs = dcfCustom?.riskFreeRate ? dcfCustom.riskFreeRate / 100 : 0.04;
+        const marketRiskPremiumFromApi = dcfCustom?.marketRiskPremium ? dcfCustom.marketRiskPremium / 100 : 0.055;
+        const betaForKs = profile?.beta || 1;
+
+        let ks: number;
+        let ksSource: string;
+
+        if (avgCAPMFromBeta !== null && avgCAPMFromBeta !== undefined && avgCAPMFromBeta > 0) {
+          // Use the average CAPM from BetaTab (already in percentage, convert to decimal)
+          ks = avgCAPMFromBeta / 100;
+          ksSource = 'BetaTab Avg CAPM';
+        } else if (dcfCustom?.costOfEquity) {
+          // Fallback to FMP API costOfEquity
+          ks = dcfCustom.costOfEquity / 100;
+          ksSource = 'FMP API';
+        } else {
+          // Final fallback: manual CAPM calculation
+          ks = riskFreeRateForKs + betaForKs * marketRiskPremiumFromApi;
+          ksSource = 'manual CAPM';
+        }
+
+        console.log('[Valuaciones] Ks (Cost of Equity):', (ks * 100).toFixed(2) + '%', 'from', ksSource);
+        console.log('[Valuaciones] gs (SGR):', (gs * 100).toFixed(2) + '%', 'sustainableGrowthRate:', sustainableGrowthRate);
+        console.log('[Valuaciones] glong (terminal):', (glong * 100).toFixed(2) + '%');
+        console.log('[Valuaciones] Ks > glong (required for terminal)?', ks > glong, `(${(ks * 100).toFixed(2)}% vs ${(glong * 100).toFixed(2)}%)`);
         const beta = profile.beta || 1;
         const fcfo = (lastCashFlow.freeCashFlow || 0) / (lastIncome.weightedAverageShsOutDil || 1);
         const bookValue = (lastBalance.totalStockholdersEquity || 0) / (lastIncome.weightedAverageShsOutDil || 1);
@@ -693,21 +1011,31 @@ export default function ValuacionesTab({
         // HJM valuation: FCF stream discounted with HJM-derived rates
         // Use the same FCF growth rate as DCF model for consistency
         const hjmGrowthRate = projectedGrowthRate / 100;
+
+        // Use fcfo if positive, otherwise try to use a normalized FCF based on earnings
+        const hjmBaseFCF = fcfo > 0
+          ? fcfo
+          : epsTTM > 0
+            ? epsTTM * 0.8 // Approximate FCF as 80% of EPS if direct FCF is negative
+            : bookValue * 0.05; // Or 5% of book value as last resort
+
         let hjmPV = 0;
-        for (let t = 1; t <= n; t++) {
-          // Time-varying forward rate with equity premium
-          const fRate = f0 + sigma * sigma * (1 - Math.exp(-a * t)) / a + equityRiskPremium;
-          const adjustedRate = Math.max(fRate, 0.05); // Minimum 5% discount rate for equities
-          const discount = 1 / Math.pow(1 + adjustedRate, t);
-          const projectedFCF = fcfo * Math.pow(1 + hjmGrowthRate, t);
-          hjmPV += projectedFCF * discount;
+        if (hjmBaseFCF > 0) {
+          for (let t = 1; t <= n; t++) {
+            // Time-varying forward rate with equity premium
+            const fRate = f0 + sigma * sigma * (1 - Math.exp(-a * t)) / a + equityRiskPremium;
+            const adjustedRate = Math.max(fRate, 0.05); // Minimum 5% discount rate for equities
+            const discount = 1 / Math.pow(1 + adjustedRate, t);
+            const projectedFCF = hjmBaseFCF * Math.pow(1 + hjmGrowthRate, t);
+            hjmPV += projectedFCF * discount;
+          }
         }
 
         // Terminal value with HJM discount
         // Use Gordon Growth with HJM-derived discount rate
         const terminalDenom = Math.max(effectiveHjmDiscountRate - glong, 0.02);
-        const hjmTerminalFCF = fcfo * Math.pow(1 + hjmGrowthRate, n) * (1 + glong);
-        const hjmTerminalValue = hjmTerminalFCF / terminalDenom;
+        const hjmTerminalFCF = hjmBaseFCF * Math.pow(1 + hjmGrowthRate, n) * (1 + glong);
+        const hjmTerminalValue = hjmBaseFCF > 0 ? hjmTerminalFCF / terminalDenom : 0;
 
         // Discount terminal value back to present
         const hjmPVTerminal = hjmTerminalValue / Math.pow(1 + effectiveHjmDiscountRate, n);
@@ -731,15 +1059,24 @@ export default function ValuacionesTab({
 
         // FCFE aggregate
         const fcfeAggregate = netIncome + dna - capex - deltaWC + netBorrowing;
-        const fcfePerShare = fcfeAggregate / sharesOutstanding;
+        const fcfePerShareRaw = fcfeAggregate / sharesOutstanding;
+
+        // Use FCFE if positive, otherwise use a normalized estimate
+        const fcfePerShare = fcfePerShareRaw > 0
+          ? fcfePerShareRaw
+          : epsTTM > 0
+            ? epsTTM * 0.7 // 70% of EPS as approximation
+            : (netIncome / sharesOutstanding) * 0.5; // Or 50% of earnings per share
 
         // FCFE 2-Stage: Gordon Growth on FCFE per share
         const fcfeGrowth1 = projectedGrowthRate / 100; // High growth period
-        const re = effectiveDiscountRate / 100; // Cost of equity
+        // BUG FIX: FCFE must use Cost of Equity (ks), NOT WACC
+        // FCFE is equity cash flow, so discount with equity rate
+        const re = ks; // Cost of equity from CAPM (was incorrectly using WACC)
 
         // 2-Stage FCFE: Explicit forecast + Terminal
         let fcfe2StageValue = 0;
-        let lastFCFE = fcfePerShare;
+        let lastFCFE = Math.max(fcfePerShare, 0.01); // Ensure positive base
         for (let t = 1; t <= n; t++) {
           const projFCFE = lastFCFE * (1 + fcfeGrowth1);
           const discountedFCFE = projFCFE / Math.pow(1 + re, t);
@@ -753,7 +1090,7 @@ export default function ValuacionesTab({
 
         // 3-Stage FCFE (high growth -> transition -> stable)
         let fcfe3StageValue = 0;
-        lastFCFE = fcfePerShare;
+        lastFCFE = Math.max(fcfePerShare, 0.01); // Ensure positive base
         const transitionYears = h;
         // Phase 1: High growth
         for (let t = 1; t <= n; t++) {
@@ -791,9 +1128,17 @@ export default function ValuacionesTab({
         const wacc = effectiveDiscountRate / 100;
         const netDebt = currentTotalDebt - (lastBalance.cashAndCashEquivalents || 0);
 
+        // Use FCFF if positive, otherwise try alternative calculation
+        // Some companies have temporary negative FCFF, use normalized value
+        const fcffBase = fcffAggregate > 0
+          ? fcffAggregate
+          : nopat > 0
+            ? nopat * 0.7 // Use 70% of NOPAT as approximation
+            : (lastIncome.netIncome || 0) * 0.5; // Or 50% of net income
+
         // 2-Stage FCFF: Explicit forecast + Terminal
         let fcff2StageEV = 0;
-        let lastFCFF = fcffAggregate;
+        let lastFCFF = fcffBase;
         for (let t = 1; t <= n; t++) {
           const projFCFF = lastFCFF * (1 + fcfeGrowth1);
           const discountedFCFF = projFCFF / Math.pow(1 + wacc, t);
@@ -810,7 +1155,7 @@ export default function ValuacionesTab({
 
         // 3-Stage FCFF
         let fcff3StageEV = 0;
-        lastFCFF = fcffAggregate;
+        lastFCFF = fcffBase;
         // Phase 1: High growth
         for (let t = 1; t <= n; t++) {
           const projFCFF = lastFCFF * (1 + fcfeGrowth1);
@@ -842,36 +1187,104 @@ export default function ValuacionesTab({
         // ────────────────────────────────────────────────
         // Métodos tradicionales (existentes)
         // ────────────────────────────────────────────────
+
+        // Safe calculation helper - ONLY for terminal value (perpetuity formula requires ks > glong)
+        const safeKsMinusGlong = Math.max(ks - glong, 0.01);
+
+        // Use positive FCF base for traditional models
+        const fcfoPositive = fcfo > 0 ? fcfo : epsTTM > 0 ? epsTTM * 0.8 : 0;
+
+        // ────────────────────────────────────────────────
+        // MULTI-STAGE VALUATION MODELS
+        // Stage 1: High growth (gs) for n years - gs CAN be > ks (finite period)
+        // Stage 2: Transition period (for 3-stage models) over h years
+        // Stage 3/Terminal: Perpetuity at glong - REQUIRES ks > glong
+        // ────────────────────────────────────────────────
+
         const calculatedMethods: ValuationMethod[] = [
           {
             name: '2-Stage DDM',
-            value: d0 * (1 + gs) / (ks - gs) * (1 - Math.pow(1 + gs, n) / Math.pow(1 + ks, n)) + sharePriceT5 / Math.pow(1 + ks, n),
+            value: (() => {
+              if (d0 <= 0 || ks <= glong) return null;
+              // Stage 1: PV of dividends growing at gs for n years
+              const stage1PV = calcPVGrowingAnnuity(d0, gs, ks, n);
+              // Dividend at end of stage 1
+              const dN = d0 * Math.pow(1 + gs, n);
+              // Stage 2: Terminal value (perpetuity at glong)
+              const stage2PV = calcTerminalValuePV(dN, glong, ks, n);
+              const result = stage1PV + stage2PV;
+              return result > 0 && isFinite(result) ? result : null;
+            })(),
             enabled: true,
-            description: 'Dividend Discount Model - 2 etapas',
+            description: `DDM 2-Stage (D0=$${d0.toFixed(2)}, g=${(gs * 100).toFixed(1)}%, glong=${(glong * 100).toFixed(1)}%, Ks=${(ks * 100).toFixed(1)}%)`,
           },
           {
             name: '3-Stage DDM',
-            value: d0 * (1 - Math.pow(1 + gs, n) / Math.pow(1 + ks, n)) / (ks - gs) + d0 * Math.pow(1 + gs, n) * (1 + glong) / (ks - glong),
+            value: (() => {
+              if (d0 <= 0 || ks <= glong) return null;
+              // Stage 1: High growth (gs) for n years
+              const stage1PV = calcPVGrowingAnnuity(d0, gs, ks, n);
+              // Stage 2: Transition - linear decline from gs to glong over h years
+              let stage2PV = 0;
+              let lastD = d0 * Math.pow(1 + gs, n);
+              for (let t = 1; t <= h; t++) {
+                const transitionG = gs - (gs - glong) * (t / h);
+                lastD = lastD * (1 + transitionG);
+                stage2PV += lastD / Math.pow(1 + ks, n + t);
+              }
+              // Stage 3: Terminal value at glong
+              const stage3PV = calcTerminalValuePV(lastD, glong, ks, n + h);
+              const result = stage1PV + stage2PV + stage3PV;
+              return result > 0 && isFinite(result) ? result : null;
+            })(),
             enabled: true,
-            description: 'Dividend Discount Model - 3 etapas',
+            description: `DDM 3-Stage (g=${(gs * 100).toFixed(1)}%→${(glong * 100).toFixed(1)}%, H=${h}y transition)`,
           },
           {
             name: 'H Model',
-            value: (d0 * (1 + glong) + d0 * (gs - glong) * h) / (ks - glong),
+            value: d0 > 0 && ks > glong
+              ? (d0 * (1 + glong) + d0 * h / 2 * (gs - glong)) / safeKsMinusGlong
+              : null,
             enabled: true,
-            description: 'H-Model para crecimiento decreciente',
+            description: `H-Model (g=${(gs * 100).toFixed(1)}%→${(glong * 100).toFixed(1)}%, H=${h}y)`,
           },
           {
             name: '2-Stage FCF',
-            value: fcfo * (1 - Math.pow(1 + gs, n) / Math.pow(1 + ks, n)) / (ks - gs) + sharePriceT5 / Math.pow(1 + ks, n),
+            value: (() => {
+              if (fcfoPositive <= 0 || ks <= glong) return null;
+              // Stage 1: PV of FCF growing at gs for n years
+              const stage1PV = calcPVGrowingAnnuity(fcfoPositive, gs, ks, n);
+              // FCF at end of stage 1
+              const fcfN = fcfoPositive * Math.pow(1 + gs, n);
+              // Stage 2: Terminal value (perpetuity at glong)
+              const stage2PV = calcTerminalValuePV(fcfN, glong, ks, n);
+              const result = stage1PV + stage2PV;
+              return result > 0 && isFinite(result) ? result : null;
+            })(),
             enabled: true,
-            description: 'Free Cash Flow - 2 etapas',
+            description: `FCF 2-Stage (FCF=$${fcfoPositive.toFixed(2)}, g=${(gs * 100).toFixed(1)}%, glong=${(glong * 100).toFixed(1)}%, Ks=${(ks * 100).toFixed(1)}%)`,
           },
           {
-            name: '3-stage FCF',
-            value: fcfo * (1 - Math.pow(1 + gs, n)) / (ks - gs) + fcfo * h * (gs - glong) / ((ks - glong) * Math.pow(1 + ks, n)) + sharePriceT5 / Math.pow(1 + ks, 2 * n),
+            name: '3-Stage FCF',
+            value: (() => {
+              if (fcfoPositive <= 0 || ks <= glong) return null;
+              // Stage 1: High growth (gs) for n years
+              const stage1PV = calcPVGrowingAnnuity(fcfoPositive, gs, ks, n);
+              // Stage 2: Transition - linear decline from gs to glong over h years
+              let stage2PV = 0;
+              let lastFCF = fcfoPositive * Math.pow(1 + gs, n);
+              for (let t = 1; t <= h; t++) {
+                const transitionG = gs - (gs - glong) * (t / h);
+                lastFCF = lastFCF * (1 + transitionG);
+                stage2PV += lastFCF / Math.pow(1 + ks, n + t);
+              }
+              // Stage 3: Terminal value at glong
+              const stage3PV = calcTerminalValuePV(lastFCF, glong, ks, n + h);
+              const result = stage1PV + stage2PV + stage3PV;
+              return result > 0 && isFinite(result) ? result : null;
+            })(),
             enabled: true,
-            description: 'Free Cash Flow - 3 etapas',
+            description: `FCF 3-Stage (g=${(gs * 100).toFixed(1)}%→${(glong * 100).toFixed(1)}%, H=${h}y transition)`,
           },
           {
             name: 'Mean Target',
@@ -963,10 +1376,82 @@ export default function ValuacionesTab({
             enabled: true,
             description: 'Equity Value Per Share from FMP Custom DCF',
           },
+          // ────────────────────────────────────────────────
+          // Monte Carlo DCF (Stochastic Simulation)
+          // ────────────────────────────────────────────────
+          {
+            name: 'Monte Carlo DCF',
+            value: monteCarloDCF?.mean && monteCarloDCF.mean > 0 && isFinite(monteCarloDCF.mean)
+              ? monteCarloDCF.mean
+              : null,
+            enabled: true,
+            description: monteCarloDCF
+              ? `${monteCarloDCF.simCount} sims → P10: $${monteCarloDCF.p10.toFixed(2)} | P50: $${monteCarloDCF.p50.toFixed(2)} | P90: $${monteCarloDCF.p90.toFixed(2)}`
+              : 'Monte Carlo simulation - requires DCF base',
+          },
+          // ────────────────────────────────────────────────
+          // FMP Key Metrics Based Valuations
+          // ────────────────────────────────────────────────
+          {
+            name: 'Graham Number (API)',
+            value: keyMetricsTTM?.grahamNumber && keyMetricsTTM.grahamNumber > 0 && isFinite(keyMetricsTTM.grahamNumber)
+              ? keyMetricsTTM.grahamNumber
+              : null,
+            enabled: true,
+            description: 'Graham Number from FMP: sqrt(22.5 × EPS × BVPS)',
+          },
+          {
+            name: 'Graham Net-Net (API)',
+            value: keyMetricsTTM?.grahamNetNet && keyMetricsTTM.grahamNetNet > 0 && isFinite(keyMetricsTTM.grahamNetNet)
+              ? keyMetricsTTM.grahamNetNet
+              : null,
+            enabled: true,
+            description: 'Net-Net Working Capital: (Current Assets - Total Liabilities) / Shares',
+          },
+          // ────────────────────────────────────────────────
+          // Owner Earnings (Buffett Method)
+          // ────────────────────────────────────────────────
+          {
+            name: 'Owner Earnings (Buffett)',
+            value: ownerEarnings && ownerEarnings.length > 0 && ownerEarnings[0]?.ownersEarningsPerShare > 0
+              ? (() => {
+                  // Gordon Growth Model using Owner Earnings
+                  const oePS = ownerEarnings[0].ownersEarningsPerShare;
+                  const discRate = ks > 0 ? ks : 0.10;
+                  const growthRate = glong;
+                  if (discRate > growthRate) {
+                    return (oePS * (1 + growthRate)) / (discRate - growthRate);
+                  }
+                  return null;
+                })()
+              : null,
+            enabled: true,
+            description: ownerEarnings && ownerEarnings.length > 0
+              ? `Owner Earnings GGM (OE/Share=$${ownerEarnings[0]?.ownersEarningsPerShare?.toFixed(2) || 0})`
+              : 'Owner Earnings (Buffett method) - data not available',
+          },
+          // NOTE: AdvanceValue Net is rendered separately to avoid infinite loop
         ];
+
+        // Update calculated state variables for getModelInputs
+        setCalcD0(d0);
+        setCalcKs(ks);
+        setCalcGs(gs);
+        setCalcFcfo(fcfo);
+        setCalcEpsTTM(epsTTM);
+        setCalcBookValue(bookValue);
+        setCalcRoe(roe);
+        setCalcFcfe(fcfePerShare);
+        setCalcFcff(fcffBase / sharesOutstanding);
+        setCalcNetDebt(netDebt);
+        setCalcNetIncome(netIncome / sharesOutstanding);
+        setCalcDA(dna / sharesOutstanding);
+        setCalcCapex(capex / sharesOutstanding);
+        setCalcAvgPeerPE(avgPeerPE);
 
         setMethods(calculatedMethods);
       } catch (err: any) {
+        console.error('[ValuacionesTab] Error:', err);
         setError(err.message || 'Error al calcular valuaciones');
       } finally {
         setLoading(false);
@@ -983,6 +1468,13 @@ export default function ValuacionesTab({
     effectivePhiPi, effectivePhiY, effectiveBetaDSGE, effectiveKappa, // DSGE params
     effectiveHjmSigma, effectiveHjmMeanReversion, // HJM params
     peerPE, dcfCalculation, dcfCustom, dividends, cashFlowAsReported, // Include dividend sources
+    sustainableGrowthRate, // SGR from SustainableGrowthTab
+    avgCAPMFromBeta, // Average CAPM from BetaTab for Ks
+    keyMetricsTTM, // FMP Key Metrics TTM (Graham Number, Net-Net, etc.)
+    ownerEarnings, // FMP Owner Earnings (Buffett method)
+    monteCarloDCF, // Monte Carlo simulation results
+    // NOTE: advanceValueNet is NOT included here to avoid infinite loop
+    // The neural model is fetched separately and updates its own state
   ]);
 
   const toggleMethod = (index: number) => {
@@ -1004,430 +1496,987 @@ export default function ValuacionesTab({
     }
   }, [averageVal, onAverageValChange]);
 
-  if (loading) return <p className="text-xl text-gray-300 py-10 text-center">Calculando valuaciones...</p>;
-  if (error) return <p className="text-xl text-red-400 py-10 text-center">Error: {error}</p>;
+  // ────────────────────────────────────────────────
+  // AdvanceValue Net - Call backend API when methods are ready
+  // ────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchAdvanceValueNet = async () => {
+      // Need at least some valid methods and a current price
+      const validMethods = methods.filter(m => m.value !== null && m.value > 0 && isFinite(m.value));
+      const currentPrice = quote?.price;
+
+      console.log('[AdvanceValueNet] Checking conditions:', {
+        validMethodsCount: validMethods.length,
+        currentPrice,
+        methodsTotal: methods.length
+      });
+
+      if (validMethods.length < 3 || !currentPrice || currentPrice <= 0) {
+        console.log('[AdvanceValueNet] Conditions not met, skipping fetch');
+        return;
+      }
+
+      console.log('[AdvanceValueNet] Starting fetch to backend...');
+      setAdvanceValueNetLoading(true);
+      setAdvanceValueNetError(null);
+
+      try {
+        // Prepare expert valuations (all method values)
+        const expertValuations = methods
+          .filter(m => m.name !== 'AdvanceValue Net (Neural)') // Exclude self
+          .map(m => m.value);
+
+        // Prepare tabular features from financial data
+        const sortedIncome = [...income].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const sortedBalance = [...balance].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const lastIncome = sortedIncome[0] || {};
+        const lastBalance = sortedBalance[0] || {};
+
+        const tabularFeatures = [
+          // Profitability
+          lastIncome.netIncome && lastBalance.totalStockholdersEquity
+            ? lastIncome.netIncome / lastBalance.totalStockholdersEquity : 0, // ROE
+          lastIncome.grossProfitRatio || 0,
+          lastIncome.operatingIncomeRatio || 0,
+          lastIncome.netIncomeRatio || 0,
+          // Growth
+          sustainableGrowthRate || 0,
+          // Valuation
+          profile?.beta || 1,
+          avgCAPMFromBeta ? avgCAPMFromBeta / 100 : 0.10, // Cost of equity
+          // Leverage
+          lastBalance.totalDebt && lastBalance.totalStockholdersEquity
+            ? lastBalance.totalDebt / lastBalance.totalStockholdersEquity : 0,
+          // Size
+          Math.log10(Math.max(lastBalance.totalAssets || 1, 1)),
+          // Efficiency
+          lastIncome.revenue && lastBalance.totalAssets
+            ? lastIncome.revenue / lastBalance.totalAssets : 0,
+        ];
+
+        const response = await fetch('http://localhost:8000/advancevalue/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ticker,
+            current_price: currentPrice,
+            expert_valuations: expertValuations,
+            tabular_features: tabularFeatures,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('[AdvanceValueNet] Success! Response:', data);
+        const advanceData = {
+          fair_value: data.fair_value,
+          confidence_interval: data.confidence_interval,
+          signal: data.signal,
+          upside_pct: data.upside_pct,
+          experts_used: data.experts_used,
+          base_ensemble: data.base_ensemble,
+          current_price: quote?.price || 0,
+        };
+        setAdvanceValueNet(advanceData);
+        // Notify parent component for ResumenTab
+        if (onAdvanceValueNetChange) {
+          onAdvanceValueNetChange(advanceData);
+        }
+      } catch (err: any) {
+        console.error('[AdvanceValueNet] Error:', err.message);
+        setAdvanceValueNetError(err.message);
+        setAdvanceValueNet(null);
+      } finally {
+        setAdvanceValueNetLoading(false);
+      }
+    };
+
+    // Only fetch if we have methods calculated
+    if (methods.length > 0 && !loading) {
+      fetchAdvanceValueNet();
+    }
+  }, [methods, loading, quote, income, balance, profile, sustainableGrowthRate, avgCAPMFromBeta, ticker]);
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-20 gap-4">
+      <div className="relative">
+        <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent"></div>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-lg font-bold text-blue-400">$</span>
+        </div>
+      </div>
+      <p className="text-xl text-gray-300">Calculando valuaciones...</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="bg-red-900/30 border border-red-500 rounded-xl p-6 text-center">
+      <p className="text-xl text-red-400">❌ Error: {error}</p>
+    </div>
+  );
+
+  // Categorize methods for better organization
+  const ddmMethods = methods.filter(m => m.name.includes('DDM') || m.name.includes('Gordon') || m.name.includes('H-Model'));
+  const dcfMethods = methods.filter(m => m.name.includes('FCF') || m.name.includes('DCF'));
+  const relativeMethods = methods.filter(m => m.name.includes('EPS') || m.name.includes('P/E') || m.name.includes('Analyst'));
+  const advancedMethods = methods.filter(m =>
+    m.name.includes('RIM') || m.name.includes('DSGE') || m.name.includes('HJM') ||
+    m.name.includes('Merton') || m.name.includes('Stochastic')
+  );
+
+  // Get null reasons for models - More detailed explanations
+  const getNullReason = (methodName: string): string | undefined => {
+    const hasDividends = dividends && dividends.length > 0 && dividends.some(d => d.dividend > 0);
+    const latestCashFlow = cashFlow?.[0];
+    const hasPositiveFCF = latestCashFlow?.freeCashFlow > 0;
+    const hasPositiveOCF = latestCashFlow?.operatingCashFlow > 0;
+    const hasPositiveEarnings = income?.[0]?.netIncome > 0;
+    const hasAnalystTargets = priceTarget?.targetHigh > 0;
+
+    // DDM Models - require dividends
+    if (methodName.includes('DDM') || methodName.includes('Gordon') || methodName.includes('H-Model')) {
+      if (!hasDividends) return 'No paga dividendos';
+    }
+
+    // FCF/FCFE/FCFF Models - require positive cash flows or valid parameters
+    if (methodName.includes('FCF') || methodName.includes('FCFE') || methodName.includes('FCFF')) {
+      if (!latestCashFlow) return 'Sin datos de cash flow';
+      if (!hasPositiveFCF && !hasPositiveOCF) return 'Cash flow negativo (FCF y OCF)';
+      if (!hasPositiveFCF) return 'FCF negativo - usando aproximación de earnings';
+      // If value is still null, it might be due to rate constraints (ks <= gs)
+      // This happens when growth rate exceeds cost of equity
+      return 'Parámetros inválidos (ks ≤ g) - ajustar tasas';
+    }
+
+    // Analyst/Target Price
+    if (methodName.includes('Analyst')) {
+      if (!hasAnalystTargets) return 'Sin estimaciones de analistas';
+    }
+
+    // EPS-based models
+    if (methodName.includes('EPS') || methodName.includes('P/E')) {
+      if (!hasPositiveEarnings) return 'Ganancias (EPS) negativas';
+    }
+
+    // Stochastic/Advanced models
+    if (methodName.includes('Stochastic') || methodName.includes('Merton')) {
+      if (!hasPositiveFCF) return 'Requiere FCF positivo para modelo estocástico';
+    }
+
+    // RIM/DSGE/HJM models
+    if (methodName.includes('RIM') || methodName.includes('DSGE') || methodName.includes('HJM')) {
+      if (!hasPositiveEarnings) return 'Requiere ganancias positivas';
+    }
+
+    return undefined;
+  };
+
+  // ────────────────────────────────────────────────
+  // Función para obtener los inputs editables de cada modelo
+  // ALL valuation models with ALL their relevant inputs
+  // Uses state variables (calcD0, calcKs, etc.) to access calculated values
+  // ────────────────────────────────────────────────
+  const getModelInputs = (methodName: string): { label: string; key: string; value: number; step?: number; min?: number; max?: number }[] | undefined => {
+    // Use user overrides if available, otherwise use calculated values
+    const d0Val = userD0 !== null ? userD0 : calcD0;
+    const ksVal = userKs !== null ? userKs : calcKs;
+    const gsVal = userGs !== null ? userGs : calcGs;
+    const epsVal = userEps !== null ? userEps : calcEpsTTM;
+    const bvVal = userBookValue !== null ? userBookValue : calcBookValue;
+    const peerPEVal = userPeerPE !== null ? userPeerPE : calcAvgPeerPE;
+
+    // 2-Stage DDM
+    if (methodName === '2-Stage DDM') {
+      return [
+        { label: 'D0 (Dividend)', key: 'd0', value: d0Val, step: 0.01, min: 0 },
+        { label: 'Ks (Cost Eq) %', key: 'ks', value: ksVal * 100, step: 0.1, min: 0.1 },
+        { label: 'gs (Growth S1) %', key: 'gs', value: gsVal * 100, step: 0.5 },
+        { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
+        { label: 'N (Years S1)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+      ];
+    }
+
+    // 3-Stage DDM
+    if (methodName === '3-Stage DDM') {
+      return [
+        { label: 'D0 (Dividend)', key: 'd0', value: d0Val, step: 0.01, min: 0 },
+        { label: 'Ks (Cost Eq) %', key: 'ks', value: ksVal * 100, step: 0.1, min: 0.1 },
+        { label: 'gs (Growth S1) %', key: 'gs', value: gsVal * 100, step: 0.5 },
+        { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
+        { label: 'N (Years S1)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+        { label: 'H (Transition)', key: 'h', value: h, step: 1, min: 1, max: 15 },
+      ];
+    }
+
+    // H Model DDM
+    if (methodName === 'H Model') {
+      return [
+        { label: 'D0 (Dividend)', key: 'd0', value: d0Val, step: 0.01, min: 0 },
+        { label: 'Ks (Cost Eq) %', key: 'ks', value: ksVal * 100, step: 0.1, min: 0.1 },
+        { label: 'gs (High Growth) %', key: 'gs', value: gsVal * 100, step: 0.5 },
+        { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
+        { label: 'H (Half-life)', key: 'h', value: h, step: 1, min: 1, max: 20 },
+      ];
+    }
+
+    // 2-Stage FCF
+    if (methodName === '2-Stage FCF') {
+      return [
+        { label: 'FCF0 (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'Ks (Discount) %', key: 'ks', value: ksVal * 100, step: 0.1, min: 0.1 },
+        { label: 'gs (Growth S1) %', key: 'gs', value: gsVal * 100, step: 0.5 },
+        { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
+        { label: 'N (Years S1)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+      ];
+    }
+
+    // 3-Stage FCF
+    if (methodName === '3-Stage FCF') {
+      return [
+        { label: 'FCF0 (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'Ks (Discount) %', key: 'ks', value: ksVal * 100, step: 0.1, min: 0.1 },
+        { label: 'gs (Growth S1) %', key: 'gs', value: gsVal * 100, step: 0.5 },
+        { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
+        { label: 'N (Years S1)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+        { label: 'H (Transition)', key: 'h', value: h, step: 1, min: 1, max: 15 },
+      ];
+    }
+
+    // Graham Method
+    if (methodName === 'Graham Method') {
+      return [
+        { label: 'EPS (TTM)', key: 'eps', value: epsVal, step: 0.01 },
+        { label: 'Book Value', key: 'bookValue', value: bvVal, step: 0.1 },
+      ];
+    }
+
+    // RIM Ohlson
+    if (methodName.includes('RIM')) {
+      return [
+        { label: 'Book Value', key: 'bookValue', value: bvVal, step: 0.1 },
+        { label: 'ROE %', key: 'roe', value: calcRoe * 100, step: 0.1 },
+        { label: 'Ks (Cost Eq) %', key: 'ks', value: ksVal * 100, step: 0.1 },
+        { label: 'ω (Persistence)', key: 'omega', value: effectiveOmega, step: 0.01, min: 0, max: 1 },
+        { label: 'γ (Other Info)', key: 'gamma', value: effectiveGamma, step: 0.01 },
+      ];
+    }
+
+    // DCF general
+    if (methodName === 'DCF') {
+      return [
+        { label: 'FCF (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'WACC %', key: 'discountRate', value: effectiveDiscountRate, step: 0.25, min: 0.1 },
+        { label: 'Exit Multiple', key: 'exitMultiple', value: exitMultiple, step: 0.5, min: 1, max: 50 },
+        { label: 'Growth %', key: 'projectedGrowthRate', value: projectedGrowthRate, step: 0.5 },
+        { label: 'N (Years)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+      ];
+    }
+
+    // EPS*Benchmark
+    if (methodName === 'EPS*Benchmark') {
+      return [
+        { label: 'EPS (TTM)', key: 'eps', value: epsVal, step: 0.01 },
+        { label: 'Avg Peer P/E', key: 'peerPE', value: peerPEVal, step: 0.5, min: 1, max: 100 },
+      ];
+    }
+
+    // Stochastic DCF
+    if (methodName.includes('Stochastic')) {
+      return [
+        { label: 'FCF (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'WACC %', key: 'discountRate', value: effectiveDiscountRate, step: 0.25 },
+        { label: 'σ (FCF Vol)', key: 'volatility', value: effectiveVolatility, step: 0.01, min: 0, max: 1 },
+        { label: 'λ (Risk Price)', key: 'lambda', value: effectiveLambda, step: 0.1 },
+        { label: 'N (Years)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+      ];
+    }
+
+    // NK DSGE Bayesian
+    if (methodName.includes('DSGE') || methodName.includes('Bayesian')) {
+      return [
+        { label: 'EPS (Base)', key: 'eps', value: epsVal, step: 0.01 },
+        { label: 'Ks (Discount) %', key: 'ks', value: ksVal * 100, step: 0.1 },
+        { label: 'φπ (Taylor Infl)', key: 'phi_pi', value: effectivePhiPi, step: 0.1, min: 1 },
+        { label: 'φy (Taylor Out)', key: 'phi_y', value: effectivePhiY, step: 0.05 },
+        { label: 'κ (Phillips)', key: 'kappa', value: effectiveKappa, step: 0.01, min: 0 },
+      ];
+    }
+
+    // HJM
+    if (methodName.includes('HJM')) {
+      return [
+        { label: 'FCF (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'Ks (Discount) %', key: 'ks', value: ksVal * 100, step: 0.1 },
+        { label: 'σ (Fwd Vol)', key: 'hjmSigma', value: effectiveHjmSigma, step: 0.001, min: 0 },
+        { label: 'a (Mean Rev)', key: 'hjmMeanReversion', value: effectiveHjmMeanReversion, step: 0.01, min: 0 },
+        { label: 'N (Years)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+      ];
+    }
+
+    // 2-Stage FCFE
+    if (methodName === '2-Stage FCFE') {
+      return [
+        { label: 'FCFE (Base)', key: 'fcfe0', value: calcFcfe, step: 0.1 },
+        { label: 'Re (Cost Eq) %', key: 'discountRate', value: effectiveDiscountRate, step: 0.25, min: 0.1 },
+        { label: 'g1 (Growth S1) %', key: 'projectedGrowthRate', value: projectedGrowthRate, step: 0.5 },
+        { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
+        { label: 'N (Years S1)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+      ];
+    }
+
+    // 3-Stage FCFE
+    if (methodName === '3-Stage FCFE') {
+      return [
+        { label: 'FCFE (Base)', key: 'fcfe0', value: calcFcfe, step: 0.1 },
+        { label: 'Re (Cost Eq) %', key: 'discountRate', value: effectiveDiscountRate, step: 0.25, min: 0.1 },
+        { label: 'g1 (Growth S1) %', key: 'projectedGrowthRate', value: projectedGrowthRate, step: 0.5 },
+        { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
+        { label: 'N (Years S1)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+        { label: 'H (Transition)', key: 'h', value: h, step: 1, min: 1, max: 15 },
+      ];
+    }
+
+    // 2-Stage FCFF
+    if (methodName === '2-Stage FCFF') {
+      return [
+        { label: 'FCFF (Base)', key: 'fcff0', value: calcFcff, step: 0.1 },
+        { label: 'WACC %', key: 'discountRate', value: effectiveDiscountRate, step: 0.25, min: 0.1 },
+        { label: 'g1 (Growth S1) %', key: 'projectedGrowthRate', value: projectedGrowthRate, step: 0.5 },
+        { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
+        { label: 'N (Years S1)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+        { label: 'Net Debt ($B)', key: 'netDebt', value: calcNetDebt / 1e9, step: 0.1 },
+      ];
+    }
+
+    // 3-Stage FCFF
+    if (methodName === '3-Stage FCFF') {
+      return [
+        { label: 'FCFF (Base)', key: 'fcff0', value: calcFcff, step: 0.1 },
+        { label: 'WACC %', key: 'discountRate', value: effectiveDiscountRate, step: 0.25, min: 0.1 },
+        { label: 'g1 (Growth S1) %', key: 'projectedGrowthRate', value: projectedGrowthRate, step: 0.5 },
+        { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
+        { label: 'N (Years S1)', key: 'n', value: n, step: 1, min: 1, max: 20 },
+        { label: 'H (Transition)', key: 'h', value: h, step: 1, min: 1, max: 15 },
+        { label: 'Net Debt ($B)', key: 'netDebt', value: calcNetDebt / 1e9, step: 0.1 },
+      ];
+    }
+
+    // Monte Carlo DCF
+    if (methodName.includes('Monte Carlo')) {
+      return [
+        { label: 'FCF (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'WACC %', key: 'discountRate', value: effectiveDiscountRate, step: 0.25, min: 0.1 },
+        { label: 'Exit Multiple', key: 'exitMultiple', value: exitMultiple, step: 0.5, min: 1, max: 50 },
+        { label: 'Growth %', key: 'projectedGrowthRate', value: projectedGrowthRate, step: 0.5 },
+        { label: 'Simulations', key: 'simCount', value: 5000, step: 1000, min: 1000, max: 10000 },
+      ];
+    }
+
+    // Owner Earnings (Buffett)
+    if (methodName.includes('Owner Earnings')) {
+      return [
+        { label: 'Net Income', key: 'netIncome', value: calcNetIncome, step: 0.1 },
+        { label: 'D&A', key: 'da', value: calcDA, step: 0.1 },
+        { label: 'CapEx', key: 'capex', value: calcCapex, step: 0.1 },
+        { label: 'Ks (Discount) %', key: 'ks', value: ksVal * 100, step: 0.1 },
+        { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
+      ];
+    }
+
+    // Mean Target - from analysts (read-only conceptually, but allow adjustment)
+    if (methodName === 'Mean Target') {
+      return undefined; // Analyst target, no user inputs
+    }
+
+    // API-based methods (Graham Number, Graham Net-Net, Advance DCF) - no local inputs
+    if (methodName.includes('(API)')) {
+      return undefined;
+    }
+
+    return undefined;
+  };
+
+  // Handler para cambios en inputs de modelos
+  const handleModelInputChange = (key: string, value: number) => {
+    switch (key) {
+      // Core model parameters
+      case 'n': setN(Math.max(1, Math.round(value))); break;
+      case 'h': setH(Math.max(1, Math.round(value))); break;
+      case 'glong': setGlong(value / 100); break;
+      case 'discountRate': setDiscountRate(value); break;
+      case 'exitMultiple': setExitMultiple(value); break;
+      case 'projectedGrowthRate': setProjectedGrowthRate(value); break;
+
+      // DDM specific
+      case 'd0': setUserD0(value); break;
+      case 'ks': setUserKs(value / 100); break;
+      case 'gs': setUserGs(value / 100); break;
+
+      // Fundamental inputs
+      case 'eps': setUserEps(value); break;
+      case 'bookValue': setUserBookValue(value); break;
+      case 'peerPE': setUserPeerPE(value); break;
+      case 'netDebt': setUserNetDebt(value); break;
+
+      // RIM/Ohlson
+      case 'omega': setOmega(value); break;
+      case 'gamma': setGamma(value); break;
+
+      // Stochastic DCF
+      case 'volatility': setVolatility(value); break;
+      case 'lambda': setLambda(value); break;
+
+      // NK DSGE
+      case 'phi_pi': setPhi_pi(value); break;
+      case 'phi_y': setPhi_y(value); break;
+      case 'kappa': setKappa(value); break;
+
+      // HJM
+      case 'hjmSigma': setHjmSigma(value); break;
+      case 'hjmMeanReversion': setHjmMeanReversion(value); break;
+
+      default:
+        console.log(`[ValuacionesTab] Unhandled input key: ${key}`);
+        break;
+    }
+  };
 
   return (
-    <div className="space-y-10 text-center">
-      <h3 className="text-3xl font-bold text-gray-100">
-        Valuaciones - {ticker}
-      </h3>
-
-      {/* ────────────────────────────────────────────────
-          Inputs básicos
-          ──────────────────────────────────────────────── */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <h4 className="text-xl font-bold text-gray-100 mb-4 text-left">Parametros Basicos (DDM/FCF)</h4>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">H (anos transicion)</label>
-            <input
-              type="number"
-              value={h}
-              onChange={(e) => setH(Number(e.target.value) || 5)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Glong (crecimiento LP)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={glong}
-              onChange={(e) => setGlong(Number(e.target.value) || 0.04)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">N (anos proyeccion)</label>
-            <input
-              type="number"
-              value={n}
-              onChange={(e) => setN(Number(e.target.value) || 5)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">CAGR Share Price TX (%)</label>
-            <input
-              type="number"
-              step="1"
-              value={sharePriceTxCAGR}
-              onChange={(e) => setSharePriceTxCAGR(Number(e.target.value) || 10)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-            />
-            <p className="text-xs text-gray-500 mt-1">Crecimiento anual esperado del precio</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Share Price T{n}</label>
-            <div className="px-3 py-2 border border-gray-600 rounded-lg bg-gray-700 text-gray-100 font-semibold">
-              ${sharePriceT5.toFixed(2)}
-            </div>
-            <p className="text-xs text-blue-400 mt-1">= ${currentPrice.toFixed(2)} × (1+{sharePriceTxCAGR}%)^{n}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* ────────────────────────────────────────────────
-          Parámetros DCF
-          ──────────────────────────────────────────────── */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <h4 className="text-xl font-bold text-gray-100 mb-4 text-left">Parametros DCF</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Discount Rate (WACC) %</label>
-            <input
-              type="number"
-              step="0.5"
-              value={discountRate ?? effectiveDiscountRate}
-              onChange={(e) => {
-                const val = parseFloat(e.target.value);
-                setDiscountRate(isNaN(val) ? null : val);
-              }}
-              placeholder={`Auto: ${calculatedDefaultWACC.toFixed(2)}%`}
-              className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-            />
-            {discountRate === null && (
-              <p className="text-xs text-blue-400 mt-1">
-                Auto: Promedio de WACC Calculado + Advance DCF API = {calculatedDefaultWACC.toFixed(2)}%
-              </p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Exit Multiple (EV/EBITDA)</label>
-            <input
-              type="number"
-              step="0.5"
-              value={exitMultiple}
-              onChange={(e) => setExitMultiple(Number(e.target.value) || 12)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Revenue Growth % (proyectado)</label>
-            <input
-              type="number"
-              step="0.5"
-              value={projectedGrowthRate}
-              onChange={(e) => setProjectedGrowthRate(Number(e.target.value) || 5)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-            />
-          </div>
-        </div>
-
-        {/* WACC Breakdown */}
-        <div className="mt-4 p-4 bg-gray-900/50 rounded-lg border border-gray-700">
-          <h5 className="text-sm font-semibold text-gray-300 mb-2">Fuentes WACC para el promedio:</h5>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Advance DCF (API):</span>
-              <span className="text-purple-400 font-semibold">
-                {dcfCustom?.wacc ? `${dcfCustom.wacc.toFixed(2)}%` : 'N/A'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">WACC Calculado (CAPM):</span>
-              <span className="text-cyan-400 font-semibold">
-                {(() => {
-                  // Recalculate the internal WACC here for display
-                  const advWacc = dcfCustom?.wacc || null;
-                  if (advWacc && calculatedDefaultWACC > 0) {
-                    const internalWacc = (calculatedDefaultWACC * 2) - advWacc;
-                    return `${internalWacc.toFixed(2)}%`;
-                  }
-                  return `${calculatedDefaultWACC.toFixed(2)}%`;
-                })()}
-              </span>
-            </div>
-          </div>
-          <div className="mt-2 pt-2 border-t border-gray-700 flex justify-between">
-            <span className="text-gray-400 font-medium">Promedio WACC Usado:</span>
-            <span className="text-blue-400 font-bold text-lg">{effectiveDiscountRate.toFixed(2)}%</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ────────────────────────────────────────────────
-          Parámetros Modelos Avanzados
-          ──────────────────────────────────────────────── */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <h4 className="text-xl font-bold text-gray-100 mb-4 text-left">Parámetros Modelos Avanzados</h4>
-
-        {/* RIM Ohlson */}
-        <div className="mb-6">
-          <h5 className="text-lg font-semibold text-blue-400 mb-3 text-left">RIM (Ohlson Model)</h5>
-          <p className="text-xs text-gray-500 mb-2 text-left">ω calculado via AR(1) en ROE histórico. γ basado en beta y sector.</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">ω (persistencia earnings)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={omega ?? effectiveOmega}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setOmega(isNaN(val) ? null : val);
-                }}
-                placeholder={`Auto: ${calculatedDefaults.omega.toFixed(2)}`}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-              />
-              {omega === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">γ (persistencia other info)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={gamma ?? effectiveGamma}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setGamma(isNaN(val) ? null : val);
-                }}
-                placeholder={`Auto: ${calculatedDefaults.gamma.toFixed(2)}`}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-              />
-              {gamma === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
-            </div>
-          </div>
-        </div>
-
-        {/* Stochastic DCF */}
-        <div className="mb-6">
-          <h5 className="text-lg font-semibold text-purple-400 mb-3 text-left">Stochastic DCF</h5>
-          <p className="text-xs text-gray-500 mb-2 text-left">σ = desv. estándar del crecimiento FCF. λ = precio de riesgo (Sharpe ratio estimado).</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">σ (volatilidad FCF)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={volatility ?? effectiveVolatility}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setVolatility(isNaN(val) ? null : val);
-                }}
-                placeholder={`Auto: ${calculatedDefaults.sigmaFCF.toFixed(2)}`}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-              />
-              {volatility === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">λ (market price of risk)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={lambda ?? effectiveLambda}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setLambda(isNaN(val) ? null : val);
-                }}
-                placeholder={`Auto: ${calculatedDefaults.lambdaRisk.toFixed(2)}`}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-              />
-              {lambda === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
-            </div>
-          </div>
-        </div>
-
-        {/* NK DSGE */}
-        <div className="mb-6">
-          <h5 className="text-lg font-semibold text-green-400 mb-3 text-left">Bayesian (NK DSGE)</h5>
-          <p className="text-xs text-gray-500 mb-2 text-left">Parámetros de política monetaria (Taylor rule) y curva de Phillips. κ basado en margen bruto.</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">φπ (Taylor inflation)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={phi_pi ?? effectivePhiPi}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setPhi_pi(isNaN(val) ? null : val);
-                }}
-                placeholder={`Auto: ${calculatedDefaults.phiPi.toFixed(2)}`}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-              />
-              {phi_pi === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">φy (Taylor output)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={phi_y ?? effectivePhiY}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setPhi_y(isNaN(val) ? null : val);
-                }}
-                placeholder={`Auto: ${calculatedDefaults.phiY.toFixed(2)}`}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-              />
-              {phi_y === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">κ (Phillips slope)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={kappa ?? effectiveKappa}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setKappa(isNaN(val) ? null : val);
-                }}
-                placeholder={`Auto: ${calculatedDefaults.kappaDSGE.toFixed(3)}`}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-              />
-              {kappa === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">β (discount factor)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={betaDSGE ?? effectiveBetaDSGE}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setBetaDSGE(isNaN(val) ? null : val);
-                }}
-                placeholder={`Auto: ${calculatedDefaults.betaDSGE.toFixed(2)}`}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-              />
-              {betaDSGE === null && <p className="text-xs text-blue-400 mt-1">Estándar: 0.99</p>}
-            </div>
-          </div>
-        </div>
-
-        {/* HJM */}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
-          <h5 className="text-lg font-semibold text-orange-400 mb-3 text-left">HJM (Heath-Jarrow-Morton)</h5>
-          <p className="text-xs text-gray-500 mb-2 text-left">Dinámica de tasas forward. σ basado en nivel de tasas, a basado en beta del stock.</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">σ (forward rate vol)</label>
-              <input
-                type="number"
-                step="0.001"
-                value={hjmSigma ?? effectiveHjmSigma}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setHjmSigma(isNaN(val) ? null : val);
-                }}
-                placeholder={`Auto: ${calculatedDefaults.hjmSigma.toFixed(3)}`}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-              />
-              {hjmSigma === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">a (mean reversion)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={hjmMeanReversion ?? effectiveHjmMeanReversion}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setHjmMeanReversion(isNaN(val) ? null : val);
-                }}
-                placeholder={`Auto: ${calculatedDefaults.hjmMeanReversion.toFixed(2)}`}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100"
-              />
-              {hjmMeanReversion === null && <p className="text-xs text-blue-400 mt-1">Auto-calculado</p>}
-            </div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Valuaciones Múltiples
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Análisis integral de valor intrínseco para {ticker}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <p className="text-xs text-gray-500">Precio Actual</p>
+            <p className="text-2xl font-bold text-gray-100">${quote?.price?.toFixed(2) || 'N/A'}</p>
+          </div>
+          <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
+            <p className="text-xs text-green-400">SGR</p>
+            <p className="text-xl font-bold text-green-400">
+              {sustainableGrowthRate != null && sustainableGrowthRate !== undefined ? `${(sustainableGrowthRate * 100).toFixed(1)}%` : '8%'}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* ────────────────────────────────────────────────
-          Info de Peers (para EPS*Benchmark)
-          ──────────────────────────────────────────────── */}
-      {peerPE.length > 0 && (
-        <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-          <h5 className="text-lg font-semibold text-gray-200 mb-2 text-left">P/E de Competidores (para EPS*Benchmark)</h5>
-          <div className="flex flex-wrap gap-3">
-            {peerPE.map((peer) => (
-              <span key={peer.symbol} className="px-3 py-1 bg-gray-700 rounded-lg text-sm text-gray-300">
-                {peer.symbol}: {peer.pe?.toFixed(1)}x
-              </span>
-            ))}
-            <span className="px-3 py-1 bg-blue-900 rounded-lg text-sm text-blue-300 font-semibold">
-              Promedio: {(peerPE.reduce((s, p) => s + (p.pe || 0), 0) / peerPE.length).toFixed(1)}x
-            </span>
+      {/* Collapsible DCF Parameters Section */}
+      <CollapsibleSection
+        title="Parámetros DCF"
+        icon="📊"
+        defaultOpen={false}
+        badge={
+          <span className="px-2 py-1 text-xs bg-blue-600/30 text-blue-400 rounded-full">
+            WACC: {effectiveDiscountRate.toFixed(1)}%
+          </span>
+        }
+      >
+        <div className="space-y-6">
+          {/* Basic Parameters */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">H (años transición)</label>
+              <input
+                type="number"
+                value={h}
+                onChange={(e) => setH(Number(e.target.value) || 5)}
+                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Glong (crecimiento LP)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={glong}
+                onChange={(e) => setGlong(Number(e.target.value) || 0.04)}
+                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">N (años proyección)</label>
+              <input
+                type="number"
+                value={n}
+                onChange={(e) => setN(Number(e.target.value) || 5)}
+                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">CAGR Share Price (%)</label>
+              <input
+                type="number"
+                step="1"
+                value={sharePriceTxCAGR}
+                onChange={(e) => setSharePriceTxCAGR(Number(e.target.value) || 10)}
+                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Share Price T{n}</label>
+              <div className="px-3 py-2 border border-blue-600 rounded-lg bg-blue-900/30 text-blue-400 font-semibold text-center">
+                ${sharePriceT5.toFixed(2)}
+              </div>
+            </div>
           </div>
+
+          {/* DCF Specific */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Discount Rate (WACC) %</label>
+              <input
+                type="number"
+                step="0.5"
+                value={discountRate ?? effectiveDiscountRate}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setDiscountRate(isNaN(val) ? null : val);
+                }}
+                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Exit Multiple (EV/EBITDA)</label>
+              <input
+                type="number"
+                step="0.5"
+                value={exitMultiple}
+                onChange={(e) => setExitMultiple(Number(e.target.value) || 12)}
+                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Revenue Growth % (proyectado)</label>
+              <input
+                type="number"
+                step="0.5"
+                value={projectedGrowthRate}
+                onChange={(e) => setProjectedGrowthRate(Number(e.target.value) || 5)}
+                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* WACC Breakdown */}
+          <div className="grid grid-cols-3 gap-4 p-4 bg-gray-800 rounded-xl border border-gray-700">
+            <div className="text-center">
+              <p className="text-xs text-gray-500">Advance DCF (API)</p>
+              <p className="text-lg font-bold text-purple-400">{dcfCustom?.wacc ? `${dcfCustom.wacc.toFixed(2)}%` : 'N/A'}</p>
+            </div>
+            <div className="text-center border-x border-gray-700">
+              <p className="text-xs text-gray-500">WACC Calculado</p>
+              <p className="text-lg font-bold text-cyan-400">{calculatedDefaultWACC.toFixed(2)}%</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500">WACC Usado</p>
+              <p className="text-lg font-bold text-blue-400">{effectiveDiscountRate.toFixed(2)}%</p>
+            </div>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* Collapsible Advanced Models Parameters */}
+      <CollapsibleSection
+        title="Parámetros Modelos Avanzados"
+        icon="🔬"
+        defaultOpen={false}
+        badge={
+          <span className="px-2 py-1 text-xs bg-purple-600/30 text-purple-400 rounded-full">
+            Quant Models
+          </span>
+        }
+      >
+        <div className="space-y-6">
+          {/* RIM Ohlson */}
+          <div className="p-4 bg-blue-900/20 rounded-xl border border-blue-700/50">
+            <h5 className="text-sm font-semibold text-blue-400 mb-2 flex items-center gap-2">
+              📘 RIM (Ohlson Model)
+            </h5>
+            <p className="text-xs text-gray-500 mb-3">ω calculado via AR(1) en ROE histórico. γ basado en beta y sector.</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">ω (persistencia)</label>
+                <input type="number" step="0.01" value={omega ?? effectiveOmega}
+                  onChange={(e) => setOmega(parseFloat(e.target.value) || null)}
+                  className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 text-sm focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">γ (other info)</label>
+                <input type="number" step="0.01" value={gamma ?? effectiveGamma}
+                  onChange={(e) => setGamma(parseFloat(e.target.value) || null)}
+                  className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 text-sm focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Stochastic + NK DSGE + HJM in a grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Stochastic DCF */}
+            <div className="p-4 bg-purple-900/20 rounded-xl border border-purple-700/50">
+              <h5 className="text-sm font-semibold text-purple-400 mb-2">📈 Stochastic DCF</h5>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">σ (vol FCF)</label>
+                  <input type="number" step="0.01" value={volatility ?? effectiveVolatility}
+                    onChange={(e) => setVolatility(parseFloat(e.target.value) || null)}
+                    className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">λ (risk price)</label>
+                  <input type="number" step="0.1" value={lambda ?? effectiveLambda}
+                    onChange={(e) => setLambda(parseFloat(e.target.value) || null)}
+                    className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* NK DSGE */}
+            <div className="p-4 bg-green-900/20 rounded-xl border border-green-700/50">
+              <h5 className="text-sm font-semibold text-green-400 mb-2">🏛️ NK DSGE</h5>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">φπ</label>
+                    <input type="number" step="0.1" value={phi_pi ?? effectivePhiPi}
+                      onChange={(e) => setPhi_pi(parseFloat(e.target.value) || null)}
+                      className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">φy</label>
+                    <input type="number" step="0.1" value={phi_y ?? effectivePhiY}
+                      onChange={(e) => setPhi_y(parseFloat(e.target.value) || null)}
+                      className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">κ</label>
+                    <input type="number" step="0.01" value={kappa ?? effectiveKappa}
+                      onChange={(e) => setKappa(parseFloat(e.target.value) || null)}
+                      className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">β</label>
+                    <input type="number" step="0.01" value={betaDSGE ?? effectiveBetaDSGE}
+                      onChange={(e) => setBetaDSGE(parseFloat(e.target.value) || null)}
+                      className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* HJM */}
+            <div className="p-4 bg-orange-900/20 rounded-xl border border-orange-700/50">
+              <h5 className="text-sm font-semibold text-orange-400 mb-2">📉 HJM</h5>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">σ (fwd rate vol)</label>
+                  <input type="number" step="0.001" value={hjmSigma ?? effectiveHjmSigma}
+                    onChange={(e) => setHjmSigma(parseFloat(e.target.value) || null)}
+                    className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">a (mean rev)</label>
+                  <input type="number" step="0.01" value={hjmMeanReversion ?? effectiveHjmMeanReversion}
+                    onChange={(e) => setHjmMeanReversion(parseFloat(e.target.value) || null)}
+                    className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* Peer P/E for benchmarking */}
+      {peerPE.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-800/50 rounded-xl border border-gray-700">
+          <span className="text-xs text-gray-500">P/E Peers:</span>
+          {peerPE.slice(0, 5).map((peer) => (
+            <span key={peer.symbol} className="px-2 py-1 bg-gray-700/50 rounded text-xs text-gray-400">
+              {peer.symbol}: {peer.pe?.toFixed(1)}x
+            </span>
+          ))}
+          <span className="px-2 py-1 bg-blue-900/50 rounded text-xs text-blue-400 font-semibold">
+            Avg: {(peerPE.reduce((s, p) => s + (p.pe || 0), 0) / peerPE.length).toFixed(1)}x
+          </span>
         </div>
       )}
 
-      {/* ────────────────────────────────────────────────
-          Grid de métodos
-          ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {methods.map((method, index) => (
-          <div
-            key={index}
-            className={`p-4 rounded-xl border shadow-sm text-center transition-all ${
-              method.enabled
-                ? 'bg-gray-800 border-gray-700'
-                : 'bg-gray-900 border-gray-800 opacity-50'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <input
-                type="checkbox"
-                checked={method.enabled}
-                onChange={() => toggleMethod(index)}
-                className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-600 rounded cursor-pointer"
-              />
-              <h4 className="text-lg font-semibold text-gray-100">
-                {method.name}
-              </h4>
+      {/* ═══════════════════════════════════════════════════
+          VALUATION MODELS GRID - Professional Design
+          ═══════════════════════════════════════════════════ */}
+      <div className="space-y-6">
+        {/* DDM Models Section */}
+        {ddmMethods.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-green-400 mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+              Dividend Discount Models (DDM)
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {ddmMethods.map((method, i) => (
+                <ModelCard
+                  key={`ddm-${i}`}
+                  name={method.name}
+                  value={method.value}
+                  enabled={method.enabled}
+                  description={method.description}
+                  onToggle={() => toggleMethod(methods.indexOf(method))}
+                  nullReason={getNullReason(method.name)}
+                  inputs={getModelInputs(method.name)}
+                  onInputChange={handleModelInputChange}
+                />
+              ))}
             </div>
-            <p className={`text-3xl font-bold ${method.enabled ? 'text-blue-400' : 'text-gray-600'}`}>
-              {method.value !== null && method.value > 0 && isFinite(method.value) ? `$${method.value.toFixed(2)}` : '—'}
-            </p>
-            {method.description && (
-              <p className="text-xs text-gray-500 mt-2 truncate" title={method.description}>
-                {method.description}
-              </p>
-            )}
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* ────────────────────────────────────────────────
-          Average
-          ──────────────────────────────────────────────── */}
-      <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 shadow-xl mt-8 text-center">
-        <h4 className="text-3xl font-bold text-gray-100 mb-4">
-          Average Valuaciones
-        </h4>
-        <p className="text-6xl font-black text-blue-400 tracking-tight">
-          {averageVal !== null ? `$${averageVal.toFixed(2)}` : '—'}
-        </p>
-        <p className="text-xl text-blue-300 mt-4">
-          (basado en {enabledMethods.length} métodos activos)
-        </p>
+        {/* DCF/FCF Models Section */}
+        {dcfMethods.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-blue-400 mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+              Discounted Cash Flow Models (DCF/FCF)
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {dcfMethods.map((method, i) => (
+                <ModelCard
+                  key={`dcf-${i}`}
+                  name={method.name}
+                  value={method.value}
+                  enabled={method.enabled}
+                  description={method.description}
+                  onToggle={() => toggleMethod(methods.indexOf(method))}
+                  nullReason={getNullReason(method.name)}
+                  inputs={getModelInputs(method.name)}
+                  onInputChange={handleModelInputChange}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
-        {/* Comparación con precio actual */}
-        {quote?.price && averageVal && (
-          <div className="mt-6 grid grid-cols-3 gap-4">
-            <div className="bg-gray-700 p-4 rounded-xl">
-              <p className="text-sm text-gray-400">Precio Actual</p>
-              <p className="text-2xl font-bold text-gray-200">${quote.price.toFixed(2)}</p>
+        {/* Relative Valuation Section */}
+        {relativeMethods.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-amber-400 mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
+              Relative Valuation
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {relativeMethods.map((method, i) => (
+                <ModelCard
+                  key={`rel-${i}`}
+                  name={method.name}
+                  value={method.value}
+                  enabled={method.enabled}
+                  description={method.description}
+                  onToggle={() => toggleMethod(methods.indexOf(method))}
+                  nullReason={getNullReason(method.name)}
+                  inputs={getModelInputs(method.name)}
+                  onInputChange={handleModelInputChange}
+                />
+              ))}
             </div>
-            <div className="bg-gray-700 p-4 rounded-xl">
-              <p className="text-sm text-gray-400">Valor Intrínseco</p>
-              <p className="text-2xl font-bold text-blue-400">${averageVal.toFixed(2)}</p>
+          </div>
+        )}
+
+        {/* Advanced/Quant Models Section */}
+        {advancedMethods.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-purple-400 rounded-full"></span>
+              Advanced Quantitative Models
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {advancedMethods.map((method, i) => (
+                <ModelCard
+                  key={`adv-${i}`}
+                  name={method.name}
+                  value={method.value}
+                  enabled={method.enabled}
+                  description={method.description}
+                  onToggle={() => toggleMethod(methods.indexOf(method))}
+                  nullReason={getNullReason(method.name)}
+                  inputs={getModelInputs(method.name)}
+                  onInputChange={handleModelInputChange}
+                />
+              ))}
             </div>
-            <div className="bg-gray-700 p-4 rounded-xl">
-              <p className="text-sm text-gray-400">Upside/Downside</p>
-              <p className={`text-2xl font-bold ${averageVal > quote.price ? 'text-green-400' : 'text-red-400'}`}>
-                {((averageVal / quote.price - 1) * 100).toFixed(1)}%
-              </p>
+          </div>
+        )}
+
+        {/* AdvanceValue Net - Neural Ensemble Section */}
+        {(advanceValueNet || advanceValueNetLoading) && (
+          <div>
+            <h4 className="text-sm font-semibold text-cyan-400 mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></span>
+              🧠 AdvanceValue Net - Neural Ensemble
+            </h4>
+            <div className="bg-gradient-to-br from-cyan-900/30 via-gray-800 to-purple-900/30 p-5 rounded-2xl border-2 border-cyan-500/40 shadow-lg">
+              {advanceValueNetLoading && !advanceValueNet && (
+                <div className="flex items-center justify-center py-6 gap-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-500 border-t-transparent"></div>
+                  <p className="text-cyan-400">Consultando Neural Ensemble...</p>
+                </div>
+              )}
+              {advanceValueNetError && (
+                <div className="text-center py-4">
+                  <p className="text-red-400 text-sm">⚠️ Error: {advanceValueNetError}</p>
+                  <p className="text-gray-500 text-xs mt-1">Asegúrate de que el backend esté corriendo en localhost:8000</p>
+                </div>
+              )}
+              {advanceValueNet && (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-xs text-cyan-400 uppercase tracking-wide mb-1">Fair Value (AI)</p>
+                      <p className="text-4xl font-black text-cyan-300">
+                        ${advanceValueNet.fair_value.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className={`px-4 py-2 rounded-xl text-sm font-bold ${
+                      advanceValueNet.signal === 'SUBVALUADO'
+                        ? 'bg-green-600/30 text-green-400 border border-green-500/50'
+                        : advanceValueNet.signal === 'SOBREVALUADO'
+                          ? 'bg-red-600/30 text-red-400 border border-red-500/50'
+                          : 'bg-yellow-600/30 text-yellow-400 border border-yellow-500/50'
+                    }`}>
+                      {advanceValueNet.signal === 'SUBVALUADO' ? '📈' : advanceValueNet.signal === 'SOBREVALUADO' ? '📉' : '➡️'} {advanceValueNet.signal}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="bg-gray-800/60 p-3 rounded-xl">
+                      <p className="text-xs text-gray-500 mb-1">Intervalo Confianza</p>
+                      <p className="text-sm font-semibold text-gray-300">
+                        ${advanceValueNet.confidence_interval[0].toFixed(2)} - ${advanceValueNet.confidence_interval[1].toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="bg-gray-800/60 p-3 rounded-xl">
+                      <p className="text-xs text-gray-500 mb-1">Upside/Downside</p>
+                      <p className={`text-sm font-semibold ${
+                        (advanceValueNet.upside_pct ?? 0) > 0 ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        {(advanceValueNet.upside_pct ?? 0) > 0 ? '+' : ''}{(advanceValueNet.upside_pct ?? 0).toFixed(1)}%
+                      </p>
+                    </div>
+                    <div className="bg-gray-800/60 p-3 rounded-xl">
+                      <p className="text-xs text-gray-500 mb-1">Modelos Usados</p>
+                      <p className="text-sm font-semibold text-gray-300">{advanceValueNet.experts_used}</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-500 mt-3 text-center">
+                    Base Ensemble: ${(advanceValueNet.base_ensemble ?? 0).toFixed(2)} | Neural Ensemble combina {advanceValueNet.experts_used ?? 0} valuaciones con métricas financieras
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      <p className="text-sm text-gray-500 text-center italic">
-        Desmarca métodos o cambia inputs para recalcular. Los cambios se reflejan automáticamente en Inputs y Análisis Final.
+      {/* ═══════════════════════════════════════════════════
+          FINAL VALUATION SUMMARY - Premium Design
+          ═══════════════════════════════════════════════════ */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-8 rounded-3xl border-2 border-blue-500/30 shadow-2xl">
+        {/* Background decoration */}
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/5 via-purple-600/5 to-blue-600/5"></div>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl"></div>
+
+        <div className="relative z-10">
+          <div className="text-center mb-6">
+            <h4 className="text-lg font-medium text-gray-400 mb-2">Valor Intrínseco Promedio</h4>
+            <p className="text-7xl font-black bg-gradient-to-r from-blue-400 via-blue-300 to-purple-400 bg-clip-text text-transparent tracking-tight">
+              {averageVal !== null ? `$${averageVal.toFixed(2)}` : '—'}
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              Basado en {enabledMethods.length} de {methods.length} modelos activos
+            </p>
+          </div>
+
+          {/* Comparison Grid */}
+          {quote?.price && averageVal && (
+            <div className="grid grid-cols-3 gap-4 mt-8">
+              <div className="bg-gray-800/80 backdrop-blur p-5 rounded-2xl border border-gray-700 text-center">
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Precio de Mercado</p>
+                <p className="text-3xl font-bold text-gray-100">${quote.price.toFixed(2)}</p>
+              </div>
+              <div className="bg-blue-900/40 backdrop-blur p-5 rounded-2xl border-2 border-blue-500/50 text-center">
+                <p className="text-xs text-blue-400 uppercase tracking-wide mb-1">Valor Intrínseco</p>
+                <p className="text-3xl font-bold text-blue-400">${averageVal.toFixed(2)}</p>
+              </div>
+              <div className={`backdrop-blur p-5 rounded-2xl border text-center ${
+                averageVal > quote.price
+                  ? 'bg-green-900/40 border-green-500/50'
+                  : 'bg-red-900/40 border-red-500/50'
+              }`}>
+                <p className={`text-xs uppercase tracking-wide mb-1 ${
+                  averageVal > quote.price ? 'text-green-400' : 'text-red-400'
+                }`}>
+                  {averageVal > quote.price ? 'Upside' : 'Downside'}
+                </p>
+                <p className={`text-3xl font-bold ${
+                  averageVal > quote.price ? 'text-green-400' : 'text-red-400'
+                }`}>
+                  {((averageVal / quote.price - 1) * 100).toFixed(1)}%
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Signal Indicator */}
+          {quote?.price && averageVal && (
+            <div className={`mt-6 p-4 rounded-xl border text-center ${
+              averageVal > quote.price * 1.2
+                ? 'bg-green-900/30 border-green-600'
+                : averageVal < quote.price * 0.8
+                  ? 'bg-red-900/30 border-red-600'
+                  : 'bg-yellow-900/30 border-yellow-600'
+            }`}>
+              <p className={`text-sm font-semibold ${
+                averageVal > quote.price * 1.2
+                  ? 'text-green-400'
+                  : averageVal < quote.price * 0.8
+                    ? 'text-red-400'
+                    : 'text-yellow-400'
+              }`}>
+                {averageVal > quote.price * 1.2
+                  ? '📈 Potencialmente SUBVALUADO (+20% upside o más)'
+                  : averageVal < quote.price * 0.8
+                    ? '📉 Potencialmente SOBREVALUADO (-20% o más)'
+                    : '➡️ Valor aproximadamente en línea con el mercado'
+                }
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer note */}
+      <p className="text-xs text-gray-600 text-center">
+        Modifica los parámetros en las secciones colapsables o desmarca modelos para ajustar el cálculo.
       </p>
     </div>
   );

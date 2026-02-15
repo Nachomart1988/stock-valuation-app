@@ -9,6 +9,7 @@ interface WACCTabProps {
   balance: any[];
   quote: any;
   profile: any;
+  onWACCChange?: (wacc: number | null) => void; // Callback for ResumenTab
 }
 
 // Tabla de Damodaran para mapear ICR a rating sintético y spread
@@ -33,7 +34,7 @@ const ICR_RATING_TABLE = [
   { minICR: 12.5, maxICR: 100000, rating: 'AAA', spread: 0.75 },
 ];
 
-export default function WACCTab({ ticker, income, balance, quote, profile }: WACCTabProps) {
+export default function WACCTab({ ticker, income, balance, quote, profile, onWACCChange }: WACCTabProps) {
   // Estados para inputs manuales
   const [riskFreeRate, setRiskFreeRate] = useState(4.5); // %
   const [equityRiskPremium, setEquityRiskPremium] = useState(5.5); // %
@@ -213,6 +214,15 @@ export default function WACCTab({ ticker, income, balance, quote, profile }: WAC
 
   const wacc = weightedCostOfDebt + weightedCostOfEquity + weightedCostOfPreferred;
 
+  // Notify parent component of WACC changes
+  useEffect(() => {
+    if (onWACCChange && wacc && isFinite(wacc)) {
+      // WACC is already in percentage form (e.g., 8.5 means 8.5%)
+      // Convert to decimal for consistency with other rate values
+      onWACCChange(wacc / 100);
+    }
+  }, [wacc, onWACCChange]);
+
   // Format helpers
   const formatPct = (val: number) => `${val.toFixed(2)}%`;
   const formatMoney = (val: number) => {
@@ -223,8 +233,22 @@ export default function WACCTab({ ticker, income, balance, quote, profile }: WAC
   };
 
   return (
-    <div className="space-y-10">
-      <h3 className="text-4xl font-bold text-gray-100">WACC Calculation - {ticker}</h3>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+        <div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+            WACC Analysis
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Costo promedio ponderado de capital para {ticker}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right bg-gradient-to-r from-amber-900/40 to-orange-900/40 px-4 py-2 rounded-xl border border-amber-600">
+            <p className="text-xs text-amber-400">WACC</p>
+            <p className="text-xl font-bold text-amber-400">{wacc.toFixed(2)}%</p>
+          </div>
+        </div>
+      </div>
 
       {/* Input Parameters */}
       <div className="bg-gray-700 p-6 rounded-xl border border-gray-600">

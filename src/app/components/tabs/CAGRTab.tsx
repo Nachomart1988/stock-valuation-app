@@ -7,12 +7,10 @@ import { Line } from 'react-chartjs-2';
 interface PriceData {
   date: string;
   price: number;
-}
-
-interface PivotPoint {
-  price: number;
-  count: number;
-  dates: string[];
+  open?: number;
+  high?: number;
+  low?: number;
+  close?: number;
 }
 
 interface CAGRTabProps {
@@ -52,7 +50,8 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
         const fromDate = tenYearsAgo.toISOString().split('T')[0];
         const toDate = today.toISOString().split('T')[0];
 
-        const url = `https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${ticker}&from=${fromDate}&to=${toDate}&apikey=${apiKey}`;
+        // Use full endpoint for OHLC data needed for pivot points
+        const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${ticker}&from=${fromDate}&to=${toDate}&apikey=${apiKey}`;
 
         const res = await fetch(url);
         if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -68,6 +67,10 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
           .map((item: any) => ({
             date: item.date,
             price: item.price || item.close,
+            open: item.open,
+            high: item.high,
+            low: item.low,
+            close: item.close,
           }))
           .sort((a: PriceData, b: PriceData) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -207,73 +210,6 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
     };
   }, [historicalPrices, cagrResults]);
 
-  // Calculate pivot points (price levels where price has bounced multiple times)
-  const pivotPoints = useMemo(() => {
-    if (historicalPrices.length === 0) return [];
-
-    // Use last 2 years (504 trading days)
-    const prices2Years = historicalPrices.slice(0, 504);
-    if (prices2Years.length < 100) return [];
-
-    // Find local minima and maxima
-    const pivots: PivotPoint[] = [];
-    const tolerance = 0.02; // 2% tolerance for price levels
-
-    // Group prices by levels
-    const priceLevels: Map<number, { count: number; dates: string[] }> = new Map();
-
-    for (let i = 2; i < prices2Years.length - 2; i++) {
-      const prev2 = prices2Years[i + 2].price;
-      const prev1 = prices2Years[i + 1].price;
-      const curr = prices2Years[i].price;
-      const next1 = prices2Years[i - 1].price;
-      const next2 = prices2Years[i - 2].price;
-
-      // Check if it's a local minimum (support)
-      const isSupport = curr < prev1 && curr < prev2 && curr < next1 && curr < next2;
-
-      // Check if it's a local maximum (resistance)
-      const isResistance = curr > prev1 && curr > prev2 && curr > next1 && curr > next2;
-
-      if (isSupport || isResistance) {
-        // Round to nearest level
-        const roundedPrice = Math.round(curr * 100) / 100;
-
-        // Find existing level within tolerance
-        let foundLevel = false;
-        for (const [level, data] of priceLevels) {
-          if (Math.abs(level - roundedPrice) / level <= tolerance) {
-            data.count++;
-            data.dates.push(prices2Years[i].date);
-            foundLevel = true;
-            break;
-          }
-        }
-
-        if (!foundLevel) {
-          priceLevels.set(roundedPrice, {
-            count: 1,
-            dates: [prices2Years[i].date],
-          });
-        }
-      }
-    }
-
-    // Filter levels with multiple touches
-    for (const [price, data] of priceLevels) {
-      if (data.count >= 2) {
-        pivots.push({
-          price,
-          count: data.count,
-          dates: data.dates,
-        });
-      }
-    }
-
-    // Sort by count descending
-    return pivots.sort((a, b) => b.count - a.count).slice(0, 10);
-  }, [historicalPrices]);
-
   // Prepare chart data
   const chartData = useMemo(() => {
     if (cagrResults.length === 0) return null;
@@ -317,9 +253,21 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
 
   return (
     <div className="space-y-8">
-      <h3 className="text-3xl font-bold text-gray-100">
-        CAGR Analysis - {ticker}
-      </h3>
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+        <div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-sky-400 bg-clip-text text-transparent">
+            CAGR Analysis
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Análisis de tasa de crecimiento anual compuesto para {ticker}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right bg-gradient-to-r from-indigo-900/40 to-sky-900/40 px-4 py-2 rounded-xl border border-indigo-600">
+            <p className="text-xs text-indigo-400">Días de Datos</p>
+            <p className="text-xl font-bold text-indigo-400">{historicalPrices.length.toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
 
       {/* Input Controls */}
       <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-600 shadow-lg">
@@ -559,46 +507,6 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
           </div>
           <p className="text-sm text-gray-500 mt-4 text-center">
             Eje izquierdo (azul): Precio • Eje derecho (verde): CAGR {yearsToAnalyze}Y
-          </p>
-        </div>
-      )}
-
-      {/* Pivot Points */}
-      {pivotPoints.length > 0 && (
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <h4 className="text-xl font-bold text-gray-100 mb-4">Pivot Points Estimados (últimos 2 años)</h4>
-          <p className="text-sm text-gray-400 mb-4">
-            Niveles de precio donde el precio ha rebotado múltiples veces (soporte/resistencia)
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {pivotPoints.map((pivot, i) => {
-              const currentPrice = statistics?.lastPrice || 0;
-              const isSupport = pivot.price < currentPrice;
-              return (
-                <div
-                  key={i}
-                  className={`p-4 rounded-xl border text-center ${
-                    isSupport
-                      ? 'bg-green-900/30 border-green-700'
-                      : 'bg-red-900/30 border-red-700'
-                  }`}
-                >
-                  <p className="text-sm text-gray-400 mb-1">
-                    {isSupport ? 'Soporte' : 'Resistencia'}
-                  </p>
-                  <p className={`text-2xl font-bold ${isSupport ? 'text-green-400' : 'text-red-400'}`}>
-                    ${pivot.price.toFixed(2)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {pivot.count} toques
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-          <p className="text-xs text-gray-500 mt-4 text-center">
-            Los pivot points son niveles de precio históricos donde el precio ha mostrado reversión.
-            Tolerancia: 2% para agrupar niveles similares.
           </p>
         </div>
       )}

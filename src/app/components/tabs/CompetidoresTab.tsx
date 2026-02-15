@@ -161,9 +161,21 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
 
   return (
     <div className="space-y-10">
-      <h3 className="text-3xl font-bold text-gray-100">
-        Competidores de {ticker}
-      </h3>
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+        <div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
+            Competidores
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Análisis comparativo de {ticker} vs competidores del sector</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right bg-gradient-to-r from-orange-900/40 to-red-900/40 px-4 py-2 rounded-xl border border-orange-600">
+            <p className="text-xs text-orange-400">Empresas</p>
+            <p className="text-xl font-bold text-orange-400">{validPeerData.length}</p>
+          </div>
+        </div>
+      </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">

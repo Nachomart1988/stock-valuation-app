@@ -91,9 +91,21 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
   return (
     <div className="space-y-10">
-      <h3 className="text-3xl font-bold text-gray-100">
-        Forecasts para {ticker} (Próximos {estimates.length} años)
-      </h3>
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+        <div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+            Analyst Forecasts
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Estimaciones de analistas para {ticker} - Próximos {estimates.length} años</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right bg-gradient-to-r from-cyan-900/40 to-blue-900/40 px-4 py-2 rounded-xl border border-cyan-600">
+            <p className="text-xs text-cyan-400">Periodos</p>
+            <p className="text-xl font-bold text-cyan-400">{estimates.length}</p>
+          </div>
+        </div>
+      </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">

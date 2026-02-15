@@ -147,7 +147,29 @@ export default function AnalisisFinalTab({
 
   return (
     <div className="space-y-10">
-      <h2 className="text-4xl font-bold text-gray-100">Analisis Final - {ticker}</h2>
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+        <div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
+            Análisis Final
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Evaluación integral y veredicto de inversión para {ticker}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          {currentPrice && (
+            <div className="text-right bg-gradient-to-r from-gray-800 to-gray-900 px-4 py-2 rounded-xl border border-gray-600">
+              <p className="text-xs text-gray-400">Precio Actual</p>
+              <p className="text-xl font-bold text-gray-100">${currentPrice.toFixed(2)}</p>
+            </div>
+          )}
+          {precioEstimado && (
+            <div className="text-right bg-gradient-to-r from-rose-900/40 to-pink-900/40 px-4 py-2 rounded-xl border border-rose-600">
+              <p className="text-xs text-rose-400">Precio Estimado</p>
+              <p className="text-xl font-bold text-rose-400">${precioEstimado.toFixed(2)}</p>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Mensaje si no hay averageVal */}
       {!sharedAverageVal && (

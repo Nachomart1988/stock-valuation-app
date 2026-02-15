@@ -21,7 +21,7 @@ import CalculosTab from '@/app/components/tabs/CalculosTab';
 import RevenueForecastTab from '@/app/components/tabs/RevenueForecastTab';
 import SustainableGrowthTab from '@/app/components/tabs/SustainableGrowthTab';
 import ValuacionesTab from '@/app/components/tabs/ValuacionesTab';
-import AnalisisFinalTab from '@/app/components/tabs/AnalisisFinalTab';
+// AnalisisFinalTab removed as per user request
 import WACCTab from '@/app/components/tabs/WACCTab';
 import CAGRTab from '@/app/components/tabs/CAGRTab';
 import NoticiasTab from '@/app/components/tabs/NoticiasTab';
@@ -29,6 +29,18 @@ import KeyMetricsTab from '@/app/components/tabs/KeyMetricsTab';
 import SegmentationTab from '@/app/components/tabs/SegmentationTab';
 import IndustryTab from '@/app/components/tabs/IndustryTab';
 import HoldersTab from '@/app/components/tabs/HoldersTab';
+import DuPontTab from '@/app/components/tabs/DuPontTab';
+import DiarioInversorTab from '@/app/components/tabs/DiarioInversorTab';
+import PivotsTab from '@/app/components/tabs/PivotsTab';
+import ResumenTab from '@/app/components/tabs/ResumenTab';
+
+// Group components for reorganized layout
+import FinancialStatementsGroup from '@/app/components/groups/FinancialStatementsGroup';
+import ForecastsGroup from '@/app/components/groups/ForecastsGroup';
+import GeneralInfoGroup from '@/app/components/groups/GeneralInfoGroup';
+import CompanyGroup from '@/app/components/groups/CompanyGroup';
+import InputsGroup from '@/app/components/groups/InputsGroup';
+import DCFGroup from '@/app/components/groups/DCFGroup';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -231,7 +243,22 @@ function AnalizarContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sharedAverageVal, setSharedAverageVal] = useState<number | null>(null);
+  const [sharedSGR, setSharedSGR] = useState<number | null>(null);
+  const [sharedAvgCAPM, setSharedAvgCAPM] = useState<number | null>(null);
+  const [sharedValorIntrinseco, setSharedValorIntrinseco] = useState<number | null>(null);
   const [initialLoad, setInitialLoad] = useState(true);
+
+  // States for ResumenTab
+  const [sharedAdvanceValueNet, setSharedAdvanceValueNet] = useState<any>(null);
+  const [sharedCompanyQualityNet, setSharedCompanyQualityNet] = useState<any>(null);
+  const [sharedWACC, setSharedWACC] = useState<number | null>(null);
+  const [sharedNews, setSharedNews] = useState<any[]>([]);
+  const [sharedHoldersData, setSharedHoldersData] = useState<any>(null);
+  const [sharedPivotAnalysis, setSharedPivotAnalysis] = useState<any>(null);
+  const [sharedForecasts, setSharedForecasts] = useState<any[]>([]);
+  const [sharedKeyMetricsSummary, setSharedKeyMetricsSummary] = useState<any>(null);
+  const [sharedMonteCarlo, setSharedMonteCarlo] = useState<any>(null);
+  const [selectedTabIndex, setSelectedTabIndex] = useState(0);
 
   // Cargar ticker desde URL solo al inicio
   useEffect(() => {
@@ -311,6 +338,40 @@ function AnalizarContent() {
           fetchJson('dividends', '&limit=20').catch(() => []),
         ]);
 
+        // Fetch additional as-reported statements and growth data
+        const [
+          incomeAsReportedData,
+          balanceAsReportedData,
+          incomeGrowthData,
+          balanceGrowthData,
+          cashFlowGrowthData,
+          financialGrowthData,
+        ] = await Promise.all([
+          fetchJson('income-statement-as-reported', '&limit=10').catch(() => []),
+          fetchJson('balance-sheet-statement-as-reported', '&limit=10').catch(() => []),
+          fetchJson('income-statement-growth', '&limit=10').catch(() => []),
+          fetchJson('balance-sheet-statement-growth', '&limit=10').catch(() => []),
+          fetchJson('cash-flow-statement-growth', '&limit=10').catch(() => []),
+          fetchJson('financial-growth', '&limit=10').catch(() => []),
+        ]);
+
+        // Fetch additional financial metrics (key-metrics, ratios, enterprise-value)
+        const [
+          keyMetricsData,
+          keyMetricsTTMData,
+          ratiosData,
+          ratiosTTMData,
+          enterpriseValueData,
+          ownerEarningsData,
+        ] = await Promise.all([
+          fetchJson('key-metrics', '&limit=10').catch(() => []),
+          fetchJson('key-metrics-ttm').catch(() => []),
+          fetchJson('ratios', '&limit=10').catch(() => []),
+          fetchJson('ratios-ttm').catch(() => []),
+          fetchJson('enterprise-value', '&limit=10').catch(() => []),
+          fetchJson('owner-earnings', '&limit=10').catch(() => []),
+        ]);
+
         const dcfStandardRes = await fetch(`${base}/discounted-cash-flow${params}`, { cache: 'no-store' });
         let dcfStandardData: any = [];
         if (dcfStandardRes.ok) {
@@ -356,6 +417,15 @@ function AnalizarContent() {
         if (dividendsData?.length > 0) {
           console.log('[AnalizarContent] Latest dividend:', dividendsData[0]);
         }
+        // Store raw SEC reports for detailed display
+        const secReportsRaw = secReportsData.filter(Boolean);
+        console.log('[AnalizarContent] Raw SEC reports loaded:', secReportsRaw.length);
+
+        console.log('[AnalizarContent] Key Metrics records:', keyMetricsData?.length || 0);
+        console.log('[AnalizarContent] Ratios records:', ratiosData?.length || 0);
+        console.log('[AnalizarContent] Enterprise Value records:', enterpriseValueData?.length || 0);
+        console.log('[AnalizarContent] Owner Earnings records:', ownerEarningsData?.length || 0);
+
         setData({
           quote: quoteData[0] || {},
           profile: profileData[0] || {},
@@ -370,12 +440,29 @@ function AnalizarContent() {
           incomeTTM: incomeTTMData[0] || null,
           balanceTTM: balanceTTMData[0] || null,
           cashFlowTTM: cashFlowTTMData[0] || null,
-          // SEC supplemental data
+          // SEC supplemental data (processed)
           secData: secSupplementalData,
+          // Raw SEC reports (complete data from financial-reports-json)
+          secReportsRaw: secReportsRaw,
           // As-reported cash flow for dividends
           cashFlowAsReported: cashFlowAsReportedData || [],
           // Dividend history per share
           dividends: dividendsData || [],
+          // As-reported statements (additional detail)
+          incomeAsReported: incomeAsReportedData || [],
+          balanceAsReported: balanceAsReportedData || [],
+          // Growth data (YoY changes)
+          incomeGrowth: incomeGrowthData || [],
+          balanceGrowth: balanceGrowthData || [],
+          cashFlowGrowth: cashFlowGrowthData || [],
+          financialGrowth: financialGrowthData || [],
+          // Additional financial metrics
+          keyMetrics: keyMetricsData || [],
+          keyMetricsTTM: keyMetricsTTMData[0] || null,
+          ratios: ratiosData || [],
+          ratiosTTM: ratiosTTMData[0] || null,
+          enterpriseValue: enterpriseValueData || [],
+          ownerEarnings: ownerEarningsData || [],
         });
       } catch (err) {
         setError((err as Error).message || 'Error al cargar datos');
@@ -385,6 +472,178 @@ function AnalizarContent() {
     };
 
     fetchData();
+  }, [activeTicker]);
+
+  // Fetch additional data for ResumenTab (news, holders, pivots, forecasts)
+  useEffect(() => {
+    if (!activeTicker) return;
+
+    const fetchResumenData = async () => {
+      const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
+      if (!apiKey) return;
+
+      try {
+        // Fetch news
+        const newsRes = await fetch(
+          `https://financialmodelingprep.com/stable/news/stock?symbols=${activeTicker}&limit=20&apikey=${apiKey}`,
+          { cache: 'no-store' }
+        );
+        if (newsRes.ok) {
+          const newsData = await newsRes.json();
+          setSharedNews(Array.isArray(newsData) ? newsData : []);
+        }
+
+        // Fetch comprehensive institutional holders data for Neural Resumen Engine
+        // Including new endpoints: positions-summary, insider-stats, ownership-analytics
+        const getLast4Quarters = () => {
+          const quarters: string[] = [];
+          const now = new Date();
+          for (let i = 0; i < 4; i++) {
+            const date = new Date(now.getFullYear(), now.getMonth() - (i * 3), 1);
+            const year = date.getFullYear();
+            const quarter = Math.floor(date.getMonth() / 3) + 1;
+            quarters.push(`${year}-Q${quarter}`);
+          }
+          return quarters;
+        };
+
+        const quarters = getLast4Quarters();
+        const [instRes, summaryRes, insiderStatsRes, analyticsRes, ...positionsResponses] = await Promise.all([
+          fetch(`https://financialmodelingprep.com/stable/institutional-holder?symbol=${activeTicker}&apikey=${apiKey}`, { cache: 'no-store' }),
+          fetch(`https://financialmodelingprep.com/stable/institutional-ownership/symbol-ownership-percent?symbol=${activeTicker}&apikey=${apiKey}`, { cache: 'no-store' }),
+          fetch(`https://financialmodelingprep.com/stable/insider-trading/statistics?symbol=${activeTicker}&apikey=${apiKey}`, { cache: 'no-store' }),
+          fetch(`https://financialmodelingprep.com/stable/institutional-ownership/extract-analytics/holder?symbol=${activeTicker}&apikey=${apiKey}`, { cache: 'no-store' }),
+          ...quarters.map(q =>
+            fetch(`https://financialmodelingprep.com/stable/symbol-positions-summary?symbol=${activeTicker}&quarter=${q}&apikey=${apiKey}`, { cache: 'no-store' })
+          )
+        ]);
+
+        let holdersData: any = {
+          institutionalHolders: [],
+          ownershipSummary: null,
+          positionsSummary: [],
+          insiderStats: null,
+          ownershipAnalytics: null
+        };
+
+        if (instRes.ok) {
+          const instData = await instRes.json();
+          holdersData.institutionalHolders = Array.isArray(instData) ? instData.slice(0, 25) : [];
+        }
+        if (summaryRes.ok) {
+          const summaryData = await summaryRes.json();
+          holdersData.ownershipSummary = Array.isArray(summaryData) && summaryData.length > 0 ? summaryData[0] : null;
+        }
+        if (insiderStatsRes.ok) {
+          const insiderData = await insiderStatsRes.json();
+          holdersData.insiderStats = Array.isArray(insiderData) && insiderData.length > 0 ? insiderData[0] : insiderData;
+        }
+        if (analyticsRes.ok) {
+          const analyticsData = await analyticsRes.json();
+          holdersData.ownershipAnalytics = Array.isArray(analyticsData) && analyticsData.length > 0 ? analyticsData[0] : analyticsData;
+        }
+
+        // Process quarterly positions data
+        for (let i = 0; i < positionsResponses.length; i++) {
+          const res = positionsResponses[i];
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              holdersData.positionsSummary.push({
+                quarter: quarters[i],
+                ...data[0]
+              });
+            } else if (data && typeof data === 'object' && !Array.isArray(data)) {
+              holdersData.positionsSummary.push({
+                quarter: quarters[i],
+                ...data
+              });
+            }
+          }
+        }
+
+        console.log('[ResumenData] Enhanced holdersData for Neural Engine:', {
+          hasInstitutional: holdersData.institutionalHolders?.length > 0,
+          hasPositionsSummary: holdersData.positionsSummary?.length > 0,
+          hasInsiderStats: !!holdersData.insiderStats,
+          hasOwnershipAnalytics: !!holdersData.ownershipAnalytics
+        });
+
+        setSharedHoldersData(holdersData);
+
+        // Fetch analyst forecasts
+        const forecastRes = await fetch(
+          `https://financialmodelingprep.com/stable/analyst-estimates?symbol=${activeTicker}&period=annual&limit=10&apikey=${apiKey}`,
+          { cache: 'no-store' }
+        );
+        if (forecastRes.ok) {
+          const forecastData = await forecastRes.json();
+          // Filter for future estimates
+          const futureEstimates = (forecastData || [])
+            .filter((est: any) => new Date(est.date) > new Date())
+            .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          setSharedForecasts(futureEstimates);
+        }
+
+        // Fetch historical prices for pivot analysis
+        const priceRes = await fetch(
+          `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${activeTicker}&apikey=${apiKey}`,
+          { cache: 'no-store' }
+        );
+        if (priceRes.ok) {
+          const priceData = await priceRes.json();
+          const historical = priceData?.historical || priceData || [];
+          if (historical.length > 0) {
+            // Calculate pivot points from recent data
+            const recent = historical.slice(0, 252); // Last year
+            const lastDay = recent[0];
+
+            // Standard Pivot Point calculation
+            const pivotPoint = (lastDay.high + lastDay.low + lastDay.close) / 3;
+            const r1 = 2 * pivotPoint - lastDay.low;
+            const s1 = 2 * pivotPoint - lastDay.high;
+            const r2 = pivotPoint + (lastDay.high - lastDay.low);
+            const s2 = pivotPoint - (lastDay.high - lastDay.low);
+
+            // Calculate 52-week high/low
+            const high52w = Math.max(...recent.map((d: any) => d.high));
+            const low52w = Math.min(...recent.map((d: any) => d.low));
+
+            // Fibonacci retracement levels
+            const range = high52w - low52w;
+            const fib236 = high52w - range * 0.236;
+            const fib382 = high52w - range * 0.382;
+            const fib500 = high52w - range * 0.500;
+            const fib618 = high52w - range * 0.618;
+            const fib786 = high52w - range * 0.786;
+
+            setSharedPivotAnalysis({
+              currentPrice: lastDay.close,
+              pivotPoint,
+              resistance: { R1: r1, R2: r2 },
+              support: { S1: s1, S2: s2 },
+              high52Week: high52w,
+              low52Week: low52w,
+              fibonacci: {
+                level236: fib236,
+                level382: fib382,
+                level500: fib500,
+                level618: fib618,
+                level786: fib786,
+              },
+              priceVsHigh: ((lastDay.close / high52w) - 1) * 100,
+              priceVsLow: ((lastDay.close / low52w) - 1) * 100,
+            });
+          }
+        }
+
+        console.log('[ResumenData] Fetched additional data for neural engine');
+      } catch (err) {
+        console.warn('[ResumenData] Error fetching additional data:', err);
+      }
+    };
+
+    fetchResumenData();
   }, [activeTicker]);
 
   // Estado inicial - mostrar formulario de búsqueda
@@ -453,32 +712,21 @@ function AnalizarContent() {
     );
   }
 
-  const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM, secData, cashFlowAsReported, dividends } = data;
+  const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM, secData, secReportsRaw, cashFlowAsReported, dividends, incomeAsReported, balanceAsReported, incomeGrowth, balanceGrowth, cashFlowGrowth, financialGrowth, keyMetrics, keyMetricsTTM, ratios, ratiosTTM, enterpriseValue, ownerEarnings } = data;
 
+  // New simplified category structure
   const categories = [
     'Inicio',
-    'Key Metrics',
-    'Noticias',
-    'DuPont Analysis',
-    'Analisis General',
-    'Income Statement',
-    'Balance Sheet',
-    'Cash Flow',
-    'Analistas',
-    'Competidores',
-    'Beta',
+    'Financial Statements',
     'Forecasts',
-    'Calculos',
-    'Revenue Forecast',
-    'Sustainable Growth',
-    'WACC',
-    'CAGR',
-    'Valuaciones',
-    'Analisis Final',
+    'Info General',
+    'Compañía',
+    'Noticias',
+    'Inputs',
     'DCF',
-    'Segmentation',
-    'Industry',
-    'Holders',
+    'Valuaciones',
+    'Diario Inversor',
+    'Resumen',
   ];
 
   return (
@@ -491,7 +739,7 @@ function AnalizarContent() {
           {profile.companyName || 'Compañía'}
         </h2>
 
-        <Tab.Group>
+        <Tab.Group selectedIndex={selectedTabIndex} onChange={setSelectedTabIndex}>
           <Tab.List className="flex flex-wrap gap-3 rounded-xl bg-gray-800 p-3 mb-10 shadow-sm">
             {categories.map((category) => (
               <Tab
@@ -512,7 +760,7 @@ function AnalizarContent() {
           </Tab.List>
 
 <Tab.Panels className="mt-2">
-  {/* Inicio (antes Inputs) */}
+  {/* 1. Inicio */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
     <InicioTab
       ticker={activeTicker}
@@ -525,109 +773,107 @@ function AnalizarContent() {
     />
   </Tab.Panel>
 
-  {/* Key Metrics */}
+  {/* 2. Financial Statements (Income, Balance, CashFlow) */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <KeyMetricsTab ticker={activeTicker} />
+    <FinancialStatementsGroup
+      IncomeTab={<FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} secData={secData} growthData={incomeGrowth} asReportedData={incomeAsReported} financialGrowth={financialGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} />}
+      BalanceTab={<FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} secData={secData} growthData={balanceGrowth} asReportedData={balanceAsReported} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} enterpriseValue={enterpriseValue} />}
+      CashFlowTab={<FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} secData={secData} cashFlowAsReported={cashFlowAsReported} growthData={cashFlowGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ownerEarnings={ownerEarnings} />}
+    />
   </Tab.Panel>
 
-  {/* Noticias */}
+  {/* 3. Forecasts (Forecasts + Revenue Forecast) */}
+  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
+    <ForecastsGroup
+      ForecastsTab={<ForecastsTab ticker={ticker} />}
+      RevenueForecastTab={<RevenueForecastTab income={income} />}
+    />
+  </Tab.Panel>
+
+  {/* 4. Info General (Analisis General, Key Metrics, Analistas, DuPont) */}
+  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
+    <GeneralInfoGroup
+      AnalisisGeneralTab={<GeneralTab profile={profile} quote={quote} ticker={activeTicker} />}
+      KeyMetricsTab={<KeyMetricsTab ticker={activeTicker} industry={profile?.industry} onCompanyQualityNetChange={setSharedCompanyQualityNet} />}
+      AnalistasTab={<AnalistasTab priceTarget={priceTarget} ticker={activeTicker} />}
+      DuPontTab={<DuPontTab income={income} balance={balance} ticker={activeTicker} />}
+    />
+  </Tab.Panel>
+
+  {/* 5. Compañía (Competidores, Industry, Segmentation, Holders) */}
+  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
+    <CompanyGroup
+      CompetidoresTab={<CompetidoresTab ticker={ticker} />}
+      IndustryTab={<IndustryTab ticker={activeTicker} />}
+      SegmentationTab={<SegmentationTab ticker={activeTicker} />}
+      HoldersTab={<HoldersTab ticker={activeTicker} />}
+    />
+  </Tab.Panel>
+
+  {/* 6. Noticias */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
     <NoticiasTab ticker={activeTicker} />
   </Tab.Panel>
 
-  {/* DuPont Analysis */}
+  {/* 7. Inputs (Sustainable Growth, Beta, CAGR, Pivots, WACC) */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <DuPontTab income={income} balance={balance} />
+    <InputsGroup
+      SustainableGrowthTab={
+        <SustainableGrowthTab
+          ticker={activeTicker}
+          income={income}
+          balance={balance}
+          cashFlow={cashFlow}
+          cashFlowAsReported={cashFlowAsReported}
+          estimates={estimates}
+          dcfCustom={dcfCustom}
+          onSGRChange={setSharedSGR}
+        />
+      }
+      BetaTab={<BetaTab ticker={ticker} onAvgCAPMChange={setSharedAvgCAPM} />}
+      CAGRTab={<CAGRTab ticker={activeTicker} />}
+      PivotsTab={<PivotsTab ticker={activeTicker} />}
+      WACCTab={
+        <WACCTab
+          ticker={activeTicker}
+          income={income}
+          balance={balance}
+          quote={quote}
+          profile={profile}
+          onWACCChange={setSharedWACC}
+        />
+      }
+    />
   </Tab.Panel>
 
-  {/* Analisis General */}
+  {/* 8. DCF (Cálculos, DCF Models) con valores intrínsecos en header */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <GeneralTab profile={profile} quote={quote} ticker={activeTicker} />
-  </Tab.Panel>
-
-  {/* Income Statement */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} secData={secData} />
-  </Tab.Panel>
-
-  {/* Balance Sheet */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} secData={secData} />
-  </Tab.Panel>
-
-  {/* Cash Flow */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} secData={secData} cashFlowAsReported={cashFlowAsReported} />
-  </Tab.Panel>
-
-  {/* Analistas */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <AnalistasTab priceTarget={priceTarget} ticker={activeTicker} />
-  </Tab.Panel>
-
-  {/* Competidores */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <CompetidoresTab ticker={ticker} />
-  </Tab.Panel>
-
-  {/* Beta */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <BetaTab ticker={ticker} />
-  </Tab.Panel>
-
-  {/* Forecasts */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <ForecastsTab ticker={ticker} />
-  </Tab.Panel>
-
-  {/* Cálculos */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <CalculosTab
-      ticker={ticker}
+    <DCFGroup
+      CalculosTab={
+        <CalculosTab
+          ticker={ticker}
+          quote={quote}
+          profile={profile}
+          income={income}
+          balance={balance}
+          cashFlow={cashFlow}
+          dcfCustom={dcfCustom}
+          estimates={estimates}
+          onValorIntrinsecoChange={setSharedValorIntrinseco}
+        />
+      }
+      DCFTab={<DCFTab dcfStandard={dcfStandard} dcfCustom={dcfCustom} quote={quote} income={income} />}
+      dcfStandard={dcfStandard}
+      dcfCustom={dcfCustom}
       quote={quote}
-      profile={profile}
+      valorIntrinseco={sharedValorIntrinseco}
       income={income}
       balance={balance}
       cashFlow={cashFlow}
-      dcfCustom={dcfCustom}
-      estimates={estimates}
     />
   </Tab.Panel>
 
-  {/* Revenue Forecast */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <RevenueForecastTab income={income} />
-  </Tab.Panel>
-
-  {/* Sustainable Growth */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <SustainableGrowthTab
-      income={income}
-      balance={balance}
-      cashFlow={cashFlow}
-      cashFlowAsReported={cashFlowAsReported}
-      estimates={estimates}
-      dcfCustom={dcfCustom}
-    />
-  </Tab.Panel>
-
-  {/* WACC */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <WACCTab
-      ticker={activeTicker}
-      income={income}
-      balance={balance}
-      quote={quote}
-      profile={profile}
-    />
-  </Tab.Panel>
-
-  {/* CAGR */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <CAGRTab ticker={activeTicker} />
-  </Tab.Panel>
-
-  {/* Valuaciones → Esta es la más importante para ti */}
+  {/* 9. Valuaciones */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
     <ValuacionesTab
       ticker={activeTicker}
@@ -640,39 +886,84 @@ function AnalizarContent() {
       profile={profile}
       quote={quote}
       dcfCustom={dcfCustom}
+      sustainableGrowthRate={sharedSGR}
+      avgCAPMFromBeta={sharedAvgCAPM}
       onAverageValChange={setSharedAverageVal}
+      onAdvanceValueNetChange={setSharedAdvanceValueNet}
+      keyMetricsTTM={keyMetricsTTM}
+      ownerEarnings={ownerEarnings}
     />
   </Tab.Panel>
 
-{/* Analisis Final */}
-<Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-  <AnalisisFinalTab
-    ticker={ticker}
-    quote={quote}
-    sharedAverageVal={sharedAverageVal}
-  />
-</Tab.Panel>
-
-  {/* DCF */}
+  {/* 10. Diario Inversor */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <DCFTab dcfStandard={dcfStandard} dcfCustom={dcfCustom} quote={quote} income={income} />
+    <DiarioInversorTab />
   </Tab.Panel>
 
-  {/* Segmentation */}
+  {/* 11. Resumen Maestro */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <SegmentationTab ticker={activeTicker} />
-  </Tab.Panel>
-
-  {/* Industry */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <IndustryTab ticker={activeTicker} />
-  </Tab.Panel>
-
-  {/* Holders */}
-  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
-    <HoldersTab ticker={activeTicker} />
+    <ResumenTab
+      ticker={activeTicker}
+      currentPrice={quote?.price || 0}
+      advanceValueNet={sharedAdvanceValueNet}
+      companyQualityNet={sharedCompanyQualityNet}
+      keyMetricsSummary={sharedKeyMetricsSummary}
+      sustainableGrowthRate={sharedSGR}
+      wacc={sharedWACC}
+      dcfValuation={sharedValorIntrinseco}
+      monteCarlo={sharedMonteCarlo}
+      pivotAnalysis={sharedPivotAnalysis}
+      holdersData={sharedHoldersData}
+      forecasts={sharedForecasts}
+      news={sharedNews}
+    />
   </Tab.Panel>
 </Tab.Panels>
+
+          {/* Navigation Buttons */}
+          <div className="flex items-center justify-between mt-8 px-4">
+            <button
+              onClick={() => setSelectedTabIndex(Math.max(0, selectedTabIndex - 1))}
+              disabled={selectedTabIndex === 0}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all ${
+                selectedTabIndex === 0
+                  ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                  : 'bg-gray-700 text-white hover:bg-gray-600 hover:shadow-lg'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              <span className="hidden sm:inline">Anterior</span>
+              <span className="sm:hidden">←</span>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-sm">
+                {selectedTabIndex + 1} / {categories.length}
+              </span>
+              <span className="hidden sm:inline text-gray-400">|</span>
+              <span className="hidden sm:inline text-blue-400 font-medium">
+                {categories[selectedTabIndex]}
+              </span>
+            </div>
+
+            <button
+              onClick={() => setSelectedTabIndex(Math.min(categories.length - 1, selectedTabIndex + 1))}
+              disabled={selectedTabIndex === categories.length - 1}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all ${
+                selectedTabIndex === categories.length - 1
+                  ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-500 hover:shadow-lg shadow-blue-500/25'
+              }`}
+            >
+              <span className="hidden sm:inline">Siguiente</span>
+              <span className="sm:hidden">→</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
         </Tab.Group>
       </div>
     </main>
@@ -1241,68 +1532,6 @@ function InicioTab({
   );
 }
 
-function DuPontTab({ income, balance }: { income: any[]; balance: any[] }) {
-  if (income.length < 2 || balance.length < 2) {
-    return <p className="text-2xl text-gray-400 text-center py-10">Datos insuficientes para DuPont</p>;
-  }
-
-  const rows = income.map((inc, i) => {
-    const bal = balance[i] || {};
-    const netIncome = inc.netIncome || 0;
-    const revenue = inc.revenue || 1;
-    const assets = bal.totalAssets || 1;
-    const equity = bal.totalStockholdersEquity || 1;
-
-    const margin = (netIncome / revenue) * 100;
-    const turnover = revenue / assets;
-    const multiplier = assets / equity;
-    const roe = margin * turnover * multiplier;
-
-    return {
-      date: inc.date,
-      roe: roe.toFixed(2),
-      margin: margin.toFixed(2),
-      turnover: turnover.toFixed(2),
-      multiplier: multiplier.toFixed(2),
-    };
-  });
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
-        <thead className="bg-gray-800">
-          <tr>
-            <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">Fecha</th>
-            <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">ROE (%)</th>
-            <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">Net Margin (%)</th>
-            <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">Asset Turnover</th>
-            <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">Equity Multiplier</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-700">
-          {rows.map((row, i) => (
-            <tr key={i} className="hover:bg-gray-700 transition">
-              <td className="px-8 py-5 text-gray-300 text-lg">{row.date}</td>
-              <td className="px-8 py-5 text-gray-300 text-lg">
-                {row.roe} {i < rows.length - 1 && getArrow(row.roe, rows[i + 1].roe)}
-              </td>
-              <td className="px-8 py-5 text-gray-300 text-lg">
-                {row.margin} {i < rows.length - 1 && getArrow(row.margin, rows[i + 1].margin)}
-              </td>
-              <td className="px-8 py-5 text-gray-300 text-lg">
-                {row.turnover} {i < rows.length - 1 && getArrow(row.turnover, rows[i + 1].turnover)}
-              </td>
-              <td className="px-8 py-5 text-gray-300 text-lg">
-                {row.multiplier} {i < rows.length - 1 && getArrow(row.multiplier, rows[i + 1].multiplier)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; ticker: string }) {
   const [floatData, setFloatData] = useState<any>(null);
   const [executives, setExecutives] = useState<any[]>([]);
@@ -1462,7 +1691,49 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
   );
 }
 
-function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAsReported }: { title: string; data: any[]; type: 'income' | 'balance' | 'cashFlow'; ttmData?: any; secData?: any; cashFlowAsReported?: any[] }) {
+// Helper function to format SEC values intelligently
+function formatSECValue(value: number): string {
+  if (value === undefined || value === null || !isFinite(value)) return '—';
+
+  // For very small values (likely percentages or ratios)
+  if (Math.abs(value) < 1 && value !== 0) {
+    return value.toFixed(4);
+  }
+  // For per-share values (typically between 0 and 100)
+  if (Math.abs(value) < 100 && Math.abs(value) >= 1) {
+    return `$${value.toFixed(2)}`;
+  }
+  // For large monetary values
+  if (Math.abs(value) >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
+  if (Math.abs(value) >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+  if (Math.abs(value) >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
+  if (Math.abs(value) >= 1e3) return `$${(value / 1e3).toFixed(0)}K`;
+  return `$${value.toLocaleString()}`;
+}
+
+function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAsReported, growthData, asReportedData, financialGrowth, secReportsRaw, keyMetrics, keyMetricsTTM, ratios, ratiosTTM, enterpriseValue, ownerEarnings }: {
+  title: string;
+  data: any[];
+  type: 'income' | 'balance' | 'cashFlow';
+  ttmData?: any;
+  secData?: any;
+  cashFlowAsReported?: any[];
+  growthData?: any[];
+  asReportedData?: any[];
+  financialGrowth?: any[];
+  secReportsRaw?: any[];
+  keyMetrics?: any[];
+  keyMetricsTTM?: any;
+  ratios?: any[];
+  ratiosTTM?: any;
+  enterpriseValue?: any[];
+  ownerEarnings?: any[];
+}) {
+  const [showSecDetails, setShowSecDetails] = useState(false);
+  const [showKeyMetrics, setShowKeyMetrics] = useState(false);
+  const [showRatios, setShowRatios] = useState(false);
+  const [showEnterpriseValue, setShowEnterpriseValue] = useState(false);
+  const [showOwnerEarnings, setShowOwnerEarnings] = useState(false);
   if (data.length === 0 && !ttmData) {
     return <p className="text-2xl text-gray-400 text-center py-10">No hay datos disponibles para {title}</p>;
   }
@@ -1657,18 +1928,24 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
       { key: 'revenue', label: 'Revenue' },
       { key: 'costOfRevenue', label: 'Cost of Revenue' },
       { key: 'grossProfit', label: 'Gross Profit' },
+      { key: 'grossProfitRatio', label: 'Gross Margin', isRatio: true },
       { key: 'researchAndDevelopmentExpenses', label: 'R&D Expenses' },
       { key: 'sellingGeneralAndAdministrativeExpenses', label: 'SG&A Expenses' },
       { key: 'operatingExpenses', label: 'Operating Expenses' },
       { key: 'operatingIncome', label: 'Operating Income' },
+      { key: 'operatingIncomeRatio', label: 'Operating Margin', isRatio: true },
       { key: 'interestExpense', label: 'Interest Expense' },
       { key: 'interestIncome', label: 'Interest Income' },
+      { key: 'totalOtherIncomeExpensesNet', label: 'Other Income/Expense' },
       { key: 'depreciationAndAmortization', label: 'D&A' },
       { key: 'ebitda', label: 'EBITDA' },
+      { key: 'ebitdaratio', label: 'EBITDA Margin', isRatio: true },
       { key: 'ebit', label: 'EBIT' },
       { key: 'incomeBeforeTax', label: 'Income Before Tax' },
+      { key: 'incomeBeforeTaxRatio', label: 'Pre-Tax Margin', isRatio: true },
       { key: 'incomeTaxExpense', label: 'Income Tax Expense' },
       { key: 'netIncome', label: 'Net Income' },
+      { key: 'netIncomeRatio', label: 'Net Margin', isRatio: true },
       { key: 'eps', label: 'EPS', isPerShare: true },
       { key: 'epsDiluted', label: 'EPS Diluted', isPerShare: true },
       { key: 'weightedAverageShsOut', label: 'Shares Outstanding' },
@@ -1679,13 +1956,18 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
       // Assets
       { key: 'cashAndCashEquivalents', label: 'Cash & Equivalents' },
       { key: 'shortTermInvestments', label: 'Short Term Investments' },
+      { key: 'cashAndShortTermInvestments', label: 'Cash + ST Investments' },
       { key: 'netReceivables', label: 'Net Receivables' },
       { key: 'inventory', label: 'Inventory' },
+      { key: 'otherCurrentAssets', label: 'Other Current Assets' },
       { key: 'totalCurrentAssets', label: 'Total Current Assets' },
       { key: 'propertyPlantEquipmentNet', label: 'PP&E Net' },
       { key: 'goodwill', label: 'Goodwill' },
       { key: 'intangibleAssets', label: 'Intangible Assets' },
+      { key: 'goodwillAndIntangibleAssets', label: 'Goodwill + Intangibles' },
       { key: 'longTermInvestments', label: 'Long Term Investments' },
+      { key: 'taxAssets', label: 'Tax Assets' },
+      { key: 'otherNonCurrentAssets', label: 'Other Non-Current Assets' },
       // Lease Assets (from SEC data)
       { key: 'operatingLeaseROU', label: 'Operating Lease ROU Assets', isSEC: true },
       { key: 'financeLeaseROU', label: 'Finance Lease ROU Assets', isSEC: true },
@@ -1694,8 +1976,14 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
       // Liabilities
       { key: 'accountPayables', label: 'Accounts Payable' },
       { key: 'shortTermDebt', label: 'Short Term Debt' },
+      { key: 'taxPayables', label: 'Tax Payables' },
+      { key: 'deferredRevenue', label: 'Deferred Revenue' },
+      { key: 'otherCurrentLiabilities', label: 'Other Current Liabilities' },
       { key: 'totalCurrentLiabilities', label: 'Total Current Liabilities' },
       { key: 'longTermDebt', label: 'Long Term Debt' },
+      { key: 'deferredRevenueNonCurrent', label: 'Deferred Revenue (NC)' },
+      { key: 'deferredTaxLiabilitiesNonCurrent', label: 'Deferred Tax Liabilities' },
+      { key: 'otherNonCurrentLiabilities', label: 'Other Non-Current Liab.' },
       // Lease Liabilities (from SEC data)
       { key: 'operatingLeaseLiabilities', label: 'Operating Lease Liabilities', isSEC: true },
       { key: 'financeLeaseLiabilities', label: 'Finance Lease Liabilities', isSEC: true },
@@ -1707,7 +1995,12 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
       { key: 'commonStock', label: 'Common Stock' },
       { key: 'preferredStock', label: 'Preferred Stock' },
       { key: 'retainedEarnings', label: 'Retained Earnings' },
+      { key: 'accumulatedOtherComprehensiveIncomeLoss', label: 'AOCI' },
+      { key: 'othertotalStockholdersEquity', label: 'Other Equity' },
       { key: 'totalStockholdersEquity', label: 'Total Equity' },
+      { key: 'minorityInterest', label: 'Minority Interest' },
+      { key: 'totalEquity', label: 'Total Equity (incl. Minority)' },
+      { key: 'totalLiabilitiesAndStockholdersEquity', label: 'Total Liab. + Equity' },
       // Calculated
       { key: 'netDebt', label: 'Net Debt' },
       { key: 'workingCapital', label: 'Working Capital' },
@@ -1717,30 +2010,52 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
       // Operating
       { key: 'netIncome', label: 'Net Income' },
       { key: 'depreciationAndAmortization', label: 'D&A' },
+      { key: 'deferredIncomeTax', label: 'Deferred Income Tax' },
       { key: 'stockBasedCompensation', label: 'Stock Based Compensation' },
       { key: 'changeInWorkingCapital', label: 'Change in Working Capital' },
+      { key: 'accountsReceivables', label: 'Change in Receivables' },
+      { key: 'inventory', label: 'Change in Inventory' },
+      { key: 'accountsPayables', label: 'Change in Payables' },
+      { key: 'otherWorkingCapital', label: 'Other Working Capital' },
+      { key: 'otherNonCashItems', label: 'Other Non-Cash Items' },
       { key: 'netCashProvidedByOperatingActivities', label: 'Operating Cash Flow' },
       // Investing
       { key: 'capitalExpenditure', label: 'Capital Expenditure' },
+      { key: 'investmentsInPropertyPlantAndEquipment', label: 'PP&E Investments' },
       { key: 'acquisitionsNet', label: 'Acquisitions' },
       { key: 'purchasesOfInvestments', label: 'Purchases of Investments' },
       { key: 'salesMaturitiesOfInvestments', label: 'Sales of Investments' },
+      { key: 'otherInvestingActivites', label: 'Other Investing Activities' },
       { key: 'netCashProvidedByInvestingActivities', label: 'Investing Cash Flow' },
       // Financing
-      { key: 'netDebtIssuance', label: 'Net Debt Issuance' },
+      { key: 'debtRepayment', label: 'Debt Repayment' },
+      { key: 'commonStockIssued', label: 'Common Stock Issued' },
       { key: 'commonStockRepurchased', label: 'Stock Repurchased' },
       { key: 'dividendsPaid', label: 'Dividends Paid' },
       { key: 'dividendsPerShare', label: 'Dividends Per Share (SEC)', isPerShare: true, isSEC: true },
+      { key: 'otherFinancingActivites', label: 'Other Financing Activities' },
       { key: 'netCashProvidedByFinancingActivities', label: 'Financing Cash Flow' },
       // Summary
+      { key: 'effectOfForexChangesOnCash', label: 'Effect of Forex on Cash' },
       { key: 'netChangeInCash', label: 'Net Change in Cash' },
+      { key: 'cashAtEndOfPeriod', label: 'Cash at End of Period' },
+      { key: 'cashAtBeginningOfPeriod', label: 'Cash at Beginning' },
       { key: 'freeCashFlow', label: 'Free Cash Flow' },
+      { key: 'operatingCashFlowPerShare', label: 'OCF per Share', isPerShare: true },
+      { key: 'capexPerShare', label: 'CapEx per Share', isPerShare: true },
+      { key: 'freeCashFlowPerShare', label: 'FCF per Share', isPerShare: true },
     ];
   }
 
   // Función para formatear valores inteligentemente
   const formatValue = (value: number | null | undefined, metric: { key: string; isRatio?: boolean; isPerShare?: boolean }): string => {
     if (value === undefined || value === null) return '—';
+
+    // Para ratios (márgenes), convertir a porcentaje
+    if (metric.isRatio || metric.key.toLowerCase().includes('ratio') || metric.key.toLowerCase().includes('margin')) {
+      // Los ratios vienen como decimales (0.45 = 45%)
+      return (value * 100).toFixed(1) + '%';
+    }
 
     // Para EPS y valores por acción, mostrar con 2 decimales sin escalar
     if (metric.isPerShare || metric.key.includes('eps') || metric.key.includes('PerShare')) {
@@ -1818,7 +2133,562 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
         <p>Datos ordenados del mas reciente (izquierda) al mas antiguo (derecha).</p>
         <p className="text-purple-400 text-sm">* Datos adicionales de SEC 10-K filings</p>
       </div>
+
+      {/* Growth Rates Section */}
+      {growthData && growthData.length > 0 && (
+        <div className="mt-10">
+          <h4 className="text-3xl font-bold text-green-400 mb-6">📈 Year-over-Year Growth Rates</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+              <thead className="bg-green-900/30">
+                <tr>
+                  <th className="px-8 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-green-900/30 z-10 min-w-[280px]">
+                    Growth Metric
+                  </th>
+                  {growthData.slice(0, 8).map((row: any, i: number) => (
+                    <th key={i} className="px-6 py-4 text-center font-bold text-base min-w-[120px] text-gray-200">
+                      {row.date ? new Date(row.date).getFullYear() : `Period ${i + 1}`}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                {type === 'income' && (
+                  <>
+                    <GrowthRow data={growthData} metricKey="revenueGrowth" label="Revenue Growth" />
+                    <GrowthRow data={growthData} metricKey="grossProfitGrowth" label="Gross Profit Growth" />
+                    <GrowthRow data={growthData} metricKey="operatingIncomeGrowth" label="Operating Income Growth" />
+                    <GrowthRow data={growthData} metricKey="ebitgrowth" label="EBIT Growth" />
+                    <GrowthRow data={growthData} metricKey="netIncomeGrowth" label="Net Income Growth" />
+                    <GrowthRow data={growthData} metricKey="epsgrowth" label="EPS Growth" />
+                    <GrowthRow data={growthData} metricKey="epsdilutedGrowth" label="EPS Diluted Growth" />
+                    <GrowthRow data={growthData} metricKey="rdexpenseGrowth" label="R&D Growth" />
+                    <GrowthRow data={growthData} metricKey="sgaexpensesGrowth" label="SG&A Growth" />
+                  </>
+                )}
+                {type === 'balance' && (
+                  <>
+                    <GrowthRow data={growthData} metricKey="totalAssetsGrowth" label="Total Assets Growth" />
+                    <GrowthRow data={growthData} metricKey="totalLiabilitiesGrowth" label="Total Liabilities Growth" />
+                    <GrowthRow data={growthData} metricKey="totalStockholdersEquityGrowth" label="Total Equity Growth" />
+                    <GrowthRow data={growthData} metricKey="cashAndCashEquivalentsGrowth" label="Cash Growth" />
+                    <GrowthRow data={growthData} metricKey="totalDebtGrowth" label="Total Debt Growth" />
+                    <GrowthRow data={growthData} metricKey="netDebtGrowth" label="Net Debt Growth" />
+                    <GrowthRow data={growthData} metricKey="inventoryGrowth" label="Inventory Growth" />
+                    <GrowthRow data={growthData} metricKey="receivablesGrowth" label="Receivables Growth" />
+                  </>
+                )}
+                {type === 'cashFlow' && (
+                  <>
+                    <GrowthRow data={growthData} metricKey="operatingCashFlowGrowth" label="Operating CF Growth" />
+                    <GrowthRow data={growthData} metricKey="capitalExpenditureGrowth" label="CapEx Growth" />
+                    <GrowthRow data={growthData} metricKey="freeCashFlowGrowth" label="Free Cash Flow Growth" />
+                    <GrowthRow data={growthData} metricKey="dividendsPaidGrowth" label="Dividends Growth" />
+                    <GrowthRow data={growthData} metricKey="netCashUsedForInvestingActivitesGrowth" label="Investing CF Growth" />
+                    <GrowthRow data={growthData} metricKey="netCashUsedProvidedByFinancingActivitiesGrowth" label="Financing CF Growth" />
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-sm text-gray-500 mt-4">Growth rates shown as year-over-year percentage change.</p>
+        </div>
+      )}
+
+      {/* Financial Growth Summary (only for income tab) */}
+      {financialGrowth && financialGrowth.length > 0 && type === 'income' && (
+        <div className="mt-10">
+          <h4 className="text-3xl font-bold text-blue-400 mb-6">📊 Financial Growth Summary</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+              <thead className="bg-blue-900/30">
+                <tr>
+                  <th className="px-8 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-blue-900/30 z-10 min-w-[280px]">
+                    Financial Growth Metric
+                  </th>
+                  {financialGrowth.slice(0, 8).map((row: any, i: number) => (
+                    <th key={i} className="px-6 py-4 text-center font-bold text-base min-w-[120px] text-gray-200">
+                      {row.date ? new Date(row.date).getFullYear() : `Period ${i + 1}`}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                <GrowthRow data={financialGrowth} metricKey="revenueGrowth" label="Revenue Growth" />
+                <GrowthRow data={financialGrowth} metricKey="netIncomeGrowth" label="Net Income Growth" />
+                <GrowthRow data={financialGrowth} metricKey="epsgrowth" label="EPS Growth" />
+                <GrowthRow data={financialGrowth} metricKey="epsdilutedGrowth" label="EPS Diluted Growth" />
+                <GrowthRow data={financialGrowth} metricKey="freeCashFlowGrowth" label="FCF Growth" />
+                <GrowthRow data={financialGrowth} metricKey="operatingCashFlowGrowth" label="Operating CF Growth" />
+                <GrowthRow data={financialGrowth} metricKey="bookValueperShareGrowth" label="Book Value/Share Growth" />
+                <GrowthRow data={financialGrowth} metricKey="debtGrowth" label="Debt Growth" />
+                <GrowthRow data={financialGrowth} metricKey="assetGrowth" label="Asset Growth" />
+                <GrowthRow data={financialGrowth} metricKey="receivablesGrowth" label="Receivables Growth" />
+                <GrowthRow data={financialGrowth} metricKey="inventoryGrowth" label="Inventory Growth" />
+                <GrowthRow data={financialGrowth} metricKey="tenYRevenueGrowthPerShare" label="10Y Revenue Growth/Share" />
+                <GrowthRow data={financialGrowth} metricKey="fiveYRevenueGrowthPerShare" label="5Y Revenue Growth/Share" />
+                <GrowthRow data={financialGrowth} metricKey="threeYRevenueGrowthPerShare" label="3Y Revenue Growth/Share" />
+                <GrowthRow data={financialGrowth} metricKey="tenYNetIncomeGrowthPerShare" label="10Y Net Income Growth/Share" />
+                <GrowthRow data={financialGrowth} metricKey="fiveYNetIncomeGrowthPerShare" label="5Y Net Income Growth/Share" />
+                <GrowthRow data={financialGrowth} metricKey="threeYNetIncomeGrowthPerShare" label="3Y Net Income Growth/Share" />
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SEC Raw Data Details - Expandable Section - Shows ALL data from financial-reports-json */}
+      {secReportsRaw && secReportsRaw.length > 0 && (
+        <div className="mt-10">
+          <button
+            onClick={() => setShowSecDetails(!showSecDetails)}
+            className="flex items-center gap-3 text-2xl font-bold text-purple-400 mb-6 hover:text-purple-300 transition"
+          >
+            <span>{showSecDetails ? '▼' : '▶'}</span>
+            <span>📋 SEC 10-K/10-Q Complete Data ({secReportsRaw.length} reports) - Click to expand ALL available data</span>
+          </button>
+
+          {showSecDetails && (
+            <div className="space-y-8">
+              {secReportsRaw.map((report: any, reportIdx: number) => {
+                if (!report) return null;
+
+                // Get ALL sections from the report (not filtering by type)
+                const allSections = Object.keys(report).filter(key =>
+                  typeof report[key] === 'object' &&
+                  Array.isArray(report[key]) &&
+                  report[key].length > 0 &&
+                  !['symbol', 'year', 'period', 'cik', 'id'].includes(key)
+                );
+
+                if (allSections.length === 0) return null;
+
+                return (
+                  <div key={reportIdx} className="bg-purple-900/20 rounded-xl border border-purple-600 p-6">
+                    <h5 className="text-xl font-bold text-purple-300 mb-4">
+                      📄 FY {report.year} - {report.symbol} ({report.period || 'Annual'}) - {allSections.length} sections available
+                    </h5>
+
+                    {allSections.map((sectionName: string) => {
+                      const sectionData = report[sectionName];
+                      if (!Array.isArray(sectionData) || sectionData.length === 0) return null;
+
+                      // FMP financial-reports-json returns data like:
+                      // [{ "Revenue": [100, 90, 80] }, { "Cost of goods sold": [50, 45, 40] }, ...]
+                      // Each object has ONE key which is the metric name, and the value is an array of numbers
+                      const extractedItems: { label: string; values: number[] }[] = [];
+
+                      sectionData.forEach((item: any) => {
+                        const keys = Object.keys(item);
+
+                        keys.forEach(key => {
+                          const value = item[key];
+
+                          // The key IS the metric name, value can be array of numbers or single number
+                          if (Array.isArray(value)) {
+                            // Filter to only numeric values
+                            const numericValues = value.filter((v: any) => typeof v === 'number');
+                            if (numericValues.length > 0) {
+                              extractedItems.push({ label: key, values: numericValues });
+                            }
+                          } else if (typeof value === 'number') {
+                            extractedItems.push({ label: key, values: [value] });
+                          }
+                          // Skip string values - they're often section headers like "Products:", "Services:", etc.
+                        });
+                      });
+
+                      if (extractedItems.length === 0) return null;
+
+                      return (
+                        <div key={sectionName} className="mb-6">
+                          <h6 className="text-lg font-semibold text-purple-200 mb-3 bg-purple-800/30 px-4 py-2 rounded flex justify-between items-center">
+                            <span>{sectionName}</span>
+                            <span className="text-sm text-purple-400">({extractedItems.length} metrics)</span>
+                          </h6>
+                          <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                            <table className="w-full text-sm">
+                              <thead className="sticky top-0 bg-gray-900">
+                                <tr>
+                                  <th className="py-2 px-4 text-left text-gray-400 font-semibold min-w-[400px]">Metric</th>
+                                  <th className="py-2 px-4 text-right text-gray-400 font-semibold min-w-[120px]">Current</th>
+                                  <th className="py-2 px-4 text-right text-gray-400 font-semibold min-w-[120px]">Prior 1</th>
+                                  <th className="py-2 px-4 text-right text-gray-400 font-semibold min-w-[120px]">Prior 2</th>
+                                  <th className="py-2 px-4 text-right text-gray-400 font-semibold min-w-[120px]">Prior 3</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {extractedItems.map((item, itemIdx) => (
+                                  <tr key={itemIdx} className="border-b border-purple-800/30 hover:bg-purple-800/20">
+                                    <td className="py-2 px-4 text-gray-300 font-medium">
+                                      {item.label}
+                                    </td>
+                                    {item.values.slice(0, 4).map((val, valIdx) => (
+                                      <td key={valIdx} className="py-2 px-4 text-right text-gray-100">
+                                        {formatSECValue(val)}
+                                      </td>
+                                    ))}
+                                    {/* Fill empty cells */}
+                                    {Array.from({ length: Math.max(0, 4 - item.values.length) }).map((_, i) => (
+                                      <td key={`empty-${i}`} className="py-2 px-4 text-right text-gray-600">—</td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Key Metrics Section */}
+      {keyMetrics && keyMetrics.length > 0 && (
+        <div className="mt-10">
+          <button
+            onClick={() => setShowKeyMetrics(!showKeyMetrics)}
+            className="flex items-center gap-3 text-2xl font-bold text-blue-400 mb-6 hover:text-blue-300 transition"
+          >
+            <span>{showKeyMetrics ? '▼' : '▶'}</span>
+            <span>📊 Key Metrics ({keyMetrics.length} periods)</span>
+          </button>
+
+          {showKeyMetrics && (
+            <div className="overflow-x-auto">
+              <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+                <thead className="bg-blue-900/30">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-blue-900/30 z-10 min-w-[280px]">
+                      Key Metric
+                    </th>
+                    {keyMetricsTTM && (
+                      <th className="px-6 py-4 text-center text-blue-400 font-bold text-base min-w-[120px] bg-blue-900/50">TTM</th>
+                    )}
+                    {keyMetrics.slice(0, 8).map((row: any, i: number) => (
+                      <th key={i} className="px-6 py-4 text-center font-bold text-base min-w-[120px] text-gray-200">
+                        {row.date ? new Date(row.date).getFullYear() : `Period ${i + 1}`}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="revenuePerShare" label="Revenue Per Share" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="netIncomePerShare" label="Net Income Per Share" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="operatingCashFlowPerShare" label="Operating CF Per Share" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="freeCashFlowPerShare" label="Free CF Per Share" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="cashPerShare" label="Cash Per Share" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="bookValuePerShare" label="Book Value Per Share" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="tangibleBookValuePerShare" label="Tangible Book Value Per Share" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="shareholdersEquityPerShare" label="Shareholders Equity Per Share" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="interestDebtPerShare" label="Interest Debt Per Share" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="marketCap" label="Market Cap" />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="enterpriseValue" label="Enterprise Value" />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="peRatio" label="P/E Ratio" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="priceToSalesRatio" label="Price to Sales" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="pocfratio" label="P/OCF Ratio" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="pfcfRatio" label="P/FCF Ratio" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="pbRatio" label="P/B Ratio" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="ptbRatio" label="P/TB Ratio" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="evToSales" label="EV/Sales" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="evToOperatingCashFlow" label="EV/Operating CF" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="evToFreeCashFlow" label="EV/FCF" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="earningsYield" label="Earnings Yield" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="freeCashFlowYield" label="FCF Yield" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="debtToEquity" label="Debt to Equity" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="debtToAssets" label="Debt to Assets" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="netDebtToEBITDA" label="Net Debt to EBITDA" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="currentRatio" label="Current Ratio" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="interestCoverage" label="Interest Coverage" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="incomeQuality" label="Income Quality" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="dividendYield" label="Dividend Yield" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="payoutRatio" label="Payout Ratio" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="salesGeneralAndAdministrativeToRevenue" label="SG&A to Revenue" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="researchAndDevelopementToRevenue" label="R&D to Revenue" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="intangiblesToTotalAssets" label="Intangibles to Assets" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="capexToOperatingCashFlow" label="CapEx to OCF" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="capexToRevenue" label="CapEx to Revenue" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="capexToDepreciation" label="CapEx to D&A" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="stockBasedCompensationToRevenue" label="SBC to Revenue" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="grahamNumber" label="Graham Number" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="roic" label="ROIC" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="returnOnTangibleAssets" label="Return on Tangible Assets" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="grahamNetNet" label="Graham Net-Net" isPerShare />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="workingCapital" label="Working Capital" />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="tangibleAssetValue" label="Tangible Asset Value" />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="netCurrentAssetValue" label="Net Current Asset Value" />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="investedCapital" label="Invested Capital" />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="averageReceivables" label="Average Receivables" />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="averagePayables" label="Average Payables" />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="averageInventory" label="Average Inventory" />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="daysSalesOutstanding" label="Days Sales Outstanding" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="daysPayablesOutstanding" label="Days Payables Outstanding" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="daysOfInventoryOnHand" label="Days Inventory On Hand" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="receivablesTurnover" label="Receivables Turnover" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="payablesTurnover" label="Payables Turnover" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="inventoryTurnover" label="Inventory Turnover" isRatio />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="roe" label="ROE" isPercent />
+                  <KeyMetricRow data={keyMetrics} ttmData={keyMetricsTTM} metricKey="capexPerShare" label="CapEx Per Share" isPerShare />
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Ratios Section */}
+      {ratios && ratios.length > 0 && (
+        <div className="mt-10">
+          <button
+            onClick={() => setShowRatios(!showRatios)}
+            className="flex items-center gap-3 text-2xl font-bold text-green-400 mb-6 hover:text-green-300 transition"
+          >
+            <span>{showRatios ? '▼' : '▶'}</span>
+            <span>📈 Financial Ratios ({ratios.length} periods)</span>
+          </button>
+
+          {showRatios && (
+            <div className="overflow-x-auto">
+              <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+                <thead className="bg-green-900/30">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-green-900/30 z-10 min-w-[280px]">
+                      Ratio
+                    </th>
+                    {ratiosTTM && (
+                      <th className="px-6 py-4 text-center text-green-400 font-bold text-base min-w-[120px] bg-green-900/50">TTM</th>
+                    )}
+                    {ratios.slice(0, 8).map((row: any, i: number) => (
+                      <th key={i} className="px-6 py-4 text-center font-bold text-base min-w-[120px] text-gray-200">
+                        {row.date ? new Date(row.date).getFullYear() : `Period ${i + 1}`}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {/* Profitability Ratios */}
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="grossProfitMargin" label="Gross Profit Margin" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="operatingProfitMargin" label="Operating Profit Margin" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="pretaxProfitMargin" label="Pretax Profit Margin" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="netProfitMargin" label="Net Profit Margin" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="effectiveTaxRate" label="Effective Tax Rate" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="returnOnAssets" label="Return on Assets" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="returnOnEquity" label="Return on Equity" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="returnOnCapitalEmployed" label="Return on Capital Employed" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="netIncomePerEBT" label="Net Income Per EBT" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="ebtPerEbit" label="EBT Per EBIT" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="ebitPerRevenue" label="EBIT Per Revenue" isPercent />
+                  {/* Liquidity Ratios */}
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="currentRatio" label="Current Ratio" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="quickRatio" label="Quick Ratio" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="cashRatio" label="Cash Ratio" isRatio />
+                  {/* Leverage Ratios */}
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="debtRatio" label="Debt Ratio" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="debtEquityRatio" label="Debt Equity Ratio" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="longTermDebtToCapitalization" label="LT Debt to Capitalization" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="totalDebtToCapitalization" label="Total Debt to Capitalization" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="interestCoverage" label="Interest Coverage" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="cashFlowToDebtRatio" label="Cash Flow to Debt" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="companyEquityMultiplier" label="Equity Multiplier" isRatio />
+                  {/* Activity Ratios */}
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="receivablesTurnover" label="Receivables Turnover" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="payablesTurnover" label="Payables Turnover" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="inventoryTurnover" label="Inventory Turnover" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="fixedAssetTurnover" label="Fixed Asset Turnover" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="assetTurnover" label="Asset Turnover" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="operatingCashFlowPerShare" label="OCF Per Share" isPerShare />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="freeCashFlowPerShare" label="FCF Per Share" isPerShare />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="cashPerShare" label="Cash Per Share" isPerShare />
+                  {/* Valuation Ratios */}
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="priceToBookRatio" label="Price to Book" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="priceToSalesRatio" label="Price to Sales" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="priceEarningsRatio" label="P/E Ratio" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="priceToFreeCashFlowsRatio" label="Price to FCF" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="priceToOperatingCashFlowsRatio" label="Price to OCF" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="priceCashFlowRatio" label="Price Cash Flow" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="priceEarningsToGrowthRatio" label="PEG Ratio" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="priceSalesRatio" label="Price Sales" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="dividendYield" label="Dividend Yield" isPercent />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="enterpriseValueMultiple" label="EV Multiple" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="priceFairValue" label="Price Fair Value" isRatio />
+                  <KeyMetricRow data={ratios} ttmData={ratiosTTM} metricKey="dividendPayoutRatio" label="Dividend Payout Ratio" isPercent />
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Enterprise Value Section */}
+      {enterpriseValue && enterpriseValue.length > 0 && type === 'balance' && (
+        <div className="mt-10">
+          <button
+            onClick={() => setShowEnterpriseValue(!showEnterpriseValue)}
+            className="flex items-center gap-3 text-2xl font-bold text-amber-400 mb-6 hover:text-amber-300 transition"
+          >
+            <span>{showEnterpriseValue ? '▼' : '▶'}</span>
+            <span>🏢 Enterprise Value ({enterpriseValue.length} periods)</span>
+          </button>
+
+          {showEnterpriseValue && (
+            <div className="overflow-x-auto">
+              <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+                <thead className="bg-amber-900/30">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-amber-900/30 z-10 min-w-[280px]">
+                      Metric
+                    </th>
+                    {enterpriseValue.slice(0, 10).map((row: any, i: number) => (
+                      <th key={i} className="px-6 py-4 text-center font-bold text-base min-w-[120px] text-gray-200">
+                        {row.date ? new Date(row.date).getFullYear() : `Period ${i + 1}`}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  <KeyMetricRow data={enterpriseValue} metricKey="stockPrice" label="Stock Price" isPerShare />
+                  <KeyMetricRow data={enterpriseValue} metricKey="numberOfShares" label="Shares Outstanding" />
+                  <KeyMetricRow data={enterpriseValue} metricKey="marketCapitalization" label="Market Cap" />
+                  <KeyMetricRow data={enterpriseValue} metricKey="minusCashAndCashEquivalents" label="(-) Cash & Equivalents" />
+                  <KeyMetricRow data={enterpriseValue} metricKey="addTotalDebt" label="(+) Total Debt" />
+                  <KeyMetricRow data={enterpriseValue} metricKey="enterpriseValue" label="Enterprise Value" />
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Owner Earnings Section */}
+      {ownerEarnings && ownerEarnings.length > 0 && type === 'cashFlow' && (
+        <div className="mt-10">
+          <button
+            onClick={() => setShowOwnerEarnings(!showOwnerEarnings)}
+            className="flex items-center gap-3 text-2xl font-bold text-cyan-400 mb-6 hover:text-cyan-300 transition"
+          >
+            <span>{showOwnerEarnings ? '▼' : '▶'}</span>
+            <span>💰 Owner Earnings (Buffett) ({ownerEarnings.length} periods)</span>
+          </button>
+
+          {showOwnerEarnings && (
+            <div className="overflow-x-auto">
+              <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+                <thead className="bg-cyan-900/30">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-cyan-900/30 z-10 min-w-[280px]">
+                      Component
+                    </th>
+                    {ownerEarnings.slice(0, 10).map((row: any, i: number) => (
+                      <th key={i} className="px-6 py-4 text-center font-bold text-base min-w-[120px] text-gray-200">
+                        {row.date ? new Date(row.date).getFullYear() : `Period ${i + 1}`}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  <KeyMetricRow data={ownerEarnings} metricKey="averagePPE" label="Average PP&E" />
+                  <KeyMetricRow data={ownerEarnings} metricKey="maintenanceCapex" label="Maintenance CapEx" />
+                  <KeyMetricRow data={ownerEarnings} metricKey="ownersEarnings" label="Owner Earnings" />
+                  <KeyMetricRow data={ownerEarnings} metricKey="growthCapex" label="Growth CapEx" />
+                  <KeyMetricRow data={ownerEarnings} metricKey="ownersEarningsPerShare" label="Owner Earnings Per Share" isPerShare />
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+// Helper component for Key Metrics rows
+function KeyMetricRow({ data, ttmData, metricKey, label, isPerShare, isRatio, isPercent }: {
+  data: any[];
+  ttmData?: any;
+  metricKey: string;
+  label: string;
+  isPerShare?: boolean;
+  isRatio?: boolean;
+  isPercent?: boolean;
+}) {
+  const formatMetricValue = (value: number | null | undefined): string => {
+    if (value === undefined || value === null || !isFinite(value)) return '—';
+
+    if (isPercent) {
+      // Values are already decimals (0.25 = 25%)
+      return `${(value * 100).toFixed(2)}%`;
+    }
+    if (isRatio) {
+      return value.toFixed(2);
+    }
+    if (isPerShare) {
+      return `$${value.toFixed(2)}`;
+    }
+    // Large monetary values
+    if (Math.abs(value) >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
+    if (Math.abs(value) >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+    if (Math.abs(value) >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
+    if (Math.abs(value) >= 1e3) return `$${(value / 1e3).toFixed(0)}K`;
+    return value.toLocaleString();
+  };
+
+  // Check if any data has this metric
+  const hasData = data.slice(0, 8).some((row: any) => row[metricKey] !== undefined && row[metricKey] !== null) ||
+                  (ttmData && ttmData[metricKey] !== undefined && ttmData[metricKey] !== null);
+  if (!hasData) return null;
+
+  return (
+    <tr className="hover:bg-gray-700/50 transition">
+      <td className="px-6 py-3 font-medium text-base sticky left-0 z-10 border-r border-gray-700 bg-gray-900 text-gray-200">
+        {label}
+      </td>
+      {ttmData && (
+        <td className="px-6 py-3 text-center text-base font-semibold text-blue-300 bg-blue-900/10">
+          {formatMetricValue(ttmData[metricKey])}
+        </td>
+      )}
+      {data.slice(0, 8).map((row: any, i: number) => (
+        <td key={i} className="px-6 py-3 text-center text-base font-medium text-gray-100">
+          {formatMetricValue(row[metricKey])}
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+// Helper component for growth rows
+function GrowthRow({ data, metricKey, label }: { data: any[]; metricKey: string; label: string }) {
+  const formatGrowth = (value: number | null | undefined): string => {
+    if (value === undefined || value === null || !isFinite(value)) return '—';
+    const percentage = value * 100;
+    return percentage >= 0 ? `+${percentage.toFixed(1)}%` : `${percentage.toFixed(1)}%`;
+  };
+
+  const getGrowthColor = (value: number | null | undefined): string => {
+    if (value === undefined || value === null || !isFinite(value)) return 'text-gray-400';
+    return value >= 0 ? 'text-green-400' : 'text-red-400';
+  };
+
+  // Check if any data has this metric
+  const hasData = data.slice(0, 8).some((row: any) => row[metricKey] !== undefined && row[metricKey] !== null);
+  if (!hasData) return null;
+
+  return (
+    <tr className="hover:bg-gray-700/50 transition">
+      <td className="px-8 py-3 font-medium text-base sticky left-0 z-10 border-r border-gray-700 bg-gray-900 text-gray-200">
+        {label}
+      </td>
+      {data.slice(0, 8).map((row: any, i: number) => (
+        <td key={i} className={`px-6 py-3 text-center text-base font-semibold ${getGrowthColor(row[metricKey])}`}>
+          {formatGrowth(row[metricKey])}
+        </td>
+      ))}
+    </tr>
   );
 }
 

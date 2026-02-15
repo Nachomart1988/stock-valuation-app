@@ -55,6 +55,39 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Helper: get recent business dates for fallback
+  const getRecentDates = (): string[] => {
+    const dates: string[] = [];
+    const today = new Date();
+    for (let i = 1; i <= 10; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      if (d.getDay() !== 0 && d.getDay() !== 6) {
+        dates.push(d.toISOString().split('T')[0]);
+      }
+    }
+    return dates;
+  };
+
+  // Helper: fetch with date fallback (tries multiple dates until data is found)
+  const fetchWithDateFallback = async (baseUrl: string, dates: string[], apiKey: string): Promise<any[]> => {
+    for (const date of dates) {
+      try {
+        const res = await fetch(`${baseUrl}?date=${date}&apikey=${apiKey}`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            console.log(`[IndustryTab] Found data for ${baseUrl} on ${date}`);
+            return data;
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+    return [];
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       if (!ticker) return;
@@ -66,58 +99,42 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
         const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
         if (!apiKey) throw new Error('API key not found');
 
-        // Use yesterday's date since today's data might not be available yet
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const dateStr = yesterday.toISOString().split('T')[0];
+        const dates = getRecentDates();
 
-        const [sectorRes, sectorPERes, industryPerfRes, industryPERes, marketRes, profileRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/stable/sector-performance-snapshot?date=${dateStr}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/sector-pe-snapshot?date=${dateStr}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/industry-performance-snapshot?date=${dateStr}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/industry-pe-snapshot?date=${dateStr}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/batch-quote?symbols=%5EGSPC,%5EDJI,%5EIXIC,%5ERUT,%5EVIX&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/profile?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
+        // Fetch profile and market indices (no date needed)
+        const [marketRes, profileRes] = await Promise.all([
+          fetch(`https://financialmodelingprep.com/api/v3/quote/%5EGSPC,%5EDJI,%5EIXIC,%5ERUT,%5EVIX?apikey=${apiKey}`, { cache: 'no-store' }),
+          fetch(`https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${apiKey}`, { cache: 'no-store' }),
         ]);
-
-        if (sectorRes.ok) {
-          const data = await sectorRes.json();
-          console.log('[IndustryTab] Sector performance:', data);
-          setSectorPerformance(Array.isArray(data) ? data : []);
-        }
-
-        if (sectorPERes.ok) {
-          const data = await sectorPERes.json();
-          console.log('[IndustryTab] Sector PE:', data);
-          setIndustryPE(Array.isArray(data) ? data : []);
-        }
-
-        if (industryPerfRes.ok) {
-          const data = await industryPerfRes.json();
-          console.log('[IndustryTab] Industry performance:', data);
-          setIndustryPerformance(Array.isArray(data) ? data : []);
-        }
-
-        if (industryPERes.ok) {
-          const data = await industryPERes.json();
-          console.log('[IndustryTab] Industry PE snapshot:', data);
-          setIndustryPESnapshot(Array.isArray(data) ? data : []);
-        }
 
         if (marketRes.ok) {
           const data = await marketRes.json();
           console.log('[IndustryTab] Market indexes:', data);
-          // Filter to major indices
-          const majorIndices = (Array.isArray(data) ? data : []).filter((item: any) =>
-            ['^GSPC', '^DJI', '^IXIC', '^RUT', '^VIX'].includes(item.symbol)
-          );
-          setMarketSummary(majorIndices);
+          setMarketSummary(Array.isArray(data) ? data : []);
         }
 
         if (profileRes.ok) {
           const data = await profileRes.json();
           setCompanyProfile(Array.isArray(data) ? data[0] : data);
         }
+
+        // Fetch date-dependent data with fallback
+        const [sectorPerfData, sectorPEData, industryPerfData, industryPEData] = await Promise.all([
+          fetchWithDateFallback('https://financialmodelingprep.com/api/v3/sector-performance-snapshot', dates, apiKey),
+          fetchWithDateFallback('https://financialmodelingprep.com/api/v3/sector-pe-snapshot', dates, apiKey),
+          fetchWithDateFallback('https://financialmodelingprep.com/api/v3/industry-performance-snapshot', dates, apiKey),
+          fetchWithDateFallback('https://financialmodelingprep.com/api/v3/industry-pe-snapshot', dates, apiKey),
+        ]);
+
+        console.log('[IndustryTab] Sector performance:', sectorPerfData.length);
+        console.log('[IndustryTab] Sector PE:', sectorPEData.length);
+        console.log('[IndustryTab] Industry performance:', industryPerfData.length);
+        console.log('[IndustryTab] Industry PE:', industryPEData.length);
+
+        setSectorPerformance(sectorPerfData);
+        setIndustryPE(sectorPEData);
+        setIndustryPerformance(industryPerfData);
+        setIndustryPESnapshot(industryPEData);
       } catch (err: any) {
         setError(err.message || 'Error loading data');
       } finally {

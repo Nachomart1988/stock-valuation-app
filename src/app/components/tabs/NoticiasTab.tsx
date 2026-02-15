@@ -58,26 +58,31 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
         const url = `https://financialmodelingprep.com/stable/news/stock?symbols=${ticker}&limit=20&apikey=${apiKey}`;
         console.log('[NoticiasTab] Fetching URL:', url.replace(apiKey, 'API_KEY'));
 
-        const res = await fetch(url);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+        const res = await fetch(url, { signal: controller.signal });
+
+        clearTimeout(timeoutId);
 
         if (!isMounted) return;
 
         if (res.ok) {
           const data = await res.json();
-          console.log('[NoticiasTab] News response for', ticker, ':', data?.length || 0, 'items', data);
+          console.log('[NoticiasTab] News response for', ticker, ':', data?.length || 0, 'items');
           if (Array.isArray(data)) {
             setCompanyNews(data);
           } else {
-            console.error('[NoticiasTab] Unexpected response format:', data);
             setCompanyNews([]);
           }
         } else {
-          const errorText = await res.text();
-          console.error('[NoticiasTab] News fetch failed:', res.status, errorText);
           setCompanyNews([]);
         }
-      } catch (err) {
-        console.error('[NoticiasTab] Error fetching company news:', err);
+      } catch (err: any) {
+        // Only log if not aborted and component is still mounted
+        if (err?.name !== 'AbortError' && isMounted) {
+          console.warn('[NoticiasTab] Error fetching company news (non-critical):', err?.message || 'Unknown error');
+        }
         if (isMounted) setCompanyNews([]);
       } finally {
         if (isMounted) setLoadingNews(false);
@@ -108,18 +113,27 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
         const url = `https://financialmodelingprep.com/stable/news/press-releases?symbol=${ticker}&limit=15&apikey=${apiKey}`;
         console.log('[NoticiasTab] Fetching PR URL:', url.replace(apiKey, 'API_KEY'));
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
         const res = await fetch(url, {
           cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' }
+          headers: { 'Cache-Control': 'no-cache' },
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (res.ok && isMounted) {
           const data = await res.json();
           console.log('[NoticiasTab] PR response for', ticker, ':', data?.length || 0, 'items');
           setPressReleases(Array.isArray(data) ? data : []);
         }
-      } catch (err) {
-        console.error('[NoticiasTab] Error fetching press releases:', err);
+      } catch (err: any) {
+        // Only log if not aborted and component is still mounted
+        if (err?.name !== 'AbortError' && isMounted) {
+          console.warn('[NoticiasTab] Error fetching press releases (non-critical):', err?.message || 'Unknown error');
+        }
       } finally {
         if (isMounted) setLoadingPRs(false);
       }
@@ -149,9 +163,21 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
 
   return (
     <div className="space-y-8">
-      <h3 className="text-4xl font-bold text-gray-100">
-        Noticias y Press Releases - {ticker}
-      </h3>
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+        <div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Noticias y Press Releases
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Últimas noticias y comunicados para {ticker}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right bg-gradient-to-r from-blue-900/40 to-purple-900/40 px-4 py-2 rounded-xl border border-blue-600">
+            <p className="text-xs text-blue-400">Total</p>
+            <p className="text-xl font-bold text-blue-400">{companyNews.length + pressReleases.length}</p>
+          </div>
+        </div>
+      </div>
 
       {/* Tab Selector */}
       <div className="flex gap-4 border-b border-gray-700 pb-2">

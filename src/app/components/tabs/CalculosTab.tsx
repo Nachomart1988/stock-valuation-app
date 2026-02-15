@@ -29,6 +29,7 @@ interface CalculosTabProps {
   dcfCustom?: any; // Para obtener WACC del Advance DCF
   estimates?: any[]; // Para obtener revenue forecast
   calculatedWacc?: number; // WACC calculado en WACCTab
+  onValorIntrinsecoChange?: (value: number | null) => void; // Callback to pass Valor Intrínseco to parent
 }
 
 export default function CalculosTab({
@@ -41,6 +42,7 @@ export default function CalculosTab({
   dcfCustom,
   estimates,
   calculatedWacc,
+  onValorIntrinsecoChange,
 }: CalculosTabProps) {
   const [calculations, setCalculations] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -403,6 +405,13 @@ export default function CalculosTab({
     setLoading(false);
   }, [ticker, quote, profile, income, balance, cashFlow, dcfCustom, userWacc, exitMultiple, projectedGrowthRate, yearsToProject]);
 
+  // Notify parent when Valor Intrínseco (impliedValuePerShare) changes
+  useEffect(() => {
+    if (onValorIntrinsecoChange && calculations?.impliedValuePerShare) {
+      onValorIntrinsecoChange(calculations.impliedValuePerShare);
+    }
+  }, [calculations?.impliedValuePerShare, onValorIntrinsecoChange]);
+
   if (loading) {
     return <p className="text-xl text-gray-400 py-10 text-center">Calculando valoración...</p>;
   }
@@ -443,9 +452,23 @@ export default function CalculosTab({
 
   return (
     <div className="space-y-10">
-      <h3 className="text-3xl font-bold text-gray-100">
-        DCF Valuation - {ticker}
-      </h3>
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+        <div>
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent">
+            DCF Valuation
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Modelo de flujos de caja descontados para {ticker}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          {impliedValuePerShare && impliedValuePerShare > 0 && (
+            <div className="text-right bg-gradient-to-r from-teal-900/40 to-cyan-900/40 px-4 py-2 rounded-xl border border-teal-600">
+              <p className="text-xs text-teal-400">Valor Intrínseco</p>
+              <p className="text-xl font-bold text-teal-400">${impliedValuePerShare.toFixed(2)}</p>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Controles de supuestos */}
       <div className="bg-gray-700 p-6 rounded-xl border border-gray-600">
