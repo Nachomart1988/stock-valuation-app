@@ -240,7 +240,9 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
       {/* Sector Performance */}
       {sectorPerformance.length > 0 && (
         <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border border-green-600">
-          <h4 className="text-2xl font-bold text-green-400 mb-6">Sector Performance</h4>
+          <h4 className="text-2xl font-bold text-green-400 mb-6">
+            Sector Performance - All {sectorPerformance.length} Sectors
+          </h4>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {sectorPerformance
               .sort((a, b) => ((b.averageChange || b.changesPercentage) || 0) - ((a.averageChange || a.changesPercentage) || 0))
@@ -252,7 +254,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                     key={idx}
                     className={`p-4 rounded-lg border ${
                       isCompanySector
-                        ? 'bg-blue-900/50 border-blue-500'
+                        ? 'bg-blue-900/50 border-blue-500 ring-2 ring-blue-400'
                         : 'bg-gray-800/50 border-gray-700'
                     }`}
                   >
@@ -269,6 +271,9 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                     <p className={`text-2xl font-bold ${getPercentColor(changeValue)}`}>
                       {formatPercent(changeValue)}
                     </p>
+                    {sector.date && (
+                      <p className="text-xs text-gray-500 mt-1">{sector.date}</p>
+                    )}
                   </div>
                 );
               })}
@@ -279,10 +284,12 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
       {/* Sector P/E Ratios */}
       {industryPE.length > 0 && (
         <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 p-6 rounded-xl border border-purple-600">
-          <h4 className="text-2xl font-bold text-purple-400 mb-6">Sector P/E Ratios (NYSE)</h4>
-          <div className="overflow-x-auto">
+          <h4 className="text-2xl font-bold text-purple-400 mb-6">
+            Sector P/E Ratios - All Exchanges ({industryPE.length} entries)
+          </h4>
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full text-left">
-              <thead>
+              <thead className="sticky top-0 bg-gray-900 z-10">
                 <tr className="border-b border-gray-700">
                   <th className="py-3 px-4 text-gray-400 font-semibold">Sector</th>
                   <th className="py-3 px-4 text-gray-400 font-semibold text-right">P/E Ratio</th>
@@ -292,20 +299,29 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
               </thead>
               <tbody>
                 {industryPE
-                  .filter((item) => item.exchange === 'NYSE')
-                  .sort((a, b) => a.pe - b.pe)
+                  .sort((a, b) => {
+                    // First sort by sector (company sector first)
+                    const aIsCompany = a.sector?.toLowerCase() === companySector?.toLowerCase();
+                    const bIsCompany = b.sector?.toLowerCase() === companySector?.toLowerCase();
+                    if (aIsCompany && !bIsCompany) return -1;
+                    if (!aIsCompany && bIsCompany) return 1;
+                    // Then by exchange (NYSE, NASDAQ, etc.)
+                    if (a.exchange !== b.exchange) return a.exchange.localeCompare(b.exchange);
+                    // Finally by PE ratio
+                    return a.pe - b.pe;
+                  })
                   .map((item, idx) => {
                     const isCompanySector = item.sector?.toLowerCase() === companySector?.toLowerCase();
                     return (
                       <tr
                         key={idx}
                         className={`border-b border-gray-800 ${
-                          isCompanySector ? 'bg-purple-900/30' : ''
+                          isCompanySector ? 'bg-purple-900/40 ring-2 ring-inset ring-purple-500' : ''
                         }`}
                       >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
-                            <span className={isCompanySector ? 'text-purple-400 font-semibold' : 'text-gray-200'}>
+                            <span className={isCompanySector ? 'text-purple-400 font-bold' : 'text-gray-200'}>
                               {item.sector}
                             </span>
                             {isCompanySector && (
@@ -316,7 +332,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                           </div>
                         </td>
                         <td className={`py-3 px-4 text-right font-semibold ${
-                          isCompanySector ? 'text-purple-400' : 'text-gray-100'
+                          isCompanySector ? 'text-purple-400 text-lg' : 'text-gray-100'
                         }`}>
                           {item.pe?.toFixed(2)}x
                         </td>
@@ -334,11 +350,12 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
       {/* Industry Performance */}
       {industryPerformance.length > 0 && (
         <div className="bg-gradient-to-r from-amber-900/30 to-orange-900/30 p-6 rounded-xl border border-amber-600">
-          <h4 className="text-2xl font-bold text-amber-400 mb-6">Industry Performance</h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto">
+          <h4 className="text-2xl font-bold text-amber-400 mb-6">
+            Industry Performance - All {industryPerformance.length} Industries
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[600px] overflow-y-auto pr-2">
             {industryPerformance
               .sort((a, b) => ((b.averageChange || b.changesPercentage) || 0) - ((a.averageChange || a.changesPercentage) || 0))
-              .slice(0, 24)
               .map((ind, idx) => {
                 const isCompanyIndustry = ind.industry?.toLowerCase() === companyIndustry?.toLowerCase();
                 const changeValue = ind.averageChange || ind.changesPercentage || 0;
@@ -347,7 +364,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                     key={idx}
                     className={`p-4 rounded-lg border ${
                       isCompanyIndustry
-                        ? 'bg-amber-900/50 border-amber-500'
+                        ? 'bg-amber-900/50 border-amber-500 ring-2 ring-amber-400'
                         : 'bg-gray-800/50 border-gray-700'
                     }`}
                   >
@@ -368,43 +385,40 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                 );
               })}
           </div>
-          {industryPerformance.length > 24 && (
-            <p className="text-xs text-gray-500 mt-4 text-center">
-              Showing top 24 of {industryPerformance.length} industries
-            </p>
-          )}
         </div>
       )}
 
       {/* Industry P/E Ratios */}
       {industryPESnapshot.length > 0 && (
         <div className="bg-gradient-to-r from-cyan-900/30 to-teal-900/30 p-6 rounded-xl border border-cyan-600">
-          <h4 className="text-2xl font-bold text-cyan-400 mb-6">Industry P/E Ratios</h4>
-          <div className="overflow-x-auto max-h-[400px]">
+          <h4 className="text-2xl font-bold text-cyan-400 mb-6">
+            Industry P/E Ratios - All {industryPESnapshot.length} Industries
+          </h4>
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full text-left">
-              <thead className="sticky top-0 bg-gray-900">
+              <thead className="sticky top-0 bg-gray-900 z-10">
                 <tr className="border-b border-gray-700">
                   <th className="py-3 px-4 text-gray-400 font-semibold">Industry</th>
                   <th className="py-3 px-4 text-gray-400 font-semibold text-right">P/E Ratio</th>
                   <th className="py-3 px-4 text-gray-400 font-semibold text-right">Exchange</th>
+                  <th className="py-3 px-4 text-gray-400 font-semibold text-right">Date</th>
                 </tr>
               </thead>
               <tbody>
                 {industryPESnapshot
                   .sort((a, b) => a.pe - b.pe)
-                  .slice(0, 30)
                   .map((item, idx) => {
                     const isCompanyIndustry = item.industry?.toLowerCase() === companyIndustry?.toLowerCase();
                     return (
                       <tr
                         key={idx}
                         className={`border-b border-gray-800 ${
-                          isCompanyIndustry ? 'bg-cyan-900/30' : ''
+                          isCompanyIndustry ? 'bg-cyan-900/40 ring-2 ring-inset ring-cyan-500' : ''
                         }`}
                       >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
-                            <span className={isCompanyIndustry ? 'text-cyan-400 font-semibold' : 'text-gray-200'}>
+                            <span className={isCompanyIndustry ? 'text-cyan-400 font-bold' : 'text-gray-200'}>
                               {item.industry}
                             </span>
                             {isCompanyIndustry && (
@@ -415,29 +429,25 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                           </div>
                         </td>
                         <td className={`py-3 px-4 text-right font-semibold ${
-                          isCompanyIndustry ? 'text-cyan-400' : 'text-gray-100'
+                          isCompanyIndustry ? 'text-cyan-400 text-lg' : 'text-gray-100'
                         }`}>
                           {item.pe?.toFixed(2)}x
                         </td>
                         <td className="py-3 px-4 text-right text-gray-400">{item.exchange}</td>
+                        <td className="py-3 px-4 text-right text-gray-400">{item.date}</td>
                       </tr>
                     );
                   })}
               </tbody>
             </table>
           </div>
-          {industryPESnapshot.length > 30 && (
-            <p className="text-xs text-gray-500 mt-4 text-center">
-              Showing {Math.min(30, industryPESnapshot.length)} of {industryPESnapshot.length} industries
-            </p>
-          )}
         </div>
       )}
 
       {/* Summary */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
-        <h4 className="text-lg font-semibold text-gray-200 mb-4">Market Summary</h4>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <h4 className="text-lg font-semibold text-gray-200 mb-4">📊 Complete Market Summary</h4>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-gray-700 rounded-lg p-4 text-center">
             <p className="text-3xl font-bold text-blue-400">{sectorPerformance.length}</p>
             <p className="text-sm text-gray-400">Sectors Tracked</p>
@@ -462,14 +472,25 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
             <p className="text-2xl font-bold text-purple-400">
               {sectorPE ? sectorPE.pe.toFixed(1) + 'x' : 'N/A'}
             </p>
-            <p className="text-sm text-gray-400">{companySector} P/E</p>
+            <p className="text-sm text-gray-400">{companySector} Sector P/E</p>
+          </div>
+          <div className="bg-gray-700 rounded-lg p-4 text-center">
+            <p className="text-2xl font-bold text-cyan-400">
+              {companyIndustryPE ? companyIndustryPE.pe.toFixed(1) + 'x' : 'N/A'}
+            </p>
+            <p className="text-sm text-gray-400">{companyIndustry} Industry P/E</p>
           </div>
         </div>
       </div>
 
-      <p className="text-center text-sm text-gray-500">
-        Market data and sector performance updated in real-time.
-      </p>
+      <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
+        <p className="text-center text-sm text-blue-300">
+          ✅ <strong>Mostrando TODOS los datos disponibles</strong> - Sector e Industria de {ticker} resaltados
+        </p>
+        <p className="text-center text-xs text-gray-400 mt-2">
+          Datos actualizados automáticamente con las fechas más recientes disponibles
+        </p>
+      </div>
     </div>
   );
 }
