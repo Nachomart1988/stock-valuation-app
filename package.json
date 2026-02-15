@@ -11,6 +11,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.37.4",
     "@headlessui/react": "^2.2.9",
     "@stripe/stripe-js": "^8.7.0",
     "@tailwindcss/forms": "^0.5.11",
