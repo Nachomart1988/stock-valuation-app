@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useLanguage } from '@/i18n/LanguageContext';
 import LanguageSelector from './components/LanguageSelector';
 import Logo from './components/Logo';
+import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
 
 interface NewsItem {
   title: string;
@@ -114,12 +115,21 @@ export default function Home() {
             {/* Auth Buttons + Language Selector */}
             <div className="hidden md:flex items-center gap-4">
               <LanguageSelector />
-              <Link href="/login" className="px-4 py-2 text-gray-300 hover:text-white transition">
-                {t('nav.login')}
-              </Link>
-              <Link href="/register" className="px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition">
-                {t('nav.register')}
-              </Link>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button className="px-4 py-2 text-gray-300 hover:text-white transition">
+                    {t('nav.login')}
+                  </button>
+                </SignInButton>
+                <SignUpButton mode="modal">
+                  <button className="px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition">
+                    {t('nav.register')}
+                  </button>
+                </SignUpButton>
+              </SignedOut>
+              <SignedIn>
+                <UserButton afterSignOutUrl="/" />
+              </SignedIn>
             </div>
 
             {/* Mobile menu button */}
@@ -146,10 +156,19 @@ export default function Home() {
                 <a href="#pricing" className="text-gray-300 hover:text-white transition">Precios</a>
                 <a href="#about" className="text-gray-300 hover:text-white transition">Nosotros</a>
                 <hr className="border-gray-800" />
-                <Link href="/login" className="text-gray-300 hover:text-white transition">Iniciar Sesión</Link>
-                <Link href="/register" className="px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-center">
-                  Registrarse
-                </Link>
+                <SignedOut>
+                  <SignInButton mode="modal">
+                    <button className="text-gray-300 hover:text-white transition text-left">Iniciar Sesión</button>
+                  </SignInButton>
+                  <SignUpButton mode="modal">
+                    <button className="px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-center">
+                      Registrarse
+                    </button>
+                  </SignUpButton>
+                </SignedOut>
+                <SignedIn>
+                  <UserButton afterSignOutUrl="/" />
+                </SignedIn>
               </div>
             </div>
           )}
