@@ -1,0 +1,21 @@
+# Ignore backend directory (deploy separately)
+backend/
+
+# Development files
+.env.local
+.vscode/
+.idea/
+
+# Python files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+
+# Temporary files
+nul
+*.log
