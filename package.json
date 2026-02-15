@@ -4,18 +4,25 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:full": "concurrently --kill-others \"npm run dev\" \"npm run backend\"",
+    "backend": "cd backend && python main.py",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",
+    "@stripe/stripe-js": "^8.7.0",
     "@tailwindcss/forms": "^0.5.11",
     "chart.js": "^4.5.1",
+    "chartjs-plugin-annotation": "^3.1.0",
+    "jspdf": "^4.1.0",
+    "jspdf-autotable": "^5.0.7",
     "next": "16.1.5",
     "react": "19.2.3",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "19.2.3",
+    "stripe": "^20.3.1",
     "use-debounce": "^10.1.0",
     "zod": "^4.3.6"
   },
@@ -24,6 +31,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.5",
     "tailwindcss": "^4",
