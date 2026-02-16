@@ -3,6 +3,7 @@
 import { Tab } from '@headlessui/react';
 import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Header from '@/app/components/Header';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -250,6 +251,7 @@ function AnalizarContent() {
 
   // States for ResumenTab
   const [sharedAdvanceValueNet, setSharedAdvanceValueNet] = useState<any>(null);
+  const [sharedCagrStats, setSharedCagrStats] = useState<{ avgCagr: number | null; minCagr: number | null; maxCagr: number | null } | null>(null);
   const [sharedCompanyQualityNet, setSharedCompanyQualityNet] = useState<any>(null);
   const [sharedWACC, setSharedWACC] = useState<number | null>(null);
   const [sharedNews, setSharedNews] = useState<any[]>([]);
@@ -649,8 +651,9 @@ function AnalizarContent() {
   // Estado inicial - mostrar formulario de búsqueda
   if (!activeTicker || !data) {
     return (
-      <main className="min-h-screen bg-gray-900 p-8 text-gray-100">
-        <div className="max-w-2xl mx-auto mt-20">
+      <main className="min-h-screen bg-gray-900 text-gray-100">
+        <Header />
+        <div className="max-w-2xl mx-auto pt-24 px-8">
           <h1 className="text-5xl font-extrabold text-blue-400 mb-8 text-center">
             Analizador de Acciones
           </h1>
@@ -692,8 +695,9 @@ function AnalizarContent() {
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-center">
+      <main className="min-h-screen bg-gray-900">
+        <Header />
+        <div className="flex items-center justify-center pt-24 min-h-[80vh]">
           <p className="text-2xl font-bold text-blue-400">Cargando datos para {activeTicker}...</p>
         </div>
       </main>
@@ -702,11 +706,14 @@ function AnalizarContent() {
 
   if (error) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-center max-w-2xl">
-          <h1 className="text-5xl font-bold text-red-500 mb-6">Error</h1>
-          <p className="text-xl text-gray-300">{error}</p>
-          <p className="mt-4 text-lg text-gray-400">Revisa tu API key o prueba otro ticker.</p>
+      <main className="min-h-screen bg-gray-900">
+        <Header />
+        <div className="flex items-center justify-center pt-24 min-h-[80vh]">
+          <div className="text-center max-w-2xl">
+            <h1 className="text-5xl font-bold text-red-500 mb-6">Error</h1>
+            <p className="text-xl text-gray-300">{error}</p>
+            <p className="mt-4 text-lg text-gray-400">Revisa tu API key o prueba otro ticker.</p>
+          </div>
         </div>
       </main>
     );
@@ -730,8 +737,9 @@ function AnalizarContent() {
   ];
 
   return (
-    <main className="min-h-screen bg-gray-900 p-8 text-gray-100">
-      <div className="max-w-[1600px] mx-auto">
+    <main className="min-h-screen bg-gray-900 text-gray-100">
+      <Header />
+      <div className="max-w-[1600px] mx-auto p-8 pt-24">
         <h1 className="text-5xl font-extrabold text-blue-400 mb-4">
           Resultados para {activeTicker}
         </h1>
@@ -831,7 +839,7 @@ function AnalizarContent() {
         />
       }
       BetaTab={<BetaTab ticker={ticker} onAvgCAPMChange={setSharedAvgCAPM} />}
-      CAGRTab={<CAGRTab ticker={activeTicker} />}
+      CAGRTab={<CAGRTab ticker={activeTicker} onCagrStatsChange={setSharedCagrStats} />}
       PivotsTab={<PivotsTab ticker={activeTicker} />}
       WACCTab={
         <WACCTab
@@ -892,6 +900,7 @@ function AnalizarContent() {
       onAdvanceValueNetChange={setSharedAdvanceValueNet}
       keyMetricsTTM={keyMetricsTTM}
       ownerEarnings={ownerEarnings}
+      cagrStats={sharedCagrStats}
     />
   </Tab.Panel>
 

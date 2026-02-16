@@ -1617,9 +1617,9 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h4 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-3">
-                    <span className="text-3xl">🧠</span> CompanyQuality Net
+                    <span className="text-3xl">🧠</span> Company Score
                   </h4>
-                  <p className="text-purple-300 mt-1">Análisis de calidad empresarial con IA avanzada</p>
+                  <p className="text-purple-300 mt-1">Análisis neuronal de calidad empresarial</p>
                 </div>
                 <div className="text-right">
                   <div className={`text-7xl font-black ${

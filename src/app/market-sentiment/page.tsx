@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Logo from '../components/Logo';
+import Header from '../components/Header';
 
 interface MarketSignal {
   source: string;
@@ -252,8 +253,9 @@ export default function MarketSentimentPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 pb-20">
-      {/* Header Premium */}
-      <header className="border-b border-gray-800 bg-black/70 backdrop-blur-lg sticky top-0 z-50">
+      <Header />
+      {/* Sub-Header Premium */}
+      <header className="border-b border-gray-800 bg-black/70 backdrop-blur-lg mt-16">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Logo size="md" />

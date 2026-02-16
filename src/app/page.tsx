@@ -4,9 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLanguage } from '@/i18n/LanguageContext';
-import LanguageSelector from './components/LanguageSelector';
+import Header from './components/Header';
 import Logo from './components/Logo';
-import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
 
 interface NewsItem {
   title: string;
@@ -28,7 +27,6 @@ interface StockMover {
 
 export default function Home() {
   const [ticker, setTicker] = useState('');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [gainers, setGainers] = useState<StockMover[]>([]);
   const [losers, setLosers] = useState<StockMover[]>([]);
@@ -98,82 +96,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-gray-900/80 backdrop-blur-xl border-b border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <Logo size="md" />
-
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-gray-300 hover:text-white transition">{t('nav.features')}</a>
-              <a href="#market" className="text-gray-300 hover:text-white transition">{t('nav.market')}</a>
-              <a href="#pricing" className="text-gray-300 hover:text-white transition">{t('nav.pricing')}</a>
-              <a href="#about" className="text-gray-300 hover:text-white transition">{t('nav.about')}</a>
-            </div>
-
-            {/* Auth Buttons + Language Selector */}
-            <div className="hidden md:flex items-center gap-4">
-              <LanguageSelector />
-              <SignedOut>
-                <SignInButton mode="modal">
-                  <button className="px-4 py-2 text-gray-300 hover:text-white transition">
-                    {t('nav.login')}
-                  </button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button className="px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition">
-                    {t('nav.register')}
-                  </button>
-                </SignUpButton>
-              </SignedOut>
-              <SignedIn>
-                <UserButton afterSignOutUrl="/" />
-              </SignedIn>
-            </div>
-
-            {/* Mobile menu button */}
-            <button
-              className="md:hidden p-2"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {mobileMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
-          </div>
-
-          {/* Mobile Menu */}
-          {mobileMenuOpen && (
-            <div className="md:hidden py-4 border-t border-gray-800">
-              <div className="flex flex-col gap-4">
-                <a href="#features" className="text-gray-300 hover:text-white transition">Características</a>
-                <a href="#market" className="text-gray-300 hover:text-white transition">Mercado</a>
-                <a href="#pricing" className="text-gray-300 hover:text-white transition">Precios</a>
-                <a href="#about" className="text-gray-300 hover:text-white transition">Nosotros</a>
-                <hr className="border-gray-800" />
-                <SignedOut>
-                  <SignInButton mode="modal">
-                    <button className="text-gray-300 hover:text-white transition text-left">Iniciar Sesión</button>
-                  </SignInButton>
-                  <SignUpButton mode="modal">
-                    <button className="px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-center">
-                      Registrarse
-                    </button>
-                  </SignUpButton>
-                </SignedOut>
-                <SignedIn>
-                  <UserButton afterSignOutUrl="/" />
-                </SignedIn>
-              </div>
-            </div>
-          )}
-        </div>
-      </nav>
+      <Header />
 
       {/* Hero Section */}
       <section className="pt-32 pb-20 px-4">

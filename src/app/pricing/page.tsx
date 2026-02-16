@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import Logo from '../components/Logo';
-import LanguageSelector from '../components/LanguageSelector';
+import Header from '../components/Header';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 const plans = [
@@ -95,23 +94,9 @@ export default function PricingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 text-white">
-      {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Logo size="md" />
-          <div className="flex items-center gap-4">
-            <LanguageSelector />
-            <Link href="/" className="text-gray-400 hover:text-white transition">
-              {t('nav.home')}
-            </Link>
-            <Link href="/analizar" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition">
-              {t('hero.analyzeButton')}
-            </Link>
-          </div>
-        </div>
-      </header>
+      <Header />
 
-      <main className="max-w-7xl mx-auto px-6 py-16">
+      <main className="max-w-7xl mx-auto px-6 py-16 pt-24">
         {/* Hero */}
         <div className="text-center mb-16">
           <h1 className="text-5xl md:text-6xl font-black mb-6 bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">

@@ -15,12 +15,13 @@ interface PriceData {
 
 interface CAGRTabProps {
   ticker: string;
+  onCagrStatsChange?: (stats: { avgCagr: number | null; minCagr: number | null; maxCagr: number | null }) => void;
 }
 
-export default function CAGRTab({ ticker }: CAGRTabProps) {
+export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
   // Estados para inputs del usuario
-  const [minCagr, setMinCagr] = useState<number>(-10);
-  const [maxCagr, setMaxCagr] = useState<number>(10);
+  const [minCagr, setMinCagr] = useState<number>(-50);
+  const [maxCagr, setMaxCagr] = useState<number>(100);
   const [yearsToAnalyze, setYearsToAnalyze] = useState<number>(5);
 
   // Estados para datos
@@ -209,6 +210,17 @@ export default function CAGRTab({ ticker }: CAGRTabProps) {
       validCagrCount: validCagrs.length,
     };
   }, [historicalPrices, cagrResults]);
+
+  // Notify parent of CAGR stats changes
+  useEffect(() => {
+    if (onCagrStatsChange && statistics) {
+      onCagrStatsChange({
+        avgCagr: statistics.avgCagr,
+        minCagr: statistics.minCagrFound,
+        maxCagr: statistics.maxCagrFound,
+      });
+    }
+  }, [statistics?.avgCagr, statistics?.minCagrFound, statistics?.maxCagrFound]);
 
   // Prepare chart data
   const chartData = useMemo(() => {

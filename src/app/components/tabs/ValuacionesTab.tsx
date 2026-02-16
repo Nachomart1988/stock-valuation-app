@@ -212,6 +212,7 @@ interface Props {
   onAdvanceValueNetChange?: (data: any) => void; // Callback for ResumenTab
   keyMetricsTTM?: any; // TTM Key Metrics from FMP (includes grahamNumber, grahamNetNet, etc.)
   ownerEarnings?: any[]; // Owner Earnings (Buffett method) from FMP
+  cagrStats?: { avgCagr: number | null; minCagr: number | null; maxCagr: number | null } | null;
 }
 
 export default function ValuacionesTab({
@@ -231,6 +232,7 @@ export default function ValuacionesTab({
   onAdvanceValueNetChange,
   keyMetricsTTM,
   ownerEarnings,
+  cagrStats,
 }: Props) {
   // ────────────────────────────────────────────────
   // Estados para parámetros del modelo
@@ -270,9 +272,12 @@ export default function ValuacionesTab({
   const [calcCapex, setCalcCapex] = useState<number>(0);
   const [calcAvgPeerPE, setCalcAvgPeerPE] = useState<number>(20);
 
-  // Calculate Share Price TX based on current price and CAGR
+  // Calculate Share Price TX based on avg of max/min CAGR from CAGR tab, fallback to manual input
   const currentPrice = quote?.price || 0;
-  const sharePriceT5 = currentPrice * Math.pow(1 + sharePriceTxCAGR / 100, n);
+  const effectiveCAGR = (cagrStats?.maxCagr != null && cagrStats?.minCagr != null)
+    ? (cagrStats.maxCagr + cagrStats.minCagr) / 2
+    : sharePriceTxCAGR;
+  const sharePriceT5 = currentPrice * Math.pow(1 + effectiveCAGR / 100, n);
 
   // Calculate default WACC as average of WACC tab calculation and Advance DCF WACC
   const calculatedDefaultWACC = useMemo(() => {
@@ -2012,13 +2017,25 @@ export default function ValuacionesTab({
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">CAGR Share Price (%)</label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">
+                CAGR Share Price (%)
+                {cagrStats?.maxCagr != null && cagrStats?.minCagr != null && (
+                  <span className="text-green-400 ml-1">
+                    [Avg: {((cagrStats.maxCagr + cagrStats.minCagr) / 2).toFixed(2)}%]
+                  </span>
+                )}
+              </label>
               <input
                 type="number"
                 step="1"
-                value={sharePriceTxCAGR}
+                value={cagrStats?.maxCagr != null && cagrStats?.minCagr != null
+                  ? Number(((cagrStats.maxCagr + cagrStats.minCagr) / 2).toFixed(2))
+                  : sharePriceTxCAGR}
                 onChange={(e) => setSharePriceTxCAGR(Number(e.target.value) || 10)}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                className={`w-full px-3 py-2 border rounded-lg text-gray-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
+                  cagrStats?.maxCagr != null ? 'border-green-600 bg-green-900/20' : 'border-gray-600 bg-gray-900'
+                }`}
+                readOnly={cagrStats?.maxCagr != null && cagrStats?.minCagr != null}
               />
             </div>
             <div>
