@@ -118,12 +118,12 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
           setCompanyProfile(Array.isArray(data) ? data[0] : data);
         }
 
-        // Fetch date-dependent data with fallback
+        // Fetch date-dependent data with fallback (using /stable/ for premium snapshot endpoints)
         const [sectorPerfData, sectorPEData, industryPerfData, industryPEData] = await Promise.all([
-          fetchWithDateFallback('https://financialmodelingprep.com/api/v3/sector-performance-snapshot', dates, apiKey),
-          fetchWithDateFallback('https://financialmodelingprep.com/api/v3/sector-pe-snapshot', dates, apiKey),
-          fetchWithDateFallback('https://financialmodelingprep.com/api/v3/industry-performance-snapshot', dates, apiKey),
-          fetchWithDateFallback('https://financialmodelingprep.com/api/v3/industry-pe-snapshot', dates, apiKey),
+          fetchWithDateFallback('https://financialmodelingprep.com/stable/sector-performance-snapshot', dates, apiKey),
+          fetchWithDateFallback('https://financialmodelingprep.com/stable/sector-pe-snapshot', dates, apiKey),
+          fetchWithDateFallback('https://financialmodelingprep.com/stable/industry-performance-snapshot', dates, apiKey),
+          fetchWithDateFallback('https://financialmodelingprep.com/stable/industry-pe-snapshot', dates, apiKey),
         ]);
 
         console.log('[IndustryTab] Sector performance:', sectorPerfData.length);
