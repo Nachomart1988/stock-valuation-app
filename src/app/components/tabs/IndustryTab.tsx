@@ -159,15 +159,27 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
   const companySector = companyProfile?.sector || '';
   const companyIndustry = companyProfile?.industry || '';
 
+  // Debug logging
+  console.log('[IndustryTab] Company Sector:', companySector);
+  console.log('[IndustryTab] Company Industry:', companyIndustry);
+  console.log('[IndustryTab] Available sectors:', industryPE.map(s => s.sector).filter((v, i, a) => a.indexOf(v) === i));
+  console.log('[IndustryTab] Available industries:', industryPESnapshot.map(s => s.industry).filter((v, i, a) => a.indexOf(v) === i).slice(0, 20));
+
+  // Normalize function for better matching
+  const normalize = (str: string) => str?.toLowerCase().trim().replace(/\s+/g, ' ') || '';
+
   // Find sector PE for the company's sector
   const sectorPE = industryPE.find(
-    (item) => item.sector?.toLowerCase() === companySector?.toLowerCase()
+    (item) => normalize(item.sector) === normalize(companySector)
   );
 
   // Find industry PE for the company's industry
   const companyIndustryPE = industryPESnapshot.find(
-    (item) => item.industry?.toLowerCase() === companyIndustry?.toLowerCase()
+    (item) => normalize(item.industry) === normalize(companyIndustry)
   );
+
+  console.log('[IndustryTab] Found sector PE:', sectorPE);
+  console.log('[IndustryTab] Found industry PE:', companyIndustryPE);
 
   if (loading) {
     return (
@@ -247,7 +259,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
             {sectorPerformance
               .sort((a, b) => ((b.averageChange || b.changesPercentage) || 0) - ((a.averageChange || a.changesPercentage) || 0))
               .map((sector, idx) => {
-                const isCompanySector = sector.sector?.toLowerCase() === companySector?.toLowerCase();
+                const isCompanySector = normalize(sector.sector) === normalize(companySector);
                 const changeValue = sector.averageChange || sector.changesPercentage || 0;
                 return (
                   <div
@@ -311,7 +323,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                     return a.pe - b.pe;
                   })
                   .map((item, idx) => {
-                    const isCompanySector = item.sector?.toLowerCase() === companySector?.toLowerCase();
+                    const isCompanySector = normalize(item.sector) === normalize(companySector);
                     return (
                       <tr
                         key={idx}
@@ -357,7 +369,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
             {industryPerformance
               .sort((a, b) => ((b.averageChange || b.changesPercentage) || 0) - ((a.averageChange || a.changesPercentage) || 0))
               .map((ind, idx) => {
-                const isCompanyIndustry = ind.industry?.toLowerCase() === companyIndustry?.toLowerCase();
+                const isCompanyIndustry = normalize(ind.industry) === normalize(companyIndustry);
                 const changeValue = ind.averageChange || ind.changesPercentage || 0;
                 return (
                   <div
@@ -408,7 +420,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                 {industryPESnapshot
                   .sort((a, b) => a.pe - b.pe)
                   .map((item, idx) => {
-                    const isCompanyIndustry = item.industry?.toLowerCase() === companyIndustry?.toLowerCase();
+                    const isCompanyIndustry = normalize(item.industry) === normalize(companyIndustry);
                     return (
                       <tr
                         key={idx}
