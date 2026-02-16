@@ -106,7 +106,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
         // Fetch profile and market indices (no date needed)
         const [marketRes, profileRes] = await Promise.all([
           fetch(`https://financialmodelingprep.com/api/v3/quote/%5EGSPC,%5EDJI,%5EIXIC,%5ERUT,%5EVIX?apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${apiKey}`, { cache: 'no-store' }),
+          fetch(`https://financialmodelingprep.com/stable/profile/${ticker}?apikey=${apiKey}`, { cache: 'no-store' }),
         ]);
 
         if (marketRes.ok) {
