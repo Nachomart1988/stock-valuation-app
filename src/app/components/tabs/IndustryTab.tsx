@@ -92,6 +92,8 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
     const fetchData = async () => {
       if (!ticker) return;
 
+      console.log('[IndustryTab] Fetching data for ticker:', ticker);
+
       setLoading(true);
       setError(null);
 
@@ -115,7 +117,11 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
 
         if (profileRes.ok) {
           const data = await profileRes.json();
-          setCompanyProfile(Array.isArray(data) ? data[0] : data);
+          const profile = Array.isArray(data) ? data[0] : data;
+          console.log('[IndustryTab] Company Profile:', profile);
+          console.log('[IndustryTab] Profile sector:', profile?.sector);
+          console.log('[IndustryTab] Profile industry:', profile?.industry);
+          setCompanyProfile(profile);
         }
 
         // Fetch date-dependent data with fallback (using /stable/ for premium snapshot endpoints)
