@@ -23,6 +23,7 @@ import CalculosTab from '@/app/components/tabs/CalculosTab';
 import RevenueForecastTab from '@/app/components/tabs/RevenueForecastTab';
 import SustainableGrowthTab from '@/app/components/tabs/SustainableGrowthTab';
 import ValuacionesTab from '@/app/components/tabs/ValuacionesTab';
+import ProbabilityTab from '@/app/components/tabs/ProbabilityTab';
 // AnalisisFinalTab removed as per user request
 import WACCTab from '@/app/components/tabs/WACCTab';
 import CAGRTab from '@/app/components/tabs/CAGRTab';
@@ -911,6 +912,7 @@ function AnalizarContent() {
     t('analysis.categories.inputs'),
     t('analysis.categories.dcf'),
     t('analysis.categories.valuations'),
+    t('analysis.categories.probability'),
     t('analysis.categories.investorJournal'),
     t('analysis.categories.summary'),
   ];
@@ -1084,7 +1086,19 @@ function AnalizarContent() {
     />
   </Tab.Panel>
 
-  {/* 10. Diario Inversor */}
+  {/* 10. Probability */}
+  <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
+    <ProbabilityTab
+      ticker={activeTicker}
+      quote={quote}
+      dcfCustom={dcfCustom}
+      sharedAverageVal={sharedAverageVal}
+      profile={profile}
+      dividends={dividends}
+    />
+  </Tab.Panel>
+
+  {/* 11. Diario Inversor */}
   <Tab.Panel unmount={false} className="rounded-2xl bg-gray-800 p-10 shadow-2xl border border-gray-700">
     <DiarioInversorTab />
   </Tab.Panel>

@@ -12,6 +12,7 @@ from model import predictor
 from quality_model import quality_predictor
 from neural_resumen_engine import neural_engine
 from market_sentiment_engine import market_sentiment_engine
+from probability_engine import probability_engine
 
 app = FastAPI(
     title="Stock Analysis AI API",
@@ -256,6 +257,61 @@ async def resumen_predict(req: ResumenRequest):
 
     except Exception as e:
         print(f"[NeuralEngine] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════════════════════════════════
+# Probability - Binomial Tree Price Probability Calculator
+# ════════════════════════════════════════════════════════════════════
+
+class ProbabilityRequest(BaseModel):
+    """Request body for binomial tree probability calculation"""
+    ticker: str
+    currentPrice: float
+    targetPrice: float
+    riskFreeRate: float = 0.042       # Annual rate as decimal
+    dividendYield: float = 0.0        # Annual DY as decimal
+    days: int = 252                    # Calendar days
+    steps: Optional[int] = None        # Tree steps (default = min(days, 252))
+    useImpliedVol: bool = True         # Try Yahoo Finance for IV
+
+
+@app.post("/probability/calculate")
+async def probability_calculate(req: ProbabilityRequest):
+    """
+    Calculate the probability of a stock reaching a target price
+    using the CRR Binomial Tree model.
+
+    Uses historical volatility from FMP and optionally implied volatility
+    from Yahoo Finance options chain.
+    """
+    try:
+        print(f"[Probability] Calculating for {req.ticker}: "
+              f"target=${req.targetPrice}, days={req.days}")
+
+        result = probability_engine.calculate(
+            ticker=req.ticker,
+            current_price=req.currentPrice,
+            target_price=req.targetPrice,
+            risk_free_rate=req.riskFreeRate,
+            dividend_yield=req.dividendYield,
+            days=req.days,
+            steps=req.steps,
+            use_implied_vol=req.useImpliedVol,
+            fmp_api_key=os.environ.get('FMP_API_KEY'),
+        )
+
+        if result.get('error'):
+            raise HTTPException(status_code=500, detail=result['error'])
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Probability] Error: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
