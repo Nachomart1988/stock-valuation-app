@@ -5,6 +5,8 @@
 # Runs in <0.5s on CPU (no transformers dependency).
 
 import numpy as np
+import os
+import requests
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
@@ -161,12 +163,112 @@ class NeuralReasoningMarketSentimentEngine:
     Thinks like a trader: analyzes, detects divergences, finds patterns, concludes.
     """
 
+    # Major indices to track
+    MAJOR_INDICES = ['^GSPC', '^DJI', '^IXIC', '^RUT', '^VIX', '^FTSE', '^N225', '^GDAXI']
+
     def __init__(self):
-        self.version = "4.0"
+        self.version = "4.1"
         self.news_analyzer = AdvancedNewsSentimentAnalyzer()
+        self._cache: Dict[str, Any] = {}
+        self._cache_ttl = 300  # 5 minutes
+
+    def _fetch_fmp(self, endpoint: str, params: str = '') -> Any:
+        """Fetch data from FMP API with caching."""
+        api_key = os.environ.get('FMP_API_KEY')
+        if not api_key:
+            return None
+
+        cache_key = f'mse_{endpoint}_{params}'
+        now = datetime.now().timestamp()
+        if cache_key in self._cache:
+            data, ts = self._cache[cache_key]
+            if now - ts < self._cache_ttl:
+                return data
+
+        try:
+            sep = '&' if params else ''
+            url = f"https://financialmodelingprep.com/stable/{endpoint}?{params}{sep}apikey={api_key}"
+            resp = requests.get(url, timeout=10)
+            if resp.ok:
+                data = resp.json()
+                self._cache[cache_key] = (data, now)
+                return data
+        except Exception as e:
+            print(f"[NeuralMSE] FMP fetch error ({endpoint}): {e}")
+        return None
+
+    def _fill_missing_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Auto-fetch any missing market data from FMP API."""
+        filled = dict(data)
+
+        # Sector performance
+        if not filled.get('sectorPerformance') or len(filled.get('sectorPerformance', [])) == 0:
+            sectors = self._fetch_fmp('sector-performance-snapshot')
+            if sectors and isinstance(sectors, list) and len(sectors) > 0:
+                filled['sectorPerformance'] = sectors
+                print(f"[NeuralMSE] Auto-fetched {len(sectors)} sectors from FMP")
+
+        # Industry performance
+        if not filled.get('industryPerformance') or len(filled.get('industryPerformance', [])) == 0:
+            industries = self._fetch_fmp('industry-performance-snapshot')
+            if industries and isinstance(industries, list) and len(industries) > 0:
+                filled['industryPerformance'] = industries
+                print(f"[NeuralMSE] Auto-fetched {len(industries)} industries from FMP")
+
+        # Index quotes — always fetch since frontend doesn't send these
+        if not filled.get('indexQuotes') or len(filled.get('indexQuotes', [])) == 0:
+            index_quotes = []
+            symbols = ','.join(self.MAJOR_INDICES)
+            quotes = self._fetch_fmp('batch-quote', f'symbols={symbols}')
+            if quotes and isinstance(quotes, list) and len(quotes) > 0:
+                index_quotes = quotes
+            else:
+                # Fallback: fetch one by one
+                for sym in self.MAJOR_INDICES[:6]:
+                    q = self._fetch_fmp('quote', f'symbol={sym}')
+                    if q and isinstance(q, list) and len(q) > 0:
+                        index_quotes.append(q[0])
+                    elif q and isinstance(q, dict):
+                        index_quotes.append(q)
+            if index_quotes:
+                filled['indexQuotes'] = index_quotes
+                print(f"[NeuralMSE] Auto-fetched {len(index_quotes)} index quotes from FMP")
+
+        # Forex quotes — check if existing data has changesPercentage, if not re-fetch
+        existing_forex = filled.get('forexQuotes', [])
+        forex_usable = False
+        if existing_forex and isinstance(existing_forex, list) and len(existing_forex) > 0:
+            # Check if at least one item has changesPercentage or changes
+            for fx in existing_forex[:5]:
+                if fx.get('changesPercentage') is not None or fx.get('changes') is not None:
+                    forex_usable = True
+                    break
+
+        if not forex_usable:
+            forex = self._fetch_fmp('batch-forex-quotes')
+            if forex and isinstance(forex, list) and len(forex) > 0:
+                filled['forexQuotes'] = forex
+                print(f"[NeuralMSE] Auto-fetched {len(forex)} forex quotes from FMP")
+
+        # Historical sector performance — derive from current sector data
+        if not filled.get('historicalSectorPerformance') or len(filled.get('historicalSectorPerformance', [])) < 2:
+            sectors = filled.get('sectorPerformance', [])
+            if sectors and len(sectors) > 0:
+                # Create multi-entry historical from sector changes to satisfy trend analysis
+                hist = []
+                for s in sectors:
+                    change = s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0
+                    hist.append({'sector': s.get('sector', ''), 'averageChange': change, 'change': change})
+                filled['historicalSectorPerformance'] = hist
+                print(f"[NeuralMSE] Created {len(hist)} historical entries from sector data")
+
+        return filled
 
     def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
         start = datetime.now()
+
+        # Auto-fetch any missing data from FMP
+        data = self._fill_missing_data(data)
 
         # === INPUT DATA ===
         news = data.get('news', [])
