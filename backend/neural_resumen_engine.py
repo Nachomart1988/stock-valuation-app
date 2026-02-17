@@ -1,14 +1,17 @@
 # backend/neural_resumen_engine.py
-# Advanced Neural Reasoning Engine v2.0
-# Full multi-source analysis with NLP, technical analysis, institutional flow, and Monte Carlo
+# Advanced Neural Reasoning Engine v3.0
+# Full multi-source analysis with NLP, technical analysis, FFT spectral cycles,
+# institutional flow, and Monte Carlo
 
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass, field
 from enum import Enum
 import re
+import os
 from collections import defaultdict
 import math
+from spectral_cycle_analyzer import SpectralCycleAnalyzer, HistoricalDataFetcher
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ENUMS AND DATA STRUCTURES
@@ -1335,11 +1338,13 @@ class NeuralResumenEngine:
     """
     Advanced multi-layer reasoning engine that integrates all analysis components.
 
-    Architecture (12 Layers):
+    Architecture (14 Layers):
     1. Data Ingestion & Validation
     2. News Sentiment Analysis (NLP)
     3. Institutional Flow Analysis
+    3A. Sector & Industry Context
     4. Technical Analysis (Pivots)
+    4A. Spectral Cycle Analysis (FFT)
     5. Valuation Ensemble Analysis
     6. Quality Analysis
     7. Growth & Value Creation Analysis
@@ -1360,6 +1365,10 @@ class NeuralResumenEngine:
         self.growth_analyzer = GrowthAnalyzer()
         self.forecast_analyzer = ForecastAnalyzer()
 
+        # Spectral Cycle Analysis (FFT)
+        self.spectral_analyzer = SpectralCycleAnalyzer(window_size=512)
+        self.data_fetcher = None  # Initialized when API key is available
+
         self.layer_results: List[LayerResult] = []
 
     def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1369,7 +1378,7 @@ class NeuralResumenEngine:
         ticker = data.get('ticker', 'UNKNOWN')
         current_price = data.get('currentPrice') or 100
 
-        print(f"[NeuralEngine] Starting 12-layer analysis for {ticker}")
+        print(f"[NeuralEngine] Starting 14-layer analysis for {ticker}")
 
         # Layer 1: Data Ingestion
         ingestion_result = self._layer1_ingest(data)
@@ -1380,8 +1389,16 @@ class NeuralResumenEngine:
         # Layer 3: Institutional Flow
         holders_result = self._layer3_institutional(data.get('holdersData'))
 
+        # Layer 3A: Sector & Industry Context
+        sector_result = self._layer3a_sector_industry(ticker, data.get('fmp_api_key'))
+
         # Layer 4: Technical Analysis
         technical_result = self._layer4_technical(data.get('pivotAnalysis'), current_price)
+
+        # Layer 4A: Spectral Cycle Analysis (FFT)
+        spectral_result = self._layer4a_spectral_cycles(
+            ticker, current_price, data.get('fmp_api_key')
+        )
 
         # Layer 5: Valuation
         valuation_result = self._layer5_valuation(data.get('advanceValueNet'), current_price)
@@ -1557,6 +1574,224 @@ class NeuralResumenEngine:
         self.layer_results.append(result)
         return result
 
+    def _layer3a_sector_industry(self, ticker: str, fmp_api_key: str = None) -> LayerResult:
+        """Layer 3A: Sector & Industry Context Analysis"""
+
+        api_key = fmp_api_key or os.environ.get('FMP_API_KEY')
+        if api_key and not self.data_fetcher:
+            self.data_fetcher = HistoricalDataFetcher(api_key)
+
+        if not self.data_fetcher:
+            result = LayerResult(
+                layer_name="Sector & Industry Context",
+                layer_number=3,
+                score=50,
+                confidence=0.0,
+                weight=0.07,
+                reasoning="No FMP API key — sector/industry data unavailable"
+            )
+            self.layer_results.append(result)
+            return result
+
+        try:
+            # Fetch company profile for sector/industry identification
+            profile = self.data_fetcher.fetch_company_profile(ticker)
+            company_sector = profile.get('sector', '')
+            company_industry = profile.get('industry', '')
+
+            if not company_sector:
+                result = LayerResult(
+                    layer_name="Sector & Industry Context",
+                    layer_number=3,
+                    score=50,
+                    confidence=0.0,
+                    weight=0.07,
+                    reasoning=f"Could not identify sector/industry for {ticker}"
+                )
+                self.layer_results.append(result)
+                return result
+
+            # Fetch sector/industry performance data
+            macro_data = self.data_fetcher.fetch_sector_industry_data()
+            sector_perf = macro_data.get('sectorPerformance', [])
+            industry_perf = macro_data.get('industryPerformance', [])
+            sector_pe_data = macro_data.get('sectorPE', [])
+            industry_pe_data = macro_data.get('industryPE', [])
+
+            signals = []
+            sub_scores = {
+                'company_sector': company_sector,
+                'company_industry': company_industry,
+            }
+            score = 50
+            reasoning_parts = [f"Company: {ticker} | Sector: {company_sector} | Industry: {company_industry}"]
+
+            # Normalize for matching
+            def normalize(s: str) -> str:
+                return s.lower().strip().replace('  ', ' ') if s else ''
+
+            # ── Sector performance analysis ──
+            matching_sector = None
+            for s in sector_perf:
+                if normalize(s.get('sector', '')) == normalize(company_sector):
+                    matching_sector = s
+                    break
+
+            if matching_sector:
+                sector_change = matching_sector.get('averageChange', 0) or matching_sector.get('changesPercentage', 0) or 0
+                sub_scores['sector_change_pct'] = round(sector_change, 2)
+                reasoning_parts.append(f"Sector performance today: {sector_change:+.2f}%")
+
+                if sector_change > 1.5:
+                    signals.append(Signal(
+                        source="Sector-Context",
+                        signal_type=SignalType.BULLISH,
+                        strength=0.6,
+                        description=f"Company's sector ({company_sector}) is rallying ({sector_change:+.2f}%)"
+                    ))
+                    score += 12
+                elif sector_change > 0.5:
+                    score += 5
+                elif sector_change < -1.5:
+                    signals.append(Signal(
+                        source="Sector-Context",
+                        signal_type=SignalType.BEARISH,
+                        strength=0.6,
+                        description=f"Company's sector ({company_sector}) is declining ({sector_change:+.2f}%)"
+                    ))
+                    score -= 12
+                elif sector_change < -0.5:
+                    score -= 5
+
+            # ── Overall sector breadth ──
+            if sector_perf:
+                up_sectors = sum(1 for s in sector_perf if (s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0) > 0)
+                sector_breadth = up_sectors / len(sector_perf)
+                sub_scores['sector_breadth'] = round(sector_breadth * 100, 1)
+
+                if sector_breadth >= 0.7:
+                    score += 5
+                    reasoning_parts.append(f"Broad market strength: {up_sectors}/{len(sector_perf)} sectors green")
+                elif sector_breadth <= 0.3:
+                    score -= 5
+                    reasoning_parts.append(f"Broad market weakness: only {up_sectors}/{len(sector_perf)} sectors green")
+
+            # ── Industry performance ──
+            matching_industry = None
+            for ind in industry_perf:
+                if normalize(ind.get('industry', '')) == normalize(company_industry):
+                    matching_industry = ind
+                    break
+
+            if matching_industry:
+                ind_change = matching_industry.get('averageChange', 0) or matching_industry.get('changesPercentage', 0) or 0
+                sub_scores['industry_change_pct'] = round(ind_change, 2)
+                reasoning_parts.append(f"Industry performance today: {ind_change:+.2f}%")
+
+                if ind_change > 2.0:
+                    signals.append(Signal(
+                        source="Industry-Context",
+                        signal_type=SignalType.BULLISH,
+                        strength=0.65,
+                        description=f"Company's industry ({company_industry}) is surging ({ind_change:+.2f}%)"
+                    ))
+                    score += 10
+                elif ind_change < -2.0:
+                    signals.append(Signal(
+                        source="Industry-Context",
+                        signal_type=SignalType.BEARISH,
+                        strength=0.65,
+                        description=f"Company's industry ({company_industry}) is falling ({ind_change:+.2f}%)"
+                    ))
+                    score -= 10
+
+            # ── Sector P/E context ──
+            matching_sector_pe = None
+            for sp in sector_pe_data:
+                if normalize(sp.get('sector', '')) == normalize(company_sector):
+                    matching_sector_pe = sp
+                    break
+
+            if matching_sector_pe and matching_sector_pe.get('pe'):
+                sector_pe = matching_sector_pe['pe']
+                sub_scores['sector_pe'] = round(sector_pe, 2)
+                reasoning_parts.append(f"Sector avg P/E: {sector_pe:.1f}x")
+
+            # ── Industry P/E context ──
+            matching_industry_pe = None
+            for ip in industry_pe_data:
+                if normalize(ip.get('industry', '')) == normalize(company_industry):
+                    matching_industry_pe = ip
+                    break
+
+            if matching_industry_pe and matching_industry_pe.get('pe'):
+                ind_pe = matching_industry_pe['pe']
+                sub_scores['industry_pe'] = round(ind_pe, 2)
+                reasoning_parts.append(f"Industry avg P/E: {ind_pe:.1f}x")
+
+            # ── Hot/cold sector rotation signal ──
+            if sector_perf:
+                sorted_sectors = sorted(
+                    sector_perf,
+                    key=lambda x: x.get('averageChange', 0) or x.get('changesPercentage', 0) or 0,
+                    reverse=True
+                )
+                hot_sectors = [s.get('sector', '') for s in sorted_sectors[:3]]
+                cold_sectors = [s.get('sector', '') for s in sorted_sectors[-3:]]
+                sub_scores['hot_sectors'] = hot_sectors
+                sub_scores['cold_sectors'] = cold_sectors
+
+                if company_sector in [s.get('sector', '') for s in sorted_sectors[:3]]:
+                    signals.append(Signal(
+                        source="Sector-Rotation",
+                        signal_type=SignalType.BULLISH,
+                        strength=0.5,
+                        description=f"Company's sector is among today's top performers"
+                    ))
+                    score += 5
+                elif company_sector in [s.get('sector', '') for s in sorted_sectors[-3:]]:
+                    signals.append(Signal(
+                        source="Sector-Rotation",
+                        signal_type=SignalType.CAUTIONARY,
+                        strength=0.5,
+                        description=f"Company's sector is among today's worst performers"
+                    ))
+                    score -= 5
+
+            confidence = 0.7 if matching_sector else 0.3
+            if matching_industry:
+                confidence = min(0.85, confidence + 0.15)
+
+            result = LayerResult(
+                layer_name="Sector & Industry Context",
+                layer_number=3,
+                score=max(0, min(100, score)),
+                confidence=confidence,
+                weight=0.07,
+                signals=signals,
+                sub_scores=sub_scores,
+                reasoning=". ".join(reasoning_parts),
+                data_used=['FMP sector performance', 'FMP industry performance', 'FMP P/E snapshots']
+            )
+            self.layer_results.append(result)
+            return result
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"[SectorIndustry] Error: {e}")
+
+            result = LayerResult(
+                layer_name="Sector & Industry Context",
+                layer_number=3,
+                score=50,
+                confidence=0.0,
+                weight=0.07,
+                reasoning=f"Sector/industry analysis error: {str(e)[:100]}"
+            )
+            self.layer_results.append(result)
+            return result
+
     def _layer4_technical(self, pivot_data: Dict, current_price: float) -> LayerResult:
         """Layer 4: Technical Analysis"""
         analysis = self.technical_analyzer.analyze(pivot_data, current_price)
@@ -1566,7 +1801,7 @@ class NeuralResumenEngine:
             layer_number=4,
             score=analysis['technical_score'],
             confidence=0.65 if pivot_data else 0.0,
-            weight=0.08,
+            weight=0.06,
             signals=analysis['signals'],
             sub_scores={
                 'position_in_range': analysis['position_in_range'],
@@ -1578,6 +1813,194 @@ class NeuralResumenEngine:
 
         self.layer_results.append(result)
         return result
+
+    def _layer4a_spectral_cycles(self, ticker: str, current_price: float, fmp_api_key: str = None) -> LayerResult:
+        """Layer 4A: Spectral Cycle Analysis (FFT-based market cycle detection)"""
+
+        # Initialize data fetcher if we have an API key
+        api_key = fmp_api_key or os.environ.get('FMP_API_KEY')
+        if api_key and not self.data_fetcher:
+            self.data_fetcher = HistoricalDataFetcher(api_key)
+            print(f"[NeuralEngine] Initialized historical data fetcher for FFT analysis")
+
+        if not self.data_fetcher:
+            result = LayerResult(
+                layer_name="Spectral Cycle Analysis (FFT)",
+                layer_number=4,
+                score=50,
+                confidence=0.0,
+                weight=0.09,
+                reasoning="No FMP API key available for historical data fetch"
+            )
+            self.layer_results.append(result)
+            return result
+
+        try:
+            # Fetch historical daily prices
+            historical = self.data_fetcher.fetch(ticker, max_bars=600)
+
+            if not historical or len(historical) < 256:
+                bars = len(historical) if historical else 0
+                result = LayerResult(
+                    layer_name="Spectral Cycle Analysis (FFT)",
+                    layer_number=4,
+                    score=50,
+                    confidence=0.0,
+                    weight=0.09,
+                    reasoning=f"Insufficient historical data ({bars} bars, minimum 256 required)"
+                )
+                self.layer_results.append(result)
+                return result
+
+            print(f"[SpectralCycles] Running FFT analysis on {len(historical)} bars for {ticker}")
+
+            # Run spectral analysis
+            analysis = self.spectral_analyzer.analyze(historical)
+
+            # Generate signals
+            signals = []
+
+            # Phase-based signals
+            if analysis.current_phase == 'trough' and analysis.cycle_strength > 0.25:
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.BULLISH,
+                    strength=min(0.9, 0.5 + analysis.cycle_strength * 0.4),
+                    description=f"At cycle TROUGH — potential entry point",
+                    data_point=f"Dominant cycle: {analysis.dominant_cycles[0].period_days:.0f}d, Strength: {analysis.cycle_strength:.0%}"
+                ))
+            elif analysis.current_phase == 'rising' and analysis.cycle_strength > 0.2:
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.BULLISH,
+                    strength=min(0.7, 0.3 + analysis.cycle_strength * 0.4),
+                    description="In RISING phase of dominant cycle",
+                    data_point=f"Phase position: {analysis.phase_position:.0%}"
+                ))
+            elif analysis.current_phase == 'peak' and analysis.cycle_strength > 0.25:
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.BEARISH,
+                    strength=min(0.85, 0.4 + analysis.cycle_strength * 0.4),
+                    description=f"At cycle PEAK — consider reducing exposure",
+                    data_point=f"Dominant cycle: {analysis.dominant_cycles[0].period_days:.0f}d"
+                ))
+            elif analysis.current_phase == 'falling' and analysis.cycle_strength > 0.2:
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.BEARISH,
+                    strength=min(0.65, 0.3 + analysis.cycle_strength * 0.3),
+                    description="In FALLING phase of dominant cycle"
+                ))
+
+            # Momentum confirmation
+            if analysis.momentum_confirmation and analysis.current_phase in ('trough', 'rising'):
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.BULLISH,
+                    strength=0.6,
+                    description="Momentum confirms cycle upturn (SMA5 > SMA20)"
+                ))
+            elif not analysis.momentum_confirmation and analysis.current_phase in ('peak', 'falling'):
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.BEARISH,
+                    strength=0.55,
+                    description="Momentum confirms cycle downturn (SMA5 < SMA20)"
+                ))
+
+            # RSI extremes
+            if analysis.rsi_value < 30:
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.BULLISH,
+                    strength=0.5,
+                    description=f"Detrended RSI oversold ({analysis.rsi_value:.0f})"
+                ))
+            elif analysis.rsi_value > 70:
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.CAUTIONARY,
+                    strength=0.5,
+                    description=f"Detrended RSI overbought ({analysis.rsi_value:.0f})"
+                ))
+
+            # High volatility warning
+            if analysis.atr_normalized > 3.0:
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.CAUTIONARY,
+                    strength=0.65,
+                    description=f"High volatility environment (ATR: {analysis.atr_normalized:.1f}% of price)"
+                ))
+
+            # Trading regime
+            if analysis.trading_regime == 'cycling':
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.NEUTRAL,
+                    strength=0.4,
+                    description=f"Strong cyclical regime detected — FFT signals are high-confidence"
+                ))
+            elif analysis.trading_regime == 'noisy':
+                signals.append(Signal(
+                    source="Spectral-FFT",
+                    signal_type=SignalType.CAUTIONARY,
+                    strength=0.3,
+                    description="Noisy/random regime — cycle signals have low reliability"
+                ))
+
+            # Confidence: higher when cycles are strong and clear
+            confidence = min(0.85, 0.35 + analysis.cycle_strength * 0.5)
+            if analysis.trading_regime == 'noisy':
+                confidence *= 0.5
+
+            # Build sub_scores for chain-of-thought display
+            cycle_periods = [c.period_days for c in analysis.dominant_cycles[:3]]
+            cycle_powers = [c.contribution_pct for c in analysis.dominant_cycles[:3]]
+
+            sub_scores = {
+                'spectral_score': analysis.spectral_score,
+                'cycle_strength': round(analysis.cycle_strength * 100, 1),
+                'phase_position': round(analysis.phase_position * 100, 1),
+                'atr_pct': analysis.atr_normalized,
+                'rsi': analysis.rsi_value,
+                'bars_analyzed': analysis.bars_analyzed,
+                'dominant_periods': cycle_periods,
+                'dominant_powers': cycle_powers,
+                'trading_regime': analysis.trading_regime
+            }
+
+            result = LayerResult(
+                layer_name="Spectral Cycle Analysis (FFT)",
+                layer_number=4,
+                score=analysis.spectral_score,
+                confidence=round(confidence, 2),
+                weight=0.09,
+                signals=signals,
+                sub_scores=sub_scores,
+                reasoning=analysis.signal_description,
+                data_used=[f"FFT of {analysis.bars_analyzed} daily bars", "OHLC from FMP API"]
+            )
+
+            self.layer_results.append(result)
+            return result
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"[SpectralCycles] Error in layer 4A: {e}")
+
+            result = LayerResult(
+                layer_name="Spectral Cycle Analysis (FFT)",
+                layer_number=4,
+                score=50,
+                confidence=0.0,
+                weight=0.09,
+                reasoning=f"Spectral analysis error: {str(e)[:100]}"
+            )
+            self.layer_results.append(result)
+            return result
 
     def _layer5_valuation(self, valuation_data: Dict, current_price: float) -> LayerResult:
         """Layer 5: Valuation Ensemble"""
@@ -1711,6 +2134,8 @@ class NeuralResumenEngine:
         technical_layer = next((l for l in self.layer_results if l.layer_name == "Technical Analysis"), None)
         news_layer = next((l for l in self.layer_results if l.layer_name == "News Sentiment"), None)
         institutional_layer = next((l for l in self.layer_results if l.layer_name == "Institutional Flow"), None)
+        sector_layer = next((l for l in self.layer_results if l.layer_name == "Sector & Industry Context"), None)
+        spectral_layer = next((l for l in self.layer_results if l.layer_name == "Spectral Cycle Analysis (FFT)"), None)
 
         score = 50
 
@@ -1790,6 +2215,54 @@ class NeuralResumenEngine:
                 ))
                 score -= 8
                 adjustments['sustainability'] = -0.08
+
+        # Sector tailwind + undervalued = opportunity
+        if sector_layer and valuation_layer:
+            sec_score = sector_layer.score
+            val_score = valuation_layer.score
+
+            if sec_score > 60 and val_score > 60:
+                signals.append(Signal(
+                    source="Correlation",
+                    signal_type=SignalType.BULLISH,
+                    strength=0.7,
+                    description="SECTOR TAILWIND: Company is undervalued in a strong-performing sector"
+                ))
+                score += 8
+                adjustments['sector_tailwind'] = 0.08
+            elif sec_score < 40 and val_score < 45:
+                signals.append(Signal(
+                    source="Correlation",
+                    signal_type=SignalType.BEARISH,
+                    strength=0.6,
+                    description="SECTOR HEADWIND: Overvalued in a weak sector environment"
+                ))
+                score -= 8
+                adjustments['sector_headwind'] = -0.08
+
+        # Spectral cycle + technical alignment
+        if spectral_layer and technical_layer:
+            spec_score = spectral_layer.score
+            tech_score = technical_layer.score
+
+            if spec_score > 60 and tech_score > 60:
+                signals.append(Signal(
+                    source="Correlation",
+                    signal_type=SignalType.BULLISH,
+                    strength=0.65,
+                    description="CYCLE-TECHNICAL ALIGNMENT: FFT cycle upturn confirmed by technical setup"
+                ))
+                score += 7
+                adjustments['cycle_technical'] = 0.07
+            elif spec_score < 40 and tech_score < 40:
+                signals.append(Signal(
+                    source="Correlation",
+                    signal_type=SignalType.BEARISH,
+                    strength=0.6,
+                    description="CYCLE-TECHNICAL WEAKNESS: FFT cycle downturn with poor technical setup"
+                ))
+                score -= 7
+                adjustments['cycle_technical_weak'] = -0.07
 
         result = LayerResult(
             layer_name="Cross-Signal Correlation",

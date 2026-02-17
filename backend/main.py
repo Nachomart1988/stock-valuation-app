@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import numpy as np
+import os
 
 from model import predictor
 from quality_model import quality_predictor
@@ -202,13 +203,15 @@ class ResumenRequest(BaseModel):
 @app.post("/resumen/predict")
 async def resumen_predict(req: ResumenRequest):
     """
-    Generate comprehensive master summary using Neural Reasoning Engine v2.0.
+    Generate comprehensive master summary using Neural Reasoning Engine v2.1.
 
-    12-Layer Neural Architecture:
+    14-Layer Neural Architecture:
     1. Data Ingestion & Validation
     2. News Sentiment Analysis (NLP with financial lexicons)
     3. Institutional Flow Analysis (smart money tracking)
+    3A. Sector & Industry Context (macro positioning)
     4. Technical Analysis (pivots, support/resistance)
+    4A. Spectral Cycle Analysis (FFT market cycles)
     5. Valuation Ensemble (multi-model integration)
     6. Quality Analysis (5-dimension scoring)
     7. Growth & Value Creation Analysis
@@ -221,7 +224,7 @@ async def resumen_predict(req: ResumenRequest):
     Returns full chain-of-thought reasoning with actionable investment advice.
     """
     try:
-        print(f"[NeuralEngine] Starting 12-layer analysis for {req.ticker}")
+        print(f"[NeuralEngine] Starting 14-layer analysis for {req.ticker}")
 
         # Convert request to dictionary for the engine
         data = {
@@ -239,9 +242,10 @@ async def resumen_predict(req: ResumenRequest):
             'forecasts': req.forecasts,
             'diarioStats': req.diarioStats,
             'news': req.news,
+            'fmp_api_key': os.environ.get('FMP_API_KEY'),
         }
 
-        # Run the 12-layer neural reasoning engine
+        # Run the 14-layer neural reasoning engine
         result = neural_engine.analyze(data)
 
         print(f"[NeuralEngine] Analysis complete: {result['finalRecommendation']} ({result['conviction']}%)")
