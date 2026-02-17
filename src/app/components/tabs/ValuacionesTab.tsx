@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 // ────────────────────────────────────────────────
 // HELPER FUNCTIONS FOR MULTI-STAGE VALUATION MODELS
@@ -234,6 +235,7 @@ export default function ValuacionesTab({
   ownerEarnings,
   cagrStats,
 }: Props) {
+  const { t } = useLanguage();
   // ────────────────────────────────────────────────
   // Estados para parámetros del modelo
   // ────────────────────────────────────────────────
@@ -1614,7 +1616,7 @@ export default function ValuacionesTab({
           <span className="text-lg font-bold text-blue-400">$</span>
         </div>
       </div>
-      <p className="text-xl text-gray-300">Calculando valuaciones...</p>
+      <p className="text-xl text-gray-300">{t('valuacionesTab.loading')}</p>
     </div>
   );
 
@@ -1956,13 +1958,13 @@ export default function ValuacionesTab({
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-            Valuaciones Múltiples
+            {t('valuacionesTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Análisis integral de valor intrínseco para {ticker}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('valuacionesTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <p className="text-xs text-gray-500">Precio Actual</p>
+            <p className="text-xs text-gray-500">{t('valuacionesTab.currentPrice')}</p>
             <p className="text-2xl font-bold text-gray-100">${quote?.price?.toFixed(2) || 'N/A'}</p>
           </div>
           <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
@@ -2424,7 +2426,7 @@ export default function ValuacionesTab({
 
         <div className="relative z-10">
           <div className="text-center mb-6">
-            <h4 className="text-lg font-medium text-gray-400 mb-2">Valor Intrínseco Promedio</h4>
+            <h4 className="text-lg font-medium text-gray-400 mb-2">{t('valuacionesTab.avgIntrinsicValue')}</h4>
             <p className="text-7xl font-black bg-gradient-to-r from-blue-400 via-blue-300 to-purple-400 bg-clip-text text-transparent tracking-tight">
               {averageVal !== null ? `$${averageVal.toFixed(2)}` : '—'}
             </p>
@@ -2452,7 +2454,7 @@ export default function ValuacionesTab({
                 <p className={`text-xs uppercase tracking-wide mb-1 ${
                   averageVal > quote.price ? 'text-green-400' : 'text-red-400'
                 }`}>
-                  {averageVal > quote.price ? 'Upside' : 'Downside'}
+                  {averageVal > quote.price ? t('valuacionesTab.upside') : 'Downside'}
                 </p>
                 <p className={`text-3xl font-bold ${
                   averageVal > quote.price ? 'text-green-400' : 'text-red-400'

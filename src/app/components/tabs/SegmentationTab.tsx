@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { useLanguage } from '@/i18n/LanguageContext';
 import { Pie, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -33,6 +34,7 @@ interface GeoSegment {
 }
 
 export default function SegmentationTab({ ticker }: SegmentationTabProps) {
+  const { t } = useLanguage();
   const [productSegments, setProductSegments] = useState<ProductSegment[]>([]);
   const [geoSegments, setGeoSegments] = useState<GeoSegment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -294,13 +296,13 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
-            Revenue Segmentation
+            {t('segmentationTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Desglose de ingresos por producto y región para {ticker}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('segmentationTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right bg-gradient-to-r from-violet-900/40 to-fuchsia-900/40 px-4 py-2 rounded-xl border border-violet-600">
-            <p className="text-xs text-violet-400">Segmentos</p>
+            <p className="text-xs text-violet-400">{t('segmentationTab.segments')}</p>
             <p className="text-xl font-bold text-violet-400">{latestProductData.length + latestGeoData.length}</p>
           </div>
         </div>
@@ -308,16 +310,16 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
 
       {/* Product Segmentation */}
       <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-6 rounded-xl border border-blue-600">
-        <h4 className="text-2xl font-bold text-blue-400 mb-6">Product/Service Segmentation</h4>
+        <h4 className="text-2xl font-bold text-blue-400 mb-6">{t('segmentationTab.productSegmentation')}</h4>
 
         {latestProductData.length === 0 ? (
-          <p className="text-gray-400 text-center py-8">No product segmentation data available for {ticker}</p>
+          <p className="text-gray-400 text-center py-8">{t('segmentationTab.noProductData')} {ticker}</p>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Pie Chart */}
             <div className="bg-gray-800/50 p-6 rounded-xl">
-              <h5 className="text-lg font-semibold text-gray-200 mb-4">Latest Period Distribution</h5>
-              <p className="text-sm text-gray-400 mb-4">Date: {latestProductData[0]?.date}</p>
+              <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.latestPeriod')}</h5>
+              <p className="text-sm text-gray-400 mb-4">{t('segmentationTab.date')}: {latestProductData[0]?.date}</p>
               <div className="h-80">
                 <Pie data={productChartData} options={chartOptions} />
               </div>
@@ -325,7 +327,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
 
             {/* Breakdown Table */}
             <div className="bg-gray-800/50 p-6 rounded-xl">
-              <h5 className="text-lg font-semibold text-gray-200 mb-4">Revenue Breakdown</h5>
+              <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.revenueBreakdown')}</h5>
               <div className="space-y-3">
                 {latestProductData
                   .sort((a, b) => b.revenue - a.revenue)
@@ -348,7 +350,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
                     );
                   })}
                 <div className="flex items-center justify-between p-3 bg-blue-900/30 rounded-lg border border-blue-600">
-                  <span className="text-blue-400 font-semibold">Total Revenue</span>
+                  <span className="text-blue-400 font-semibold">{t('segmentationTab.totalRevenue')}</span>
                   <span className="text-blue-400 font-bold">{formatCurrency(totalProductRevenue)}</span>
                 </div>
               </div>
@@ -359,7 +361,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
         {/* Historical Bar Chart */}
         {productSegments.length > 0 && (
           <div className="mt-8 bg-gray-800/50 p-6 rounded-xl">
-            <h5 className="text-lg font-semibold text-gray-200 mb-4">Historical Product Revenue</h5>
+            <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.historicalProduct')}</h5>
             <div className="h-80">
               <Bar data={productHistoricalData} options={barChartOptions} />
             </div>
@@ -369,16 +371,16 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
 
       {/* Geographic Segmentation */}
       <div className="bg-gradient-to-r from-green-900/30 to-teal-900/30 p-6 rounded-xl border border-green-600">
-        <h4 className="text-2xl font-bold text-green-400 mb-6">Geographic Segmentation</h4>
+        <h4 className="text-2xl font-bold text-green-400 mb-6">{t('segmentationTab.geographicSegmentation')}</h4>
 
         {latestGeoData.length === 0 ? (
-          <p className="text-gray-400 text-center py-8">No geographic segmentation data available for {ticker}</p>
+          <p className="text-gray-400 text-center py-8">{t('segmentationTab.noGeoData')} {ticker}</p>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Pie Chart */}
             <div className="bg-gray-800/50 p-6 rounded-xl">
-              <h5 className="text-lg font-semibold text-gray-200 mb-4">Latest Period Distribution</h5>
-              <p className="text-sm text-gray-400 mb-4">Date: {latestGeoData[0]?.date}</p>
+              <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.latestPeriod')}</h5>
+              <p className="text-sm text-gray-400 mb-4">{t('segmentationTab.date')}: {latestGeoData[0]?.date}</p>
               <div className="h-80">
                 <Pie data={geoChartData} options={chartOptions} />
               </div>
@@ -386,7 +388,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
 
             {/* Breakdown Table */}
             <div className="bg-gray-800/50 p-6 rounded-xl">
-              <h5 className="text-lg font-semibold text-gray-200 mb-4">Regional Revenue</h5>
+              <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.regionalRevenue')}</h5>
               <div className="space-y-3">
                 {latestGeoData
                   .sort((a, b) => b.revenue - a.revenue)
@@ -409,7 +411,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
                     );
                   })}
                 <div className="flex items-center justify-between p-3 bg-green-900/30 rounded-lg border border-green-600">
-                  <span className="text-green-400 font-semibold">Total Revenue</span>
+                  <span className="text-green-400 font-semibold">{t('segmentationTab.totalRevenue')}</span>
                   <span className="text-green-400 font-bold">{formatCurrency(totalGeoRevenue)}</span>
                 </div>
               </div>
@@ -420,7 +422,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
         {/* Historical Bar Chart */}
         {geoSegments.length > 0 && (
           <div className="mt-8 bg-gray-800/50 p-6 rounded-xl">
-            <h5 className="text-lg font-semibold text-gray-200 mb-4">Historical Geographic Revenue</h5>
+            <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.historicalGeographic')}</h5>
             <div className="h-80">
               <Bar data={geoHistoricalData} options={barChartOptions} />
             </div>
@@ -431,34 +433,34 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
       {/* Summary Stats */}
       {(latestProductData.length > 0 || latestGeoData.length > 0) && (
         <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
-          <h4 className="text-lg font-semibold text-gray-200 mb-4">Segmentation Summary</h4>
+          <h4 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.summaryTitle')}</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gray-700 rounded-lg p-4 text-center">
               <p className="text-3xl font-bold text-blue-400">{latestProductData.length}</p>
-              <p className="text-sm text-gray-400">Product Segments</p>
+              <p className="text-sm text-gray-400">{t('segmentationTab.productSegments')}</p>
             </div>
             <div className="bg-gray-700 rounded-lg p-4 text-center">
               <p className="text-3xl font-bold text-green-400">{latestGeoData.length}</p>
-              <p className="text-sm text-gray-400">Geographic Regions</p>
+              <p className="text-sm text-gray-400">{t('segmentationTab.geographicRegions')}</p>
             </div>
             <div className="bg-gray-700 rounded-lg p-4 text-center">
               <p className="text-2xl font-bold text-purple-400">
                 {latestProductData.length > 0 ? latestProductData.sort((a, b) => b.revenue - a.revenue)[0]?.segment : 'N/A'}
               </p>
-              <p className="text-sm text-gray-400">Top Product</p>
+              <p className="text-sm text-gray-400">{t('segmentationTab.topProduct')}</p>
             </div>
             <div className="bg-gray-700 rounded-lg p-4 text-center">
               <p className="text-2xl font-bold text-amber-400">
                 {latestGeoData.length > 0 ? latestGeoData.sort((a, b) => b.revenue - a.revenue)[0]?.region : 'N/A'}
               </p>
-              <p className="text-sm text-gray-400">Top Region</p>
+              <p className="text-sm text-gray-400">{t('segmentationTab.topRegion')}</p>
             </div>
           </div>
         </div>
       )}
 
       <p className="text-center text-sm text-gray-500">
-        Revenue segmentation data based on company fiscal year filings.
+        {t('segmentationTab.footer')}
       </p>
     </div>
   );

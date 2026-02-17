@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface PeerData {
   symbol: string;
@@ -30,6 +31,7 @@ type BalanceSheetResponse = {
 };
 
 export default function CompetidoresTab({ ticker }: { ticker: string }) {
+  const { t } = useLanguage();
   const [peerData, setPeerData] = useState<PeerData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +146,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
   }, [ticker]);
 
   if (loading) {
-    return <p className="text-xl text-gray-300 py-10 text-center">Cargando competidores...</p>;
+    return <p className="text-xl text-gray-300 py-10 text-center">{t('competidoresTab.loading')}</p>;
   }
 
   if (error) {
@@ -152,7 +154,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
   }
 
   if (peerData.length === 0) {
-    return <p className="text-xl text-gray-400 py-10 text-center">No hay datos de competidores</p>;
+    return <p className="text-xl text-gray-400 py-10 text-center">{t('competidoresTab.noData')}</p>;
   }
 
   const validPeerData = peerData.filter(
@@ -165,13 +167,13 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
-            Competidores
+            {t('competidoresTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Análisis comparativo de {ticker} vs competidores del sector</p>
+          <p className="text-sm text-gray-400 mt-1">{t('competidoresTab.subtitle')} {ticker} {t('competidoresTab.vsCompetitors')}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right bg-gradient-to-r from-orange-900/40 to-red-900/40 px-4 py-2 rounded-xl border border-orange-600">
-            <p className="text-xs text-orange-400">Empresas</p>
+            <p className="text-xs text-orange-400">{t('competidoresTab.companies')}</p>
             <p className="text-xl font-bold text-orange-400">{validPeerData.length}</p>
           </div>
         </div>
@@ -182,12 +184,12 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
           <thead className="bg-gray-800">
             <tr>
               <th className="px-6 py-4 text-left font-bold text-gray-200 sticky left-0 bg-gray-800 z-10 min-w-[220px]">
-                Empresa
+                {t('competidoresTab.company')}
               </th>
-              <th className="px-6 py-4 text-center font-bold text-gray-200">Levered Beta</th>
-              <th className="px-6 py-4 text-right font-bold text-gray-200">Mkt. Val. (Equity)</th>
-              <th className="px-6 py-4 text-right font-bold text-gray-200">Deuda Total</th>
-              <th className="px-6 py-4 text-right font-bold text-gray-200">Debt / Mkt Cap</th>
+              <th className="px-6 py-4 text-center font-bold text-gray-200">{t('competidoresTab.leveredBeta')}</th>
+              <th className="px-6 py-4 text-right font-bold text-gray-200">{t('competidoresTab.marketValue')}</th>
+              <th className="px-6 py-4 text-right font-bold text-gray-200">{t('competidoresTab.totalDebt')}</th>
+              <th className="px-6 py-4 text-right font-bold text-gray-200">{t('competidoresTab.debtToMktCap')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
@@ -252,7 +254,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
       </div>
 
       <p className="text-sm text-gray-500 text-center">
-        Datos de Financial Modeling Prep. Ticker principal + hasta 8 competidores.
+        Data from Financial Modeling Prep. Main ticker + up to 8 competitors.
       </p>
     </div>
   );

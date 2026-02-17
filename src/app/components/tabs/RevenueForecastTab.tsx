@@ -14,6 +14,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 ChartJS.register(
   CategoryScale,
@@ -31,6 +32,7 @@ interface RevenueForecastTabProps {
 }
 
 export default function RevenueForecastTab({ income }: RevenueForecastTabProps) {
+  const { t } = useLanguage();
   const [forecastYears, setForecastYears] = useState(5);
   const [optimizedParams, setOptimizedParams] = useState<{ alpha: number; beta: number; mse: number } | null>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -141,7 +143,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
   if (historical.length < 3) {
     return (
       <div className="text-center py-16 text-gray-400 text-xl">
-        No hay suficientes datos históricos de revenue para realizar proyecciones confiables.
+        {t('revenueForecastTab.insufficientData')}
       </div>
     );
   }
@@ -217,7 +219,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
     datasets: [
       {
         type: 'bar' as const,
-        label: 'Revenue Histórico ($B)',
+        label: t('revenueForecastTab.revenueHistorical'),
         data: [
           ...historical.map((d) => d.revenue),
           ...Array(forecastYears).fill(null),
@@ -228,7 +230,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       },
       {
         type: 'line' as const,
-        label: 'Holt Fitted (histórico)',
+        label: t('revenueForecastTab.holtFitted'),
         data: [
           ...holtFitted,
           ...Array(forecastYears).fill(null),
@@ -243,7 +245,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       },
       {
         type: 'line' as const,
-        label: 'Holt Forecast',
+        label: t('revenueForecastTab.holtForecast'),
         data: [
           ...Array(historical.length).fill(null),
           ...holtForecast,
@@ -257,7 +259,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       },
       {
         type: 'line' as const,
-        label: 'Regresión Fitted (histórico)',
+        label: t('revenueForecastTab.regressionFitted'),
         data: [
           ...regressionFitted,
           ...Array(forecastYears).fill(null),
@@ -272,7 +274,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       },
       {
         type: 'line' as const,
-        label: 'Regresión Forecast',
+        label: t('revenueForecastTab.regressionForecast'),
         data: [
           ...Array(historical.length).fill(null),
           ...regressionForecast,
@@ -293,13 +295,13 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
-            Revenue Forecast
+            {t('revenueForecastTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Proyección de ingresos con modelo Holt-Winters optimizado</p>
+          <p className="text-sm text-gray-400 mt-1">{t('revenueForecastTab.subtitle')}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right bg-gradient-to-r from-emerald-900/40 to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
-            <p className="text-xs text-emerald-400">Años Proyectados</p>
+            <p className="text-xs text-emerald-400">{t('revenueForecastTab.yearsProjected')}</p>
             <p className="text-xl font-bold text-emerald-400">{forecastYears}</p>
           </div>
         </div>
@@ -307,39 +309,38 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
 
       {/* Info de optimización */}
       <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <h3 className="text-xl font-bold text-emerald-400 mb-4">Parámetros Optimizados (Holt-Winters)</h3>
+        <h3 className="text-xl font-bold text-emerald-400 mb-4">{t('revenueForecastTab.optimizedParameters')}</h3>
         {isOptimizing ? (
-          <p className="text-gray-400">Optimizando parámetros...</p>
+          <p className="text-gray-400">{t('revenueForecastTab.optimizing')}</p>
         ) : optimizedParams ? (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-gray-700 p-4 rounded-lg text-center">
-              <p className="text-gray-400 text-sm mb-1">Alpha (nivel)</p>
+              <p className="text-gray-400 text-sm mb-1">{t('revenueForecastTab.alpha')}</p>
               <p className="text-2xl font-bold text-emerald-400">{optimizedParams.alpha.toFixed(2)}</p>
             </div>
             <div className="bg-gray-700 p-4 rounded-lg text-center">
-              <p className="text-gray-400 text-sm mb-1">Beta (tendencia)</p>
+              <p className="text-gray-400 text-sm mb-1">{t('revenueForecastTab.betaParam')}</p>
               <p className="text-2xl font-bold text-emerald-400">{optimizedParams.beta.toFixed(2)}</p>
             </div>
             <div className="bg-gray-700 p-4 rounded-lg text-center">
-              <p className="text-gray-400 text-sm mb-1">MSE Holt</p>
+              <p className="text-gray-400 text-sm mb-1">{t('revenueForecastTab.mseHolt')}</p>
               <p className="text-2xl font-bold text-emerald-400">{optimizedParams.mse.toFixed(4)}</p>
             </div>
             <div className="bg-gray-700 p-4 rounded-lg text-center">
-              <p className="text-gray-400 text-sm mb-1">MSE Regresión</p>
+              <p className="text-gray-400 text-sm mb-1">{t('revenueForecastTab.mseRegression')}</p>
               <p className="text-2xl font-bold text-amber-400">{regressionMSE.toFixed(4)}</p>
             </div>
           </div>
         ) : null}
         <p className="text-sm text-gray-500 mt-4">
-          Los parámetros alpha y beta se optimizan automáticamente para minimizar el error cuadrático medio (MSE)
-          entre los valores históricos y los valores fitted del modelo Holt.
+          {t('revenueForecastTab.paramExplanation')}
         </p>
       </div>
 
       {/* Control de años */}
       <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
         <div className="max-w-xs">
-          <label className="block text-gray-300 mb-2">Años a proyectar</label>
+          <label className="block text-gray-300 mb-2">{t('revenueForecastTab.yearsToProject')}</label>
           <input
             type="number"
             min="1"
@@ -354,7 +355,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       {/* Gráfico */}
       <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
         <h3 className="text-2xl font-bold text-blue-400 mb-6 text-center">
-          Revenue Histórico vs Forecast ({forecastYears} años)
+          {t('revenueForecastTab.chartTitle')} ({forecastYears} {t('revenueForecastTab.yearsToProject')})
         </h3>
         <div className="h-96">
           <Chart
@@ -394,12 +395,12 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
         <table className="min-w-full bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
           <thead className="bg-gray-700">
             <tr>
-              <th className="px-6 py-4 text-left">Año</th>
-              <th className="px-6 py-4 text-right">Revenue Histórico ($B)</th>
-              <th className="px-6 py-4 text-right">Holt Fitted ($B)</th>
-              <th className="px-6 py-4 text-right">Holt Forecast ($B)</th>
-              <th className="px-6 py-4 text-right">Regresión Fitted ($B)</th>
-              <th className="px-6 py-4 text-right">Regresión Forecast ($B)</th>
+              <th className="px-6 py-4 text-left">{t('revenueForecastTab.yearsProjected').replace('Proyectados', '').replace('Projected', '')}</th>
+              <th className="px-6 py-4 text-right">{t('revenueForecastTab.revenueHistorical')}</th>
+              <th className="px-6 py-4 text-right">{t('revenueForecastTab.holtFitted')}</th>
+              <th className="px-6 py-4 text-right">{t('revenueForecastTab.holtForecast')}</th>
+              <th className="px-6 py-4 text-right">{t('revenueForecastTab.regressionFitted')}</th>
+              <th className="px-6 py-4 text-right">{t('revenueForecastTab.regressionForecast')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
@@ -437,7 +438,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       </div>
 
       <p className="text-center text-sm text-gray-500 mt-4">
-        Proyecciones en billones de dólares ($B). El modelo Holt utiliza parámetros optimizados automáticamente.
+        {t('revenueForecastTab.footer')}
       </p>
     </div>
   );

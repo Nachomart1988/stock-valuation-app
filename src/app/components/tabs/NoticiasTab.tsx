@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface NoticiasTabProps {
   ticker: string;
@@ -25,6 +26,7 @@ interface PressRelease {
 }
 
 export default function NoticiasTab({ ticker }: NoticiasTabProps) {
+  const { t } = useLanguage();
   const [companyNews, setCompanyNews] = useState<NewsItem[]>([]);
   const [pressReleases, setPressReleases] = useState<PressRelease[]>([]);
   const [loadingNews, setLoadingNews] = useState(true);
@@ -167,13 +169,13 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-            Noticias y Press Releases
+            {t('noticiasTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Últimas noticias y comunicados para {ticker}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('noticiasTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right bg-gradient-to-r from-blue-900/40 to-purple-900/40 px-4 py-2 rounded-xl border border-blue-600">
-            <p className="text-xs text-blue-400">Total</p>
+            <p className="text-xs text-blue-400">{t('noticiasTab.total')}</p>
             <p className="text-xl font-bold text-blue-400">{companyNews.length + pressReleases.length}</p>
           </div>
         </div>
@@ -189,7 +191,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
               : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
           }`}
         >
-          Noticias de la Compania ({companyNews.length})
+          {t('noticiasTab.companyNews')} ({companyNews.length})
         </button>
         <button
           onClick={() => setActiveTab('prs')}
@@ -199,7 +201,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
               : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
           }`}
         >
-          Press Releases ({pressReleases.length})
+          {t('noticiasTab.pressReleases')} ({pressReleases.length})
         </button>
       </div>
 
@@ -209,11 +211,11 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
           {loadingNews ? (
             <div className="text-center py-16">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-              <p className="mt-4 text-gray-400 text-lg">Cargando noticias...</p>
+              <p className="mt-4 text-gray-400 text-lg">{t('noticiasTab.loading')}</p>
             </div>
           ) : companyNews.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
-              <p className="text-2xl">No hay noticias disponibles para {ticker}</p>
+              <p className="text-2xl">{t('noticiasTab.noNews')} {ticker}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -273,11 +275,11 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
           {loadingPRs ? (
             <div className="text-center py-16">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent"></div>
-              <p className="mt-4 text-gray-400 text-lg">Cargando press releases...</p>
+              <p className="mt-4 text-gray-400 text-lg">{t('noticiasTab.loadingPressReleases')}</p>
             </div>
           ) : pressReleases.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
-              <p className="text-2xl">No hay press releases disponibles para {ticker}</p>
+              <p className="text-2xl">{t('noticiasTab.noPressReleases')} {ticker}</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -309,15 +311,15 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
 
       {/* Summary Stats */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
-        <h4 className="text-lg font-semibold text-gray-200 mb-4">Resumen de Cobertura</h4>
+        <h4 className="text-lg font-semibold text-gray-200 mb-4">{t('noticiasTab.coverageSummary')}</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-700 rounded-lg p-4 text-center">
             <p className="text-3xl font-bold text-blue-400">{companyNews.length}</p>
-            <p className="text-sm text-gray-400">Noticias Recientes</p>
+            <p className="text-sm text-gray-400">{t('noticiasTab.recentNews')}</p>
           </div>
           <div className="bg-gray-700 rounded-lg p-4 text-center">
             <p className="text-3xl font-bold text-purple-400">{pressReleases.length}</p>
-            <p className="text-sm text-gray-400">Press Releases</p>
+            <p className="text-sm text-gray-400">{t('noticiasTab.pressReleases')}</p>
           </div>
           <div className="bg-gray-700 rounded-lg p-4 text-center">
             <p className="text-3xl font-bold text-green-400">
@@ -325,7 +327,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
                 ? new Set(companyNews.map((n) => n.site).filter(Boolean)).size
                 : 0}
             </p>
-            <p className="text-sm text-gray-400">Fuentes</p>
+            <p className="text-sm text-gray-400">{t('noticiasTab.sources')}</p>
           </div>
           <div className="bg-gray-700 rounded-lg p-4 text-center">
             <p className="text-3xl font-bold text-amber-400">
@@ -335,13 +337,13 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
                   ).split(',')[0]
                 : 'N/A'}
             </p>
-            <p className="text-sm text-gray-400">Ultima Actualizacion</p>
+            <p className="text-sm text-gray-400">{t('noticiasTab.lastUpdate')}</p>
           </div>
         </div>
       </div>
 
       <p className="text-center text-sm text-gray-500">
-        Las noticias y press releases se actualizan en tiempo real desde multiples fuentes financieras.
+        {t('noticiasTab.footer')}
       </p>
     </div>
   );

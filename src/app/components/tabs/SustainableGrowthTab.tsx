@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface SGRMethod {
   name: string;
@@ -37,6 +38,7 @@ export default function SustainableGrowthTab({
   profile,
   onSGRChange,
 }: SustainableGrowthTabProps) {
+  const { t } = useLanguage();
   // Get WACC - API returns it already as percentage (e.g., 8.88 means 8.88%)
   const getDefaultWacc = () => {
     const waccValues: number[] = [];
@@ -83,7 +85,7 @@ export default function SustainableGrowthTab({
 
       try {
         if (income.length < 2 || balance.length < 2 || cashFlow.length < 2) {
-          setError('Datos insuficientes');
+          setError(t('sgrTab.insufficientData'));
           setLoading(false);
           return;
         }
@@ -468,7 +470,7 @@ export default function SustainableGrowthTab({
 
       } catch (err: any) {
         console.error('SGR calculation error:', err);
-        setError(err.message || 'Error al calcular');
+        setError(err.message || t('common.error'));
       } finally {
         setLoading(false);
       }
@@ -512,7 +514,7 @@ export default function SustainableGrowthTab({
             <span className="text-lg font-bold text-green-400">📈</span>
           </div>
         </div>
-        <p className="text-xl text-gray-300">Calculando tasa de crecimiento sostenible...</p>
+        <p className="text-xl text-gray-300">{t('sgrTab.loading')}</p>
       </div>
     );
   }
@@ -520,7 +522,7 @@ export default function SustainableGrowthTab({
   if (error) {
     return (
       <div className="bg-red-900/30 border border-red-500 rounded-xl p-6 text-center">
-        <p className="text-xl text-red-400">❌ Error: {error}</p>
+        <p className="text-xl text-red-400">{t('common.error')}: {error}</p>
       </div>
     );
   }
@@ -531,13 +533,13 @@ export default function SustainableGrowthTab({
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
-            Sustainable Growth Rate
+            {t('sgrTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Análisis de tasa de crecimiento sostenible para {ticker}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('sgrTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
-            <p className="text-xs text-green-400">Avg SGR</p>
+            <p className="text-xs text-green-400">{t('sgrTab.avgSgr')}</p>
             <p className="text-xl font-bold text-green-400">
               {averageSGR !== null ? (averageSGR * 100).toFixed(2) + '%' : '—'}
             </p>
@@ -548,7 +550,7 @@ export default function SustainableGrowthTab({
       {/* Inputs */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-lg font-medium text-gray-300 mb-2">Periodo histórico (años)</label>
+          <label className="block text-lg font-medium text-gray-300 mb-2">{t('sgrTab.historicalPeriod')}</label>
           <select
             value={years}
             onChange={(e) => setYears(Number(e.target.value))}
@@ -571,7 +573,7 @@ export default function SustainableGrowthTab({
             placeholder="8.5"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Fuente: Advance DCF ({dcfCustom?.wacc?.toFixed(1) || 'N/A'}%) + WACC Tab ({calculatedWacc?.toFixed(1) || 'N/A'}%)
+            {t('sgrTab.waccSource')}
           </p>
         </div>
       </div>
@@ -581,7 +583,7 @@ export default function SustainableGrowthTab({
           ═══════════════════════════════════════════════════════════════ */}
       <div className={`bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-6 rounded-xl border ${topdownMethods[0]?.enabled ? 'border-blue-500' : 'border-gray-600 opacity-60'}`}>
         <div className="flex items-center justify-between mb-4">
-          <h4 className="text-2xl font-bold text-blue-400">Análisis Top-Down</h4>
+          <h4 className="text-2xl font-bold text-blue-400">{t('sgrTab.topDown')}</h4>
           {topdownMethods[0] && (
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -590,12 +592,12 @@ export default function SustainableGrowthTab({
                 onChange={() => toggleMethod(methods.indexOf(topdownMethods[0]))}
                 className="w-5 h-5 text-blue-600 focus:ring-blue-500 border-gray-600 rounded"
               />
-              <span className="text-sm text-gray-300">Incluir en promedio</span>
+              <span className="text-sm text-gray-300">{t('sgrTab.includeInAverage')}</span>
             </label>
           )}
         </div>
         <p className="text-gray-400 mb-4">
-          Partimos desde la rentabilidad total de la empresa (ROE) y vemos cuánto puede crecer reinvirtiendo sus ganancias.
+          {t('sgrTab.topDownDesc')}
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div className="bg-gray-800/50 p-4 rounded-lg text-center">
@@ -630,7 +632,7 @@ export default function SustainableGrowthTab({
           ═══════════════════════════════════════════════════════════════ */}
       <div className={`bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border ${bottomupMethods[0]?.enabled ? 'border-green-500' : 'border-gray-600 opacity-60'}`}>
         <div className="flex items-center justify-between mb-4">
-          <h4 className="text-2xl font-bold text-green-400">Análisis Bottom-Up (DuPont Extendido)</h4>
+          <h4 className="text-2xl font-bold text-green-400">{t('sgrTab.bottomUp')}</h4>
           {bottomupMethods[0] && (
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -639,12 +641,12 @@ export default function SustainableGrowthTab({
                 onChange={() => toggleMethod(methods.indexOf(bottomupMethods[0]))}
                 className="w-5 h-5 text-green-600 focus:ring-green-500 border-gray-600 rounded"
               />
-              <span className="text-sm text-gray-300">Incluir en promedio</span>
+              <span className="text-sm text-gray-300">{t('sgrTab.includeInAverage')}</span>
             </label>
           )}
         </div>
         <p className="text-gray-400 mb-4">
-          Descomponemos el crecimiento en sus componentes operativos para identificar drivers y áreas de mejora.
+          {t('sgrTab.bottomUpDesc')}
         </p>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           <div className="bg-gray-800/50 p-3 rounded-lg text-center">
@@ -690,9 +692,9 @@ export default function SustainableGrowthTab({
           ROE METHODS (2 variants)
           ═══════════════════════════════════════════════════════════════ */}
       <div className="bg-gradient-to-r from-indigo-900/30 to-violet-900/30 p-6 rounded-xl border border-indigo-600">
-        <h4 className="text-2xl font-bold text-indigo-400 mb-4">Métodos basados en ROE</h4>
+        <h4 className="text-2xl font-bold text-indigo-400 mb-4">{t('sgrTab.roeMethods')}</h4>
         <p className="text-gray-400 mb-4">
-          SGR = Retention Rate × ROE. Dos variantes: usando promedios o calculando año por año.
+          {t('sgrTab.roeMethodsDesc')}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {roeMethods.map((method) => (
@@ -711,9 +713,9 @@ export default function SustainableGrowthTab({
           ROIC METHODS (2 variants)
           ═══════════════════════════════════════════════════════════════ */}
       <div className="bg-gradient-to-r from-amber-900/30 to-orange-900/30 p-6 rounded-xl border border-amber-600">
-        <h4 className="text-2xl font-bold text-amber-400 mb-4">Métodos basados en ROIC</h4>
+        <h4 className="text-2xl font-bold text-amber-400 mb-4">{t('sgrTab.roicMethods')}</h4>
         <p className="text-gray-400 mb-4">
-          SGR = Retention Rate × ROIC. Mismas variantes que ROE pero usando ROIC (retorno sobre capital invertido).
+          {t('sgrTab.roicMethodsDesc')}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {roicMethods.map((method) => (
@@ -732,9 +734,9 @@ export default function SustainableGrowthTab({
           FULL RETENTION METHODS
           ═══════════════════════════════════════════════════════════════ */}
       <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 p-6 rounded-xl border border-purple-600">
-        <h4 className="text-2xl font-bold text-purple-400 mb-4">SGR con Retención Total (Payout = 0%)</h4>
+        <h4 className="text-2xl font-bold text-purple-400 mb-4">{t('sgrTab.fullRetention')}</h4>
         <p className="text-gray-400 mb-4">
-          Crecimiento máximo teórico si la empresa reinvierte el 100% de sus ganancias.
+          {t('sgrTab.fullRetentionDesc')}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {retentionMethods.map((method) => (
@@ -753,9 +755,9 @@ export default function SustainableGrowthTab({
           HISTORICAL CAGR
           ═══════════════════════════════════════════════════════════════ */}
       <div className="bg-gradient-to-r from-cyan-900/30 to-teal-900/30 p-6 rounded-xl border border-cyan-600">
-        <h4 className="text-2xl font-bold text-cyan-400 mb-4">Crecimiento Histórico</h4>
+        <h4 className="text-2xl font-bold text-cyan-400 mb-4">{t('sgrTab.historicalGrowth')}</h4>
         <p className="text-gray-400 mb-4">
-          CAGR real de ingresos en el período analizado.
+          {t('sgrTab.historicalGrowthDesc')}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {historicalMethods.map((method) => (
@@ -775,20 +777,20 @@ export default function SustainableGrowthTab({
           ═══════════════════════════════════════════════════════════════ */}
       <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 shadow-xl text-center mt-12">
         <h4 className="text-3xl font-bold text-gray-100 mb-4">
-          Promedio SGR Seleccionado
+          {t('sgrTab.averageSgr')}
         </h4>
         <p className="text-7xl font-black text-blue-400 tracking-tight">
           {averageSGR !== null ? (averageSGR * 100).toFixed(2) + '%' : '—'}
         </p>
         <p className="text-xl text-blue-300 mt-4">
-          (basado en {activeMethods.length} métodos activos)
+          ({t('sgrTab.basedOnMethods').replace('{count}', activeMethods.length.toString())})
         </p>
 
         {/* Comparison with WACC */}
         {averageSGR !== null && (
           <div className="mt-6 grid grid-cols-3 gap-4">
             <div className="bg-gray-700 p-4 rounded-xl">
-              <p className="text-sm text-gray-400">SGR Promedio</p>
+              <p className="text-sm text-gray-400">{t('sgrTab.sgrAverage')}</p>
               <p className="text-2xl font-bold text-blue-400">{(averageSGR * 100).toFixed(1)}%</p>
             </div>
             <div className="bg-gray-700 p-4 rounded-xl">
@@ -796,7 +798,7 @@ export default function SustainableGrowthTab({
               <p className="text-2xl font-bold text-purple-400">{waccPercent.toFixed(1)}%</p>
             </div>
             <div className="bg-gray-700 p-4 rounded-xl">
-              <p className="text-sm text-gray-400">Spread (SGR - WACC)</p>
+              <p className="text-sm text-gray-400">{t('sgrTab.spread')}</p>
               <p className={`text-2xl font-bold ${(averageSGR * 100) > waccPercent ? 'text-green-400' : 'text-red-400'}`}>
                 {((averageSGR * 100) - waccPercent).toFixed(1)}%
               </p>
@@ -806,7 +808,7 @@ export default function SustainableGrowthTab({
       </div>
 
       <p className="text-sm text-gray-500 text-center italic">
-        Desmarca métodos para excluirlos del promedio. Cada tarjeta muestra los inputs usados en el cálculo.
+        {t('sgrTab.footer')}
       </p>
     </div>
   );
@@ -824,6 +826,7 @@ function MethodCard({
   onToggle: (index: number) => void;
   color?: 'blue' | 'green' | 'indigo' | 'amber' | 'purple' | 'cyan';
 }) {
+  const { t } = useLanguage();
   const [showDetails, setShowDetails] = useState(false);
 
   const colorClasses = {
@@ -855,7 +858,7 @@ function MethodCard({
           onClick={() => setShowDetails(!showDetails)}
           className="text-xs text-gray-400 hover:text-blue-400"
         >
-          {showDetails ? 'Ocultar' : 'Ver inputs'}
+          {showDetails ? t('sgrTab.hide') : t('sgrTab.showInputs')}
         </button>
       </div>
 

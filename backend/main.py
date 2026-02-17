@@ -262,10 +262,15 @@ async def resumen_predict(req: ResumenRequest):
 # ════════════════════════════════════════════════════════════════════
 
 class MarketSentimentRequest(BaseModel):
-    """Request body for market sentiment analysis"""
+    """Request body for market sentiment analysis v4.0"""
     news: Optional[List[Dict[str, Any]]] = None
     gainers: Optional[List[Dict[str, Any]]] = None
     losers: Optional[List[Dict[str, Any]]] = None
+    sectorPerformance: Optional[List[Dict[str, Any]]] = None
+    industryPerformance: Optional[List[Dict[str, Any]]] = None
+    indexQuotes: Optional[List[Dict[str, Any]]] = None
+    forexQuotes: Optional[List[Dict[str, Any]]] = None
+    historicalSectorPerformance: Optional[List[Dict[str, Any]]] = None
 
 
 @app.post("/market-sentiment/analyze")
@@ -292,7 +297,12 @@ async def analyze_market_sentiment(req: MarketSentimentRequest):
         data = {
             'news': req.news or [],
             'gainers': req.gainers or [],
-            'losers': req.losers or []
+            'losers': req.losers or [],
+            'sectorPerformance': req.sectorPerformance or [],
+            'industryPerformance': req.industryPerformance or [],
+            'indexQuotes': req.indexQuotes or [],
+            'forexQuotes': req.forexQuotes or [],
+            'historicalSectorPerformance': req.historicalSectorPerformance or [],
         }
 
         result = market_sentiment_engine.analyze(data)

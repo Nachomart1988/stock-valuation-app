@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface PriceData {
   date: string;
@@ -19,6 +20,7 @@ interface CAGRTabProps {
 }
 
 export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
+  const { t } = useLanguage();
   // Estados para inputs del usuario
   const [minCagr, setMinCagr] = useState<number>(-50);
   const [maxCagr, setMaxCagr] = useState<number>(100);
@@ -41,7 +43,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
 
         const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
         if (!apiKey) {
-          setError('API key not configured');
+          setError(t('common.error'));
           return;
         }
 
@@ -59,7 +61,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
 
         const json = await res.json();
         if (!Array.isArray(json) || json.length === 0) {
-          setError('No historical data available');
+          setError(t('cagrTab.loading'));
           return;
         }
 
@@ -233,7 +235,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
       labels: dataToShow.map(d => d.date),
       datasets: [
         {
-          label: 'Precio',
+          label: t('cagrTab.price'),
           data: dataToShow.map(d => d.price),
           borderColor: 'rgb(59, 130, 246)',
           backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -256,11 +258,11 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
   }, [cagrResults, yearsToAnalyze]);
 
   if (loading) {
-    return <p className="text-xl text-gray-400 py-10 text-center">Cargando datos históricos...</p>;
+    return <p className="text-xl text-gray-400 py-10 text-center">{t('cagrTab.loading')}</p>;
   }
 
   if (error) {
-    return <p className="text-xl text-red-400 py-10 text-center">Error: {error}</p>;
+    return <p className="text-xl text-red-400 py-10 text-center">{t('common.error')}: {error}</p>;
   }
 
   return (
@@ -269,13 +271,13 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-sky-400 bg-clip-text text-transparent">
-            CAGR Analysis
+            {t('cagrTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Análisis de tasa de crecimiento anual compuesto para {ticker}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('cagrTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right bg-gradient-to-r from-indigo-900/40 to-sky-900/40 px-4 py-2 rounded-xl border border-indigo-600">
-            <p className="text-xs text-indigo-400">Días de Datos</p>
+            <p className="text-xs text-indigo-400">{t('cagrTab.daysOfData')}</p>
             <p className="text-xl font-bold text-indigo-400">{historicalPrices.length.toLocaleString()}</p>
           </div>
         </div>
@@ -283,10 +285,10 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
 
       {/* Input Controls */}
       <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-600 shadow-lg">
-        <h4 className="text-2xl font-bold text-gray-100 mb-6">Parámetros de Análisis</h4>
+        <h4 className="text-2xl font-bold text-gray-100 mb-6">{t('cagrTab.parameters')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div>
-            <label className="block text-gray-300 mb-2 font-medium">Min CAGR (%)</label>
+            <label className="block text-gray-300 mb-2 font-medium">{t('cagrTab.minCagr')}</label>
             <input
               type="number"
               step="1"
@@ -296,7 +298,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
             />
           </div>
           <div>
-            <label className="block text-gray-300 mb-2 font-medium">Max CAGR (%)</label>
+            <label className="block text-gray-300 mb-2 font-medium">{t('cagrTab.maxCagr')}</label>
             <input
               type="number"
               step="1"
@@ -306,7 +308,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
             />
           </div>
           <div>
-            <label className="block text-gray-300 mb-2 font-medium">Años a Analizar</label>
+            <label className="block text-gray-300 mb-2 font-medium">{t('cagrTab.yearsToAnalyze')}</label>
             <input
               type="number"
               step="1"
@@ -317,15 +319,15 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
               className="w-full bg-gray-900/80 border-2 border-blue-500/50 rounded-xl px-4 py-3 text-xl font-bold text-blue-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30 focus:outline-none transition-all"
             />
             <p className="text-xs text-gray-500 mt-2">
-              Max disponible: {maxYearsAvailable} años
+              {maxYearsAvailable} {t('cagrTab.available')}
             </p>
           </div>
           <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-600 flex flex-col justify-center">
-            <label className="block text-gray-400 text-sm mb-1">Datos disponibles</label>
+            <label className="block text-gray-400 text-sm mb-1">{t('cagrTab.daysOfData')}</label>
             <p className="text-3xl font-bold text-blue-400">
               {historicalPrices.length.toLocaleString()}
             </p>
-            <p className="text-xs text-gray-500">días de trading</p>
+            <p className="text-xs text-gray-500">days</p>
           </div>
         </div>
       </div>
@@ -334,33 +336,33 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
       {statistics && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           <div className="bg-gradient-to-br from-green-800/50 to-green-900/50 p-5 rounded-2xl border border-green-700 text-center flex flex-col justify-center min-h-[120px]">
-            <p className="text-sm text-gray-300 mb-2">52 Week High</p>
+            <p className="text-sm text-gray-300 mb-2">{t('cagrTab.week52High')}</p>
             <p className="text-3xl font-bold text-green-400">${statistics.week52High?.toFixed(2)}</p>
           </div>
           <div className="bg-gradient-to-br from-red-800/50 to-red-900/50 p-5 rounded-2xl border border-red-700 text-center flex flex-col justify-center min-h-[120px]">
-            <p className="text-sm text-gray-300 mb-2">52 Week Low</p>
+            <p className="text-sm text-gray-300 mb-2">{t('cagrTab.week52Low')}</p>
             <p className="text-3xl font-bold text-red-400">${statistics.week52Low?.toFixed(2)}</p>
           </div>
           <div className="bg-gradient-to-br from-emerald-800/50 to-emerald-900/50 p-5 rounded-2xl border border-emerald-700 text-center flex flex-col justify-center min-h-[120px]">
-            <p className="text-sm text-gray-300 mb-2">104 Week High</p>
+            <p className="text-sm text-gray-300 mb-2">{t('cagrTab.week104High')}</p>
             <p className="text-3xl font-bold text-emerald-400">
               {statistics.week104High ? `$${statistics.week104High.toFixed(2)}` : 'N/A'}
             </p>
           </div>
           <div className="bg-gradient-to-br from-rose-800/50 to-rose-900/50 p-5 rounded-2xl border border-rose-700 text-center flex flex-col justify-center min-h-[120px]">
-            <p className="text-sm text-gray-300 mb-2">104 Week Low</p>
+            <p className="text-sm text-gray-300 mb-2">{t('cagrTab.week104Low')}</p>
             <p className="text-3xl font-bold text-rose-400">
               {statistics.week104Low ? `$${statistics.week104Low.toFixed(2)}` : 'N/A'}
             </p>
           </div>
           <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-5 rounded-2xl border border-gray-600 text-center flex flex-col justify-center min-h-[120px]">
-            <p className="text-sm text-gray-300 mb-2">Avg Daily Return</p>
+            <p className="text-sm text-gray-300 mb-2">{t('cagrTab.avgDailyReturn')}</p>
             <p className={`text-2xl font-bold ${statistics.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {statistics.avgReturn.toFixed(4)}%
             </p>
           </div>
           <div className="bg-gradient-to-br from-blue-800/50 to-blue-900/50 p-5 rounded-2xl border border-blue-700 text-center flex flex-col justify-center min-h-[120px]">
-            <p className="text-sm text-gray-300 mb-2">Annual Return</p>
+            <p className="text-sm text-gray-300 mb-2">{t('cagrTab.annualReturn')}</p>
             <p className={`text-3xl font-bold ${statistics.annualReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {statistics.annualReturn.toFixed(2)}%
             </p>
@@ -397,29 +399,29 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
       {/* CAGR Range Analysis */}
       {statistics && (
         <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-8 rounded-2xl border border-blue-500 shadow-xl">
-          <h4 className="text-2xl font-bold text-blue-400 mb-6 text-center">CAGR Range Analysis ({yearsToAnalyze} años)</h4>
+          <h4 className="text-2xl font-bold text-blue-400 mb-6 text-center">{t('cagrTab.title')} ({yearsToAnalyze}Y)</h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="bg-gray-800/50 p-6 rounded-xl text-center border border-red-700/50">
-              <p className="text-gray-300 mb-3 font-medium">Min CAGR Encontrado</p>
+              <p className="text-gray-300 mb-3 font-medium">{t('cagrTab.cagrMin')}</p>
               <p className={`text-5xl font-black ${(statistics.minCagrFound || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {statistics.minCagrFound !== null ? `${statistics.minCagrFound.toFixed(2)}%` : 'N/A'}
               </p>
             </div>
             <div className="bg-gray-800/50 p-6 rounded-xl text-center border border-blue-600/50">
-              <p className="text-gray-300 mb-3 font-medium">Promedio CAGR</p>
+              <p className="text-gray-300 mb-3 font-medium">{t('cagrTab.avgCagr')}</p>
               <p className={`text-5xl font-black ${(statistics.avgCagr || 0) >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
                 {statistics.avgCagr !== null ? `${statistics.avgCagr.toFixed(2)}%` : 'N/A'}
               </p>
             </div>
             <div className="bg-gray-800/50 p-6 rounded-xl text-center border border-green-700/50">
-              <p className="text-gray-300 mb-3 font-medium">Max CAGR Encontrado</p>
+              <p className="text-gray-300 mb-3 font-medium">{t('cagrTab.cagrMax')}</p>
               <p className={`text-5xl font-black ${(statistics.maxCagrFound || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {statistics.maxCagrFound !== null ? `${statistics.maxCagrFound.toFixed(2)}%` : 'N/A'}
               </p>
             </div>
           </div>
           <p className="text-sm text-gray-400 mt-6 text-center">
-            Filtrado: CAGR entre <span className="text-red-400 font-semibold">{minCagr}%</span> y <span className="text-green-400 font-semibold">{maxCagr}%</span> • <span className="text-blue-400 font-semibold">{statistics.validCagrCount}</span> períodos válidos encontrados
+            {minCagr}% - {maxCagr}% • {statistics.validCagrCount} {t('cagrTab.validDays')}
           </p>
         </div>
       )}
@@ -427,7 +429,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
       {/* Chart */}
       {chartData && (
         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-xl">
-          <h4 className="text-2xl font-bold text-gray-100 mb-6">Precio y CAGR (últimos 2 años)</h4>
+          <h4 className="text-2xl font-bold text-gray-100 mb-6">{t('cagrTab.chartTitle')}</h4>
           <div className="h-[500px]">
             <Line
               data={chartData}
@@ -518,14 +520,13 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
             />
           </div>
           <p className="text-sm text-gray-500 mt-4 text-center">
-            Eje izquierdo (azul): Precio • Eje derecho (verde): CAGR {yearsToAnalyze}Y
+            {t('cagrTab.price')} • CAGR {yearsToAnalyze}Y
           </p>
         </div>
       )}
 
       <p className="text-sm text-gray-500 text-center">
-        Fórmula CAGR: (Precio_actual / Precio_hace_{yearsToAnalyze}_años)^(1/{yearsToAnalyze}) - 1 •
-        Sólo se muestran períodos con CAGR entre {minCagr}% y {maxCagr}%
+        {t('cagrTab.footerExplanation')}
       </p>
     </div>
   );

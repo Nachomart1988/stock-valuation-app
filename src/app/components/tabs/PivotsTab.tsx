@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { Line, Bar } from 'react-chartjs-2';
+import { useLanguage } from '@/i18n/LanguageContext';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -90,6 +91,7 @@ interface PivotsTabProps {
 }
 
 export default function PivotsTab({ ticker }: PivotsTabProps) {
+  const { t } = useLanguage();
   // Estado para datos de precios
   const [priceData, setPriceData] = useState<PriceData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,10 +101,12 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
   // Configuración de usuario
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [lookbackPeriods, setLookbackPeriods] = useState<number>(252); // 1 year default
+  const [lookbackInput, setLookbackInput] = useState<string>('252');
   const [pivotMethod, setPivotMethod] = useState<'standard' | 'fibonacci' | 'camarilla' | 'woodie' | 'demark'>('standard');
   const [showHistoricalLevels, setShowHistoricalLevels] = useState(true);
   const [volumeWeighted, setVolumeWeighted] = useState(false);
   const [tolerancePercent, setTolerancePercent] = useState<number>(1.5);
+  const [toleranceInput, setToleranceInput] = useState<string>('1.5');
 
   // Fetch historical prices
   useEffect(() => {
@@ -567,7 +571,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
   }, [volumeProfile]);
 
   if (loading) {
-    return <p className="text-xl text-gray-400 py-10 text-center">Cargando datos de pivots...</p>;
+    return <p className="text-xl text-gray-400 py-10 text-center">{t('pivotsTab.loading')}</p>;
   }
 
   if (error) {
@@ -580,18 +584,18 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            Advanced Pivot Points
+            {t('pivotsTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Análisis técnico de soporte y resistencia para {ticker}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('pivotsTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right bg-gradient-to-r from-yellow-900/40 to-amber-900/40 px-4 py-2 rounded-xl border border-yellow-600">
-            <p className="text-xs text-yellow-400">Precio Actual</p>
+            <p className="text-xs text-yellow-400">{t('pivotsTab.currentPrice')}</p>
             <p className="text-xl font-bold text-yellow-400">${currentPrice.toFixed(2)}</p>
           </div>
           {standardPivots && standardPivots.length > 0 && (
             <div className="text-right bg-gradient-to-r from-purple-900/40 to-pink-900/40 px-4 py-2 rounded-xl border border-purple-600">
-              <p className="text-xs text-purple-400">Pivot Point</p>
+              <p className="text-xs text-purple-400">{t('pivotsTab.pivotPoint')}</p>
               <p className="text-xl font-bold text-purple-400">
                 ${standardPivots.find(p => p.name === 'PP')?.value.toFixed(2) || '—'}
               </p>
@@ -602,54 +606,90 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Configuration Panel */}
       <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 p-6 rounded-2xl border border-purple-600">
-        <h4 className="text-xl font-bold text-purple-300 mb-4">Configuración</h4>
+        <h4 className="text-xl font-bold text-purple-300 mb-4">{t('pivotsTab.configuration')}</h4>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm text-gray-300 mb-2">Método de Pivot</label>
+            <label className="block text-sm text-gray-300 mb-2">{t('pivotsTab.pivotMethod')}</label>
             <select
               value={pivotMethod}
               onChange={(e) => setPivotMethod(e.target.value as any)}
               className="w-full px-3 py-2 bg-gray-800 border border-purple-500/50 rounded-lg text-gray-100 focus:border-purple-400"
             >
-              <option value="standard">Standard (Floor)</option>
-              <option value="fibonacci">Fibonacci</option>
-              <option value="camarilla">Camarilla</option>
-              <option value="woodie">Woodie</option>
-              <option value="demark">DeMark</option>
+              <option value="standard">{t('pivotsTab.standard')}</option>
+              <option value="fibonacci">{t('pivotsTab.fibonacci')}</option>
+              <option value="camarilla">{t('pivotsTab.camarilla')}</option>
+              <option value="woodie">{t('pivotsTab.woodie')}</option>
+              <option value="demark">{t('pivotsTab.demark')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-300 mb-2">Timeframe</label>
+            <label className="block text-sm text-gray-300 mb-2">{t('pivotsTab.timeframe')}</label>
             <select
               value={timeframe}
               onChange={(e) => setTimeframe(e.target.value as any)}
               className="w-full px-3 py-2 bg-gray-800 border border-purple-500/50 rounded-lg text-gray-100 focus:border-purple-400"
             >
-              <option value="daily">Diario</option>
-              <option value="weekly">Semanal</option>
-              <option value="monthly">Mensual</option>
+              <option value="daily">{t('pivotsTab.daily')}</option>
+              <option value="weekly">{t('pivotsTab.weekly')}</option>
+              <option value="monthly">{t('pivotsTab.monthly')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-300 mb-2">Períodos Históricos</label>
+            <label className="block text-sm text-gray-300 mb-2">{t('pivotsTab.historicalPeriods')}</label>
             <input
               type="number"
               min="20"
               max="756"
-              value={lookbackPeriods}
-              onChange={(e) => setLookbackPeriods(Math.max(20, parseInt(e.target.value) || 252))}
+              value={lookbackInput}
+              onChange={(e) => setLookbackInput(e.target.value)}
+              onBlur={() => {
+                const parsed = parseInt(lookbackInput);
+                if (isNaN(parsed) || parsed < 20) {
+                  setLookbackPeriods(20);
+                  setLookbackInput('20');
+                } else if (parsed > 756) {
+                  setLookbackPeriods(756);
+                  setLookbackInput('756');
+                } else {
+                  setLookbackPeriods(parsed);
+                  setLookbackInput(String(parsed));
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
               className="w-full px-3 py-2 bg-gray-800 border border-purple-500/50 rounded-lg text-gray-100 focus:border-purple-400"
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-300 mb-2">Tolerancia (%)</label>
+            <label className="block text-sm text-gray-300 mb-2">{t('pivotsTab.tolerance')}</label>
             <input
               type="number"
               min="0.5"
               max="5"
               step="0.1"
-              value={tolerancePercent}
-              onChange={(e) => setTolerancePercent(parseFloat(e.target.value) || 1.5)}
+              value={toleranceInput}
+              onChange={(e) => setToleranceInput(e.target.value)}
+              onBlur={() => {
+                const parsed = parseFloat(toleranceInput);
+                if (isNaN(parsed) || parsed < 0.5) {
+                  setTolerancePercent(0.5);
+                  setToleranceInput('0.5');
+                } else if (parsed > 5) {
+                  setTolerancePercent(5);
+                  setToleranceInput('5');
+                } else {
+                  setTolerancePercent(parsed);
+                  setToleranceInput(String(parsed));
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
               className="w-full px-3 py-2 bg-gray-800 border border-purple-500/50 rounded-lg text-gray-100 focus:border-purple-400"
             />
           </div>
@@ -661,7 +701,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                 onChange={(e) => setVolumeWeighted(e.target.checked)}
                 className="w-4 h-4 accent-purple-500"
               />
-              Volumen Ponderado
+              {t('pivotsTab.volumeWeighted')}
             </label>
           </div>
         </div>
@@ -707,11 +747,11 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
           {/* Method Description */}
           <div className="mt-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
             <p className="text-sm text-gray-400">
-              {pivotMethod === 'standard' && 'Método clásico: PP = (H + L + C) / 3. R1/S1 se calculan usando el rango del período anterior.'}
-              {pivotMethod === 'fibonacci' && 'Usa ratios de Fibonacci (38.2%, 61.8%, 100%) aplicados al rango del período anterior desde el pivot.'}
-              {pivotMethod === 'camarilla' && 'Diseñado para traders intraday. H3/L3 son niveles de entrada, H4/L4 son breakouts.'}
-              {pivotMethod === 'woodie' && 'Da más peso al precio de apertura actual. Mejor para mercados con gaps.'}
-              {pivotMethod === 'demark' && 'Ajusta el cálculo basándose en la relación Open-Close del período anterior.'}
+              {pivotMethod === 'standard' && t('pivotsTab.standardDesc')}
+              {pivotMethod === 'fibonacci' && t('pivotsTab.fibonacciDesc')}
+              {pivotMethod === 'camarilla' && t('pivotsTab.camarillaDesc')}
+              {pivotMethod === 'woodie' && t('pivotsTab.woodieDesc')}
+              {pivotMethod === 'demark' && t('pivotsTab.demarkDesc')}
             </p>
           </div>
         </div>
@@ -720,7 +760,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       {/* Chart with Pivot Lines */}
       {chartData && (
         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700">
-          <h4 className="text-xl font-bold text-gray-100 mb-4">Gráfico con Niveles de Pivot</h4>
+          <h4 className="text-xl font-bold text-gray-100 mb-4">{t('pivotsTab.chartTitle')}</h4>
           <div className="h-[500px]">
             <Line
               data={chartData}
@@ -759,10 +799,10 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       {showHistoricalLevels && historicalPivots.length > 0 && (
         <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 p-6 rounded-2xl border border-emerald-600">
           <h4 className="text-xl font-bold text-emerald-400 mb-4">
-            Niveles Históricos de Soporte/Resistencia
+            {t('pivotsTab.historicalLevels')}
           </h4>
           <p className="text-sm text-gray-400 mb-4">
-            Basado en {lookbackPeriods} períodos ({timeframe}). Tolerancia de agrupación: {tolerancePercent}%
+            {t('pivotsTab.basedOnPeriods')} {lookbackPeriods} ({timeframe}). {t('pivotsTab.tolerance')} {tolerancePercent}%
           </p>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -779,7 +819,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                     <span className={`text-xs px-2 py-1 rounded ${
                       pivot.type === 'support' ? 'bg-green-700 text-green-200' : 'bg-red-700 text-red-200'
                     }`}>
-                      {pivot.type === 'support' ? 'Soporte' : 'Resistencia'}
+                      {pivot.type === 'support' ? t('pivotsTab.support') : t('pivotsTab.resistance')}
                     </span>
                     <span className="text-xs text-gray-400">
                       {'⭐'.repeat(pivot.strength)}
@@ -791,7 +831,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                     ${pivot.price.toFixed(2)}
                   </p>
                   <div className="flex justify-between mt-2 text-xs">
-                    <span className="text-gray-400">{pivot.count} toques</span>
+                    <span className="text-gray-400">{pivot.count} {t('pivotsTab.touches')}</span>
                     <span className={distance > 0 ? 'text-green-400' : 'text-red-400'}>
                       {distance > 0 ? '+' : ''}{distance.toFixed(1)}%
                     </span>
@@ -806,10 +846,10 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       {/* Fibonacci Retracement */}
       {fibonacciLevels.length > 0 && (
         <div className="bg-gradient-to-r from-amber-900/30 to-orange-900/30 p-6 rounded-2xl border border-amber-600">
-          <h4 className="text-xl font-bold text-amber-400 mb-4">Fibonacci Retracement</h4>
+          <h4 className="text-xl font-bold text-amber-400 mb-4">{t('pivotsTab.fibRetracement')}</h4>
           <p className="text-sm text-gray-400 mb-4">
-            Desde Swing High: ${Math.max(...aggregatedData.map(d => d.high)).toFixed(2)} →
-            Swing Low: ${Math.min(...aggregatedData.map(d => d.low)).toFixed(2)}
+            {t('pivotsTab.swingHigh')}: ${Math.max(...aggregatedData.map(d => d.high)).toFixed(2)} →
+            {t('pivotsTab.swingLow')}: ${Math.min(...aggregatedData.map(d => d.low)).toFixed(2)}
           </p>
 
           <div className="grid grid-cols-4 md:grid-cols-7 gap-3">
@@ -837,21 +877,21 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       {/* Volume Profile & POC */}
       {volumeProfile && pocLevel && (
         <div className="bg-gradient-to-r from-violet-900/30 to-purple-900/30 p-6 rounded-2xl border border-violet-600">
-          <h4 className="text-xl font-bold text-violet-400 mb-4">Volume Profile & Point of Control (POC)</h4>
+          <h4 className="text-xl font-bold text-violet-400 mb-4">{t('pivotsTab.volumeProfile')}</h4>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* POC Card */}
             <div className="bg-violet-900/40 p-6 rounded-xl border-2 border-violet-500 text-center">
-              <p className="text-sm text-violet-300 mb-2">Point of Control (POC)</p>
+              <p className="text-sm text-violet-300 mb-2">{t('pivotsTab.pocLabel')}</p>
               <p className="text-4xl font-bold text-violet-400">${pocLevel.priceLevel.toFixed(2)}</p>
               <p className="text-sm text-gray-400 mt-2">
-                Nivel de precio con mayor volumen negociado
+                {t('pivotsTab.pocDescription')}
               </p>
               <p className={`text-lg font-semibold mt-2 ${
                 calculateDistance(pocLevel.priceLevel) > 0 ? 'text-green-400' : 'text-red-400'
               }`}>
                 {calculateDistance(pocLevel.priceLevel) > 0 ? '+' : ''}
-                {calculateDistance(pocLevel.priceLevel).toFixed(2)}% desde precio actual
+                {calculateDistance(pocLevel.priceLevel).toFixed(2)}% {t('pivotsTab.fromCurrentPrice')}
               </p>
             </div>
 
@@ -862,7 +902,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                   data={{
                     labels: volumeProfile.map(b => `$${b.priceLevel.toFixed(0)}`),
                     datasets: [{
-                      label: 'Volumen',
+                      label: t('pivotsTab.volume'),
                       data: volumeProfile.map(b => b.volume),
                       backgroundColor: volumeProfile.map(b =>
                         b.priceLevel === pocLevel.priceLevel
@@ -901,11 +941,11 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       {/* Summary / Signal */}
       {currentPivots && (
         <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-600">
-          <h4 className="text-xl font-bold text-gray-100 mb-4">Resumen de Análisis</h4>
+          <h4 className="text-xl font-bold text-gray-100 mb-4">{t('pivotsTab.analysisSummary')}</h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Nearest Support */}
             <div className="bg-green-900/30 p-4 rounded-xl border border-green-700">
-              <p className="text-sm text-green-300 mb-2">Soporte Más Cercano</p>
+              <p className="text-sm text-green-300 mb-2">{t('pivotsTab.nearestSupport')}</p>
               {(() => {
                 const supports = currentPivots.filter(p => p.type === 'support' && p.value < currentPrice);
                 const nearest = supports.sort((a, b) => b.value - a.value)[0];
@@ -921,7 +961,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
             {/* Current Position */}
             <div className="bg-blue-900/40 p-4 rounded-xl border-2 border-blue-500">
-              <p className="text-sm text-blue-300 mb-2">Precio Actual</p>
+              <p className="text-sm text-blue-300 mb-2">{t('pivotsTab.currentPrice')}</p>
               <p className="text-3xl font-bold text-yellow-400">${currentPrice.toFixed(2)}</p>
               {(() => {
                 const pp = currentPivots.find(p => p.name === 'PP');
@@ -929,7 +969,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                 const isAbovePP = currentPrice > pp.value;
                 return (
                   <p className={`text-sm mt-2 ${isAbovePP ? 'text-green-400' : 'text-red-400'}`}>
-                    {isAbovePP ? '↑ Por encima del Pivot' : '↓ Por debajo del Pivot'}
+                    {isAbovePP ? `↑ ${t('pivotsTab.abovePivot')}` : `↓ ${t('pivotsTab.belowPivot')}`}
                   </p>
                 );
               })()}
@@ -937,7 +977,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
             {/* Nearest Resistance */}
             <div className="bg-red-900/30 p-4 rounded-xl border border-red-700">
-              <p className="text-sm text-red-300 mb-2">Resistencia Más Cercana</p>
+              <p className="text-sm text-red-300 mb-2">{t('pivotsTab.nearestResistance')}</p>
               {(() => {
                 const resistances = currentPivots.filter(p => p.type === 'resistance' && p.value > currentPrice);
                 const nearest = resistances.sort((a, b) => a.value - b.value)[0];
@@ -957,11 +997,10 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       {/* Info Footer */}
       <div className="text-center text-sm text-gray-500 space-y-1">
         <p>
-          Los Pivot Points son niveles de soporte y resistencia calculados usando los precios del período anterior.
+          {t('pivotsTab.footerExplanation')}
         </p>
         <p>
-          Datos basados en {aggregatedData.length} períodos ({timeframe}).
-          Última actualización: {priceData[0]?.date || 'N/A'}
+          {t('pivotsTab.footerDataInfo')} {aggregatedData.length} ({timeframe}). {priceData[0]?.date || 'N/A'}
         </p>
       </div>
     </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface DuPontTabProps {
   income: any[];
@@ -24,6 +25,7 @@ function getArrow(current: string, previous: string) {
 }
 
 export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
+  const { t } = useLanguage();
   const [notes, setNotes] = useState<CompanyNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
       try {
         const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
         if (!apiKey) {
-          setNotesError('API key no configurada');
+          setNotesError(t('dupontTab.apiKeyError'));
           return;
         }
 
@@ -59,7 +61,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
         }
       } catch (err) {
         console.error('[DuPontTab] Error fetching notes:', err);
-        setNotesError(err instanceof Error ? err.message : 'Error al cargar notas');
+        setNotesError(err instanceof Error ? err.message : t('dupontTab.loadingNotes'));
       } finally {
         setNotesLoading(false);
       }
@@ -69,7 +71,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
   }, [ticker]);
 
   if (income.length < 2 || balance.length < 2) {
-    return <p className="text-2xl text-gray-400 text-center py-10">Datos insuficientes para DuPont</p>;
+    return <p className="text-2xl text-gray-400 text-center py-10">{t('dupontTab.insufficientData')}</p>;
   }
 
   const rows = income.map((inc, i) => {
@@ -99,14 +101,14 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
-            DuPont Analysis
+            {t('dupontTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Descomposición del ROE para {ticker}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('dupontTab.subtitle')} {ticker}</p>
         </div>
         {rows.length > 0 && (
           <div className="flex items-center gap-4">
             <div className="text-right bg-gradient-to-r from-violet-900/40 to-purple-900/40 px-4 py-2 rounded-xl border border-violet-600">
-              <p className="text-xs text-violet-400">ROE Actual</p>
+              <p className="text-xs text-violet-400">{t('dupontTab.currentRoe')}</p>
               <p className="text-xl font-bold text-violet-400">{rows[0]?.roe || '—'}</p>
             </div>
           </div>
@@ -118,11 +120,11 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
         <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
           <thead className="bg-gray-800">
             <tr>
-              <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">Fecha</th>
-              <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">ROE (%)</th>
-              <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">Net Margin (%)</th>
-              <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">Asset Turnover</th>
-              <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">Equity Multiplier</th>
+              <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">{t('dupontTab.date')}</th>
+              <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">{t('dupontTab.roe')}</th>
+              <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">{t('dupontTab.netMargin')}</th>
+              <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">{t('dupontTab.assetTurnover')}</th>
+              <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">{t('dupontTab.equityMultiplier')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
@@ -151,13 +153,13 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
       <div className="bg-gray-800/50 rounded-xl p-8 border border-gray-700">
         <h3 className="text-2xl font-bold text-gray-100 mb-6 flex items-center gap-3">
           <span className="text-yellow-400">📜</span>
-          Company Notes / Bonos
+          {t('dupontTab.companyNotes')}
         </h3>
 
         {notesLoading ? (
           <div className="flex items-center justify-center py-10">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-400"></div>
-            <span className="ml-4 text-gray-400 text-lg">Cargando notas...</span>
+            <span className="ml-4 text-gray-400 text-lg">{t('dupontTab.loadingNotes')}</span>
           </div>
         ) : notesError ? (
           <div className="text-center py-10">
@@ -165,9 +167,9 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
           </div>
         ) : notes.length === 0 ? (
           <div className="text-center py-10">
-            <p className="text-gray-400 text-lg">No se encontraron notas/bonos para {ticker}</p>
+            <p className="text-gray-400 text-lg">{t('dupontTab.noNotes')} {ticker}</p>
             <p className="text-gray-500 text-sm mt-2">
-              Esto puede indicar que la empresa no tiene bonos emitidos o la información no está disponible.
+              {t('dupontTab.noNotesExplanation')}
             </p>
           </div>
         ) : (
@@ -175,9 +177,9 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
             <table className="min-w-full border border-gray-600 rounded-lg overflow-hidden">
               <thead className="bg-gray-700">
                 <tr>
-                  <th className="px-6 py-4 text-left text-gray-200 font-bold">Título del Bono</th>
-                  <th className="px-6 py-4 text-left text-gray-200 font-bold">Exchange</th>
-                  <th className="px-6 py-4 text-left text-gray-200 font-bold">CIK</th>
+                  <th className="px-6 py-4 text-left text-gray-200 font-bold">{t('dupontTab.bondTitle')}</th>
+                  <th className="px-6 py-4 text-left text-gray-200 font-bold">{t('dupontTab.exchange')}</th>
+                  <th className="px-6 py-4 text-left text-gray-200 font-bold">{t('dupontTab.cik')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-600">
@@ -197,7 +199,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
               </tbody>
             </table>
             <p className="text-gray-500 text-sm mt-4 text-right">
-              Total: {notes.length} nota{notes.length !== 1 ? 's' : ''}/bono{notes.length !== 1 ? 's' : ''}
+              {t('dupontTab.totalNotes')}: {notes.length} {t('dupontTab.notesBonds')}
             </p>
           </div>
         )}

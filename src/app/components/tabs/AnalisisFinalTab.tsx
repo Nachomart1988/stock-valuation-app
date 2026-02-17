@@ -12,6 +12,7 @@ import {
   Legend,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
+import { useLanguage } from '@/i18n/LanguageContext'
 
 ChartJS.register(
   CategoryScale,
@@ -34,6 +35,7 @@ export default function AnalisisFinalTab({
   quote,
   sharedAverageVal,
 }: Props) {
+  const { t } = useLanguage();
   const [margenSeguridad, setMargenSeguridad] = useState(15)
   const [años, setAños] = useState(3)
   const [historical, setHistorical] = useState<any[]>([])
@@ -45,18 +47,18 @@ export default function AnalisisFinalTab({
     ? ((precioEstimado - currentPrice) / currentPrice) * 100
     : null
 
-  let veredicto = 'Sin datos'
+  let veredicto = t('analisisFinalTab.noData')
   let color = 'text-gray-400'
 
   if (upside !== null) {
     if (upside > 20) {
-      veredicto = 'Barata'
+      veredicto = t('analisisFinalTab.cheap') || 'Barata'
       color = 'text-green-400'
     } else if (upside > -5) {
-      veredicto = 'Justa'
+      veredicto = t('analisisFinalTab.fair') || 'Justa'
       color = 'text-yellow-400'
     } else {
-      veredicto = 'Cara'
+      veredicto = t('analisisFinalTab.expensive') || 'Cara'
       color = 'text-red-400'
     }
   }
@@ -151,20 +153,20 @@ export default function AnalisisFinalTab({
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
-            Análisis Final
+            {t('analisisFinalTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Evaluación integral y veredicto de inversión para {ticker}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('analisisFinalTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
           {currentPrice && (
             <div className="text-right bg-gradient-to-r from-gray-800 to-gray-900 px-4 py-2 rounded-xl border border-gray-600">
-              <p className="text-xs text-gray-400">Precio Actual</p>
+              <p className="text-xs text-gray-400">{t('analisisFinalTab.currentPrice')}</p>
               <p className="text-xl font-bold text-gray-100">${currentPrice.toFixed(2)}</p>
             </div>
           )}
           {precioEstimado && (
             <div className="text-right bg-gradient-to-r from-rose-900/40 to-pink-900/40 px-4 py-2 rounded-xl border border-rose-600">
-              <p className="text-xs text-rose-400">Precio Estimado</p>
+              <p className="text-xs text-rose-400">{t('analisisFinalTab.estimatedPrice')}</p>
               <p className="text-xl font-bold text-rose-400">${precioEstimado.toFixed(2)}</p>
             </div>
           )}
@@ -175,35 +177,35 @@ export default function AnalisisFinalTab({
       {!sharedAverageVal && (
         <div className="bg-yellow-900/30 border border-yellow-600 rounded-2xl p-6 text-center">
           <p className="text-yellow-400 text-lg">
-            Ve a la pestana <strong>Valuaciones</strong> para calcular el promedio de valuacion. Los valores se actualizaran automaticamente aqui.
+            {t('analisisFinalTab.goToValuations')}
           </p>
         </div>
       )}
 
       {/* Hero Section - Veredicto Principal */}
       <div className={`rounded-2xl p-8 text-center border-2 ${
-        veredicto === 'Barata' ? 'bg-green-900/20 border-green-500' :
-        veredicto === 'Justa' ? 'bg-yellow-900/20 border-yellow-500' :
-        veredicto === 'Cara' ? 'bg-red-900/20 border-red-500' :
+        veredicto === t('analisisFinalTab.cheap') ? 'bg-green-900/20 border-green-500' :
+        veredicto === t('analisisFinalTab.fair') ? 'bg-yellow-900/20 border-yellow-500' :
+        veredicto === t('analisisFinalTab.expensive') ? 'bg-red-900/20 border-red-500' :
         'bg-gray-800 border-gray-600'
       }`}>
-        <p className="text-xl text-gray-400 mb-2">Veredicto</p>
+        <p className="text-xl text-gray-400 mb-2">{t('analisisFinalTab.verdict')}</p>
         <p className={`text-6xl font-black mb-4 ${color}`}>
           {veredicto}
         </p>
         {upside !== null && (
           <p className={`text-3xl font-bold ${upside > 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {upside > 0 ? '+' : ''}{upside.toFixed(1)}% Potencial
+            {upside > 0 ? '+' : ''}{upside.toFixed(1)}% {t('analisisFinalTab.potential')}
           </p>
         )}
       </div>
 
       {/* Inputs */}
       <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-        <h4 className="text-xl font-bold text-gray-200 mb-4">Parametros</h4>
+        <h4 className="text-xl font-bold text-gray-200 mb-4">{t('analisisFinalTab.parameters')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-lg font-medium text-gray-300 mb-2">Margen de seguridad (%)</label>
+            <label className="block text-lg font-medium text-gray-300 mb-2">{t('analisisFinalTab.marginOfSafety')}</label>
             <input
               type="number"
               value={margenSeguridad}
@@ -213,7 +215,7 @@ export default function AnalisisFinalTab({
           </div>
 
           <div>
-            <label className="block text-lg font-medium text-gray-300 mb-2">Anos historicos</label>
+            <label className="block text-lg font-medium text-gray-300 mb-2">{t('analisisFinalTab.historicalYears')}</label>
             <input
               type="number"
               min={1}
@@ -229,30 +231,30 @@ export default function AnalisisFinalTab({
       {/* Resumen de análisis - Larger cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-gradient-to-br from-blue-900/40 to-blue-800/20 p-6 rounded-2xl border border-blue-600/50 text-center">
-          <p className="text-lg text-blue-300 mb-2">Precio Actual</p>
+          <p className="text-lg text-blue-300 mb-2">{t('analisisFinalTab.currentPrice')}</p>
           <p className="text-4xl font-black text-blue-400">
             {currentPrice ? `$${currentPrice.toFixed(2)}` : 'N/A'}
           </p>
         </div>
         <div className="bg-gradient-to-br from-purple-900/40 to-purple-800/20 p-6 rounded-2xl border border-purple-600/50 text-center">
-          <p className="text-lg text-purple-300 mb-2">Valuacion Promedio</p>
+          <p className="text-lg text-purple-300 mb-2">{t('analisisFinalTab.avgValuation')}</p>
           <p className="text-4xl font-black text-purple-400">
             {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
           </p>
         </div>
         <div className="bg-gradient-to-br from-green-900/40 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
-          <p className="text-lg text-green-300 mb-2">Precio Compra Sugerido</p>
+          <p className="text-lg text-green-300 mb-2">{t('analisisFinalTab.suggestedBuyPrice')}</p>
           <p className="text-4xl font-black text-green-400">
             {precioEstimado ? `$${precioEstimado.toFixed(2)}` : 'N/A'}
           </p>
-          <p className="text-sm text-gray-500 mt-1">({margenSeguridad}% margen)</p>
+          <p className="text-sm text-gray-500 mt-1">({margenSeguridad}% {t('analisisFinalTab.marginOfSafety').toLowerCase()})</p>
         </div>
         <div className={`p-6 rounded-2xl border text-center ${
           upside !== null && upside > 0
             ? 'bg-gradient-to-br from-green-900/40 to-emerald-800/20 border-green-600/50'
             : 'bg-gradient-to-br from-red-900/40 to-rose-800/20 border-red-600/50'
         }`}>
-          <p className="text-lg text-gray-300 mb-2">Upside/Downside</p>
+          <p className="text-lg text-gray-300 mb-2">{t('analisisFinalTab.upsideDownside')}</p>
           <p className={`text-4xl font-black ${upside !== null && upside > 0 ? 'text-green-400' : 'text-red-400'}`}>
             {upside !== null ? `${upside > 0 ? '+' : ''}${upside.toFixed(1)}%` : 'N/A'}
           </p>
@@ -263,16 +265,16 @@ export default function AnalisisFinalTab({
       {loading ? (
         <div className="text-center py-16">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-          <p className="mt-4 text-gray-400 text-lg">Cargando grafico...</p>
+          <p className="mt-4 text-gray-400 text-lg">{t('analisisFinalTab.loading')}</p>
         </div>
       ) : historical.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-2xl">No hay datos historicos disponibles</p>
+          <p className="text-2xl">{t('analisisFinalTab.noHistoricalData')}</p>
         </div>
       ) : (
         <div className="bg-gray-800 rounded-2xl border border-gray-700 p-8">
           <h4 className="text-2xl font-bold text-gray-200 mb-6">
-            Precio Historico ({años} {años === 1 ? 'ano' : 'anos'})
+            {t('analisisFinalTab.historicalPrice')} ({años} {años === 1 ? t('analisisFinalTab.year') : t('analisisFinalTab.years')})
           </h4>
           <div className="h-[450px]">
             <Line
@@ -331,29 +333,29 @@ export default function AnalisisFinalTab({
 
       {/* Legend explanation */}
       <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
-        <h4 className="text-xl font-bold text-gray-200 mb-4">Interpretacion</h4>
+        <h4 className="text-xl font-bold text-gray-200 mb-4">{t('analisisFinalTab.interpretation')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-base">
           <div className="flex items-center gap-3">
             <div className="w-6 h-1 bg-cyan-400 rounded"></div>
-            <span className="text-gray-300"><strong>Precio Cierre:</strong> Precio historico de la accion</span>
+            <span className="text-gray-300">{t('analisisFinalTab.closingPrice')}</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-6 h-1 bg-purple-500 rounded" style={{ borderStyle: 'dashed' }}></div>
-            <span className="text-gray-300"><strong>Valuacion Promedio:</strong> Valor intrinseco calculado</span>
+            <span className="text-gray-300">{t('analisisFinalTab.avgValuationDesc')}</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-6 h-1 bg-green-500 rounded" style={{ borderStyle: 'dashed' }}></div>
-            <span className="text-gray-300"><strong>Precio Compra:</strong> Con margen de seguridad aplicado</span>
+            <span className="text-gray-300">{t('analisisFinalTab.buyPriceDesc')}</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-6 h-1 bg-red-500 rounded" style={{ borderStyle: 'dashed' }}></div>
-            <span className="text-gray-300"><strong>Precio Actual:</strong> Cotizacion actual del mercado</span>
+            <span className="text-gray-300">{t('analisisFinalTab.currentPriceDesc')}</span>
           </div>
         </div>
       </div>
 
       <p className="text-center text-sm text-gray-500">
-        Los valores se actualizan automaticamente cuando cambias los metodos de valuacion en la pestana Valuaciones.
+        {t('analisisFinalTab.footer')}
       </p>
     </div>
   )

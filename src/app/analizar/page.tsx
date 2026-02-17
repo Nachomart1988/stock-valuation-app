@@ -4,6 +4,7 @@ import { Tab } from '@headlessui/react';
 import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Header from '@/app/components/Header';
+import { useLanguage } from '@/i18n/LanguageContext';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -44,6 +45,138 @@ import InputsGroup from '@/app/components/groups/InputsGroup';
 import DCFGroup from '@/app/components/groups/DCFGroup';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+
+// ===== Currency Conversion to USD =====
+// Fields that are absolute monetary values (need conversion)
+const MONETARY_FIELDS = new Set([
+  // Quote
+  'price', 'previousClose', 'dayHigh', 'dayLow', 'yearHigh', 'yearLow',
+  'marketCap', 'open', 'priceAvg50', 'priceAvg200', 'eps',
+  // Income Statement
+  'revenue', 'costOfRevenue', 'grossProfit', 'operatingExpenses',
+  'costAndExpenses', 'operatingIncome', 'interestExpense', 'interestIncome',
+  'ebitda', 'netIncome', 'incomeBeforeTax', 'incomeTaxExpense',
+  'sellingAndMarketingExpenses', 'generalAndAdministrativeExpenses',
+  'researchAndDevelopmentExpenses', 'depreciationAndAmortization',
+  'weightedAverageShsOut', 'weightedAverageShsOutDil',
+  'epsdiluted', 'operatingIncomeRatio',
+  // Balance Sheet
+  'totalAssets', 'totalLiabilities', 'totalEquity', 'totalStockholdersEquity',
+  'cashAndCashEquivalents', 'cashAndShortTermInvestments', 'shortTermInvestments',
+  'netReceivables', 'inventory', 'totalCurrentAssets', 'totalCurrentLiabilities',
+  'propertyPlantEquipmentNet', 'goodwill', 'intangibleAssets', 'longTermDebt',
+  'shortTermDebt', 'totalDebt', 'netDebt', 'otherAssets', 'otherLiabilities',
+  'retainedEarnings', 'commonStock', 'totalInvestments', 'capitalLeaseObligations',
+  'accumulatedOtherComprehensiveIncomeLoss', 'othertotalStockholdersEquity',
+  'taxPayables', 'deferredRevenue', 'otherCurrentAssets', 'otherCurrentLiabilities',
+  'otherNonCurrentAssets', 'otherNonCurrentLiabilities', 'longTermInvestments',
+  'taxAssets', 'preferredStock', 'minorityInterest',
+  // Cash Flow
+  'operatingCashFlow', 'freeCashFlow', 'capitalExpenditure',
+  'netCashUsedForInvestingActivites', 'netCashUsedProvidedByFinancingActivities',
+  'netCashProvidedByOperatingActivities', 'netChangeInCash',
+  'dividendsPaid', 'commonStockRepurchased', 'commonStockIssued',
+  'debtRepayment', 'purchasesOfInvestments', 'salesMaturitiesOfInvestments',
+  'acquisitionsNet', 'changeInWorkingCapital',
+  // Key Metrics
+  'revenuePerShare', 'netIncomePerShare', 'operatingCashFlowPerShare',
+  'freeCashFlowPerShare', 'cashPerShare', 'bookValuePerShare',
+  'tangibleBookValuePerShare', 'interestDebtPerShare',
+  'marketCap', 'enterpriseValue', 'workingCapital',
+  'tangibleAssetValue', 'netCurrentAssetValue',
+  // Enterprise Value
+  'stockPrice', 'addTotalDebt', 'minusCashAndCashEquivalents',
+  // DCF
+  'dcf', 'stockPrice',
+  // Price Target
+  'priceTarget', 'priceTargetHigh', 'priceTargetLow', 'priceTargetAvg', 'priceTargetMedian',
+  'lastPrice', 'lastPriceAvg',
+  // Owner Earnings
+  'ownerEarnings', 'growthCapex', 'maintenanceCapex', 'averageOwnerEarnings',
+  // Dividends
+  'dividend', 'adjDividend',
+  // Estimates
+  'estimatedRevenueLow', 'estimatedRevenueHigh', 'estimatedRevenueAvg',
+  'estimatedEbitdaLow', 'estimatedEbitdaHigh', 'estimatedEbitdaAvg',
+  'estimatedEpsLow', 'estimatedEpsHigh', 'estimatedEpsAvg',
+  'estimatedNetIncomeLow', 'estimatedNetIncomeHigh', 'estimatedNetIncomeAvg',
+  'estimatedSgaExpenseLow', 'estimatedSgaExpenseHigh', 'estimatedSgaExpenseAvg',
+  // Profile
+  'mktCap', 'lastDiv', 'volAvg',
+]);
+
+// Fields that are ratios/percentages and should NOT be converted
+const RATIO_FIELDS = new Set([
+  'pe', 'peRatio', 'priceToBookRatio', 'priceToSalesRatio', 'priceEarningsRatio',
+  'priceToFreeCashFlowsRatio', 'priceEarningsToGrowthRatio',
+  'enterpriseValueOverEBITDA', 'evToSales', 'evToOperatingCashFlow', 'evToFreeCashFlow',
+  'debtToEquity', 'debtToAssets', 'debtRatio', 'currentRatio', 'quickRatio', 'cashRatio',
+  'grossProfitMargin', 'operatingProfitMargin', 'netProfitMargin', 'ebitdaMargin',
+  'returnOnEquity', 'returnOnAssets', 'returnOnCapitalEmployed', 'roic',
+  'dividendYield', 'payoutRatio', 'beta', 'change', 'changesPercentage',
+  'grossProfitRatio', 'operatingIncomeRatio', 'incomeBeforeTaxRatio', 'netIncomeRatio',
+  'effectiveTaxRate', 'interestCoverage',
+]);
+
+function convertMonetaryValue(value: any, rate: number): any {
+  if (typeof value !== 'number' || isNaN(value)) return value;
+  return value * rate;
+}
+
+function convertObjectToUSD(obj: any, rate: number): any {
+  if (!obj || typeof obj !== 'object' || rate === 1) return obj;
+  const converted = Array.isArray(obj) ? [...obj] : { ...obj };
+  for (const key of Object.keys(converted)) {
+    if (RATIO_FIELDS.has(key)) continue; // Skip ratios
+    if (MONETARY_FIELDS.has(key)) {
+      converted[key] = convertMonetaryValue(converted[key], rate);
+    }
+  }
+  return converted;
+}
+
+function convertArrayToUSD(arr: any[], rate: number): any[] {
+  if (!arr || rate === 1) return arr;
+  return arr.map(item => convertObjectToUSD(item, rate));
+}
+
+async function fetchExchangeRate(fromCurrency: string, apiKey: string): Promise<number> {
+  if (!fromCurrency || fromCurrency === 'USD') return 1;
+  try {
+    // FMP forex endpoint: get rate for converting fromCurrency to USD
+    const res = await fetch(
+      `https://financialmodelingprep.com/stable/fx?apikey=${apiKey}`,
+      { cache: 'no-store' }
+    );
+    if (!res.ok) {
+      console.warn(`[Currency] Failed to fetch FX rates: ${res.status}`);
+      return 1;
+    }
+    const fxData = await res.json();
+    // Look for the pair, e.g. EUR/USD
+    const pair = fxData.find?.((p: any) =>
+      p.ticker === `${fromCurrency}/USD` || p.ticker === `${fromCurrency}USD`
+    );
+    if (pair?.price) {
+      console.log(`[Currency] ${fromCurrency}/USD rate: ${pair.price}`);
+      return pair.price;
+    }
+    // Try inverse pair USD/XXX
+    const inversePair = fxData.find?.((p: any) =>
+      p.ticker === `USD/${fromCurrency}` || p.ticker === `USD${fromCurrency}`
+    );
+    if (inversePair?.price) {
+      const rate = 1 / inversePair.price;
+      console.log(`[Currency] ${fromCurrency}/USD rate (inverse): ${rate}`);
+      return rate;
+    }
+    console.warn(`[Currency] Could not find FX pair for ${fromCurrency}/USD`);
+    return 1;
+  } catch (err) {
+    console.error('[Currency] Error fetching exchange rate:', err);
+    return 1;
+  }
+}
 
 // Helper function to extract ALL values from SEC JSON structure for a given key
 function extractAllSECValues(data: any[], key: string): number[] {
@@ -238,6 +371,7 @@ function getArrow(curr: string, prev: string) {
 
 function AnalizarContent() {
   const searchParams = useSearchParams();
+  const { t } = useLanguage();
   const [ticker, setTicker] = useState('');
   const [activeTicker, setActiveTicker] = useState(''); // El ticker activo para el cual se cargaron los datos
   const [data, setData] = useState<any>(null);
@@ -261,6 +395,7 @@ function AnalizarContent() {
   const [sharedKeyMetricsSummary, setSharedKeyMetricsSummary] = useState<any>(null);
   const [sharedMonteCarlo, setSharedMonteCarlo] = useState<any>(null);
   const [selectedTabIndex, setSelectedTabIndex] = useState(0);
+  const [currencyInfo, setCurrencyInfo] = useState<{ original: string; rate: number } | null>(null);
 
   // Cargar ticker desde URL solo al inicio
   useEffect(() => {
@@ -428,43 +563,56 @@ function AnalizarContent() {
         console.log('[AnalizarContent] Enterprise Value records:', enterpriseValueData?.length || 0);
         console.log('[AnalizarContent] Owner Earnings records:', ownerEarningsData?.length || 0);
 
+        // ===== Currency Conversion =====
+        const profileCurrency = (profileData[0]?.currency || 'USD').toUpperCase();
+        let fxRate = 1;
+        if (profileCurrency !== 'USD') {
+          console.log(`[Currency] Stock currency is ${profileCurrency}, fetching exchange rate...`);
+          fxRate = await fetchExchangeRate(profileCurrency, apiKey);
+          setCurrencyInfo({ original: profileCurrency, rate: fxRate });
+        } else {
+          setCurrencyInfo(null);
+        }
+        const cx = (obj: any) => convertObjectToUSD(obj, fxRate);
+        const cxArr = (arr: any[]) => convertArrayToUSD(arr, fxRate);
+
         setData({
-          quote: quoteData[0] || {},
-          profile: profileData[0] || {},
-          income: incomeData || [],
-          balance: balanceData || [],
-          cashFlow: cashFlowData || [],
-          priceTarget: priceTargetData[0] || {},
-          estimates: estimatesData || [],
-          dcfStandard: dcfStandardData[0] || dcfStandardData,
-          dcfCustom: dcfCustomData[0] || dcfCustomData,
+          quote: cx(quoteData[0] || {}),
+          profile: cx(profileData[0] || {}),
+          income: cxArr(incomeData || []),
+          balance: cxArr(balanceData || []),
+          cashFlow: cxArr(cashFlowData || []),
+          priceTarget: cx(priceTargetData[0] || {}),
+          estimates: cxArr(estimatesData || []),
+          dcfStandard: cx(dcfStandardData[0] || dcfStandardData),
+          dcfCustom: cx(dcfCustomData[0] || dcfCustomData),
           // TTM data
-          incomeTTM: incomeTTMData[0] || null,
-          balanceTTM: balanceTTMData[0] || null,
-          cashFlowTTM: cashFlowTTMData[0] || null,
+          incomeTTM: cx(incomeTTMData[0] || null),
+          balanceTTM: cx(balanceTTMData[0] || null),
+          cashFlowTTM: cx(cashFlowTTMData[0] || null),
           // SEC supplemental data (processed)
           secData: secSupplementalData,
           // Raw SEC reports (complete data from financial-reports-json)
           secReportsRaw: secReportsRaw,
           // As-reported cash flow for dividends
-          cashFlowAsReported: cashFlowAsReportedData || [],
+          cashFlowAsReported: cxArr(cashFlowAsReportedData || []),
           // Dividend history per share
-          dividends: dividendsData || [],
+          dividends: cxArr(dividendsData || []),
           // As-reported statements (additional detail)
-          incomeAsReported: incomeAsReportedData || [],
-          balanceAsReported: balanceAsReportedData || [],
-          // Growth data (YoY changes)
+          incomeAsReported: cxArr(incomeAsReportedData || []),
+          balanceAsReported: cxArr(balanceAsReportedData || []),
+          // Growth data (YoY changes - mostly ratios, but convert anyway for safety)
           incomeGrowth: incomeGrowthData || [],
           balanceGrowth: balanceGrowthData || [],
           cashFlowGrowth: cashFlowGrowthData || [],
           financialGrowth: financialGrowthData || [],
           // Additional financial metrics
-          keyMetrics: keyMetricsData || [],
-          keyMetricsTTM: keyMetricsTTMData[0] || null,
+          keyMetrics: cxArr(keyMetricsData || []),
+          keyMetricsTTM: cx(keyMetricsTTMData[0] || null),
           ratios: ratiosData || [],
           ratiosTTM: ratiosTTMData[0] || null,
-          enterpriseValue: enterpriseValueData || [],
-          ownerEarnings: ownerEarningsData || [],
+          enterpriseValue: cxArr(enterpriseValueData || []),
+          ownerEarnings: cxArr(ownerEarningsData || []),
         });
       } catch (err) {
         setError((err as Error).message || 'Error al cargar datos');
@@ -648,6 +796,37 @@ function AnalizarContent() {
     fetchResumenData();
   }, [activeTicker]);
 
+  // Convert pivot analysis data to USD if needed
+  const convertedPivotAnalysis = useMemo(() => {
+    if (!sharedPivotAnalysis || !currencyInfo?.rate || currencyInfo.rate === 1) return sharedPivotAnalysis;
+    const r = currencyInfo.rate;
+    return {
+      ...sharedPivotAnalysis,
+      currentPrice: (sharedPivotAnalysis.currentPrice || 0) * r,
+      pivotPoint: (sharedPivotAnalysis.pivotPoint || 0) * r,
+      resistance: {
+        R1: (sharedPivotAnalysis.resistance?.R1 || 0) * r,
+        R2: (sharedPivotAnalysis.resistance?.R2 || 0) * r,
+      },
+      support: {
+        S1: (sharedPivotAnalysis.support?.S1 || 0) * r,
+        S2: (sharedPivotAnalysis.support?.S2 || 0) * r,
+      },
+      high52Week: (sharedPivotAnalysis.high52Week || 0) * r,
+      low52Week: (sharedPivotAnalysis.low52Week || 0) * r,
+      fibonacci: {
+        level236: (sharedPivotAnalysis.fibonacci?.level236 || 0) * r,
+        level382: (sharedPivotAnalysis.fibonacci?.level382 || 0) * r,
+        level500: (sharedPivotAnalysis.fibonacci?.level500 || 0) * r,
+        level618: (sharedPivotAnalysis.fibonacci?.level618 || 0) * r,
+        level786: (sharedPivotAnalysis.fibonacci?.level786 || 0) * r,
+      },
+      // These are percentages - don't convert
+      priceVsHigh: sharedPivotAnalysis.priceVsHigh,
+      priceVsLow: sharedPivotAnalysis.priceVsLow,
+    };
+  }, [sharedPivotAnalysis, currencyInfo?.rate]);
+
   // Estado inicial - mostrar formulario de búsqueda
   if (!activeTicker || !data) {
     return (
@@ -698,7 +877,7 @@ function AnalizarContent() {
       <main className="min-h-screen bg-gray-900">
         <Header />
         <div className="flex items-center justify-center pt-24 min-h-[80vh]">
-          <p className="text-2xl font-bold text-blue-400">Cargando datos para {activeTicker}...</p>
+          <p className="text-2xl font-bold text-blue-400">{t('analysis.loadingData')} {activeTicker}...</p>
         </div>
       </main>
     );
@@ -710,9 +889,9 @@ function AnalizarContent() {
         <Header />
         <div className="flex items-center justify-center pt-24 min-h-[80vh]">
           <div className="text-center max-w-2xl">
-            <h1 className="text-5xl font-bold text-red-500 mb-6">Error</h1>
+            <h1 className="text-5xl font-bold text-red-500 mb-6">{t('common.error')}</h1>
             <p className="text-xl text-gray-300">{error}</p>
-            <p className="mt-4 text-lg text-gray-400">Revisa tu API key o prueba otro ticker.</p>
+            <p className="mt-4 text-lg text-gray-400">{t('analysis.errorLoadingData')}</p>
           </div>
         </div>
       </main>
@@ -723,17 +902,17 @@ function AnalizarContent() {
 
   // New simplified category structure
   const categories = [
-    'Inicio',
-    'Financial Statements',
-    'Forecasts',
-    'Info General',
-    'Compañía',
-    'Noticias',
-    'Inputs',
-    'DCF',
-    'Valuaciones',
-    'Diario Inversor',
-    'Resumen',
+    t('analysis.categories.inicio'),
+    t('analysis.categories.financialStatements'),
+    t('analysis.categories.forecasts'),
+    t('analysis.categories.generalInfo'),
+    t('analysis.categories.company'),
+    t('analysis.categories.news'),
+    t('analysis.categories.inputs'),
+    t('analysis.categories.dcf'),
+    t('analysis.categories.valuations'),
+    t('analysis.categories.investorJournal'),
+    t('analysis.categories.summary'),
   ];
 
   return (
@@ -741,10 +920,10 @@ function AnalizarContent() {
       <Header />
       <div className="max-w-[1600px] mx-auto p-8 pt-24">
         <h1 className="text-5xl font-extrabold text-blue-400 mb-4">
-          Resultados para {activeTicker}
+          {t('analysis.resultsFor')} {activeTicker}
         </h1>
         <h2 className="text-3xl font-bold text-gray-300 mb-12">
-          {profile.companyName || 'Compañía'}
+          {profile.companyName || t('analysis.company')}
         </h2>
 
         <Tab.Group selectedIndex={selectedTabIndex} onChange={setSelectedTabIndex}>
@@ -778,6 +957,7 @@ function AnalizarContent() {
       dividends={dividends}
       sharedAverageVal={sharedAverageVal}
       onAnalizar={handleAnalizar}
+      currencyInfo={currencyInfo}
     />
   </Tab.Panel>
 
@@ -921,7 +1101,7 @@ function AnalizarContent() {
       wacc={sharedWACC}
       dcfValuation={sharedValorIntrinseco}
       monteCarlo={sharedMonteCarlo}
-      pivotAnalysis={sharedPivotAnalysis}
+      pivotAnalysis={convertedPivotAnalysis}
       holdersData={sharedHoldersData}
       forecasts={sharedForecasts}
       news={sharedNews}
@@ -1005,6 +1185,7 @@ function InicioTab({
   dividends,
   sharedAverageVal,
   onAnalizar,
+  currencyInfo,
 }: {
   ticker: string;
   quote: any;
@@ -1013,12 +1194,15 @@ function InicioTab({
   dividends: any[];
   sharedAverageVal: number | null;
   onAnalizar: (ticker: string) => void;
+  currencyInfo?: { original: string; rate: number } | null;
 }) {
   const [inputTicker, setInputTicker] = useState(ticker);
   const [margenSeguridad, setMargenSeguridad] = useState('15');
   const [historical, setHistorical] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [technicalIndicators, setTechnicalIndicators] = useState<any>({});
+
+  const { t } = useLanguage();
 
   // Sincronizar inputTicker cuando cambia el ticker activo
   useEffect(() => {
@@ -1056,11 +1240,12 @@ function InicioTab({
         const json = await res.json();
 
         if (Array.isArray(json) && json.length > 0) {
+          const fxRate = currencyInfo?.rate || 1;
           const sorted = json
             .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
             .map((item: any) => ({
               date: item.date,
-              close: item.price || item.close,
+              close: (item.price || item.close) * fxRate,
             }));
           setHistorical(sorted);
         }
@@ -1072,7 +1257,7 @@ function InicioTab({
     }
 
     if (ticker) fetchHistory();
-  }, [ticker]);
+  }, [ticker, currencyInfo?.rate]);
 
   // Fetch technical indicators
   useEffect(() => {
@@ -1291,13 +1476,18 @@ function InicioTab({
             )}
             <div>
               <h2 className="text-5xl font-bold text-white">{ticker}</h2>
-              <p className="text-xl text-gray-400">{profile?.companyName || 'Compania'}</p>
+              <p className="text-xl text-gray-400">{profile?.companyName || t('analysis.company')}</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
             <span className="px-4 py-2 bg-blue-600/30 text-blue-400 rounded-full text-lg">{profile?.sector || 'N/A'}</span>
             <span className="px-4 py-2 bg-purple-600/30 text-purple-400 rounded-full text-lg">{profile?.industry || 'N/A'}</span>
             <span className="px-4 py-2 bg-green-600/30 text-green-400 rounded-full text-lg">{profile?.exchangeShortName || 'N/A'}</span>
+            {currencyInfo && (
+              <span className="px-4 py-2 bg-amber-600/30 text-amber-400 rounded-full text-lg" title={`Original: ${currencyInfo.original} → USD (rate: ${currencyInfo.rate.toFixed(4)})`}>
+                {currencyInfo.original} → USD
+              </span>
+            )}
           </div>
         </div>
 
@@ -1309,7 +1499,7 @@ function InicioTab({
               value={inputTicker}
               onChange={(e) => setInputTicker(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && onAnalizar(inputTicker)}
-              placeholder="Buscar ticker..."
+              placeholder={t('analysis.searchTicker')}
               className="w-48 px-5 py-4 border border-gray-600 rounded-xl text-gray-100 text-xl bg-gray-900 focus:border-blue-500 focus:ring-blue-500 placeholder-gray-500"
             />
             <button
@@ -1326,7 +1516,7 @@ function InicioTab({
       {/* Price Hero Section */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div className="col-span-2 md:col-span-1 bg-gradient-to-br from-blue-600 to-blue-800 p-6 rounded-2xl text-center flex flex-col justify-center min-h-[140px]">
-          <p className="text-blue-200 text-sm mb-1">Precio Actual</p>
+          <p className="text-blue-200 text-sm mb-1">{t('analysis.precio.actual')}</p>
           <p className="text-4xl font-bold text-white">${currentPrice?.toFixed(2) || 'N/A'}</p>
           {priceStats && (
             <p className={`text-sm mt-2 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
@@ -1335,25 +1525,25 @@ function InicioTab({
           )}
         </div>
         <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[140px]">
-          <p className="text-gray-400 text-sm mb-1">Valor Intrinseco</p>
+          <p className="text-gray-400 text-sm mb-1">{t('analysis.precio.intrinseco')}</p>
           <p className="text-3xl font-bold text-purple-400">
             {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
           </p>
         </div>
         <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[140px]">
-          <p className="text-gray-400 text-sm mb-1">Compra Sugerida</p>
+          <p className="text-gray-400 text-sm mb-1">{t('analysis.precio.compraSugerida')}</p>
           <p className="text-3xl font-bold text-green-400">
             {precioCompraSugerido ? `$${precioCompraSugerido.toFixed(2)}` : 'N/A'}
           </p>
         </div>
         <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[140px]">
-          <p className="text-gray-400 text-sm mb-1">Upside</p>
+          <p className="text-gray-400 text-sm mb-1">{t('analysis.precio.upside')}</p>
           <p className={`text-3xl font-bold ${sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400'}`}>
             {sharedAverageVal && currentPrice ? `${(((sharedAverageVal - currentPrice) / currentPrice) * 100).toFixed(1)}%` : 'N/A'}
           </p>
         </div>
         <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[140px]">
-          <p className="text-gray-400 text-sm mb-1">P/E Ratio</p>
+          <p className="text-gray-400 text-sm mb-1">{t('analysis.precio.peRatio')}</p>
           <p className="text-3xl font-bold text-cyan-400">
             {(() => {
               const ttmEPS = incomeTTM?.eps || incomeTTM?.epsdiluted || quote?.eps || profile?.ttmEPS;
@@ -1365,7 +1555,7 @@ function InicioTab({
           </p>
         </div>
         <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-6 rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[140px]">
-          <p className="text-gray-400 text-sm mb-1">Margen Seguridad</p>
+          <p className="text-gray-400 text-sm mb-1">{t('analysis.precio.margenSeguridad')}</p>
           <input
             type="number"
             value={margenSeguridad}

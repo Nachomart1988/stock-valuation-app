@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface Estimate {
   date: string;
@@ -28,6 +29,7 @@ interface Estimate {
 }
 
 export default function ForecastsTab({ ticker }: { ticker: string }) {
+  const { t } = useLanguage();
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +78,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
   };
 
   if (loading) {
-    return <p className="text-xl text-gray-300 py-10 text-center">Cargando forecasts...</p>;
+    return <p className="text-xl text-gray-300 py-10 text-center">{t('forecastsTab.loading')}</p>;
   }
 
   if (error) {
@@ -84,7 +86,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
   }
 
   if (estimates.length === 0) {
-    return <p className="text-xl text-gray-400 py-10 text-center">No hay estimaciones disponibles para los próximos años</p>;
+    return <p className="text-xl text-gray-400 py-10 text-center">{t('forecastsTab.noData')}</p>;
   }
 
   const years = estimates.map(est => new Date(est.date).getFullYear());
@@ -95,13 +97,13 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-            Analyst Forecasts
+            {t('forecastsTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Estimaciones de analistas para {ticker} - Próximos {estimates.length} años</p>
+          <p className="text-sm text-gray-400 mt-1">{t('forecastsTab.subtitle')} {ticker} - {t('forecastsTab.nextYears')}: {estimates.length}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right bg-gradient-to-r from-cyan-900/40 to-blue-900/40 px-4 py-2 rounded-xl border border-cyan-600">
-            <p className="text-xs text-cyan-400">Periodos</p>
+            <p className="text-xs text-cyan-400">{t('forecastsTab.periods')}</p>
             <p className="text-xl font-bold text-cyan-400">{estimates.length}</p>
           </div>
         </div>
@@ -112,7 +114,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
           <thead className="bg-gray-800">
             <tr>
               <th className="px-6 py-4 text-left font-bold text-gray-200 sticky left-0 bg-gray-800 z-10 min-w-[220px]">
-                Métrica
+                {t('forecastsTab.metric')}
               </th>
               {years.map(year => (
                 <th key={year} className="px-6 py-4 text-center font-bold text-gray-200 min-w-[140px]">
@@ -125,7 +127,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* Revenue Avg */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
-                Revenue (Avg)
+                {t('forecastsTab.revenueAvg')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-blue-400 font-semibold">
@@ -137,7 +139,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* Revenue Low */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Revenue (Low)
+                {t('forecastsTab.revenueLow')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-400">
@@ -149,7 +151,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* Revenue High */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Revenue (High)
+                {t('forecastsTab.revenueHigh')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-400">
@@ -161,7 +163,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* EPS Avg */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
-                EPS (Avg)
+                {t('forecastsTab.epsAvg')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-green-400 font-semibold">
@@ -173,7 +175,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* EPS Low */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                EPS (Low)
+                {t('forecastsTab.epsLow')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-400">
@@ -185,7 +187,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* EPS High */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                EPS (High)
+                {t('forecastsTab.epsHigh')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-400">
@@ -197,7 +199,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* Net Income Avg */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
-                Net Income (Avg)
+                {t('forecastsTab.netIncomeAvg')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-purple-400 font-semibold">
@@ -209,7 +211,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* Net Income Low */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Net Income (Low)
+                {t('forecastsTab.netIncomeLow')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-400">
@@ -221,7 +223,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* Net Income High */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                Net Income (High)
+                {t('forecastsTab.netIncomeHigh')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-400">
@@ -233,7 +235,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* EBITDA Avg */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
-                EBITDA (Avg)
+                {t('forecastsTab.ebitdaAvg')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-indigo-400 font-semibold">
@@ -245,7 +247,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* EBITDA Low */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                EBITDA (Low)
+                {t('forecastsTab.ebitdaLow')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-400">
@@ -257,7 +259,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* EBITDA High */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                EBITDA (High)
+                {t('forecastsTab.ebitdaHigh')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-400">
@@ -269,7 +271,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* EBIT Avg */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
-                EBIT (Avg)
+                {t('forecastsTab.ebitAvg')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-cyan-400 font-semibold">
@@ -281,7 +283,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* EBIT Low */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                EBIT (Low)
+                {t('forecastsTab.ebitLow')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-400">
@@ -293,7 +295,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* EBIT High */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
-                EBIT (High)
+                {t('forecastsTab.ebitHigh')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-400">
@@ -341,7 +343,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* # Analistas Revenue */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
-                # Analistas Revenue
+                {t('forecastsTab.numAnalystsRevenue')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-300">
@@ -353,7 +355,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
             {/* # Analistas EPS */}
             <tr className="hover:bg-gray-700">
               <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
-                # Analistas EPS
+                {t('forecastsTab.numAnalystsEps')}
               </td>
               {estimates.map((est, idx) => (
                 <td key={idx} className="px-6 py-4 text-right text-gray-300">

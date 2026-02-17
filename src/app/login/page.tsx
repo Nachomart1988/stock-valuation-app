@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Logo from '../components/Logo';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 export default function LoginPage() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,7 +21,7 @@ export default function LoginPage() {
     // For now, show a message that auth is coming soon
     setTimeout(() => {
       setLoading(false);
-      setError('La autenticación estará disponible próximamente. Por ahora, puedes usar la app sin registro.');
+      setError(t('auth.authComingSoon'));
     }, 1000);
   };
 
@@ -30,7 +32,7 @@ export default function LoginPage() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Logo size="md" />
           <Link href="/" className="text-gray-400 hover:text-white transition">
-            Volver al inicio
+            {t('auth.backToHome')}
           </Link>
         </div>
       </header>
@@ -41,8 +43,8 @@ export default function LoginPage() {
           {/* Card */}
           <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-8">
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold mb-2">Bienvenido de vuelta</h1>
-              <p className="text-gray-400">Inicia sesión en tu cuenta de Prismo</p>
+              <h1 className="text-3xl font-bold mb-2">{t('auth.welcomeBack')}</h1>
+              <p className="text-gray-400">{t('auth.signInToAccount')}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -54,7 +56,7 @@ export default function LoginPage() {
 
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                  Email
+                  {t('auth.email')}
                 </label>
                 <input
                   type="email"
@@ -63,13 +65,13 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="tu@email.com"
+                  placeholder={t('auth.emailPlaceholder')}
                 />
               </div>
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-                  Contraseña
+                  {t('auth.password')}
                 </label>
                 <input
                   type="password"
@@ -78,17 +80,17 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="••••••••"
+                  placeholder={t('auth.passwordPlaceholder')}
                 />
               </div>
 
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-purple-500 focus:ring-purple-500" />
-                  <span className="text-sm text-gray-400">Recordarme</span>
+                  <span className="text-sm text-gray-400">{t('auth.rememberMe')}</span>
                 </label>
                 <Link href="/forgot-password" className="text-sm text-purple-400 hover:text-purple-300">
-                  ¿Olvidaste tu contraseña?
+                  {t('auth.forgotPassword')}
                 </Link>
               </div>
 
@@ -97,7 +99,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full py-3 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 hover:from-cyan-400 hover:via-purple-400 hover:to-pink-400 text-white font-bold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+                {loading ? t('auth.signingIn') : t('auth.signIn')}
               </button>
             </form>
 
@@ -107,7 +109,7 @@ export default function LoginPage() {
                 <div className="w-full border-t border-gray-700"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-gray-900/50 text-gray-500">O continúa con</span>
+                <span className="px-4 bg-gray-900/50 text-gray-500">{t('auth.continueWith')}</span>
               </div>
             </div>
 
@@ -132,9 +134,9 @@ export default function LoginPage() {
 
             {/* Register Link */}
             <p className="text-center mt-8 text-gray-400">
-              ¿No tienes cuenta?{' '}
+              {t('auth.noAccount')}{' '}
               <Link href="/register" className="text-purple-400 hover:text-purple-300 font-medium">
-                Regístrate gratis
+                {t('auth.registerFree')}
               </Link>
             </p>
           </div>
@@ -142,7 +144,7 @@ export default function LoginPage() {
           {/* Quick access */}
           <div className="mt-6 text-center">
             <Link href="/analizar" className="text-gray-500 hover:text-gray-300 text-sm">
-              O prueba la app sin registro →
+              {t('auth.tryWithoutRegister')} →
             </Link>
           </div>
         </div>

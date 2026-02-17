@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface BetaTabProps {
   ticker: string;
@@ -9,6 +10,7 @@ interface BetaTabProps {
 }
 
 export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
+  const { t } = useLanguage();
   const [betaApi, setBetaApi] = useState<number | null>(null);
   const [betaUser, setBetaUser] = useState<number>(0);
   const [betaCalculated, setBetaCalculated] = useState<number | null>(null);
@@ -25,7 +27,7 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
         setLoading(true);
         setError(null);
         const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) throw new Error('FMP_API_KEY no configurada');
+        if (!apiKey) throw new Error(t('betaTab.apiKeyError'));
 
         // 1. Beta oficial (de profile)
         const profileRes = await fetch(
@@ -95,7 +97,7 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
 
       } catch (err: any) {
         console.error('Error en BetaTab:', err);
-        setError(err.message || 'Error al cargar datos');
+        setError(err.message || t('common.error'));
       } finally {
         setLoading(false);
       }
@@ -230,11 +232,11 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
 
   // Now we can have conditional returns
   if (loading) {
-    return <p className="text-xl text-gray-300 py-10 text-center">Cargando betas y CAPM...</p>;
+    return <p className="text-xl text-gray-300 py-10 text-center">{t('betaTab.loading')}</p>;
   }
 
   if (error) {
-    return <p className="text-xl text-red-400 py-10 text-center">Error: {error}</p>;
+    return <p className="text-xl text-red-400 py-10 text-center">{t('common.error')}: {error}</p>;
   }
 
   return (
@@ -243,13 +245,13 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-            Beta & CAPM Analysis
+            {t('betaTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Análisis de riesgo sistemático para {ticker}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('betaTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right bg-gradient-to-r from-pink-900/40 to-purple-900/40 px-4 py-2 rounded-xl border border-pink-600">
-            <p className="text-xs text-pink-400">Avg CAPM (Ks)</p>
+            <p className="text-xs text-pink-400">{t('betaTab.avgCapm')}</p>
             <p className="text-xl font-bold text-pink-400">
               {avgCAPM !== null ? avgCAPM.toFixed(2) + '%' : '—'}
             </p>
@@ -260,14 +262,14 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
       {/* Risk Free Rate y Market Risk Premium */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
-          <h4 className="text-lg font-semibold text-gray-400 mb-2">Risk Free Rate (10Y Treasury)</h4>
+          <h4 className="text-lg font-semibold text-gray-400 mb-2">{t('betaTab.riskFreeRate')}</h4>
           <p className="text-5xl font-bold text-blue-400">
             {riskFreeRate !== null ? riskFreeRate.toFixed(2) + '%' : '—'}
           </p>
         </div>
 
         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
-          <h4 className="text-lg font-semibold text-gray-400 mb-2">Market Risk Premium</h4>
+          <h4 className="text-lg font-semibold text-gray-400 mb-2">{t('betaTab.marketRiskPremium')}</h4>
           <p className="text-5xl font-bold text-purple-400">
             {marketRiskPremium !== null ? marketRiskPremium.toFixed(2) + '%' : '—'}
           </p>
@@ -277,17 +279,17 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
       {/* Betas + CAPM */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
-          <h4 className="text-lg font-semibold text-gray-400 mb-3">Beta Oficial (FMP)</h4>
+          <h4 className="text-lg font-semibold text-gray-400 mb-3">{t('betaTab.betaOfficial')}</h4>
           <p className="text-5xl font-bold text-indigo-400 mb-4">
             {betaApi !== null ? betaApi.toFixed(2) : '—'}
           </p>
           <p className="text-lg font-medium text-gray-400">
-            CAPM: <span className="text-blue-400">{calculateCAPM(betaApi)}</span>
+            {t('betaTab.capm')}: <span className="text-blue-400">{calculateCAPM(betaApi)}</span>
           </p>
         </div>
 
         <div className="bg-gradient-to-br from-amber-900/20 to-orange-900/20 p-6 rounded-2xl border border-amber-600/50 shadow-lg text-center">
-          <h4 className="text-lg font-semibold text-amber-400 mb-3">Beta Usuario</h4>
+          <h4 className="text-lg font-semibold text-amber-400 mb-3">{t('betaTab.betaUser')}</h4>
           <div className="relative mb-4">
             <input
               type="number"
@@ -303,48 +305,48 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
             />
           </div>
           <p className="text-lg font-medium text-gray-400">
-            CAPM: <span className="text-blue-400">{calculateCAPM(betaUser)}</span>
+            {t('betaTab.capm')}: <span className="text-blue-400">{calculateCAPM(betaUser)}</span>
           </p>
         </div>
 
         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
-          <h4 className="text-lg font-semibold text-gray-400 mb-3">Beta Calculado (5Y vs SPY)</h4>
+          <h4 className="text-lg font-semibold text-gray-400 mb-3">{t('betaTab.betaCalculated')}</h4>
           <p className="text-5xl font-bold text-green-400 mb-4">
             {betaCalculated !== null ? betaCalculated.toFixed(2) : '—'}
           </p>
           <p className="text-lg font-medium text-gray-400">
-            CAPM: <span className="text-blue-400">{calculateCAPM(betaCalculated)}</span>
+            {t('betaTab.capm')}: <span className="text-blue-400">{calculateCAPM(betaCalculated)}</span>
           </p>
         </div>
       </div>
 
       {/* Average Beta and CAPM */}
       <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-8 rounded-2xl border border-blue-500">
-        <h4 className="text-2xl font-bold text-blue-400 mb-6 text-center">Promedios</h4>
+        <h4 className="text-2xl font-bold text-blue-400 mb-6 text-center">{t('betaTab.avgBeta')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="bg-gray-800/50 p-6 rounded-xl text-center">
-            <p className="text-gray-400 text-lg mb-2">Average Beta</p>
+            <p className="text-gray-400 text-lg mb-2">{t('betaTab.avgBeta')}</p>
             <p className="text-5xl font-bold text-cyan-400">
               {avgBeta !== null ? avgBeta.toFixed(2) : '—'}
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              Promedio de {validBetasCount} beta(s) disponibles
+              {validBetasCount} beta(s)
             </p>
           </div>
           <div className="bg-gray-800/50 p-6 rounded-xl text-center">
-            <p className="text-gray-400 text-lg mb-2">Average CAPM</p>
+            <p className="text-gray-400 text-lg mb-2">{t('betaTab.avgCapm')}</p>
             <p className="text-5xl font-bold text-pink-400">
               {avgCAPM !== null ? avgCAPM.toFixed(2) + '%' : '—'}
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              Costo de Equity promedio
+              Cost of Equity
             </p>
           </div>
         </div>
       </div>
 
       <p className="text-sm text-gray-500 text-center italic">
-        CAPM = Risk Free Rate + Beta × (Market Risk Premium - Risk Free Rate)
+        {t('betaTab.formula')}
       </p>
     </div>
   );

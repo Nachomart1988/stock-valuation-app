@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface KeyMetricsTabProps {
   ticker: string;
@@ -1118,6 +1119,7 @@ const DEFAULT_BENCHMARK: Record<string, { range: [number, number]; direction_bet
 };
 
 export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetChange }: KeyMetricsTabProps) {
+  const { t } = useLanguage();
   const [keyMetrics, setKeyMetrics] = useState<any>(null);
   const [ratios, setRatios] = useState<any>(null);
   const [scores, setScores] = useState<any>(null);
@@ -1497,7 +1499,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
             <span className="text-lg font-bold text-emerald-400">📈</span>
           </div>
         </div>
-        <p className="text-xl text-gray-300">Cargando métricas clave...</p>
+        <p className="text-xl text-gray-300">{t('keyMetricsTab.loading')}</p>
       </div>
     );
   }
@@ -1516,9 +1518,9 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
-            Key Metrics & Ratios
+            {t('keyMetricsTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Análisis de métricas financieras TTM para {ticker}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('keyMetricsTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
           {industry && (
@@ -1712,7 +1714,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
       {/* Valuation Ratios */}
       {ratios && (
         <div>
-          <h4 className="text-xl font-bold text-gray-200 mb-4">Valuation Ratios</h4>
+          <h4 className="text-xl font-bold text-gray-200 mb-4">{t('keyMetricsTab.categories.valuation')}</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <MetricCardWithBenchmark
               label="P/E Ratio"
@@ -1781,7 +1783,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
       {/* Profitability Ratios */}
       {ratios && (
         <div>
-          <h4 className="text-xl font-bold text-gray-200 mb-4">Profitability</h4>
+          <h4 className="text-xl font-bold text-gray-200 mb-4">{t('keyMetricsTab.categories.profitability')}</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <MetricCardWithBenchmark
               label="Gross Margin"
@@ -1838,7 +1840,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
       {/* Liquidity & Solvency */}
       {ratios && keyMetrics && (
         <div>
-          <h4 className="text-xl font-bold text-gray-200 mb-4">Liquidity & Solvency</h4>
+          <h4 className="text-xl font-bold text-gray-200 mb-4">{t('keyMetricsTab.categories.liquidity')}</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <MetricCardWithBenchmark
               label="Current Ratio"
@@ -1895,7 +1897,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
       {/* Efficiency */}
       {keyMetrics && ratios && (
         <div>
-          <h4 className="text-xl font-bold text-gray-200 mb-4">Efficiency & Turnover</h4>
+          <h4 className="text-xl font-bold text-gray-200 mb-4">{t('keyMetricsTab.categories.efficiency')}</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <MetricCardWithBenchmark
               label="Asset Turnover"
@@ -1952,7 +1954,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
       {/* Per Share Data */}
       {ratios && (
         <div>
-          <h4 className="text-xl font-bold text-gray-200 mb-4">Per Share Data</h4>
+          <h4 className="text-xl font-bold text-gray-200 mb-4">{t('keyMetricsTab.categories.perShare')}</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <MetricCard label="Revenue/Share" value={formatValue(ratios.revenuePerShareTTM, 'currency')} color="teal" />
             <MetricCard label="EPS" value={formatValue(ratios.netIncomePerShareTTM, 'currency')} color="teal" />

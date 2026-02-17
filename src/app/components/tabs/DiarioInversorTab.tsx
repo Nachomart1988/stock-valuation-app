@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Tab } from '@headlessui/react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES - Estructura principal según especificaciones
@@ -148,6 +149,7 @@ const getWeekStart = (date: Date): Date => {
 // ═══════════════════════════════════════════════════════════════
 
 export default function DiarioInversorTab() {
+  const { t } = useLanguage();
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
   // Estado central - Tabla maestra de trades
@@ -676,14 +678,14 @@ export default function DiarioInversorTab() {
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-            📊 Diario del Inversor
+            📊 {t('diarioTab.title')}
           </h3>
-          <p className="text-sm text-gray-400 mt-1">Registro y seguimiento de operaciones</p>
+          <p className="text-sm text-gray-400 mt-1">{t('diarioTab.subtitle')}</p>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <label className="text-gray-400">Balance:</label>
+            <label className="text-gray-400">{t('diarioTab.balance')}:</label>
             <input
               type="number"
               value={accountBalance}
@@ -701,11 +703,11 @@ export default function DiarioInversorTab() {
           </select>
 
           <button onClick={exportData} className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white">
-            📤 Exportar
+            📤 {t('diarioTab.export')}
           </button>
 
           <label className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white cursor-pointer">
-            📥 Importar
+            📥 {t('diarioTab.import')}
             <input type="file" accept=".json" onChange={importData} className="hidden" />
           </label>
         </div>
@@ -823,6 +825,7 @@ function SwingTab({
   onCloseTrade: (t: Trade, price: number) => void;
   calculateMetrics: (t: Trade) => any;
 }) {
+  const { t } = useLanguage();
   const [closeModal, setCloseModal] = useState<{ trade: Trade; price: string } | null>(null);
 
   return (
@@ -830,7 +833,7 @@ function SwingTab({
       {/* Stats Summary */}
       {stats && (
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-          <h3 className="text-lg font-bold text-blue-400 mb-4">📈 Estadísticas</h3>
+          <h3 className="text-lg font-bold text-blue-400 mb-4">📈 {t('diarioTab.statistics')}</h3>
 
           {/* Main stats grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
@@ -1050,6 +1053,7 @@ function PLTab({
   accountBalance: number;
   calculateMetrics: (t: Trade) => any;
 }) {
+  const { t } = useLanguage();
   // Calculate weekly P&L from closed trades
   const weeklyData = useMemo(() => {
     const weeks: Record<string, { trades: Trade[]; pnl: number }> = {};
@@ -1320,14 +1324,15 @@ function PortfolioTab({
   lastUpdate: string | null;
   priceError?: string | null;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="space-y-6">
       {/* Header with refresh button */}
       <div className="flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h3 className="text-xl font-bold text-blue-400">💼 Portfolio en Tiempo Real</h3>
+          <h3 className="text-xl font-bold text-blue-400">💼 {t('diarioTab.portfolioRealTime')}</h3>
           {lastUpdate && (
-            <p className="text-sm text-green-400">✓ Última actualización: {lastUpdate}</p>
+            <p className="text-sm text-green-400">✓ {t('diarioTab.lastUpdate')}: {lastUpdate}</p>
           )}
           {priceError && (
             <p className="text-sm text-red-400">⚠️ Error: {priceError}</p>
@@ -1342,7 +1347,7 @@ function PortfolioTab({
               : 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 shadow-lg hover:shadow-xl'
           }`}
         >
-          {loadingPrices ? '⏳ Actualizando precios...' : '🔄 Actualizar Precios'}
+          {loadingPrices ? `⏳ ${t('diarioTab.updating')}...` : `🔄 ${t('diarioTab.refreshPrices')}`}
         </button>
       </div>
 
@@ -1465,8 +1470,8 @@ function PortfolioTab({
       ) : (
         <div className="bg-gray-800 rounded-xl p-8 text-center border border-gray-700">
           <div className="text-4xl mb-4">📭</div>
-          <p className="text-gray-400 text-lg">No hay posiciones abiertas</p>
-          <p className="text-gray-500 text-sm mt-2">Agrega un trade en la pestaña SWING para verlo aquí</p>
+          <p className="text-gray-400 text-lg">{t('diarioTab.noOpenPositions')}</p>
+          <p className="text-gray-500 text-sm mt-2">{t('diarioTab.addTradeInSwing')}</p>
         </div>
       )}
 
@@ -1549,6 +1554,7 @@ function PTATab({
   trades: Trade[];
   createEmpty: () => PTAEntry;
 }) {
+  const { t } = useLanguage();
   const [editingEntry, setEditingEntry] = useState<PTAEntry | null>(null);
   const [showForm, setShowForm] = useState(false);
 
@@ -1567,7 +1573,7 @@ function PTATab({
   };
 
   const deleteEntry = (id: string) => {
-    if (confirm('¿Eliminar esta entrada?')) {
+    if (confirm(t('diarioTab.confirmDelete'))) {
       setEntries(prev => prev.filter(e => e.id !== id));
     }
   };
@@ -1579,7 +1585,7 @@ function PTATab({
         onClick={() => { setEditingEntry(createEmpty()); setShowForm(true); }}
         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-semibold"
       >
-        ➕ Nueva Entrada PTA
+        ➕ {t('diarioTab.newPTAEntry')}
       </button>
 
       {/* Entries List */}
@@ -1639,7 +1645,7 @@ function PTATab({
           </div>
         ))}
         {entries.length === 0 && (
-          <div className="text-center py-8 text-gray-500">No hay entradas PTA</div>
+          <div className="text-center py-8 text-gray-500">{t('diarioTab.noPTAEntries')}</div>
         )}
       </div>
 
@@ -1707,6 +1713,7 @@ function TradeFormModal({
   onSave: (t: Trade) => void;
   onCancel: () => void;
 }) {
+  const { t } = useLanguage();
   const [form, setForm] = useState<Trade>(trade);
   const [loadingQuote, setLoadingQuote] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -1808,7 +1815,7 @@ function TradeFormModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
       <div className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <h3 className="text-xl font-bold text-blue-400 mb-6">
-          {trade.symbol ? `Editar Trade: ${trade.symbol}` : 'Nuevo Trade'}
+          {trade.symbol ? `${t('diarioTab.editTradeTitle')}: ${trade.symbol}` : t('diarioTab.newTrade')}
         </h3>
 
         {/* Entry Summary Card */}
@@ -2163,6 +2170,7 @@ function PTAFormModal({
   onSave: (e: PTAEntry) => void;
   onCancel: () => void;
 }) {
+  const { t } = useLanguage();
   const [form, setForm] = useState<PTAEntry>(entry);
 
   const updateField = <K extends keyof PTAEntry>(key: K, value: PTAEntry[K]) => {
@@ -2172,11 +2180,11 @@ function PTAFormModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
       <div className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <h3 className="text-xl font-bold text-blue-400 mb-6">PTA Entry</h3>
+        <h3 className="text-xl font-bold text-blue-400 mb-6">{t('diarioTab.ptaEntry')}</h3>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Date</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('diarioTab.date')}</label>
             <input
               type="date"
               value={form.date}

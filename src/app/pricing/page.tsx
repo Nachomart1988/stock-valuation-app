@@ -5,92 +5,71 @@ import Link from 'next/link';
 import Header from '../components/Header';
 import { useLanguage } from '@/i18n/LanguageContext';
 
-const plans = [
-  {
-    name: "Free",
-    price: 0,
-    annualPrice: 0,
-    popular: false,
-    features: [
-      "5 análisis por día",
-      "Pestañas básicas (General, Cálculos, Beta)",
-      "Datos en tiempo real",
-      "Soporte por email",
-    ],
-    limitations: [
-      "Límite diario de 5 análisis",
-      "Sin acceso a Resumen Neural",
-      "Sin exportación PDF/Excel",
-    ],
-    cta: "Empezar Gratis",
-    ctaLink: "/analizar",
-  },
-  {
-    name: "Pro",
-    price: 29,
-    annualPrice: 290,
-    popular: true,
-    features: [
-      "Análisis ilimitados",
-      "Todas las 21+ pestañas",
-      "Resumen Neural con IA",
-      "20+ modelos de valuación",
-      "Inputs personalizables en cada modelo",
-      "Exportación PDF + Excel",
-      "Market Sentiment Analysis",
-      "Soporte prioritario",
-    ],
-    limitations: [],
-    cta: "Elegir Pro",
-    ctaLink: "/auth/sign-up?plan=pro",
-  },
-  {
-    name: "Elite",
-    price: 79,
-    annualPrice: 790,
-    popular: false,
-    features: [
-      "Todo lo del plan Pro",
-      "API de acceso para integración",
-      "Reportes mensuales personalizados",
-      "Soporte VIP (respuesta <2h)",
-      "Invitaciones a webinars privados",
-      "Acceso anticipado a nuevas features",
-      "Consultoría 1-on-1 mensual",
-    ],
-    limitations: [],
-    cta: "Elegir Elite",
-    ctaLink: "/auth/sign-up?plan=elite",
-  },
-];
-
-const faqs = [
-  {
-    q: "¿Puedo cambiar de plan en cualquier momento?",
-    a: "Sí, puedes actualizar o degradar tu plan cuando quieras. Los cambios se aplican inmediatamente y se prorratea el costo."
-  },
-  {
-    q: "¿Qué métodos de pago aceptan?",
-    a: "Aceptamos todas las tarjetas de crédito principales (Visa, Mastercard, American Express) y PayPal."
-  },
-  {
-    q: "¿Hay garantía de devolución?",
-    a: "Sí, ofrecemos 14 días de garantía de devolución sin preguntas en los planes pagos."
-  },
-  {
-    q: "¿Cuántos modelos de valuación incluye?",
-    a: "Incluimos más de 20 modelos: DDM (2-Stage, 3-Stage, H-Model), DCF, FCFE, FCFF, Graham, RIM Ohlson, Monte Carlo, Stochastic DCF, NK DSGE, HJM, y más."
-  },
-  {
-    q: "¿Puedo exportar mis análisis?",
-    a: "Los planes Pro y Elite incluyen exportación a PDF con el reporte completo y a Excel para análisis personalizado."
-  },
-];
-
 export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(true);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { t } = useLanguage();
+
+  const plans = [
+    {
+      name: "Free",
+      price: 0,
+      annualPrice: 0,
+      popular: false,
+      features: [
+        t('pricing.features.analysisPerDay'),
+        t('pricing.features.basicTabs'),
+        t('pricing.features.realTimeData'),
+        t('pricing.features.emailSupport'),
+      ],
+      limitations: [],
+      cta: t('pricing.free.cta'),
+      ctaLink: "/analizar",
+    },
+    {
+      name: "Pro",
+      price: 29,
+      annualPrice: 290,
+      popular: true,
+      features: [
+        t('pricing.features.unlimitedAnalysis'),
+        t('pricing.features.allTabs'),
+        t('pricing.features.neuralSummary'),
+        `20+ ${t('pricing.features.valuationModels')}`,
+        t('pricing.features.customInputs'),
+        t('pricing.features.exportPdfExcel'),
+        "Market Sentiment Analysis",
+        t('pricing.features.prioritySupport'),
+      ],
+      limitations: [],
+      cta: t('pricing.pro.cta'),
+      ctaLink: "/auth/sign-up?plan=pro",
+    },
+    {
+      name: "Elite",
+      price: 79,
+      annualPrice: 790,
+      popular: false,
+      features: [
+        t('pricing.features.apiAccess'),
+        t('pricing.features.customReports'),
+        t('pricing.features.vipSupport'),
+        t('pricing.features.webinars'),
+        t('pricing.features.consulting'),
+      ],
+      limitations: [],
+      cta: t('pricing.elite.cta'),
+      ctaLink: "/auth/sign-up?plan=elite",
+    },
+  ];
+
+  const faqs = [
+    { q: t('pricingPage.faqs.0.q'), a: t('pricingPage.faqs.0.a') },
+    { q: t('pricingPage.faqs.1.q'), a: t('pricingPage.faqs.1.a') },
+    { q: t('pricingPage.faqs.2.q'), a: t('pricingPage.faqs.2.a') },
+    { q: t('pricingPage.faqs.3.q'), a: t('pricingPage.faqs.3.a') },
+    { q: t('pricingPage.faqs.4.q'), a: t('pricingPage.faqs.4.a') },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 text-white">

@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Logo from '../components/Logo';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 export default function RegisterPage() {
+  const { t } = useLanguage();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,7 +20,7 @@ export default function RegisterPage() {
     setError('');
 
     if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden');
+      setError(t('auth.passwordsNoMatch'));
       setLoading(false);
       return;
     }
@@ -27,7 +29,7 @@ export default function RegisterPage() {
     // For now, show a message that auth is coming soon
     setTimeout(() => {
       setLoading(false);
-      setError('El registro estará disponible próximamente. Por ahora, puedes usar la app sin registro.');
+      setError(t('auth.registerComingSoon'));
     }, 1000);
   };
 
@@ -38,7 +40,7 @@ export default function RegisterPage() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Logo size="md" />
           <Link href="/" className="text-gray-400 hover:text-white transition">
-            Volver al inicio
+            {t('auth.backToHome')}
           </Link>
         </div>
       </header>
@@ -49,8 +51,8 @@ export default function RegisterPage() {
           {/* Card */}
           <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-8">
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold mb-2">Crea tu cuenta</h1>
-              <p className="text-gray-400">Comienza a analizar acciones con Prismo</p>
+              <h1 className="text-3xl font-bold mb-2">{t('auth.createAccount')}</h1>
+              <p className="text-gray-400">{t('auth.startAnalyzing')}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -62,7 +64,7 @@ export default function RegisterPage() {
 
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">
-                  Nombre completo
+                  {t('auth.fullName')}
                 </label>
                 <input
                   type="text"
@@ -71,13 +73,13 @@ export default function RegisterPage() {
                   onChange={(e) => setName(e.target.value)}
                   required
                   className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Tu nombre"
+                  placeholder={t('auth.namePlaceholder')}
                 />
               </div>
 
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                  Email
+                  {t('auth.email')}
                 </label>
                 <input
                   type="email"
@@ -86,13 +88,13 @@ export default function RegisterPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="tu@email.com"
+                  placeholder={t('auth.emailPlaceholder')}
                 />
               </div>
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-                  Contraseña
+                  {t('auth.password')}
                 </label>
                 <input
                   type="password"
@@ -102,13 +104,13 @@ export default function RegisterPage() {
                   required
                   minLength={8}
                   className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Mínimo 8 caracteres"
+                  placeholder={t('auth.minChars')}
                 />
               </div>
 
               <div>
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300 mb-2">
-                  Confirmar contraseña
+                  {t('auth.confirmPassword')}
                 </label>
                 <input
                   type="password"
@@ -117,7 +119,7 @@ export default function RegisterPage() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Repite tu contraseña"
+                  placeholder={t('auth.confirmPasswordPlaceholder')}
                 />
               </div>
 
@@ -129,14 +131,10 @@ export default function RegisterPage() {
                   className="w-4 h-4 mt-1 rounded border-gray-600 bg-gray-800 text-purple-500 focus:ring-purple-500"
                 />
                 <label htmlFor="terms" className="text-sm text-gray-400">
-                  Acepto los{' '}
-                  <Link href="/terms" className="text-purple-400 hover:text-purple-300">
-                    Términos de Servicio
-                  </Link>{' '}
-                  y la{' '}
-                  <Link href="/privacy" className="text-purple-400 hover:text-purple-300">
-                    Política de Privacidad
-                  </Link>
+                  {t('auth.acceptTerms')}{' '}
+                  <Link href="/terms" className="text-purple-400 hover:text-purple-300">{t('auth.termsOfService')}</Link>{' '}
+                  {t('auth.andThe')}{' '}
+                  <Link href="/privacy" className="text-purple-400 hover:text-purple-300">{t('auth.privacyPolicy')}</Link>
                 </label>
               </div>
 
@@ -145,7 +143,7 @@ export default function RegisterPage() {
                 disabled={loading}
                 className="w-full py-3 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 hover:from-cyan-400 hover:via-purple-400 hover:to-pink-400 text-white font-bold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Creando cuenta...' : 'Crear Cuenta Gratis'}
+                {loading ? t('auth.creatingAccount') : t('auth.createAccountFree')}
               </button>
             </form>
 
@@ -155,7 +153,7 @@ export default function RegisterPage() {
                 <div className="w-full border-t border-gray-700"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-gray-900/50 text-gray-500">O regístrate con</span>
+                <span className="px-4 bg-gray-900/50 text-gray-500">{t('auth.signUpWith')}</span>
               </div>
             </div>
 
@@ -180,9 +178,9 @@ export default function RegisterPage() {
 
             {/* Login Link */}
             <p className="text-center mt-8 text-gray-400">
-              ¿Ya tienes cuenta?{' '}
+              {t('auth.alreadyHaveAccount')}{' '}
               <Link href="/login" className="text-purple-400 hover:text-purple-300 font-medium">
-                Inicia sesión
+                {t('auth.signInLink')}
               </Link>
             </p>
           </div>
@@ -190,7 +188,7 @@ export default function RegisterPage() {
           {/* Quick access */}
           <div className="mt-6 text-center">
             <Link href="/analizar" className="text-gray-500 hover:text-gray-300 text-sm">
-              O prueba la app sin registro →
+              {t('auth.tryWithoutRegister')} →
             </Link>
           </div>
         </div>

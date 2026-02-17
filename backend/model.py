@@ -2,113 +2,124 @@
 # AdvanceValue Net - Neural Ensemble for Stock Valuation
 # Simplified version that works without pre-training
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 
-
-class VariableSelectionNetwork(nn.Module):
-    """Learns which input features are most important"""
-    def __init__(self, input_dim: int):
-        super().__init__()
-        self.grn = nn.Sequential(
-            nn.Linear(input_dim, 64),
-            nn.GELU(),
-            nn.Linear(64, input_dim),
-            nn.Softmax(dim=-1)
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        weights = self.grn(x)
-        return x * weights
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    print("[WARNING] PyTorch not available - AdvanceValueNet will use fallback predictor")
 
 
-class AdvanceValueNet(nn.Module):
-    """
-    Neural Ensemble for Stock Valuation
-    Combines:
-    - Expert valuations (DDM, DCF, etc.)
-    - Tabular financial metrics
-    - Simple ensemble averaging with learned weights
-    """
-    def __init__(self, expert_dim: int = 20, tabular_dim: int = 30):
-        super().__init__()
+if TORCH_AVAILABLE:
+    class VariableSelectionNetwork(nn.Module):
+        """Learns which input features are most important"""
+        def __init__(self, input_dim: int):
+            super().__init__()
+            self.grn = nn.Sequential(
+                nn.Linear(input_dim, 64),
+                nn.GELU(),
+                nn.Linear(64, input_dim),
+                nn.Softmax(dim=-1)
+            )
 
-        # Variable selection for tabular features
-        self.var_selection = VariableSelectionNetwork(tabular_dim)
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            weights = self.grn(x)
+            return x * weights
 
-        # Tabular encoder
-        self.tabular_encoder = nn.Sequential(
-            nn.Linear(tabular_dim, 128),
-            nn.BatchNorm1d(128),
-            nn.GELU(),
-            nn.Dropout(0.2),
-            nn.Linear(128, 64),
-            nn.GELU()
-        )
 
-        # Expert valuations encoder
-        self.expert_encoder = nn.Sequential(
-            nn.Linear(expert_dim, 64),
-            nn.GELU(),
-            nn.Dropout(0.2),
-            nn.Linear(64, 64),
-            nn.GELU()
-        )
+    class AdvanceValueNet(nn.Module):
+        """
+        Neural Ensemble for Stock Valuation
+        Combines:
+        - Expert valuations (DDM, DCF, etc.)
+        - Tabular financial metrics
+        - Simple ensemble averaging with learned weights
+        """
+        def __init__(self, expert_dim: int = 20, tabular_dim: int = 30):
+            super().__init__()
 
-        # Fusion layer
-        self.fusion = nn.Sequential(
-            nn.Linear(128, 64),
-            nn.GELU(),
-            nn.Dropout(0.15)
-        )
+            # Variable selection for tabular features
+            self.var_selection = VariableSelectionNetwork(tabular_dim)
 
-        # Output heads
-        self.fair_value_head = nn.Linear(64, 1)
-        self.uncertainty_head = nn.Linear(64, 2)  # q10 and q90
+            # Tabular encoder
+            self.tabular_encoder = nn.Sequential(
+                nn.Linear(tabular_dim, 128),
+                nn.BatchNorm1d(128),
+                nn.GELU(),
+                nn.Dropout(0.2),
+                nn.Linear(128, 64),
+                nn.GELU()
+            )
 
-        # Initialize weights for reasonable outputs
-        self._init_weights()
+            # Expert valuations encoder
+            self.expert_encoder = nn.Sequential(
+                nn.Linear(expert_dim, 64),
+                nn.GELU(),
+                nn.Dropout(0.2),
+                nn.Linear(64, 64),
+                nn.GELU()
+            )
 
-    def _init_weights(self):
-        """Initialize to produce reasonable initial outputs"""
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight, gain=0.5)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
+            # Fusion layer
+            self.fusion = nn.Sequential(
+                nn.Linear(128, 64),
+                nn.GELU(),
+                nn.Dropout(0.15)
+            )
 
-    def forward(self, expert_vals: torch.Tensor, tabular: torch.Tensor) -> dict:
-        # Encode tabular features with variable selection
-        tab_selected = self.var_selection(tabular)
-        tab_emb = self.tabular_encoder(tab_selected)
+            # Output heads
+            self.fair_value_head = nn.Linear(64, 1)
+            self.uncertainty_head = nn.Linear(64, 2)  # q10 and q90
 
-        # Encode expert valuations
-        exp_emb = self.expert_encoder(expert_vals)
+            # Initialize weights for reasonable outputs
+            self._init_weights()
 
-        # Fuse embeddings
-        combined = torch.cat([tab_emb, exp_emb], dim=1)
-        fused = self.fusion(combined)
+        def _init_weights(self):
+            """Initialize to produce reasonable initial outputs"""
+            for m in self.modules():
+                if isinstance(m, nn.Linear):
+                    nn.init.xavier_uniform_(m.weight, gain=0.5)
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
 
-        # Compute outputs
-        fair_value_raw = self.fair_value_head(fused)
-        uncertainty = self.uncertainty_head(fused)
+        def forward(self, expert_vals: torch.Tensor, tabular: torch.Tensor) -> dict:
+            # Encode tabular features with variable selection
+            tab_selected = self.var_selection(tabular)
+            tab_emb = self.tabular_encoder(tab_selected)
 
-        return {
-            'fair_value_adjustment': fair_value_raw.squeeze(-1),
-            'uncertainty': uncertainty  # [q10_adj, q90_adj]
-        }
+            # Encode expert valuations
+            exp_emb = self.expert_encoder(expert_vals)
+
+            # Fuse embeddings
+            combined = torch.cat([tab_emb, exp_emb], dim=1)
+            fused = self.fusion(combined)
+
+            # Compute outputs
+            fair_value_raw = self.fair_value_head(fused)
+            uncertainty = self.uncertainty_head(fused)
+
+            return {
+                'fair_value_adjustment': fair_value_raw.squeeze(-1),
+                'uncertainty': uncertainty  # [q10_adj, q90_adj]
+            }
 
 
 class AdvanceValuePredictor:
     """
     Wrapper that combines the neural network with heuristic ensemble
     Works without pre-training by using expert valuations as base
+    Falls back to pure heuristic ensemble if PyTorch is not available
     """
     def __init__(self):
-        self.model = AdvanceValueNet(expert_dim=20, tabular_dim=30)
-        self.model.eval()
+        if TORCH_AVAILABLE:
+            self.model = AdvanceValueNet(expert_dim=20, tabular_dim=30)
+            self.model.eval()
+        else:
+            self.model = None
 
     def predict(
         self,
@@ -150,21 +161,21 @@ class AdvanceValuePredictor:
         weights = weights / weights.sum()
         base_value = np.sum(np.array(valid_experts) * weights)
 
-        # Prepare tensors for neural network
-        expert_tensor = torch.zeros(1, 20)
-        for i, v in enumerate(valid_experts[:20]):
-            expert_tensor[0, i] = v / current_price  # Normalize by price
+        # Neural network adjustment (only if torch available)
+        adjustment = 0.0
+        if TORCH_AVAILABLE and self.model is not None:
+            expert_tensor = torch.zeros(1, 20)
+            for i, v in enumerate(valid_experts[:20]):
+                expert_tensor[0, i] = v / current_price  # Normalize by price
 
-        tabular_tensor = torch.zeros(1, 30)
-        for i, v in enumerate(tabular_features[:30]):
-            if v is not None and np.isfinite(v):
-                tabular_tensor[0, i] = float(v)
+            tabular_tensor = torch.zeros(1, 30)
+            for i, v in enumerate(tabular_features[:30]):
+                if v is not None and np.isfinite(v):
+                    tabular_tensor[0, i] = float(v)
 
-        # Get neural network adjustment
-        with torch.no_grad():
-            output = self.model(expert_tensor, tabular_tensor)
-            adjustment = output['fair_value_adjustment'].item()
-            uncertainty = output['uncertainty'][0].numpy()
+            with torch.no_grad():
+                output = self.model(expert_tensor, tabular_tensor)
+                adjustment = output['fair_value_adjustment'].item()
 
         # Apply adjustment (small, bounded)
         adjustment = np.clip(adjustment, -0.15, 0.15)  # Max 15% adjustment

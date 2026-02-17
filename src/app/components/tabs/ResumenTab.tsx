@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface ChainOfThoughtStep {
   step: number;
@@ -77,6 +78,7 @@ export default function ResumenTab({
   diarioStats,
   news,
 }: ResumenTabProps) {
+  const { t } = useLanguage();
   const [resumen, setResumen] = useState<ResumenData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
