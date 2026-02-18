@@ -1,15 +1,16 @@
 # backend/market_sentiment_engine.py
-# NEURAL REASONING MARKET SENTIMENT ENGINE v4.0
-# 6-layer analysis with chain-of-thought reasoning, divergence detection,
-# cross-correlation analysis, and actionable conclusions.
-# Runs in <0.5s on CPU (no transformers dependency).
+# NEURAL REASONING MARKET SENTIMENT ENGINE v5.0
+# 8-layer analysis: news NLP, market breadth, sector/industry rotation,
+# index internals, forex risk, volatility regime (VIX), Fear&Greed scoring,
+# cross-correlation fusion with divergence detection.
+# Runs in <1s on CPU. Self-sufficient via FMP auto-fetch.
 
 import numpy as np
 import os
 import requests
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 
 
@@ -28,11 +29,10 @@ class MarketSignal:
 class AdvancedNewsSentimentAnalyzer:
     """
     Multi-layer NLP sentiment analyzer for financial news.
-    Uses weighted keyword matching with context awareness.
+    Uses weighted keyword matching with context, negation, and intensity modifiers.
     """
 
     def __init__(self):
-        # === Strong sentiment keywords (weight: 2.0+) ===
         self.strong_bullish = {
             'rally': 2.0, 'surge': 2.0, 'soar': 2.0, 'skyrocket': 2.5,
             'bull market': 2.5, 'record high': 2.5, 'all-time high': 2.5, 'breakout': 2.0,
@@ -42,9 +42,10 @@ class AdvancedNewsSentimentAnalyzer:
             'recovery': 1.5, 'inflation cooling': 2.0, 'soft landing': 2.0,
             'blowout earnings': 2.5, 'beat estimates': 2.0, 'record revenue': 2.0,
             'raised guidance': 2.0, 'upgraded': 1.8, 'outperform': 1.8,
-            'golden cross': 2.0, 'new highs': 2.0,
+            'golden cross': 2.0, 'new highs': 2.0, 'buyback': 1.5, 'dividend hike': 1.8,
+            'strong gdp': 2.0, 'jobs beat': 1.8, 'consumer confidence': 1.2,
+            'ai boom': 2.0, 'deregulation': 1.5, 'tax cut': 1.5, 'ipo surge': 1.5,
         }
-
         self.strong_bearish = {
             'crash': 2.5, 'collapse': 2.5, 'plunge': 2.0, 'plummet': 2.0,
             'bear market': 2.5, 'recession': 2.5, 'crisis': 2.5, 'selloff': 2.0,
@@ -52,13 +53,13 @@ class AdvancedNewsSentimentAnalyzer:
             'flight to safety': 2.0, 'stagflation': 2.5, 'depression': 2.5,
             'market crash': 2.5, 'black swan': 2.5, 'circuit breaker': 2.5,
             'rate hike': 1.8, 'hawkish': 1.8, 'tightening': 1.5, 'inflation surge': 2.0,
-            'hard landing': 2.0, 'inverted yield curve': 2.0,
+            'hard landing': 2.0, 'inverted yield curve': 2.0, 'bank failure': 2.5,
             'missed estimates': 2.0, 'disappointing earnings': 2.0, 'lowered guidance': 2.0,
             'downgraded': 1.8, 'underperform': 1.8, 'revenue miss': 1.8,
             'death cross': 2.0, 'breakdown': 2.0, 'new lows': 2.0,
+            'tariff': 1.5, 'trade war': 2.0, 'sanctions': 1.8, 'war': 2.0,
+            'default': 2.0, 'bankruptcy': 2.5, 'layoffs': 1.5, 'mass layoffs': 2.0,
         }
-
-        # === Moderate sentiment keywords (weight: 1.0) ===
         self.moderate_bullish = {
             'gains': 1.0, 'higher': 0.8, 'positive': 0.8, 'advance': 1.0,
             'growth': 0.8, 'uptick': 0.8, 'rebound': 1.2, 'upward': 0.8,
@@ -66,8 +67,8 @@ class AdvancedNewsSentimentAnalyzer:
             'beat': 1.5, 'strong': 1.0, 'robust': 1.0, 'upgrade': 1.2,
             'buy': 0.8, 'accumulate': 1.0, 'bullish': 1.5, 'opportunity': 0.8,
             'momentum': 0.8, 'strength': 0.8, 'confident': 0.8, 'exceeded': 1.2,
+            'partnership': 0.6, 'contract win': 1.0, 'approval': 1.0, 'deal': 0.8,
         }
-
         self.moderate_bearish = {
             'decline': 1.0, 'drop': 1.0, 'fall': 0.8, 'negative': 0.8,
             'weakness': 1.0, 'concern': 0.8, 'uncertain': 0.8, 'volatility': 0.8,
@@ -75,23 +76,32 @@ class AdvancedNewsSentimentAnalyzer:
             'headwinds': 1.0, 'slowdown': 1.2, 'contraction': 1.5, 'layoffs': 1.5,
             'sell': 0.8, 'reduce': 0.8, 'bearish': 1.5, 'cautious': 0.5,
             'risk': 0.5, 'warning': 1.0, 'caution': 0.5, 'worry': 0.8,
-            'weak': 1.0, 'slumped': 1.2, 'tumbled': 1.2,
+            'weak': 1.0, 'slumped': 1.2, 'tumbled': 1.2, 'competition': 0.6,
+            'recall': 0.8, 'investigation': 0.8, 'lawsuit': 0.8, 'fine': 0.6,
         }
+        self.negations = ['not', "n't", 'no', 'never', 'without', 'hardly', 'barely']
+        self.intensifiers = {'very': 1.3, 'extremely': 1.5, 'highly': 1.2, 'massive': 1.4, 'huge': 1.3}
 
     def analyze_text(self, text: str) -> Dict[str, Any]:
-        """Analyze sentiment of a single text."""
         if not text:
             return {'score': 0.0, 'normalized': 0.0}
-
         text_lower = text.lower()
         score = 0.0
+        words = text_lower.split()
 
         for phrase, weight in self.strong_bullish.items():
             if phrase in text_lower:
-                score += weight
+                # Check for nearby negation
+                pos = text_lower.find(phrase)
+                prefix = text_lower[max(0, pos-30):pos]
+                neg_factor = -1 if any(neg in prefix for neg in self.negations) else 1
+                score += weight * neg_factor
         for phrase, weight in self.strong_bearish.items():
             if phrase in text_lower:
-                score -= weight
+                pos = text_lower.find(phrase)
+                prefix = text_lower[max(0, pos-30):pos]
+                neg_factor = -1 if any(neg in prefix for neg in self.negations) else 1
+                score -= weight * neg_factor
         for word, weight in self.moderate_bullish.items():
             if word in text_lower:
                 score += weight
@@ -99,29 +109,30 @@ class AdvancedNewsSentimentAnalyzer:
             if word in text_lower:
                 score -= weight
 
+        # Intensity modifiers
+        for i, word in enumerate(words):
+            if word in self.intensifiers:
+                factor = self.intensifiers[word]
+                score = score * factor if score != 0 else score
+
         normalized = float(np.tanh(score / 5))
         return {'score': float(score), 'normalized': normalized}
 
     def analyze_news_batch(self, news_items: List[Dict]) -> Tuple[float, List[MarketSignal], List[str]]:
-        """Analyze a batch of news items. Returns score + signals + reasoning chain."""
         if not news_items:
             return 50.0, [], ["No news data available."]
 
         sentiments = []
-        positive_count = 0
-        negative_count = 0
-        strong_bull_headlines = []
-        strong_bear_headlines = []
-        reasoning = ["**NEWS NEURAL ANALYSIS:**"]
+        positive_count, negative_count = 0, 0
+        strong_bull_headlines, strong_bear_headlines = [], []
+        reasoning = ["**LAYER 1 — NEWS NEURAL (NLP):**"]
 
         for item in news_items[:30]:
             title = item.get('title', '')
             text = item.get('text', '')[:500]
             combined = f"{title} {text}"
-
             analysis = self.analyze_text(combined)
             sentiments.append(analysis['normalized'])
-
             if analysis['normalized'] > 0.3:
                 positive_count += 1
                 if analysis['normalized'] > 0.5:
@@ -132,145 +143,216 @@ class AdvancedNewsSentimentAnalyzer:
                     strong_bear_headlines.append(title[:80])
 
         avg_sentiment = np.mean(sentiments) if sentiments else 0
+        std_sentiment = np.std(sentiments) if len(sentiments) > 1 else 0
         score = (avg_sentiment + 1) / 2 * 100
 
         signals = []
-        if positive_count > negative_count * 1.5:
-            signals.append(MarketSignal(
-                source="news_neural", type="bullish", strength=0.80, weight=0.38,
-                description=f"{positive_count} bullish headlines dominate news flow",
-                emoji="📰"
-            ))
-        elif negative_count > positive_count * 1.5:
-            signals.append(MarketSignal(
-                source="news_neural", type="bearish", strength=0.80, weight=0.38,
-                description=f"{negative_count} bearish headlines dominate news flow",
-                emoji="📰"
-            ))
+        bull_ratio = positive_count / len(sentiments) if sentiments else 0.5
+        if bull_ratio >= 0.65:
+            signals.append(MarketSignal("news_nlp", "bullish", min(0.9, bull_ratio), 0.35,
+                f"{positive_count}/{len(sentiments)} headlines bullish ({bull_ratio:.0%})", emoji="📰"))
+        elif bull_ratio <= 0.35:
+            bear_ratio = negative_count / len(sentiments) if sentiments else 0.5
+            signals.append(MarketSignal("news_nlp", "bearish", min(0.9, bear_ratio), 0.35,
+                f"{negative_count}/{len(sentiments)} headlines bearish ({bear_ratio:.0%})", emoji="📰"))
+
+        # High dispersion = uncertain/volatile market
+        if std_sentiment > 0.5:
+            signals.append(MarketSignal("news_volatility", "cautionary", 0.6, 0.08,
+                f"High sentiment dispersion (σ={std_sentiment:.2f}) — market uncertainty", emoji="⚡"))
 
         for h in strong_bull_headlines[:2]:
-            reasoning.append(f"  + Strong bullish: '{h}...'")
+            reasoning.append(f"  + Bullish: '{h}'")
         for h in strong_bear_headlines[:2]:
-            reasoning.append(f"  - Strong bearish: '{h}...'")
-        reasoning.append(f"**News conclusion:** Score {score:.1f} | {positive_count} bull | {negative_count} bear | {len(sentiments) - positive_count - negative_count} neutral")
+            reasoning.append(f"  - Bearish: '{h}'")
+        reasoning.append(f"  Score: {score:.1f} | {positive_count}↑ {negative_count}↓ {len(sentiments)-positive_count-negative_count}= | σ={std_sentiment:.2f}")
 
         return score, signals, reasoning
 
 
 class NeuralReasoningMarketSentimentEngine:
     """
-    v4.0 - 6-Layer Neural Reasoning Engine
-    Thinks like a trader: analyzes, detects divergences, finds patterns, concludes.
+    v5.0 — 8-Layer Neural Reasoning Engine
+    Self-sufficient: auto-fetches all data from FMP when missing.
+    Layers: News NLP → Breadth → Sectors/Industries → Indices →
+            VIX Regime → Forex Risk → Fear&Greed → Neural Fusion
     """
 
-    # Major indices to track
-    MAJOR_INDICES = ['^GSPC', '^DJI', '^IXIC', '^RUT', '^VIX', '^FTSE', '^N225', '^GDAXI']
+    MAJOR_INDICES = ['^GSPC', '^DJI', '^IXIC', '^RUT', '^FTSE', '^N225', '^GDAXI']
+    VIX_SYMBOL = '^VIX'
 
     def __init__(self):
-        self.version = "4.1"
+        self.version = "5.0"
         self.news_analyzer = AdvancedNewsSentimentAnalyzer()
         self._cache: Dict[str, Any] = {}
-        self._cache_ttl = 300  # 5 minutes
+        self._cache_ttl = 300  # 5 min cache
 
-    def _fetch_fmp(self, endpoint: str, params: str = '') -> Any:
-        """Fetch data from FMP API with caching."""
-        api_key = os.environ.get('FMP_API_KEY')
+    # ====================== FMP FETCH HELPERS ======================
+
+    def _get_api_key(self) -> Optional[str]:
+        return os.environ.get('FMP_API_KEY')
+
+    def _fetch_stable(self, endpoint: str, params: str = '') -> Any:
+        """Fetch from /stable/ base path with caching."""
+        api_key = self._get_api_key()
         if not api_key:
             return None
-
-        cache_key = f'mse_{endpoint}_{params}'
-        now = datetime.now().timestamp()
-        if cache_key in self._cache:
-            data, ts = self._cache[cache_key]
-            if now - ts < self._cache_ttl:
+        cache_key = f'mse_stable_{endpoint}_{params}'
+        cached = self._cache.get(cache_key)
+        if cached:
+            data, ts = cached
+            if datetime.now().timestamp() - ts < self._cache_ttl:
                 return data
-
         try:
             sep = '&' if params else ''
             url = f"https://financialmodelingprep.com/stable/{endpoint}?{params}{sep}apikey={api_key}"
-            resp = requests.get(url, timeout=10)
+            print(f"[NeuralMSE v{self.version}] Fetching: {url[:100]}...")
+            resp = requests.get(url, timeout=12)
+            print(f"[NeuralMSE v{self.version}] Response {endpoint}: {resp.status_code}")
             if resp.ok:
                 data = resp.json()
-                self._cache[cache_key] = (data, now)
+                self._cache[cache_key] = (data, datetime.now().timestamp())
                 return data
         except Exception as e:
-            print(f"[NeuralMSE] FMP fetch error ({endpoint}): {e}")
+            print(f"[NeuralMSE] Fetch error ({endpoint}): {e}")
         return None
+
+    def _fetch_v3(self, path: str, params: str = '') -> Any:
+        """Fetch from /api/v3/ base path (legacy endpoints like batch quote)."""
+        api_key = self._get_api_key()
+        if not api_key:
+            return None
+        cache_key = f'mse_v3_{path}_{params}'
+        cached = self._cache.get(cache_key)
+        if cached:
+            data, ts = cached
+            if datetime.now().timestamp() - ts < self._cache_ttl:
+                return data
+        try:
+            sep = '&' if params else ''
+            url = f"https://financialmodelingprep.com/api/v3/{path}?{params}{sep}apikey={api_key}"
+            print(f"[NeuralMSE v{self.version}] Fetching v3: {url[:100]}...")
+            resp = requests.get(url, timeout=12)
+            print(f"[NeuralMSE v{self.version}] Response v3/{path}: {resp.status_code}")
+            if resp.ok:
+                data = resp.json()
+                self._cache[cache_key] = (data, datetime.now().timestamp())
+                return data
+        except Exception as e:
+            print(f"[NeuralMSE] v3 fetch error ({path}): {e}")
+        return None
+
+    def _prev_trading_day(self, offset: int = 1) -> str:
+        """Get a recent trading day date string (skip weekends)."""
+        d = datetime.now() - timedelta(days=offset)
+        while d.weekday() >= 5:  # 5=Sat, 6=Sun
+            d -= timedelta(days=1)
+        return d.strftime('%Y-%m-%d')
 
     def _fill_missing_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Auto-fetch any missing market data from FMP API."""
         filled = dict(data)
 
-        # Sector performance
-        if not filled.get('sectorPerformance') or len(filled.get('sectorPerformance', [])) == 0:
-            sectors = self._fetch_fmp('sector-performance-snapshot')
-            if sectors and isinstance(sectors, list) and len(sectors) > 0:
-                filled['sectorPerformance'] = sectors
-                print(f"[NeuralMSE] Auto-fetched {len(sectors)} sectors from FMP")
-
-        # Industry performance
-        if not filled.get('industryPerformance') or len(filled.get('industryPerformance', [])) == 0:
-            industries = self._fetch_fmp('industry-performance-snapshot')
-            if industries and isinstance(industries, list) and len(industries) > 0:
-                filled['industryPerformance'] = industries
-                print(f"[NeuralMSE] Auto-fetched {len(industries)} industries from FMP")
-
-        # Index quotes — always fetch since frontend doesn't send these
-        if not filled.get('indexQuotes') or len(filled.get('indexQuotes', [])) == 0:
-            index_quotes = []
-            symbols = ','.join(self.MAJOR_INDICES)
-            quotes = self._fetch_fmp('batch-quote', f'symbols={symbols}')
-            if quotes and isinstance(quotes, list) and len(quotes) > 0:
-                index_quotes = quotes
-            else:
-                # Fallback: fetch one by one
-                for sym in self.MAJOR_INDICES[:6]:
-                    q = self._fetch_fmp('quote', f'symbol={sym}')
-                    if q and isinstance(q, list) and len(q) > 0:
-                        index_quotes.append(q[0])
-                    elif q and isinstance(q, dict):
-                        index_quotes.append(q)
-            if index_quotes:
-                filled['indexQuotes'] = index_quotes
-                print(f"[NeuralMSE] Auto-fetched {len(index_quotes)} index quotes from FMP")
-
-        # Forex quotes — check if existing data has changesPercentage, if not re-fetch
-        existing_forex = filled.get('forexQuotes', [])
-        forex_usable = False
-        if existing_forex and isinstance(existing_forex, list) and len(existing_forex) > 0:
-            # Check if at least one item has changesPercentage or changes
-            for fx in existing_forex[:5]:
-                if fx.get('changesPercentage') is not None or fx.get('changes') is not None:
-                    forex_usable = True
+        # ── Sector performance ──────────────────────────────────────────
+        if not filled.get('sectorPerformance'):
+            # Try today, then fallback to previous trading days
+            for offset in range(0, 4):
+                date_str = self._prev_trading_day(offset)
+                sectors = self._fetch_stable('sector-performance-snapshot', f'date={date_str}')
+                if sectors and isinstance(sectors, list) and len(sectors) > 0:
+                    filled['sectorPerformance'] = sectors
+                    print(f"[NeuralMSE] Got {len(sectors)} sectors for {date_str}")
                     break
 
-        if not forex_usable:
-            forex = self._fetch_fmp('batch-forex-quotes')
+        # ── Industry performance ─────────────────────────────────────────
+        if not filled.get('industryPerformance'):
+            for offset in range(0, 4):
+                date_str = self._prev_trading_day(offset)
+                industries = self._fetch_stable('industry-performance-snapshot', f'date={date_str}')
+                if industries and isinstance(industries, list) and len(industries) > 0:
+                    filled['industryPerformance'] = industries
+                    print(f"[NeuralMSE] Got {len(industries)} industries for {date_str}")
+                    break
+
+        # ── Index quotes (use /api/v3/quote/ path) ──────────────────────
+        if not filled.get('indexQuotes'):
+            symbols_str = ','.join(self.MAJOR_INDICES)
+            quotes = self._fetch_v3(f'quote/{symbols_str}')
+            if quotes and isinstance(quotes, list) and len(quotes) > 0:
+                filled['indexQuotes'] = quotes
+                print(f"[NeuralMSE] Got {len(quotes)} index quotes")
+            else:
+                # Try full-index-quotes stable endpoint
+                all_idx = self._fetch_stable('full-index-quotes')
+                if all_idx and isinstance(all_idx, list):
+                    # Filter to major indices only
+                    wanted = set(self.MAJOR_INDICES + [self.VIX_SYMBOL])
+                    filtered = [q for q in all_idx if q.get('symbol', '') in wanted]
+                    if filtered:
+                        filled['indexQuotes'] = filtered
+                        print(f"[NeuralMSE] Got {len(filtered)} major index quotes (full-index-quotes)")
+
+        # ── VIX quote specifically ──────────────────────────────────────
+        if not filled.get('vixQuote'):
+            vix = self._fetch_v3(f'quote/{self.VIX_SYMBOL}')
+            if vix and isinstance(vix, list) and len(vix) > 0:
+                filled['vixQuote'] = vix[0]
+                print(f"[NeuralMSE] Got VIX: {vix[0].get('price', 'N/A')}")
+            elif filled.get('indexQuotes'):
+                for q in filled['indexQuotes']:
+                    if q.get('symbol') == self.VIX_SYMBOL:
+                        filled['vixQuote'] = q
+                        break
+
+        # ── Forex quotes (/stable/fx returns all pairs) ──────────────────
+        existing_forex = filled.get('forexQuotes', [])
+        forex_has_changes = any(
+            fx.get('changesPercentage') is not None or fx.get('changes') is not None
+            for fx in (existing_forex or [])[:5]
+        )
+        if not existing_forex or not forex_has_changes:
+            # Try stable/fx first
+            forex = self._fetch_stable('fx')
             if forex and isinstance(forex, list) and len(forex) > 0:
                 filled['forexQuotes'] = forex
-                print(f"[NeuralMSE] Auto-fetched {len(forex)} forex quotes from FMP")
+                print(f"[NeuralMSE] Got {len(forex)} forex pairs from /stable/fx")
+            else:
+                # Fallback: batch-forex-quotes
+                forex2 = self._fetch_stable('batch-forex-quotes')
+                if forex2 and isinstance(forex2, list) and len(forex2) > 0:
+                    filled['forexQuotes'] = forex2
+                    print(f"[NeuralMSE] Got {len(forex2)} forex pairs from batch-forex-quotes")
 
-        # Historical sector performance — derive from current sector data
-        if not filled.get('historicalSectorPerformance') or len(filled.get('historicalSectorPerformance', [])) < 2:
+        # ── Historical trend proxy from sector changes ───────────────────
+        if not filled.get('historicalSectorPerformance'):
             sectors = filled.get('sectorPerformance', [])
-            if sectors and len(sectors) > 0:
-                # Create multi-entry historical from sector changes to satisfy trend analysis
-                hist = []
-                for s in sectors:
-                    change = s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0
-                    hist.append({'sector': s.get('sector', ''), 'averageChange': change, 'change': change})
+            if sectors:
+                hist = [
+                    {'sector': s.get('sector', ''), 'averageChange': s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0}
+                    for s in sectors
+                ]
                 filled['historicalSectorPerformance'] = hist
-                print(f"[NeuralMSE] Created {len(hist)} historical entries from sector data")
+
+        # ── Fear & Greed components: market momentum ─────────────────────
+        if not filled.get('sp500History') and filled.get('indexQuotes'):
+            for q in filled['indexQuotes']:
+                if q.get('symbol') in ('^GSPC', 'SPY'):
+                    filled['sp500Change'] = q.get('changesPercentage', 0) or 0
+                    filled['sp500Price'] = q.get('price', 0) or 0
+                    filled['sp500YearHigh'] = q.get('yearHigh', 0) or 0
+                    filled['sp500YearLow'] = q.get('yearLow', 0) or 0
+                    break
 
         return filled
+
+    # ====================== 8 ANALYSIS LAYERS ======================
 
     def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
         start = datetime.now()
 
-        # Auto-fetch any missing data from FMP
+        # Self-sufficient data fill
         data = self._fill_missing_data(data)
 
-        # === INPUT DATA ===
         news = data.get('news', [])
         gainers = data.get('gainers', [])
         losers = data.get('losers', [])
@@ -279,58 +361,69 @@ class NeuralReasoningMarketSentimentEngine:
         indices = data.get('indexQuotes', [])
         forex = data.get('forexQuotes', [])
         hist_sectors = data.get('historicalSectorPerformance', [])
+        vix_quote = data.get('vixQuote')
 
         signals: List[MarketSignal] = []
-        full_reasoning: List[str] = [f"**REASONING ENGINE v{self.version} INITIATED**"]
+        full_reasoning: List[str] = [f"**NEURAL ENGINE v{self.version} — ANALYSIS INITIATED**"]
 
-        print(f"[NeuralMSE v{self.version}] Analyzing: news={len(news)}, gainers={len(gainers)}, losers={len(losers)}, sectors={len(sectors)}, industries={len(industries)}, indices={len(indices)}, forex={len(forex)}")
+        print(f"[NeuralMSE v{self.version}] Data: news={len(news)}, gainers={len(gainers)}, losers={len(losers)}, "
+              f"sectors={len(sectors)}, industries={len(industries)}, indices={len(indices)}, "
+              f"forex={len(forex)}, vix={'YES' if vix_quote else 'NO'}")
 
-        # ====================== LAYER 1: NEWS NEURAL ======================
+        # LAYER 1 — NEWS NLP
         news_score, news_signals, news_reasoning = self.news_analyzer.analyze_news_batch(news)
         signals.extend(news_signals)
         full_reasoning.extend(news_reasoning)
 
-        # ====================== LAYER 2: MICRO BREADTH ======================
-        movers_score, movers_signals, breadth_ratio, sector_rotation, top_gainers, top_losers = self._analyze_movers(gainers, losers)
+        # LAYER 2 — MARKET BREADTH (Gainers vs Losers)
+        movers_score, movers_signals, breadth_ratio, sector_rotation, top_gainers, top_losers = self._layer2_breadth(gainers, losers)
         signals.extend(movers_signals)
-        full_reasoning.append(f"**MICRO BREADTH:** {breadth_ratio:.0%} advancing ({len(gainers)} up vs {len(losers)} down)")
+        full_reasoning.append(f"**LAYER 2 — BREADTH:** {breadth_ratio:.0%} advancing | {len(gainers)}↑ {len(losers)}↓")
 
-        # ====================== LAYER 3: MACRO SECTORS + INDUSTRIES ======================
-        sector_score, sector_signals, sector_breadth, hot_sectors, cold_sectors, sector_reasoning = self._analyze_sectors(sectors)
+        # LAYER 3 — SECTOR & INDUSTRY MACRO
+        sector_score, sector_signals, sector_breadth, hot_sectors, cold_sectors, sector_reasoning = self._layer3_sectors(sectors)
         signals.extend(sector_signals)
         full_reasoning.extend(sector_reasoning)
 
-        industry_score, industry_signals, industry_breadth = self._analyze_industries(industries)
+        industry_score, industry_signals, industry_breadth = self._layer3b_industries(industries)
         signals.extend(industry_signals)
-        if industries:
-            full_reasoning.append(f"**INDUSTRIES:** {industry_breadth:.0%} showing strength")
 
-        # ====================== LAYER 4: INDICES + FOREX ======================
-        index_score, index_signals, index_reasoning = self._analyze_indices(indices)
+        # LAYER 4 — MAJOR INDICES
+        index_score, index_signals, index_reasoning, sp500_change = self._layer4_indices(indices)
         signals.extend(index_signals)
         full_reasoning.extend(index_reasoning)
 
-        forex_score, forex_signals, forex_reasoning = self._analyze_forex(forex)
+        # LAYER 5 — VIX VOLATILITY REGIME
+        vix_score, vix_signals, vix_value, vix_reasoning = self._layer5_vix(vix_quote, indices)
+        signals.extend(vix_signals)
+        full_reasoning.extend(vix_reasoning)
+
+        # LAYER 6 — FOREX (USD RISK)
+        forex_score, forex_signals, forex_reasoning = self._layer6_forex(forex)
         signals.extend(forex_signals)
         full_reasoning.extend(forex_reasoning)
 
-        # ====================== LAYER 5: HISTORICAL TRENDS ======================
-        trend_score, trend_signals, trend_reasoning = self._analyze_trends(hist_sectors)
-        signals.extend(trend_signals)
-        full_reasoning.extend(trend_reasoning)
+        # LAYER 7 — FEAR & GREED COMPOSITE
+        fg_score, fg_label, fg_signals, fg_reasoning = self._layer7_fear_greed(
+            news_score, breadth_ratio, vix_value, sector_breadth, industry_breadth,
+            sp500_change, sector_score, index_score
+        )
+        signals.extend(fg_signals)
+        full_reasoning.extend(fg_reasoning)
 
-        # ====================== LAYER 6: FUSION + CROSS-CORRELATION ======================
-        composite, fusion_reasoning = self._fuse_and_reason(
+        # LAYER 8 — NEURAL FUSION + CROSS-CORRELATION
+        composite, fusion_reasoning = self._layer8_fusion(
             news_score, movers_score, sector_score, industry_score,
-            index_score, forex_score, trend_score, breadth_ratio, sector_breadth
+            index_score, vix_score, forex_score, fg_score,
+            breadth_ratio, sector_breadth, vix_value
         )
         full_reasoning.extend(fusion_reasoning)
 
-        # ====================== ACTIONABLE CONCLUSION ======================
-        rec, emoji, sentiment, desc, action = self._generate_conclusion(composite)
+        # CONCLUSION
+        rec, emoji, sentiment, desc, action = self._generate_conclusion(composite, vix_value, breadth_ratio)
 
         process_time = (datetime.now() - start).total_seconds()
-        print(f"[NeuralMSE v{self.version}] Complete in {process_time:.3f}s: {rec} (score: {composite:.1f})")
+        print(f"[NeuralMSE v{self.version}] Done in {process_time:.3f}s → {rec} (score: {composite:.1f})")
 
         return {
             "version": self.version,
@@ -342,32 +435,37 @@ class NeuralReasoningMarketSentimentEngine:
             "recommendation": rec,
             "recommendationDescription": desc,
             "actionableAdvice": action,
+            "fearGreedScore": round(fg_score, 1),
+            "fearGreedLabel": fg_label,
+            "vixValue": round(vix_value, 2) if vix_value else None,
             "scores": {
                 "news": round(news_score, 1),
                 "movers": round(movers_score, 1),
                 "sectors": round(sector_score, 1),
                 "industries": round(industry_score, 1),
                 "indices": round(index_score, 1),
+                "vix": round(vix_score, 1),
                 "forex": round(forex_score, 1),
-                "trends": round(trend_score, 1),
-                "composite": round(composite, 1)
+                "fearGreed": round(fg_score, 1),
+                "composite": round(composite, 1),
             },
             "moversAnalysis": {
                 "breadthRatio": round(breadth_ratio, 3),
-                "breadthLabel": self._get_breadth_label(breadth_ratio),
+                "breadthLabel": self._breadth_label(breadth_ratio),
                 "gainersCount": len(gainers),
                 "losersCount": len(losers),
                 "topGainers": top_gainers,
                 "topLosers": top_losers,
-                "sectorRotation": sector_rotation
+                "sectorRotation": sector_rotation,
             },
             "macroAnalysis": {
-                "sectorBreadth": round(sector_breadth, 3),
-                "industryBreadth": round(industry_breadth, 3),
-                "hotSectors": [{"sector": s.get('sector', ''), "change": s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0} for s in hot_sectors[:4]],
-                "coldSectors": [{"sector": s.get('sector', ''), "change": s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0} for s in cold_sectors[:4]],
-                "majorIndicesUp": [i.get('symbol', '') for i in indices[:6] if (i.get('changesPercentage', 0) or 0) > 0],
-                "majorIndicesDown": [i.get('symbol', '') for i in indices[:6] if (i.get('changesPercentage', 0) or 0) < 0],
+                "sectorBreadth": round(sector_breadth * 100, 1),
+                "industryBreadth": round(industry_breadth * 100, 1),
+                "hotSectors": [{"sector": s.get('sector', ''), "change": round(s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0, 2)} for s in hot_sectors[:5]],
+                "coldSectors": [{"sector": s.get('sector', ''), "change": round(s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0, 2)} for s in cold_sectors[:5]],
+                "majorIndicesUp": [i.get('symbol', '') for i in indices if (i.get('changesPercentage', 0) or 0) > 0],
+                "majorIndicesDown": [i.get('symbol', '') for i in indices if (i.get('changesPercentage', 0) or 0) < 0],
+                "vixRegime": self._vix_regime_label(vix_value),
             },
             "signals": [
                 {
@@ -375,322 +473,541 @@ class NeuralReasoningMarketSentimentEngine:
                     "weight": s.weight, "description": s.description,
                     "dataPoint": s.data_point, "emoji": s.emoji
                 }
-                for s in signals[:20]
+                for s in signals[:25]
             ],
             "reasoningChain": full_reasoning,
-            "briefing": self._generate_briefing(composite, news_score, movers_score, breadth_ratio,
-                                                 sector_rotation, rec, len(gainers), len(losers),
-                                                 hot_sectors, cold_sectors, action)
+            "briefing": self._generate_briefing(
+                composite, news_score, movers_score, breadth_ratio,
+                sector_rotation, rec, len(gainers), len(losers),
+                hot_sectors, cold_sectors, action, vix_value, fg_score, fg_label
+            ),
         }
 
-    # ====================== INTERNAL ANALYSIS METHODS ======================
+    # ====================== LAYER IMPLEMENTATIONS ======================
 
-    def _analyze_movers(self, gainers: List, losers: List) -> Tuple[float, List[MarketSignal], float, Dict, List, List]:
-        """Analyze market movers with sector rotation."""
+    def _layer2_breadth(self, gainers, losers):
+        """Layer 2: Market breadth — Zweig Breadth Thrust style analysis."""
         signals = []
         total = len(gainers) + len(losers)
         if total == 0:
             return 50.0, [], 0.5, {"hot": [], "cold": []}, [], []
 
         breadth_ratio = len(gainers) / total
+        avg_gainer = np.mean([g.get('changesPercentage', 0) or 0 for g in gainers]) if gainers else 0
+        avg_loser = np.mean([abs(l.get('changesPercentage', 0) or 0) for l in losers]) if losers else 0
 
-        # Sector rotation analysis
-        sector_data = defaultdict(lambda: {'gainers': 0, 'losers': 0, 'gainer_change': 0, 'loser_change': 0})
+        # Zweig-style: up volume / total volume proxy via breadth
+        score = 50 + (breadth_ratio - 0.5) * 90
+
+        # Breadth thrust — very strong signal when ≥61.5% advance in any 10-day window
+        if breadth_ratio >= 0.72:
+            signals.append(MarketSignal("breadth_thrust", "bullish", 0.95, 0.28,
+                f"BREADTH THRUST: {breadth_ratio:.0%} advancing — extreme bull signal", emoji="🚀"))
+        elif breadth_ratio >= 0.62:
+            signals.append(MarketSignal("breadth", "bullish", 0.80, 0.22,
+                f"Strong breadth: {breadth_ratio:.0%} advancing", emoji="📈"))
+        elif breadth_ratio <= 0.28:
+            signals.append(MarketSignal("breadth_collapse", "bearish", 0.95, 0.28,
+                f"BREADTH COLLAPSE: only {breadth_ratio:.0%} advancing — extreme bear signal", emoji="🔻"))
+        elif breadth_ratio <= 0.40:
+            signals.append(MarketSignal("breadth", "bearish", 0.80, 0.22,
+                f"Weak breadth: {breadth_ratio:.0%} advancing", emoji="📉"))
+        else:
+            signals.append(MarketSignal("breadth", "neutral", 0.50, 0.10,
+                f"Neutral breadth: {breadth_ratio:.0%} advancing", emoji="⚖️"))
+
+        # Momentum asymmetry
+        if avg_gainer > 0 and avg_loser > 0:
+            momentum_ratio = avg_gainer / avg_loser
+            if momentum_ratio > 2.0:
+                signals.append(MarketSignal("momentum", "bullish", 0.80, 0.15,
+                    f"Gainer momentum {momentum_ratio:.1f}x stronger than losers ({avg_gainer:.1f}% vs {avg_loser:.1f}%)", emoji="💪"))
+            elif momentum_ratio < 0.5:
+                signals.append(MarketSignal("momentum", "bearish", 0.80, 0.15,
+                    f"Loser momentum {1/momentum_ratio:.1f}x stronger ({avg_loser:.1f}% drops vs {avg_gainer:.1f}% gains)", emoji="⚠️"))
+
+        # Sector rotation from movers
+        sector_data = defaultdict(lambda: {'g': 0, 'l': 0})
         for g in gainers:
-            sector = g.get('sector', 'Unknown') or 'Unknown'
-            sector_data[sector]['gainers'] += 1
-            sector_data[sector]['gainer_change'] += abs(g.get('changesPercentage', 0) or 0)
+            sector_data[g.get('sector', 'Unknown') or 'Unknown']['g'] += 1
         for l in losers:
-            sector = l.get('sector', 'Unknown') or 'Unknown'
-            sector_data[sector]['losers'] += 1
-            sector_data[sector]['loser_change'] += abs(l.get('changesPercentage', 0) or 0)
+            sector_data[l.get('sector', 'Unknown') or 'Unknown']['l'] += 1
 
-        hot_sectors = sorted(
-            [(s, d) for s, d in sector_data.items() if d['gainers'] > d['losers']],
-            key=lambda x: x[1]['gainers'], reverse=True
-        )[:5]
-        cold_sectors = sorted(
-            [(s, d) for s, d in sector_data.items() if d['losers'] > d['gainers']],
-            key=lambda x: x[1]['losers'], reverse=True
-        )[:5]
+        hot = sorted([(s, d) for s, d in sector_data.items() if d['g'] > d['l']], key=lambda x: x[1]['g'], reverse=True)[:5]
+        cold = sorted([(s, d) for s, d in sector_data.items() if d['l'] > d['g']], key=lambda x: x[1]['l'], reverse=True)[:5]
 
         top_gainers = [
             {"symbol": g.get('symbol', ''), "name": g.get('name', '')[:40],
-             "change": g.get('changesPercentage', 0), "price": g.get('price', 0),
-             "sector": g.get('sector', '')}
+             "change": g.get('changesPercentage', 0), "price": g.get('price', 0), "sector": g.get('sector', '')}
             for g in sorted(gainers, key=lambda x: x.get('changesPercentage', 0) or 0, reverse=True)[:10]
         ]
         top_losers = [
             {"symbol": l.get('symbol', ''), "name": l.get('name', '')[:40],
-             "change": l.get('changesPercentage', 0), "price": l.get('price', 0),
-             "sector": l.get('sector', '')}
+             "change": l.get('changesPercentage', 0), "price": l.get('price', 0), "sector": l.get('sector', '')}
             for l in sorted(losers, key=lambda x: x.get('changesPercentage', 0) or 0)[:10]
         ]
 
-        avg_gainer = np.mean([g.get('changesPercentage', 0) or 0 for g in gainers]) if gainers else 0
-        avg_loser = np.mean([abs(l.get('changesPercentage', 0) or 0) for l in losers]) if losers else 0
-
-        score = 50 + (breadth_ratio - 0.5) * 85
-
-        # Breadth signals
-        if breadth_ratio >= 0.7:
-            signals.append(MarketSignal("breadth", "bullish", 0.9, 0.30, f"Excellent breadth: {breadth_ratio:.0%} advancing", emoji="🟢"))
-        elif breadth_ratio >= 0.6:
-            signals.append(MarketSignal("breadth", "bullish", 0.7, 0.25, f"Positive breadth: {breadth_ratio:.0%} advancing", emoji="📈"))
-        elif breadth_ratio <= 0.3:
-            signals.append(MarketSignal("breadth", "bearish", 0.9, 0.30, f"Very weak breadth: only {breadth_ratio:.0%} advancing", emoji="🔴"))
-        elif breadth_ratio <= 0.4:
-            signals.append(MarketSignal("breadth", "bearish", 0.7, 0.25, f"Negative breadth: {breadth_ratio:.0%} advancing", emoji="📉"))
-
-        # Momentum signals
-        if avg_gainer > 8:
-            signals.append(MarketSignal("momentum", "bullish", 0.85, 0.20, f"Explosive gainer momentum: +{avg_gainer:.1f}% avg", emoji="🚀"))
-        elif avg_gainer > 5:
-            signals.append(MarketSignal("momentum", "bullish", 0.70, 0.15, f"Strong gainer momentum: +{avg_gainer:.1f}% avg", emoji="💪"))
-        if avg_loser > 8:
-            signals.append(MarketSignal("momentum", "bearish", 0.85, 0.20, f"Extreme selling pressure: -{avg_loser:.1f}% avg", emoji="🔻"))
-
-        # Sector rotation signals
-        if hot_sectors:
-            top_hot = hot_sectors[0]
-            signals.append(MarketSignal("sector_rotation", "bullish", 0.6, 0.12, f"Hot sector: {top_hot[0]} ({top_hot[1]['gainers']}up/{top_hot[1]['losers']}down)", emoji="🔥"))
-        if cold_sectors:
-            top_cold = cold_sectors[0]
-            signals.append(MarketSignal("sector_rotation", "bearish", 0.6, 0.12, f"Cold sector: {top_cold[0]} ({top_cold[1]['losers']}down/{top_cold[1]['gainers']}up)", emoji="❄️"))
-
         sector_rotation = {
-            "hot": [{"sector": s, "gainers": d['gainers'], "losers": d['losers']} for s, d in hot_sectors],
-            "cold": [{"sector": s, "gainers": d['gainers'], "losers": d['losers']} for s, d in cold_sectors]
+            "hot": [{"sector": s, "gainers": d['g'], "losers": d['l']} for s, d in hot],
+            "cold": [{"sector": s, "gainers": d['g'], "losers": d['l']} for s, d in cold],
         }
 
-        return max(10, min(90, score)), signals, breadth_ratio, sector_rotation, top_gainers, top_losers
+        return max(5, min(95, score)), signals, breadth_ratio, sector_rotation, top_gainers, top_losers
 
-    def _analyze_sectors(self, sectors: List) -> Tuple[float, List[MarketSignal], float, List, List, List[str]]:
-        """Analyze sector performance snapshot."""
+    def _layer3_sectors(self, sectors):
+        """Layer 3: Sector macro breadth and rotation."""
         if not sectors:
-            return 50.0, [], 0.5, [], [], ["No sector performance data."]
+            return 50.0, [], 0.5, [], [], ["**LAYER 3 — SECTORS:** No data"]
 
-        up_sectors = [s for s in sectors if (s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0) > 0]
-        breadth = len(up_sectors) / len(sectors) if sectors else 0.5
         changes = [s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0 for s in sectors]
+        up = [s for s, c in zip(sectors, changes) if c > 0]
+        breadth = len(up) / len(sectors)
         avg_change = np.mean(changes)
+        max_change = max(changes)
+        min_change = min(changes)
+        dispersion = max_change - min_change  # rotation strength
 
-        score = 50 + (breadth - 0.5) * 75 + (avg_change * 10)
-        score = max(10, min(90, score))
+        score = 50 + (breadth - 0.5) * 80 + (avg_change * 12)
+        score = max(5, min(95, score))
+
+        hot = sorted([s for s in sectors if (s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0) > 0.3],
+                     key=lambda x: x.get('averageChange', 0) or x.get('changesPercentage', 0) or 0, reverse=True)[:5]
+        cold = sorted([s for s in sectors if (s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0) < -0.3],
+                      key=lambda x: x.get('averageChange', 0) or x.get('changesPercentage', 0) or 0)[:5]
 
         signals = []
-        if breadth >= 0.7:
-            signals.append(MarketSignal("sectors", "bullish", 0.8, 0.18, f"Broad sector strength: {len(up_sectors)}/{len(sectors)} green", emoji="📊"))
-        elif breadth <= 0.3:
-            signals.append(MarketSignal("sectors", "bearish", 0.8, 0.18, f"Broad sector weakness: only {len(up_sectors)}/{len(sectors)} green", emoji="📊"))
+        if breadth >= 0.73:
+            signals.append(MarketSignal("sector_breadth", "bullish", 0.85, 0.18,
+                f"Broad sector strength: {len(up)}/{len(sectors)} green ({avg_change:+.2f}% avg)", emoji="📊"))
+        elif breadth >= 0.60:
+            signals.append(MarketSignal("sector_breadth", "bullish", 0.65, 0.12,
+                f"Positive sector breadth: {len(up)}/{len(sectors)} green", emoji="📊"))
+        elif breadth <= 0.27:
+            signals.append(MarketSignal("sector_breadth", "bearish", 0.85, 0.18,
+                f"Sector weakness: only {len(up)}/{len(sectors)} green ({avg_change:+.2f}% avg)", emoji="📊"))
+        elif breadth <= 0.40:
+            signals.append(MarketSignal("sector_breadth", "bearish", 0.65, 0.12,
+                f"Negative sector breadth: {len(up)}/{len(sectors)} green", emoji="📊"))
 
-        hot = sorted([s for s in sectors if (s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0) > 0.5],
-                     key=lambda x: x.get('averageChange', 0) or x.get('changesPercentage', 0) or 0, reverse=True)[:4]
-        cold = sorted([s for s in sectors if (s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0) < -0.5],
-                      key=lambda x: x.get('averageChange', 0) or x.get('changesPercentage', 0) or 0)[:4]
+        # Sector rotation speed
+        if dispersion > 3.0:
+            signals.append(MarketSignal("sector_rotation", "cautionary", 0.60, 0.06,
+                f"High sector rotation (spread: {dispersion:.1f}%) — defensive/cyclical divergence", emoji="🔄"))
 
-        reasoning = [f"**SECTORS:** {len(up_sectors)}/{len(sectors)} green ({avg_change:+.2f}% avg)"]
+        # Defensive vs Cyclical
+        defensive = ['Utilities', 'Consumer Defensive', 'Healthcare', 'Real Estate']
+        cyclical = ['Technology', 'Consumer Cyclical', 'Industrials', 'Financial Services', 'Energy']
+        def_change = np.mean([c for s, c in zip(sectors, changes) if any(d in (s.get('sector') or '') for d in defensive)] or [0])
+        cyc_change = np.mean([c for s, c in zip(sectors, changes) if any(cy in (s.get('sector') or '') for cy in cyclical)] or [0])
+        if cyc_change > def_change + 1.0:
+            signals.append(MarketSignal("risk_on_rotation", "bullish", 0.70, 0.08,
+                f"Risk-ON rotation: cyclicals {cyc_change:+.2f}% vs defensives {def_change:+.2f}%", emoji="🔥"))
+        elif def_change > cyc_change + 1.0:
+            signals.append(MarketSignal("risk_off_rotation", "bearish", 0.70, 0.08,
+                f"Risk-OFF rotation: defensives {def_change:+.2f}% vs cyclicals {cyc_change:+.2f}%", emoji="🛡️"))
+
+        reasoning = [f"**LAYER 3 — SECTORS ({len(sectors)}):** {len(up)}/{len(sectors)} green | avg {avg_change:+.2f}% | spread {dispersion:.1f}%"]
         if hot:
-            reasoning.append(f"  Hot: {', '.join([h.get('sector', '?') for h in hot[:3]])}")
+            reasoning.append(f"  Hot: {', '.join([h.get('sector','?') + f' ({h.get(\"averageChange\",0) or 0:+.1f}%)' for h in hot[:3]])}")
         if cold:
-            reasoning.append(f"  Cold: {', '.join([c.get('sector', '?') for c in cold[:3]])}")
+            reasoning.append(f"  Cold: {', '.join([c.get('sector','?') + f' ({c.get(\"averageChange\",0) or 0:+.1f}%)' for c in cold[:3]])}")
 
         return score, signals, breadth, hot, cold, reasoning
 
-    def _analyze_industries(self, industries: List) -> Tuple[float, List[MarketSignal], float]:
-        """Analyze industry performance."""
+    def _layer3b_industries(self, industries):
+        """Layer 3b: Industry granular breadth."""
         if not industries:
             return 50.0, [], 0.5
-        up = [i for i in industries if (i.get('averageChange', 0) or i.get('changesPercentage', 0) or 0) > 0]
-        breadth = len(up) / len(industries) if industries else 0.5
         changes = [i.get('averageChange', 0) or i.get('changesPercentage', 0) or 0 for i in industries]
+        up = [c for c in changes if c > 0]
+        breadth = len(up) / len(industries)
         avg_change = np.mean(changes)
         score = 50 + (breadth - 0.5) * 70 + (avg_change * 8)
-        score = max(10, min(90, score))
+        score = max(5, min(95, score))
 
         signals = []
-        if breadth >= 0.65:
-            signals.append(MarketSignal("industries", "bullish", 0.7, 0.10, f"Industry breadth strong: {len(up)}/{len(industries)} positive", emoji="🏭"))
-        elif breadth <= 0.35:
-            signals.append(MarketSignal("industries", "bearish", 0.7, 0.10, f"Industry breadth weak: {len(up)}/{len(industries)} positive", emoji="🏭"))
-
+        if breadth >= 0.68:
+            signals.append(MarketSignal("industry_breadth", "bullish", 0.72, 0.10,
+                f"Broad industry participation: {len(up)}/{len(industries)} positive", emoji="🏭"))
+        elif breadth <= 0.32:
+            signals.append(MarketSignal("industry_breadth", "bearish", 0.72, 0.10,
+                f"Industry weakness: only {len(up)}/{len(industries)} positive", emoji="🏭"))
         return score, signals, breadth
 
-    def _analyze_indices(self, indices: List) -> Tuple[float, List[MarketSignal], List[str]]:
-        """Analyze major market indices."""
+    def _layer4_indices(self, indices):
+        """Layer 4: Major indices analysis — S&P500, Dow, Nasdaq, Russell."""
         if not indices:
-            return 50.0, [], ["No index data available."]
+            return 50.0, [], ["**LAYER 4 — INDICES:** No data available"], 0.0
 
-        up_count = sum(1 for i in indices if (i.get('changesPercentage', 0) or 0) > 0)
-        total = len(indices) or 1
-        changes = [i.get('changesPercentage', 0) or 0 for i in indices]
-        avg_change = np.mean(changes)
+        # Exclude VIX from scoring (it's inverse)
+        price_indices = [i for i in indices if 'VIX' not in (i.get('symbol', '') + i.get('name', ''))]
+        if not price_indices:
+            price_indices = indices
 
-        score = 50 + (up_count / total - 0.5) * 70 + (avg_change * 8)
-        score = max(10, min(90, score))
+        changes = [i.get('changesPercentage', 0) or 0 for i in price_indices]
+        up_count = sum(1 for c in changes if c > 0)
+        avg_change = np.mean(changes) if changes else 0
+        sp500_change = 0.0
 
         signals = []
-        for idx in indices[:6]:
+        for idx in price_indices:
+            sym = idx.get('symbol', '')
             change = idx.get('changesPercentage', 0) or 0
-            symbol = idx.get('symbol', '')
+            price = idx.get('price', 0) or 0
+            year_high = idx.get('yearHigh', 0) or 0
+            year_low = idx.get('yearLow', 0) or 0
+
+            if '^GSPC' in sym or 'SPX' in sym or 'SPY' in sym:
+                sp500_change = change
+                if year_high > 0 and price > 0:
+                    pct_from_high = (price - year_high) / year_high * 100
+                    if pct_from_high >= -2:
+                        signals.append(MarketSignal("sp500_highs", "bullish", 0.85, 0.12,
+                            f"S&P500 near 52-week high ({pct_from_high:+.1f}% from high)", emoji="🏔️"))
+                    elif pct_from_high <= -15:
+                        signals.append(MarketSignal("sp500_correction", "bearish", 0.85, 0.12,
+                            f"S&P500 in correction ({pct_from_high:.1f}% from 52W high)", emoji="⛰️"))
+
             if abs(change) > 1.5:
                 sig_type = "bullish" if change > 0 else "bearish"
-                signals.append(MarketSignal("index", sig_type, 0.75, 0.08,
-                    f"{symbol}: {change:+.2f}%", emoji="📈" if change > 0 else "📉"))
+                signals.append(MarketSignal("index", sig_type, min(0.90, abs(change) / 3),
+                    0.08, f"{sym}: {change:+.2f}%", emoji="📈" if change > 0 else "📉"))
 
-        reasoning = [f"**INDICES:** {up_count}/{total} green ({avg_change:+.2f}% avg)"]
-        for idx in indices[:4]:
-            change = idx.get('changesPercentage', 0) or 0
-            symbol = idx.get('symbol', idx.get('name', '?'))
-            reasoning.append(f"  {symbol}: {change:+.2f}%")
+        # Nasdaq vs Russell divergence (growth vs small cap)
+        nasdaq_change = next((i.get('changesPercentage', 0) or 0 for i in price_indices if '^IXIC' in (i.get('symbol', '') or '')), None)
+        russell_change = next((i.get('changesPercentage', 0) or 0 for i in price_indices if '^RUT' in (i.get('symbol', '') or '')), None)
+        if nasdaq_change is not None and russell_change is not None:
+            if nasdaq_change > russell_change + 1.5:
+                signals.append(MarketSignal("growth_dominance", "neutral", 0.60, 0.05,
+                    f"Growth (Nasdaq {nasdaq_change:+.1f}%) outpacing small caps (Russell {russell_change:+.1f}%) — narrow rally", emoji="💻"))
+            elif russell_change > nasdaq_change + 1.5:
+                signals.append(MarketSignal("small_cap_leadership", "bullish", 0.70, 0.07,
+                    f"Small caps leading (Russell {russell_change:+.1f}% vs Nasdaq {nasdaq_change:+.1f}%) — broad risk-on", emoji="🏃"))
 
-        return score, signals, reasoning
+        score = 50 + (up_count / max(len(price_indices), 1) - 0.5) * 70 + (avg_change * 10)
+        score = max(5, min(95, score))
 
-    def _analyze_forex(self, forex: List) -> Tuple[float, List[MarketSignal], List[str]]:
-        """Analyze forex movements (USD strength = risk-off signal)."""
+        reasoning = [f"**LAYER 4 — INDICES:** {up_count}/{len(price_indices)} green | avg {avg_change:+.2f}%"]
+        for idx in price_indices[:5]:
+            reasoning.append(f"  {idx.get('symbol','?')}: {idx.get('changesPercentage', 0) or 0:+.2f}%")
+
+        return score, signals, reasoning, sp500_change
+
+    def _layer5_vix(self, vix_quote, indices) -> Tuple[float, List[MarketSignal], float, List[str]]:
+        """Layer 5: VIX Volatility Regime — fear thermometer."""
+        vix_val = 0.0
+        if vix_quote:
+            vix_val = vix_quote.get('price', 0) or vix_quote.get('bid', 0) or 0
+        if not vix_val and indices:
+            for i in indices:
+                if 'VIX' in (i.get('symbol', '') + i.get('name', '')):
+                    vix_val = i.get('price', 0) or 0
+                    break
+
+        if not vix_val:
+            return 50.0, [], 0.0, ["**LAYER 5 — VIX:** No VIX data available"]
+
+        vix_change = 0.0
+        if vix_quote:
+            vix_change = vix_quote.get('changesPercentage', 0) or 0
+
+        signals = []
+        regime_label = self._vix_regime_label(vix_val)
+
+        if vix_val < 12:
+            score = 80.0
+            signals.append(MarketSignal("vix_regime", "bullish", 0.85, 0.15,
+                f"VIX={vix_val:.1f} — Extreme Complacency (ultra-low fear)", emoji="😴"))
+        elif vix_val < 16:
+            score = 72.0
+            signals.append(MarketSignal("vix_regime", "bullish", 0.75, 0.13,
+                f"VIX={vix_val:.1f} — Low Volatility regime (calm market)", emoji="🟢"))
+        elif vix_val < 20:
+            score = 62.0
+            signals.append(MarketSignal("vix_regime", "bullish", 0.60, 0.10,
+                f"VIX={vix_val:.1f} — Normal volatility (stable environment)", emoji="🟡"))
+        elif vix_val < 25:
+            score = 48.0
+            signals.append(MarketSignal("vix_regime", "neutral", 0.55, 0.10,
+                f"VIX={vix_val:.1f} — Elevated volatility (some uncertainty)", emoji="🟠"))
+        elif vix_val < 30:
+            score = 35.0
+            signals.append(MarketSignal("vix_regime", "bearish", 0.75, 0.14,
+                f"VIX={vix_val:.1f} — High Fear zone — market stress", emoji="🔴"))
+        elif vix_val < 40:
+            score = 20.0
+            signals.append(MarketSignal("vix_spike", "bearish", 0.90, 0.18,
+                f"VIX={vix_val:.1f} — FEAR SPIKE — panic conditions", emoji="😱"))
+        else:
+            score = 8.0
+            signals.append(MarketSignal("vix_extreme", "bearish", 0.98, 0.20,
+                f"VIX={vix_val:.1f} — EXTREME FEAR — market dislocation (possible capitulation)", emoji="🆘"))
+
+        # VIX direction
+        if vix_change > 8:
+            signals.append(MarketSignal("vix_surging", "bearish", 0.80, 0.10,
+                f"VIX surging +{vix_change:.1f}% — fear accelerating", emoji="⬆️"))
+        elif vix_change > 4:
+            signals.append(MarketSignal("vix_rising", "bearish", 0.60, 0.07,
+                f"VIX rising +{vix_change:.1f}% — increasing concern", emoji="📈"))
+        elif vix_change < -8:
+            signals.append(MarketSignal("vix_falling", "bullish", 0.80, 0.10,
+                f"VIX falling {vix_change:.1f}% — fear subsiding rapidly", emoji="⬇️"))
+        elif vix_change < -4:
+            signals.append(MarketSignal("vix_easing", "bullish", 0.60, 0.07,
+                f"VIX easing {vix_change:.1f}% — market calming", emoji="📉"))
+
+        reasoning = [f"**LAYER 5 — VIX REGIME:** {vix_val:.1f} ({regime_label}) | change: {vix_change:+.1f}%"]
+
+        return score, signals, vix_val, reasoning
+
+    def _layer6_forex(self, forex) -> Tuple[float, List[MarketSignal], List[str]]:
+        """Layer 6: Forex risk — USD strength/weakness as risk-on/off proxy."""
         if not forex:
-            return 50.0, [], ["No forex data available."]
+            return 50.0, [], ["**LAYER 6 — FOREX:** No data available"]
 
-        usd_pairs = [f for f in forex if 'USD' in (f.get('ticker', '') or f.get('symbol', ''))]
+        # Find USD pairs - handle different formats from FMP /stable/fx
+        usd_pairs = []
+        for fx in forex:
+            ticker = fx.get('ticker', '') or fx.get('symbol', '') or fx.get('name', '')
+            if 'USD' in ticker.upper():
+                change = fx.get('changesPercentage', None) or fx.get('changes', None) or fx.get('change', None)
+                if change is not None:
+                    try:
+                        usd_pairs.append({'ticker': ticker, 'change': float(change)})
+                    except (ValueError, TypeError):
+                        pass
+
         if not usd_pairs:
-            return 50.0, [], ["No USD pairs found."]
+            return 50.0, [], ["**LAYER 6 — FOREX:** USD pairs found but no change data"]
 
-        usd_changes = [f.get('changesPercentage', 0) or f.get('changes', 0) or 0 for f in usd_pairs[:10]]
-        avg_usd_change = np.mean(usd_changes) if usd_changes else 0
+        # Pairs where USD is BASE (e.g., USDEUR) = USD strengthening when positive
+        # Pairs where USD is QUOTE (e.g., EURUSD) = USD weakening when positive
+        usd_base = [p['change'] for p in usd_pairs if p['ticker'].upper().startswith('USD')]
+        usd_quote = [-p['change'] for p in usd_pairs if not p['ticker'].upper().startswith('USD')]
+        all_usd = usd_base + usd_quote
 
-        # Strong USD = risk-off (bearish for stocks), weak USD = risk-on
-        score = 50 - (avg_usd_change * 6)
+        avg_usd_strength = np.mean(all_usd) if all_usd else 0.0
+
+        # Strong USD = capital fleeing to safety (bearish for risk assets)
+        score = 50 - (avg_usd_strength * 8)
         score = max(15, min(85, score))
 
         signals = []
-        if avg_usd_change > 0.3:
-            signals.append(MarketSignal("forex", "bearish", 0.6, 0.04,
-                f"USD strengthening ({avg_usd_change:+.2f}%) - risk-off signal", emoji="💵"))
-        elif avg_usd_change < -0.3:
-            signals.append(MarketSignal("forex", "bullish", 0.6, 0.04,
-                f"USD weakening ({avg_usd_change:+.2f}%) - risk-on signal", emoji="💵"))
+        if avg_usd_strength > 0.5:
+            signals.append(MarketSignal("forex_usd", "bearish", min(0.85, avg_usd_strength * 0.5),
+                0.06, f"USD strengthening ({avg_usd_strength:+.2f}%) — risk-off signal", emoji="💵↑"))
+        elif avg_usd_strength > 0.2:
+            signals.append(MarketSignal("forex_usd", "bearish", 0.45, 0.04,
+                f"USD mildly strong ({avg_usd_strength:+.2f}%)", emoji="💵"))
+        elif avg_usd_strength < -0.5:
+            signals.append(MarketSignal("forex_usd", "bullish", min(0.85, abs(avg_usd_strength) * 0.5),
+                0.06, f"USD weakening ({avg_usd_strength:+.2f}%) — risk-on signal", emoji="💵↓"))
+        elif avg_usd_strength < -0.2:
+            signals.append(MarketSignal("forex_usd", "bullish", 0.45, 0.04,
+                f"USD mildly weak ({avg_usd_strength:+.2f}%)", emoji="💵"))
 
-        mode = "risk-off" if avg_usd_change > 0.1 else "risk-on" if avg_usd_change < -0.1 else "stable"
-        reasoning = [f"**FOREX:** USD {avg_usd_change:+.2f}% -> {mode}"]
+        mode = "RISK-OFF" if avg_usd_strength > 0.2 else "RISK-ON" if avg_usd_strength < -0.2 else "NEUTRAL"
+        reasoning = [f"**LAYER 6 — FOREX:** USD {avg_usd_strength:+.2f}% → {mode} ({len(usd_pairs)} USD pairs)"]
 
         return score, signals, reasoning
 
-    def _analyze_trends(self, hist_sectors: List) -> Tuple[float, List[MarketSignal], List[str]]:
-        """Analyze historical sector trends (3-5 day momentum)."""
-        if not hist_sectors or len(hist_sectors) < 2:
-            return 50.0, [], ["No historical trend data."]
-
-        recent = hist_sectors[-5:] if len(hist_sectors) >= 5 else hist_sectors
-        up_days = sum(1 for d in recent if (d.get('averageChange', 0) or d.get('change', 0) or 0) > 0)
-        avg_momentum = np.mean([d.get('averageChange', 0) or d.get('change', 0) or 0 for d in recent])
-
-        score = 50 + (up_days / len(recent) - 0.5) * 60 + (avg_momentum * 5)
-        score = max(15, min(85, score))
-
-        signals = []
-        if up_days >= 4:
-            signals.append(MarketSignal("trend", "bullish", 0.65, 0.02,
-                f"Strong uptrend: {up_days}/{len(recent)} bullish days", emoji="📈"))
-        elif up_days <= 1:
-            signals.append(MarketSignal("trend", "bearish", 0.65, 0.02,
-                f"Downtrend: only {up_days}/{len(recent)} bullish days", emoji="📉"))
-
-        reasoning = [f"**TRENDS:** {up_days}/{len(recent)} bullish days (avg momentum: {avg_momentum:+.2f}%)"]
-        return score, signals, reasoning
-
-    def _fuse_and_reason(self, news, movers, sectors, ind, idx, fx, trend, br, sb) -> Tuple[float, List[str]]:
-        """Neural fusion with cross-correlation and divergence detection."""
-        weights = {
-            'news': 0.35, 'movers': 0.22, 'sectors': 0.18 if sectors != 50 else 0.05,
-            'ind': 0.08 if ind != 50 else 0.02, 'idx': 0.10 if idx != 50 else 0.03,
-            'fx': 0.04, 'trend': 0.03
+    def _layer7_fear_greed(self, news_score, breadth_ratio, vix_val, sector_breadth,
+                           industry_breadth, sp500_change, sector_score, index_score):
+        """Layer 7: Fear & Greed composite index (0=Extreme Fear, 100=Extreme Greed)."""
+        # Weighted components
+        components = {
+            'market_breadth': (breadth_ratio * 100, 0.25),         # breadth
+            'news_sentiment': (news_score, 0.20),                    # news
+            'sector_breadth': (sector_breadth * 100, 0.15),         # sector health
+            'industry_breadth': (industry_breadth * 100, 0.10),     # industry health
+            'price_momentum': (50 + sp500_change * 5, 0.15),        # S&P momentum
+            'sector_strength': (sector_score, 0.15),                 # overall sector score
         }
-        total_w = sum(weights.values())
 
+        # Invert VIX contribution (high VIX = fear)
+        if vix_val:
+            vix_fear = max(0, min(100, 100 - (vix_val - 10) * 3))
+            components['vix_fear'] = (vix_fear, 0.15)
+            # Reduce other weights
+            for k in components:
+                components[k] = (components[k][0], components[k][1] * 0.85)
+
+        total_w = sum(w for _, w in components.values())
+        fg_score = sum(v * w for v, w in components.values()) / total_w
+        fg_score = max(0, min(100, fg_score))
+
+        if fg_score >= 75:
+            label = "Extreme Greed"
+        elif fg_score >= 60:
+            label = "Greed"
+        elif fg_score >= 45:
+            label = "Neutral"
+        elif fg_score >= 30:
+            label = "Fear"
+        else:
+            label = "Extreme Fear"
+
+        signals = []
+        if fg_score >= 80:
+            signals.append(MarketSignal("fear_greed", "cautionary", 0.80, 0.08,
+                f"Fear & Greed = {fg_score:.0f} (Extreme Greed) — contrarian caution warranted", emoji="🤑"))
+        elif fg_score >= 65:
+            signals.append(MarketSignal("fear_greed", "bullish", 0.70, 0.07,
+                f"Fear & Greed = {fg_score:.0f} (Greed) — positive sentiment dominates", emoji="😀"))
+        elif fg_score <= 20:
+            signals.append(MarketSignal("fear_greed", "bullish", 0.75, 0.10,
+                f"Fear & Greed = {fg_score:.0f} (Extreme Fear) — contrarian BUY signal", emoji="😱→📈"))
+        elif fg_score <= 35:
+            signals.append(MarketSignal("fear_greed", "bearish", 0.70, 0.07,
+                f"Fear & Greed = {fg_score:.0f} (Fear) — risk-off dominant", emoji="😨"))
+
+        reasoning = [f"**LAYER 7 — FEAR & GREED:** {fg_score:.0f}/100 — {label}"]
+
+        return fg_score, label, signals, reasoning
+
+    def _layer8_fusion(self, news, movers, sectors, ind, idx, vix, fx, fg,
+                       br, sb, vix_val):
+        """Layer 8: Neural fusion with divergence detection and cross-correlation."""
+        # Dynamic weights based on data quality
+        w = {
+            'news': 0.28,
+            'movers': 0.20,
+            'sectors': 0.16 if sectors != 50 else 0.05,
+            'ind': 0.08 if ind != 50 else 0.02,
+            'idx': 0.12 if idx != 50 else 0.03,
+            'vix': 0.10 if vix != 50 else 0.01,
+            'fx': 0.04,
+            'fg': 0.06,
+        }
+        total_w = sum(w.values())
         composite = (
-            news * weights['news'] + movers * weights['movers'] + sectors * weights['sectors'] +
-            ind * weights['ind'] + idx * weights['idx'] + fx * weights['fx'] + trend * weights['trend']
+            news * w['news'] + movers * w['movers'] + sectors * w['sectors'] +
+            ind * w['ind'] + idx * w['idx'] + vix * w['vix'] + fx * w['fx'] + fg * w['fg']
         ) / total_w
 
-        reasoning = ["**NEURAL FUSION:**"]
+        reasoning = ["**LAYER 8 — NEURAL FUSION + CROSS-CORRELATION:**"]
 
-        # === DIVERGENCE DETECTION ===
-        if news > 65 and (movers < 42 or br < 0.38):
-            reasoning.append("DIVERGENCE: Bullish news BUT weak breadth -> Caution (possible bull trap)")
-            composite *= 0.92
-        elif news < 35 and (movers > 60 and br > 0.62):
-            reasoning.append("DIVERGENCE: Bearish news BUT strong breadth -> Possible bounce")
-            composite *= 1.08
-        elif news > 60 and sectors > 55 and idx < 40:
-            reasoning.append("DIVERGENCE: News+sectors bullish BUT indices weak -> Rotation underway")
-            composite *= 0.96
+        # === DIVERGENCE PATTERNS ===
+        # Pattern 1: News pumping but breadth poor
+        if news > 65 and br < 0.40:
+            reasoning.append("⚠️ DIVERGENCE: Bullish news BUT narrow breadth → possible bull trap / momentum divergence")
+            composite *= 0.91
+        # Pattern 2: Bearish news but strong breadth
+        elif news < 35 and br > 0.60:
+            reasoning.append("💡 DIVERGENCE: Bearish headlines BUT market participation strong → oversold bounce likely")
+            composite *= 1.09
+        # Pattern 3: News+sectors bullish but indices weak
+        elif news > 62 and sectors > 57 and idx < 42:
+            reasoning.append("⚠️ DIVERGENCE: News & sectors bullish BUT indices weak → rotation without leadership")
+            composite *= 0.95
+        # Pattern 4: VIX elevated despite bullish sentiment
+        elif vix_val and vix_val > 22 and composite > 60:
+            reasoning.append("⚠️ DIVERGENCE: Bullish score BUT elevated VIX → hedging demand signals uncertainty")
+            composite *= 0.93
+        # Pattern 5: VIX falling + broad breadth = strong buy
+        elif vix_val and vix_val < 18 and br > 0.60 and sectors > 58:
+            reasoning.append("✅ ALIGNMENT: Low VIX + broad breadth + strong sectors → high-conviction bullish")
+            composite *= 1.04
 
-        # === CROSS-CORRELATION ===
-        if composite > 70 and idx > 55 and fx < 48:
-            reasoning.append("ALIGNMENT: News + macro + risk-on all aligned. High conviction bull.")
-        elif composite < 35 and idx < 45 and fx > 55:
-            reasoning.append("ALIGNMENT: Bearish across all layers. High conviction risk-off.")
+        # === CROSS-CORRELATION PATTERNS ===
+        if composite > 70 and idx > 60 and fx < 48 and br > 0.60:
+            reasoning.append("✅ TRIPLE LOCK: Index strength + risk-on forex + broad breadth → premium bull signal")
+        elif composite < 35 and idx < 42 and fx > 54 and vix_val and vix_val > 25:
+            reasoning.append("🔴 RISK-OFF LOCK: Weak indices + strong USD + high VIX → defensive mode confirmed")
+        elif br > 0.55 and sectors < 45:
+            reasoning.append("⚠️ SECTOR/BREADTH GAP: Movers advancing but sectors weak → quality leadership thin")
 
         # === BREADTH CONFIRMATION ===
-        if composite > 60 and br < 0.45:
-            reasoning.append("WARNING: Score bullish but market participation narrow. Rally fragile.")
-            composite *= 0.95
-        elif composite < 40 and br > 0.55:
-            reasoning.append("NOTE: Score bearish but breadth decent. Selling may be overdone.")
-            composite *= 1.05
+        if composite > 60 and br < 0.42:
+            reasoning.append("⚠️ NARROWING RALLY: Score bullish but market participation thin → fragile")
+            composite *= 0.94
+        elif composite < 40 and br > 0.58:
+            reasoning.append("💡 SELLING MAY BE OVERDONE: Breadth decent despite bearish score")
+            composite *= 1.06
 
-        composite = max(5, min(95, composite))
-        reasoning.append(f"**Final composite score:** {composite:.1f}")
+        composite = max(3, min(97, composite))
+        reasoning.append(f"  Final composite: {composite:.1f}/100")
 
         return composite, reasoning
 
-    def _generate_conclusion(self, composite: float) -> Tuple[str, str, str, str, str]:
-        """Generate actionable conclusion."""
-        if composite >= 78:
-            return ("BULL MARKET - FULL RISK ON", "🚀", "very_bullish",
-                    "Unstoppable momentum. All layers green.",
-                    "AGGRESSIVE BUY: Focus on hot sectors and top gainers. Tight stops at 2%.")
-        elif composite >= 64:
-            return ("BULLISH - SOLID MOMENTUM", "📈", "bullish",
-                    "Market on the offensive with clear rotation.",
-                    "GO LONG: Hot sectors and momentum plays. Monitor breadth for confirmation.")
-        elif composite >= 50:
-            return ("NEUTRAL - MIXED SIGNALS", "⚖️", "neutral",
-                    "Balanced signals. Wait for confirmation.",
-                    "HOLD: Be selective. Keep 30% cash. Watch for breakout direction.")
-        elif composite >= 36:
-            return ("BEARISH - SELLING PRESSURE", "📉", "bearish",
-                    "Macro weakness. Reduce risk exposure.",
-                    "REDUCE: Trim longs. Consider hedges. Look for defensive sectors.")
-        else:
-            return ("RISK OFF - DEFENSIVE MODE", "🛡️", "very_bearish",
-                    "Defensive posture. Capital preservation priority.",
-                    "SELL: Move to cash/bonds. Wait for bottom signals before re-entering.")
+    # ====================== CONCLUSION + LABELS ======================
 
-    def _get_breadth_label(self, ratio: float) -> str:
-        if ratio >= 0.7: return "Very Positive"
-        elif ratio >= 0.55: return "Positive"
-        elif ratio >= 0.45: return "Neutral"
-        elif ratio >= 0.3: return "Negative"
-        return "Very Negative"
+    def _vix_regime_label(self, vix_val) -> str:
+        if not vix_val:
+            return "Unknown"
+        if vix_val < 12: return "Extreme Complacency"
+        if vix_val < 16: return "Low Volatility"
+        if vix_val < 20: return "Normal"
+        if vix_val < 25: return "Elevated"
+        if vix_val < 30: return "High Fear"
+        if vix_val < 40: return "Fear Spike"
+        return "Extreme Dislocation"
+
+    def _breadth_label(self, ratio: float) -> str:
+        if ratio >= 0.72: return "Extreme Breadth"
+        if ratio >= 0.60: return "Positive"
+        if ratio >= 0.45: return "Neutral"
+        if ratio >= 0.32: return "Negative"
+        return "Extreme Weakness"
+
+    def _generate_conclusion(self, composite, vix_val, breadth_ratio):
+        # Adjust for VIX regime
+        vix_regime = ""
+        if vix_val:
+            if vix_val > 35 and composite > 50:
+                composite = min(composite, 50)  # cap at neutral in crisis
+                vix_regime = " | High VIX caution"
+            elif vix_val < 14 and composite < 60:
+                composite = max(composite, 45)  # floor at near-neutral in ultra-calm markets
+
+        if composite >= 80:
+            return ("BULL MARKET — FULL RISK ON", "🚀", "very_bullish",
+                    f"All neural layers aligned bullish. Maximum conviction{vix_regime}.",
+                    "AGGRESSIVE BUY: Add to winners, focus on hot sectors & momentum plays. Tight 2% stops.")
+        elif composite >= 67:
+            return ("BULLISH — SOLID MOMENTUM", "📈", "bullish",
+                    f"Market on the offensive with broad participation{vix_regime}.",
+                    "GO LONG: Rotate into strength. Sector leaders and breakouts. Monitor VIX for regime shift.")
+        elif composite >= 54:
+            return ("NEUTRAL — MIXED SIGNALS", "⚖️", "neutral",
+                    f"Balanced data — no clear directional conviction{vix_regime}.",
+                    "SELECTIVE: Quality over quantity. 30-40% cash buffer. Wait for volume confirmation.")
+        elif composite >= 40:
+            return ("BEARISH — SELLING PRESSURE", "📉", "bearish",
+                    f"Macro deteriorating. Reduce risk exposure{vix_regime}.",
+                    "REDUCE: Trim longs 30-50%. Sector rotation to defensives. Hedge with inverse ETFs.")
+        elif composite >= 25:
+            return ("RISK OFF — DEFENSIVE MODE", "🛡️", "very_bearish",
+                    f"Bear market conditions emerging. Capital preservation{vix_regime}.",
+                    "SELL: Move 60%+ to cash/bonds. Wait for VIX<25 and breadth>55% before re-entering.")
+        else:
+            return ("EXTREME FEAR — POSSIBLE CAPITULATION", "🆘", "very_bearish",
+                    f"Panic conditions. Maximum fear = possible contrarian bottom{vix_regime}.",
+                    "SURVIVE FIRST: 80%+ cash. Watch for VIX spike + reversal as capitulation signal → aggressive re-entry.")
 
     def _generate_briefing(self, composite, news_score, movers_score, breadth,
                            sector_rotation, recommendation, gainers_count, losers_count,
-                           hot_sectors, cold_sectors, action) -> str:
-        """Generate comprehensive market briefing."""
+                           hot_sectors, cold_sectors, action, vix_val, fg_score, fg_label) -> str:
         parts = []
-        if composite >= 70:
-            parts.append(f"🚀 Market in **strong bullish mode** (score: {composite:.0f}/100).")
-        elif composite >= 55:
-            parts.append(f"📈 Positive sentiment with good participation (score: {composite:.0f}/100).")
-        elif composite >= 45:
-            parts.append(f"⚖️ Mixed market with no clear direction (score: {composite:.0f}/100).")
+        if composite >= 75:
+            parts.append(f"🚀 Market in **strong bullish mode** (neural score: {composite:.0f}/100).")
+        elif composite >= 58:
+            parts.append(f"📈 **Positive market** with solid participation (score: {composite:.0f}/100).")
+        elif composite >= 47:
+            parts.append(f"⚖️ **Mixed signals** — market lacks clear direction (score: {composite:.0f}/100).")
         elif composite >= 35:
-            parts.append(f"📉 Market showing weakness (score: {composite:.0f}/100).")
+            parts.append(f"📉 **Market under pressure** — defensive posture recommended (score: {composite:.0f}/100).")
         else:
-            parts.append(f"🔻 Dominant selling pressure (score: {composite:.0f}/100).")
+            parts.append(f"🔻 **Dominant selling pressure** — extreme caution (score: {composite:.0f}/100).")
 
-        parts.append(f"Market breadth: {breadth:.0%} advancing ({gainers_count} gainers vs {losers_count} losers).")
+        parts.append(f"Breadth: {breadth:.0%} advancing ({gainers_count} gainers vs {losers_count} losers).")
+
+        if vix_val:
+            vix_regime = self._vix_regime_label(vix_val)
+            parts.append(f"VIX at {vix_val:.1f} ({vix_regime}).")
+
+        parts.append(f"Fear & Greed Index: **{fg_score:.0f}/100** ({fg_label}).")
 
         if news_score >= 65:
             parts.append("News flow predominantly positive.")
@@ -710,5 +1027,5 @@ class NeuralReasoningMarketSentimentEngine:
         return " ".join(parts)
 
 
-# Global instance
+# Global singleton
 market_sentiment_engine = NeuralReasoningMarketSentimentEngine()

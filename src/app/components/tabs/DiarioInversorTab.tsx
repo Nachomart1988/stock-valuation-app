@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Tab } from '@headlessui/react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { useUser } from '@clerk/nextjs';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES - Estructura principal según especificaciones
@@ -150,6 +151,7 @@ const getWeekStart = (date: Date): Date => {
 
 export default function DiarioInversorTab() {
   const { t } = useLanguage();
+  const { user, isLoaded: authLoaded } = useUser();
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
 
   // Estado central - Tabla maestra de trades
@@ -163,6 +165,8 @@ export default function DiarioInversorTab() {
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [accountBalance, setAccountBalance] = useState<number>(10000);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ref para mantener trades actualizado en fetchRealTimePrices
   const tradesRef = useRef<Trade[]>(trades);
@@ -170,47 +174,124 @@ export default function DiarioInversorTab() {
     tradesRef.current = trades;
   }, [trades]);
 
-  // Load from localStorage
-  useEffect(() => {
-    try {
-      const savedTrades = localStorage.getItem('diario_trades_v2');
-      const savedWeeklyPL = localStorage.getItem('diario_weeklypl_v2');
-      const savedPTA = localStorage.getItem('diario_pta_v2');
-      const savedBalance = localStorage.getItem('diario_balance');
-
-      if (savedTrades) {
-        const parsedTrades = JSON.parse(savedTrades);
-        setTrades(parsedTrades);
-        tradesRef.current = parsedTrades; // Actualizar ref inmediatamente
-        console.log('[DiarioInversor] Loaded trades from localStorage:', parsedTrades.length);
+  // ── Save to DB (debounced 1.5s) ──────────────────────────────────
+  const saveToDB = useCallback(async (
+    t: Trade[], wpl: WeeklyPL[], pta: PTAEntry[], bal: number
+  ) => {
+    if (!user) return;
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(async () => {
+      setSyncStatus('saving');
+      try {
+        const res = await fetch('/api/diary', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trades: t, weekly_pl: wpl, pta, balance: bal }),
+        });
+        setSyncStatus(res.ok ? 'saved' : 'error');
+        setTimeout(() => setSyncStatus('idle'), 3000);
+      } catch {
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 4000);
       }
-      if (savedWeeklyPL) setWeeklyPL(JSON.parse(savedWeeklyPL));
-      if (savedPTA) setPtaEntries(JSON.parse(savedPTA));
-      if (savedBalance) setAccountBalance(JSON.parse(savedBalance));
+    }, 1500);
+  }, [user]);
 
+  // ── Load: DB first (if logged in), fallback to localStorage ──────
+  useEffect(() => {
+    if (!authLoaded) return;
+
+    const loadFromLocalStorage = () => {
+      try {
+        const savedTrades = localStorage.getItem('diario_trades_v2');
+        const savedWeeklyPL = localStorage.getItem('diario_weeklypl_v2');
+        const savedPTA = localStorage.getItem('diario_pta_v2');
+        const savedBalance = localStorage.getItem('diario_balance');
+        if (savedTrades) {
+          const p = JSON.parse(savedTrades);
+          setTrades(p);
+          tradesRef.current = p;
+        }
+        if (savedWeeklyPL) setWeeklyPL(JSON.parse(savedWeeklyPL));
+        if (savedPTA) setPtaEntries(JSON.parse(savedPTA));
+        if (savedBalance) setAccountBalance(JSON.parse(savedBalance));
+      } catch (e) {
+        console.error('[DiarioInversor] localStorage load error:', e);
+      }
       setDataLoaded(true);
-    } catch (e) {
-      console.error('Error loading diario data:', e);
-      setDataLoaded(true); // Marcar como cargado aunque haya error
+    };
+
+    if (user) {
+      // Load from database
+      fetch('/api/diary')
+        .then(res => res.json())
+        .then(data => {
+          if (data.error) throw new Error(data.error);
+          const dbTrades: Trade[] = data.trades ?? [];
+          const dbWPL: WeeklyPL[] = data.weekly_pl ?? [];
+          const dbPTA: PTAEntry[] = data.pta ?? [];
+          const dbBalance: number = data.balance ?? 10000;
+
+          // If DB is empty, migrate localStorage data to DB
+          const localTrades = localStorage.getItem('diario_trades_v2');
+          if (dbTrades.length === 0 && localTrades) {
+            const migrated = JSON.parse(localTrades);
+            const migratedWPL = JSON.parse(localStorage.getItem('diario_weeklypl_v2') || '[]');
+            const migratedPTA = JSON.parse(localStorage.getItem('diario_pta_v2') || '[]');
+            const migratedBal = JSON.parse(localStorage.getItem('diario_balance') || '10000');
+            setTrades(migrated);
+            tradesRef.current = migrated;
+            setWeeklyPL(migratedWPL);
+            setPtaEntries(migratedPTA);
+            setAccountBalance(migratedBal);
+            // Push migrated data to DB
+            saveToDB(migrated, migratedWPL, migratedPTA, migratedBal);
+            console.log('[DiarioInversor] Migrated localStorage data to DB');
+          } else {
+            setTrades(dbTrades);
+            tradesRef.current = dbTrades;
+            setWeeklyPL(dbWPL);
+            setPtaEntries(dbPTA);
+            setAccountBalance(dbBalance);
+            console.log('[DiarioInversor] Loaded from DB:', dbTrades.length, 'trades');
+          }
+          setDataLoaded(true);
+        })
+        .catch(err => {
+          console.error('[DiarioInversor] DB load failed, falling back to localStorage:', err);
+          loadFromLocalStorage();
+        });
+    } else {
+      loadFromLocalStorage();
     }
-  }, []);
+  }, [authLoaded, user, saveToDB]);
 
-  // Save to localStorage
+  // ── Save to localStorage (always) ────────────────────────────────
   useEffect(() => {
+    if (!dataLoaded) return;
     localStorage.setItem('diario_trades_v2', JSON.stringify(trades));
-  }, [trades]);
+  }, [trades, dataLoaded]);
 
   useEffect(() => {
+    if (!dataLoaded) return;
     localStorage.setItem('diario_weeklypl_v2', JSON.stringify(weeklyPL));
-  }, [weeklyPL]);
+  }, [weeklyPL, dataLoaded]);
 
   useEffect(() => {
+    if (!dataLoaded) return;
     localStorage.setItem('diario_pta_v2', JSON.stringify(ptaEntries));
-  }, [ptaEntries]);
+  }, [ptaEntries, dataLoaded]);
 
   useEffect(() => {
+    if (!dataLoaded) return;
     localStorage.setItem('diario_balance', JSON.stringify(accountBalance));
-  }, [accountBalance]);
+  }, [accountBalance, dataLoaded]);
+
+  // ── Save to DB whenever data changes (debounced) ─────────────────
+  useEffect(() => {
+    if (!dataLoaded || !user) return;
+    saveToDB(trades, weeklyPL, ptaEntries, accountBalance);
+  }, [trades, weeklyPL, ptaEntries, accountBalance, dataLoaded, user, saveToDB]);
 
   // ═══════════════════════════════════════════════════════════════
   // CALCULATED VALUES - Desde tabla maestra
@@ -710,6 +791,25 @@ export default function DiarioInversorTab() {
             📥 {t('diarioTab.import')}
             <input type="file" accept=".json" onChange={importData} className="hidden" />
           </label>
+
+          {/* Sync status badge */}
+          {user ? (
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+              syncStatus === 'saving' ? 'bg-blue-900/40 border-blue-500/40 text-blue-300' :
+              syncStatus === 'saved'  ? 'bg-green-900/40 border-green-500/40 text-green-300' :
+              syncStatus === 'error'  ? 'bg-red-900/40 border-red-500/40 text-red-300' :
+              'bg-gray-800 border-gray-600 text-gray-400'
+            }`}>
+              {syncStatus === 'saving' && <><span className="animate-spin">⏳</span> Saving...</>}
+              {syncStatus === 'saved'  && <>✅ Saved to cloud</>}
+              {syncStatus === 'error'  && <>❌ Sync error</>}
+              {syncStatus === 'idle'   && <>☁️ Cloud sync</>}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border border-yellow-600/40 bg-yellow-900/20 text-yellow-400">
+              ⚠️ Login to save
+            </div>
+          )}
         </div>
       </div>
 

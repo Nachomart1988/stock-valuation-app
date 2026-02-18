@@ -16,19 +16,6 @@ interface MarketSignal {
   emoji: string;
 }
 
-interface TopStock {
-  symbol: string;
-  name: string;
-  change: number;
-  price: number;
-  sector: string;
-}
-
-interface SectorRotation {
-  hot: Array<{ sector: string; gainers: number; losers: number }>;
-  cold: Array<{ sector: string; gainers: number; losers: number }>;
-}
-
 interface MacroAnalysis {
   sectorBreadth: number;
   industryBreadth: number;
@@ -36,6 +23,7 @@ interface MacroAnalysis {
   coldSectors: Array<{ sector: string; change: number }>;
   majorIndicesUp: string[];
   majorIndicesDown: string[];
+  vixRegime?: string;
 }
 
 interface MarketSentimentData {
@@ -48,31 +36,81 @@ interface MarketSentimentData {
   recommendation: string;
   recommendationDescription: string;
   actionableAdvice?: string;
-  scores: {
-    news: number;
-    movers: number;
-    sectors?: number;
-    industries?: number;
-    indices?: number;
-    forex?: number;
-    trends?: number;
-    breadth?: number;
-    institutional?: number;
-    composite: number;
-  };
+  fearGreedScore?: number;
+  fearGreedLabel?: string;
+  vixValue?: number;
+  scores: Record<string, number>;
   moversAnalysis: {
     breadthRatio: number;
     breadthLabel: string;
     gainersCount: number;
     losersCount: number;
-    topGainers: TopStock[];
-    topLosers: TopStock[];
-    sectorRotation: SectorRotation;
+    topGainers: Array<{ symbol: string; name: string; change: number; price: number; sector: string }>;
+    topLosers: Array<{ symbol: string; name: string; change: number; price: number; sector: string }>;
+    sectorRotation: {
+      hot: Array<{ sector: string; gainers: number; losers: number }>;
+      cold: Array<{ sector: string; gainers: number; losers: number }>;
+    };
   };
   macroAnalysis?: MacroAnalysis;
   signals: MarketSignal[];
   reasoningChain?: string[];
   briefing: string;
+}
+
+function ScoreBar({ score, label }: { score: number; label: string }) {
+  const color = score >= 60 ? 'bg-green-500' : score >= 45 ? 'bg-yellow-500' : 'bg-red-500';
+  const textColor = score >= 60 ? 'text-green-400' : score >= 45 ? 'text-yellow-400' : 'text-red-400';
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-center">
+        <span className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider">{label}</span>
+        <span className={`text-xs sm:text-sm font-bold ${textColor}`}>{score.toFixed(0)}</span>
+      </div>
+      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${score}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function FearGreedGauge({ score, label }: { score: number; label: string }) {
+  const getColor = (s: number) => {
+    if (s >= 75) return '#ef4444';   // Extreme Greed = red (danger)
+    if (s >= 60) return '#f97316';   // Greed = orange
+    if (s >= 45) return '#eab308';   // Neutral = yellow
+    if (s >= 30) return '#3b82f6';   // Fear = blue
+    return '#8b5cf6';                // Extreme Fear = purple
+  };
+  const color = getColor(score);
+  const rotation = (score / 100) * 180 - 90; // -90° to +90°
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative w-32 h-16 sm:w-40 sm:h-20">
+        {/* Semicircle background */}
+        <svg viewBox="0 0 160 80" className="w-full h-full">
+          <path d="M 10 80 A 70 70 0 0 1 150 80" fill="none" stroke="#374151" strokeWidth="12" strokeLinecap="round" />
+          {/* Color zones */}
+          <path d="M 10 80 A 70 70 0 0 1 44 24" fill="none" stroke="#8b5cf6" strokeWidth="12" strokeLinecap="round" opacity="0.4" />
+          <path d="M 44 24 A 70 70 0 0 1 80 10" fill="none" stroke="#3b82f6" strokeWidth="12" strokeLinecap="round" opacity="0.4" />
+          <path d="M 80 10 A 70 70 0 0 1 116 24" fill="none" stroke="#eab308" strokeWidth="12" strokeLinecap="round" opacity="0.4" />
+          <path d="M 116 24 A 70 70 0 0 1 150 80" fill="none" stroke="#f97316" strokeWidth="12" strokeLinecap="round" opacity="0.4" />
+          {/* Needle */}
+          <line
+            x1="80" y1="80" x2="80" y2="18"
+            stroke={color} strokeWidth="3" strokeLinecap="round"
+            transform={`rotate(${rotation}, 80, 80)`}
+          />
+          <circle cx="80" cy="80" r="5" fill={color} />
+        </svg>
+      </div>
+      <div className="text-center -mt-2">
+        <div className="text-2xl sm:text-3xl font-black" style={{ color }}>{score.toFixed(0)}</div>
+        <div className="text-xs font-semibold" style={{ color }}>{label}</div>
+      </div>
+    </div>
+  );
 }
 
 export default function MarketSentimentPage() {
@@ -82,17 +120,15 @@ export default function MarketSentimentPage() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [backendStatus, setBackendStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
+  const [showReasoning, setShowReasoning] = useState(false);
   const { t } = useLanguage();
 
   const fetchMarketData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-
       const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
       if (!apiKey) throw new Error('API key not found');
-
-      console.log('[MarketSentiment] Fetching market data...');
 
       const [newsRes, gainersRes, losersRes, sectorsRes, industriesRes, forexRes] = await Promise.all([
         fetch(`https://financialmodelingprep.com/stable/news/general-latest?page=0&limit=30&apikey=${apiKey}`),
@@ -112,23 +148,7 @@ export default function MarketSentimentPage() {
         forexRes?.ok ? forexRes.json() : [],
       ]);
 
-      console.log('[MarketSentiment] Data fetched:', {
-        news: newsData?.length || 0,
-        gainers: gainersData?.length || 0,
-        losers: losersData?.length || 0,
-        sectors: sectorsData?.length || 0,
-        industries: industriesData?.length || 0,
-        forex: forexData?.length || 0,
-      });
-
-      // Try backend first
       try {
-        console.log('[MarketSentiment] Calling backend with:', {
-          newsCount: (newsData || []).length,
-          gainersCount: (gainersData || []).length,
-          losersCount: (losersData || []).length,
-        });
-
         const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/market-sentiment/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -141,87 +161,43 @@ export default function MarketSentimentPage() {
             forexQuotes: forexData || [],
           }),
         });
-
-        console.log('[MarketSentiment] Backend response status:', res.status);
-
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error('[MarketSentiment] Backend error:', errorText);
-          throw new Error('Backend error: ' + res.status);
-        }
-
+        if (!res.ok) throw new Error('Backend error: ' + res.status);
         const sentimentData: MarketSentimentData = await res.json();
-        console.log('[MarketSentiment] Backend response:', sentimentData);
-
         setBackendStatus('connected');
         setData(sentimentData);
         setLastUpdate(new Date());
       } catch (backendErr: any) {
-        console.error('[MarketSentiment] Backend error details:', backendErr.message);
         setBackendStatus('disconnected');
-
-        // Fallback analysis
-        const fallbackData = generateFallbackAnalysis(
-          Array.isArray(newsData) ? newsData : [],
-          Array.isArray(gainersData) ? gainersData : [],
-          Array.isArray(losersData) ? losersData : []
-        );
-        setData(fallbackData);
+        setData(generateFallback(gainersData || [], losersData || []));
         setLastUpdate(new Date());
       }
     } catch (err: any) {
-      console.error('[MarketSentiment] Error:', err);
-      setError(err.message || t('marketSentiment.errorAnalyzing'));
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Fallback when backend is unavailable
-  const generateFallbackAnalysis = (news: any[], gainers: any[], losers: any[]): MarketSentimentData => {
-    const total = (gainers?.length || 0) + (losers?.length || 0);
-    const breadthRatio = total > 0 ? (gainers?.length || 0) / total : 0.5;
+  const generateFallback = (gainers: any[], losers: any[]): MarketSentimentData => {
+    const total = gainers.length + losers.length;
+    const breadthRatio = total > 0 ? gainers.length / total : 0.5;
     const composite = breadthRatio * 100;
-
     return {
-      version: 'fallback',
-      timestamp: new Date().toISOString(),
-      processingTime: 0,
+      version: 'fallback', timestamp: new Date().toISOString(), processingTime: 0,
       compositeScore: Math.round(composite),
       overallSentiment: composite > 55 ? 'bullish' : composite < 45 ? 'bearish' : 'neutral',
       sentimentEmoji: composite > 55 ? '📈' : composite < 45 ? '📉' : '⚖️',
       recommendation: t('marketSentiment.backendDisconnected'),
       recommendationDescription: t('marketSentiment.runBackend'),
-      scores: {
-        news: 50,
-        movers: Math.round(composite),
-        breadth: Math.round(breadthRatio * 100),
-        institutional: 50,
-        composite: Math.round(composite),
-      },
+      scores: { news: 50, movers: Math.round(composite), composite: Math.round(composite) },
       moversAnalysis: {
-        breadthRatio,
-        breadthLabel: breadthRatio > 0.55 ? t('marketSentiment.positive') : breadthRatio < 0.45 ? t('marketSentiment.negative') : t('marketSentiment.neutral'),
-        gainersCount: gainers?.length || 0,
-        losersCount: losers?.length || 0,
-        topGainers: (gainers || []).slice(0, 10).map((g: any) => ({
-          symbol: g?.symbol || '',
-          name: g?.name || '',
-          change: g?.changesPercentage || 0,
-          price: g?.price || 0,
-          sector: g?.sector || '',
-        })),
-        topLosers: (losers || []).slice(0, 10).map((l: any) => ({
-          symbol: l?.symbol || '',
-          name: l?.name || '',
-          change: l?.changesPercentage || 0,
-          price: l?.price || 0,
-          sector: l?.sector || '',
-        })),
+        breadthRatio, breadthLabel: '',
+        gainersCount: gainers.length, losersCount: losers.length,
+        topGainers: gainers.slice(0, 10).map((g: any) => ({ symbol: g.symbol || '', name: g.name || '', change: g.changesPercentage || 0, price: g.price || 0, sector: g.sector || '' })),
+        topLosers: losers.slice(0, 10).map((l: any) => ({ symbol: l.symbol || '', name: l.name || '', change: l.changesPercentage || 0, price: l.price || 0, sector: l.sector || '' })),
         sectorRotation: { hot: [], cold: [] },
       },
-      signals: [],
-      briefing: t('marketSentiment.engineUnavailable'),
+      signals: [], briefing: t('marketSentiment.engineUnavailable'),
     };
   };
 
@@ -231,32 +207,31 @@ export default function MarketSentimentPage() {
     return () => { if (interval) clearInterval(interval); };
   }, [fetchMarketData, autoRefresh]);
 
-  const getSentimentStyle = (sentiment: string) => {
-    switch (sentiment) {
-      case 'very_bullish': return 'from-emerald-900/80 to-cyan-900/60 border-emerald-500';
-      case 'bullish': return 'from-green-900/70 to-emerald-900/50 border-green-500';
-      case 'neutral': return 'from-amber-900/60 to-yellow-900/40 border-amber-500';
-      case 'bearish': return 'from-orange-900/60 to-red-900/40 border-orange-500';
-      case 'very_bearish': return 'from-red-900/80 to-rose-900/60 border-red-500';
+  const sentimentBg = (s: string) => {
+    switch (s) {
+      case 'very_bullish': return 'from-emerald-950/90 to-cyan-950/70 border-emerald-500/60';
+      case 'bullish': return 'from-green-950/80 to-emerald-950/60 border-green-500/50';
+      case 'neutral': return 'from-amber-950/70 to-yellow-950/50 border-amber-500/40';
+      case 'bearish': return 'from-orange-950/70 to-red-950/50 border-orange-500/40';
+      case 'very_bearish': return 'from-red-950/90 to-rose-950/70 border-red-500/60';
       default: return 'from-gray-900 to-slate-900 border-gray-600';
     }
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 70) return 'text-emerald-400';
-    if (score >= 55) return 'text-green-400';
-    if (score >= 45) return 'text-yellow-400';
-    if (score >= 30) return 'text-orange-400';
-    return 'text-red-400';
+  const scoreColor = (s: number) => s >= 65 ? 'text-emerald-400' : s >= 52 ? 'text-green-400' : s >= 45 ? 'text-yellow-400' : s >= 35 ? 'text-orange-400' : 'text-red-400';
+
+  const SCORE_LABELS: Record<string, string> = {
+    news: 'News NLP', movers: 'Breadth', sectors: 'Sectors', industries: 'Industries',
+    indices: 'Indices', vix: 'VIX Score', forex: 'Forex', fearGreed: 'Fear/Greed', composite: 'Composite',
   };
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 to-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 to-slate-950 flex items-center justify-center px-4">
         <div className="text-center">
-          <div className="w-20 h-20 mx-auto mb-6 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-2xl font-light text-purple-400">{t('marketSentiment.analyzing')}</p>
-          <p className="text-gray-500 mt-2">{t('marketSentiment.processingData')}</p>
+          <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-6 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xl sm:text-2xl font-light text-purple-400">{t('marketSentiment.analyzing')}</p>
+          <p className="text-gray-500 mt-2 text-sm">{t('marketSentiment.processingData')}</p>
         </div>
       </div>
     );
@@ -264,15 +239,12 @@ export default function MarketSentimentPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 to-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 to-slate-950 flex items-center justify-center px-4">
         <div className="text-center max-w-md">
-          <div className="text-6xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-bold text-red-400 mb-4">{t('marketSentiment.error')}</h2>
-          <p className="text-gray-400 mb-6">{error}</p>
-          <button
-            onClick={fetchMarketData}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold transition"
-          >
+          <div className="text-5xl mb-4">⚠️</div>
+          <h2 className="text-xl sm:text-2xl font-bold text-red-400 mb-4">{t('marketSentiment.error')}</h2>
+          <p className="text-gray-400 mb-6 text-sm">{error}</p>
+          <button onClick={fetchMarketData} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold transition">
             {t('marketSentiment.retry')}
           </button>
         </div>
@@ -283,221 +255,225 @@ export default function MarketSentimentPage() {
   if (!data) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 pb-16">
       <Header />
-      {/* Sub-Header Premium */}
+
+      {/* Sub-header */}
       <header className="border-b border-gray-800 bg-black/70 backdrop-blur-lg mt-16">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Logo size="md" />
-            <div>
-              <div className="text-xl font-bold text-white">Market Pulse</div>
-              <div className="text-[10px] text-purple-400 font-mono tracking-[3px] uppercase">
-                NEURAL v{data.version}
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <Logo size="sm" />
+              <div>
+                <div className="text-base sm:text-xl font-bold text-white">Market Pulse</div>
+                <div className="text-[9px] sm:text-[10px] text-purple-400 font-mono tracking-[2px] sm:tracking-[3px] uppercase">
+                  NEURAL v{data.version}
+                </div>
               </div>
+              <span className={`hidden sm:flex px-2 py-1 text-xs rounded-full border ${backendStatus === 'connected' ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'}`}>
+                {backendStatus === 'connected' ? '🟢 Neural Engine' : '⚠️ Fallback'}
+              </span>
             </div>
-            {backendStatus === 'connected' ? (
-              <span className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded-full border border-green-500/30">
-                🟢 {t('marketSentiment.neuralEngine')}
-              </span>
-            ) : (
-              <span className="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 rounded-full border border-yellow-500/30">
-                ⚠️ {t('marketSentiment.fallback')}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-6">
-            {lastUpdate && (
-              <div className="text-xs text-gray-500">
-                {lastUpdate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                {data.processingTime > 0 && ` • ${data.processingTime}s`}
-              </div>
-            )}
-            <button
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`px-4 py-2 text-xs rounded-full border transition-all ${
-                autoRefresh
-                  ? 'bg-green-500/10 border-green-500 text-green-400'
-                  : 'bg-gray-800 border-gray-700 text-gray-500'
-              }`}
-            >
-              {autoRefresh ? `🔄 ${t('marketSentiment.autoOn')}` : `⏸️ ${t('marketSentiment.autoOff')}`}
-            </button>
-            <button
-              onClick={fetchMarketData}
-              disabled={loading}
-              className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95"
-            >
-              {loading ? t('common.analyzing') : `🔄 ${t('marketSentiment.update')}`}
-            </button>
+            <div className="flex items-center gap-2 sm:gap-4">
+              {lastUpdate && (
+                <span className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">
+                  {lastUpdate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                  {data.processingTime > 0 && ` · ${data.processingTime}s`}
+                </span>
+              )}
+              <button
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                className={`px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs rounded-full border transition-all ${autoRefresh ? 'bg-green-500/10 border-green-500 text-green-400' : 'bg-gray-800 border-gray-700 text-gray-500'}`}
+              >
+                {autoRefresh ? '🔄 Auto' : '⏸️ Off'}
+              </button>
+              <button
+                onClick={fetchMarketData}
+                disabled={loading}
+                className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 disabled:opacity-50 px-3 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all active:scale-95"
+              >
+                {loading ? '⏳' : `🔄 ${t('marketSentiment.update')}`}
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 pt-10 space-y-10">
-        {/* HERO - Main Sentiment Card */}
-        <div className={`rounded-[2.25rem] p-10 md:p-16 border-2 bg-gradient-to-br ${getSentimentStyle(data.overallSentiment)} relative overflow-hidden`}>
-          <div className="absolute inset-0 bg-[radial-gradient(at_top_right,#ffffff08_0%,transparent_50%)]"></div>
-          <div className="relative z-10 text-center">
-            <div className="text-7xl mb-4">{data.sentimentEmoji}</div>
-            <h1 className="text-4xl md:text-6xl font-black text-white mb-3 tracking-tighter">
-              {data.recommendation}
-            </h1>
-            <p className="text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed">
-              {data.recommendationDescription}
-            </p>
-            <div className="mt-10 flex justify-center">
-              <div className="bg-black/40 backdrop-blur-xl rounded-3xl px-10 py-6 border border-white/10">
-                <div className="text-sm text-gray-400 mb-1">{t('marketSentiment.compositeScore')}</div>
-                <div className={`text-6xl font-black ${getScoreColor(data.compositeScore)}`}>
-                  {data.compositeScore}
-                </div>
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 pt-6 sm:pt-10 space-y-6 sm:space-y-8">
+
+        {/* ── HERO ── */}
+        <div className={`rounded-2xl sm:rounded-[2rem] p-6 sm:p-10 md:p-14 border-2 bg-gradient-to-br ${sentimentBg(data.overallSentiment)} relative overflow-hidden`}>
+          <div className="absolute inset-0 bg-[radial-gradient(at_top_right,#ffffff06_0%,transparent_60%)]" />
+          <div className="relative z-10">
+            {/* Mobile: stacked. Desktop: centered */}
+            <div className="text-center">
+              <div className="text-5xl sm:text-7xl mb-3">{data.sentimentEmoji}</div>
+              <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-2 tracking-tight leading-tight">
+                {data.recommendation}
+              </h1>
+              <p className="text-sm sm:text-lg text-gray-300 max-w-xl mx-auto leading-relaxed">
+                {data.recommendationDescription}
+              </p>
+            </div>
+
+            {/* Composite + VIX + Fear/Greed row */}
+            <div className="mt-8 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-6">
+              {/* Composite Score */}
+              <div className="bg-black/40 backdrop-blur-xl rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border border-white/10 text-center">
+                <div className="text-xs text-gray-400 mb-1 uppercase tracking-wider">{t('marketSentiment.compositeScore')}</div>
+                <div className={`text-5xl sm:text-6xl font-black ${scoreColor(data.compositeScore)}`}>{data.compositeScore}</div>
+                <div className="text-[10px] text-gray-500 mt-1">/ 100</div>
               </div>
+
+              {/* VIX */}
+              {data.vixValue != null && (
+                <div className="bg-black/40 backdrop-blur-xl rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border border-white/10 text-center">
+                  <div className="text-xs text-gray-400 mb-1 uppercase tracking-wider">VIX</div>
+                  <div className={`text-4xl sm:text-5xl font-black ${data.vixValue < 20 ? 'text-green-400' : data.vixValue < 30 ? 'text-yellow-400' : 'text-red-400'}`}>
+                    {data.vixValue.toFixed(1)}
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-1">{data.macroAnalysis?.vixRegime || ''}</div>
+                </div>
+              )}
+
+              {/* Fear & Greed */}
+              {data.fearGreedScore != null && (
+                <div className="bg-black/40 backdrop-blur-xl rounded-2xl px-4 py-4 border border-white/10">
+                  <div className="text-xs text-gray-400 mb-1 uppercase tracking-wider text-center">Fear & Greed</div>
+                  <FearGreedGauge score={data.fearGreedScore} label={data.fearGreedLabel || ''} />
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* BRIEFING */}
-        <div className="bg-gray-900/70 border border-gray-700 rounded-3xl p-8">
-          <h3 className="text-lg font-bold text-purple-400 mb-4 flex items-center gap-2">
+        {/* ── BRIEFING ── */}
+        <div className="bg-gray-900/70 border border-gray-700 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+          <h3 className="text-base sm:text-lg font-bold text-purple-400 mb-3 sm:mb-4 flex items-center gap-2">
             🧠 {t('marketSentiment.neuralAnalysis')}
           </h3>
-          <p className="text-lg leading-relaxed text-gray-200">{data.briefing}</p>
+          <p className="text-sm sm:text-lg leading-relaxed text-gray-200">{data.briefing}</p>
         </div>
 
-        {/* ACTIONABLE ADVICE */}
+        {/* ── ACTIONABLE ADVICE ── */}
         {data.actionableAdvice && (
-          <div className="bg-gradient-to-br from-indigo-950/50 to-purple-950/30 border border-indigo-600/40 rounded-3xl p-8">
-            <h3 className="text-lg font-bold text-indigo-400 mb-4 flex items-center gap-2">
+          <div className="bg-gradient-to-br from-indigo-950/50 to-purple-950/30 border border-indigo-600/40 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+            <h3 className="text-base sm:text-lg font-bold text-indigo-400 mb-3 sm:mb-4 flex items-center gap-2">
               🎯 {t('marketSentiment.actionableAdvice')}
             </h3>
-            <p className="text-lg leading-relaxed text-gray-100 font-medium">{data.actionableAdvice}</p>
+            <p className="text-sm sm:text-lg leading-relaxed text-gray-100 font-medium">{data.actionableAdvice}</p>
           </div>
         )}
 
-        {/* MACRO ANALYSIS */}
+        {/* ── SCORE BREAKDOWN ── */}
+        <div className="bg-gray-900/60 border border-gray-700 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+          <h3 className="text-base sm:text-lg font-bold text-teal-400 mb-4 sm:mb-6 flex items-center gap-2">
+            📊 {t('marketSentiment.neuralLayers')}
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+            {Object.entries(data.scores).map(([key, value]) => (
+              <div key={key} className="bg-gray-800/60 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center border border-gray-700/50">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{SCORE_LABELS[key] || key}</div>
+                <div className={`text-2xl sm:text-3xl font-bold ${scoreColor(value)}`}>{value.toFixed(0)}</div>
+                <div className="h-1 bg-gray-700 rounded-full mt-2 overflow-hidden">
+                  <div className={`h-full rounded-full ${value >= 60 ? 'bg-green-500' : value >= 45 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${value}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── MACRO ANALYSIS ── */}
         {data.macroAnalysis && (
-          <div className="bg-gray-900/60 border border-gray-700 rounded-3xl p-8">
-            <h3 className="text-lg font-bold text-teal-400 mb-6 flex items-center gap-2">
+          <div className="bg-gray-900/60 border border-gray-700 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+            <h3 className="text-base sm:text-lg font-bold text-teal-400 mb-4 sm:mb-6 flex items-center gap-2">
               🌐 {t('marketSentiment.macroAnalysis')}
             </h3>
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Sector & Industry Breadth */}
-              <div className="space-y-4">
-                <div className="bg-gray-800/50 rounded-2xl p-5 border border-gray-700">
-                  <div className="text-xs text-gray-500 uppercase mb-2">{t('marketSentiment.sectorBreadth')}</div>
-                  <div className={`text-3xl font-bold ${getScoreColor(data.macroAnalysis.sectorBreadth)}`}>
-                    {data.macroAnalysis.sectorBreadth.toFixed(0)}%
-                  </div>
-                  <div className="h-1.5 bg-gray-700 rounded-full mt-2 overflow-hidden">
-                    <div className={`h-full rounded-full ${data.macroAnalysis.sectorBreadth >= 50 ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${data.macroAnalysis.sectorBreadth}%` }} />
-                  </div>
+            <div className="space-y-4 sm:space-y-6">
+              {/* Breadth bars */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="bg-gray-800/50 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-gray-700">
+                  <ScoreBar score={data.macroAnalysis.sectorBreadth} label={t('marketSentiment.sectorBreadth') + ' %'} />
                 </div>
-                <div className="bg-gray-800/50 rounded-2xl p-5 border border-gray-700">
-                  <div className="text-xs text-gray-500 uppercase mb-2">{t('marketSentiment.industryBreadth')}</div>
-                  <div className={`text-3xl font-bold ${getScoreColor(data.macroAnalysis.industryBreadth)}`}>
-                    {data.macroAnalysis.industryBreadth.toFixed(0)}%
-                  </div>
-                  <div className="h-1.5 bg-gray-700 rounded-full mt-2 overflow-hidden">
-                    <div className={`h-full rounded-full ${data.macroAnalysis.industryBreadth >= 50 ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${data.macroAnalysis.industryBreadth}%` }} />
-                  </div>
+                <div className="bg-gray-800/50 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-gray-700">
+                  <ScoreBar score={data.macroAnalysis.industryBreadth} label={t('marketSentiment.industryBreadth') + ' %'} />
                 </div>
               </div>
 
-              {/* Hot & Cold Sectors */}
-              <div className="space-y-4">
+              {/* Hot/Cold sectors */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {data.macroAnalysis.hotSectors.length > 0 && (
-                  <div className="bg-green-900/20 border border-green-800/30 rounded-2xl p-5">
-                    <div className="text-xs text-green-400 uppercase mb-3 font-semibold">🔥 {t('marketSentiment.hotSectors')}</div>
-                    <div className="space-y-2">
+                  <div className="bg-green-900/20 border border-green-800/30 rounded-xl sm:rounded-2xl p-4">
+                    <div className="text-xs text-green-400 uppercase mb-2 sm:mb-3 font-semibold">🔥 {t('marketSentiment.hotSectors')}</div>
+                    <div className="space-y-1.5">
                       {data.macroAnalysis.hotSectors.slice(0, 5).map((s, i) => (
                         <div key={i} className="flex justify-between items-center">
-                          <span className="text-green-300 text-sm">{s.sector}</span>
-                          <span className="text-green-400 text-sm font-mono">+{s.change?.toFixed(2)}%</span>
+                          <span className="text-green-300 text-xs sm:text-sm truncate mr-2">{s.sector}</span>
+                          <span className="text-green-400 text-xs font-mono shrink-0">+{s.change?.toFixed(2)}%</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
                 {data.macroAnalysis.coldSectors.length > 0 && (
-                  <div className="bg-red-900/20 border border-red-800/30 rounded-2xl p-5">
-                    <div className="text-xs text-red-400 uppercase mb-3 font-semibold">❄️ {t('marketSentiment.coldSectors')}</div>
-                    <div className="space-y-2">
+                  <div className="bg-red-900/20 border border-red-800/30 rounded-xl sm:rounded-2xl p-4">
+                    <div className="text-xs text-red-400 uppercase mb-2 sm:mb-3 font-semibold">❄️ {t('marketSentiment.coldSectors')}</div>
+                    <div className="space-y-1.5">
                       {data.macroAnalysis.coldSectors.slice(0, 5).map((s, i) => (
                         <div key={i} className="flex justify-between items-center">
-                          <span className="text-red-300 text-sm">{s.sector}</span>
-                          <span className="text-red-400 text-sm font-mono">{s.change?.toFixed(2)}%</span>
+                          <span className="text-red-300 text-xs sm:text-sm truncate mr-2">{s.sector}</span>
+                          <span className="text-red-400 text-xs font-mono shrink-0">{s.change?.toFixed(2)}%</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Major Indices */}
-            {(data.macroAnalysis.majorIndicesUp.length > 0 || data.macroAnalysis.majorIndicesDown.length > 0) && (
-              <div className="mt-6 flex flex-wrap gap-3">
-                {data.macroAnalysis.majorIndicesUp.map((idx, i) => (
-                  <span key={`up-${i}`} className="px-3 py-1.5 bg-green-900/30 border border-green-700/40 rounded-full text-green-400 text-sm">
-                    ▲ {idx}
-                  </span>
-                ))}
-                {data.macroAnalysis.majorIndicesDown.map((idx, i) => (
-                  <span key={`dn-${i}`} className="px-3 py-1.5 bg-red-900/30 border border-red-700/40 rounded-full text-red-400 text-sm">
-                    ▼ {idx}
-                  </span>
-                ))}
-              </div>
-            )}
+              {/* Index pills */}
+              {(data.macroAnalysis.majorIndicesUp.length > 0 || data.macroAnalysis.majorIndicesDown.length > 0) && (
+                <div className="flex flex-wrap gap-2">
+                  {data.macroAnalysis.majorIndicesUp.map((idx, i) => (
+                    <span key={`up-${i}`} className="px-2 sm:px-3 py-1 bg-green-900/30 border border-green-700/40 rounded-full text-green-400 text-[10px] sm:text-sm">
+                      ▲ {idx}
+                    </span>
+                  ))}
+                  {data.macroAnalysis.majorIndicesDown.map((idx, i) => (
+                    <span key={`dn-${i}`} className="px-2 sm:px-3 py-1 bg-red-900/30 border border-red-700/40 rounded-full text-red-400 text-[10px] sm:text-sm">
+                      ▼ {idx}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* SCORE BREAKDOWN */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {Object.entries(data.scores).map(([key, value]) => (
-            <div key={key} className="bg-gray-800/50 rounded-2xl p-5 text-center border border-gray-700">
-              <div className="text-xs text-gray-500 uppercase mb-2">{key}</div>
-              <div className={`text-3xl font-bold ${getScoreColor(value)}`}>{value.toFixed(0)}</div>
-              <div className="h-1.5 bg-gray-700 rounded-full mt-3 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    value >= 55 ? 'bg-green-500' : value >= 45 ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${value}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* SIGNALS */}
+        {/* ── SIGNALS ── */}
         {data.signals.length > 0 && (
-          <div className="bg-gray-900/60 border border-gray-700 rounded-3xl p-8">
-            <h3 className="text-lg font-bold text-cyan-400 mb-6 flex items-center gap-2">
+          <div className="bg-gray-900/60 border border-gray-700 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+            <h3 className="text-base sm:text-lg font-bold text-cyan-400 mb-4 sm:mb-6 flex items-center gap-2">
               📡 {t('marketSentiment.signalsDetected')} ({data.signals.length})
             </h3>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {data.signals.map((signal, i) => (
-                <div
-                  key={i}
-                  className={`p-5 rounded-2xl border ${
-                    signal.type === 'bullish'
-                      ? 'bg-emerald-900/30 border-emerald-700'
-                      : signal.type === 'bearish'
-                        ? 'bg-red-900/30 border-red-700'
-                        : 'bg-gray-800 border-gray-700'
-                  }`}
-                >
-                  <div className="text-2xl mb-2">{signal.emoji}</div>
-                  <p className="font-medium text-white">{signal.description}</p>
-                  <div className="flex items-center justify-between mt-3">
-                    <span className="text-xs text-gray-500 uppercase">{signal.source}</span>
-                    <span className={`text-xs font-medium ${
-                      signal.type === 'bullish' ? 'text-green-400' : signal.type === 'bearish' ? 'text-red-400' : 'text-gray-400'
-                    }`}>
-                      {(signal.strength * 100).toFixed(0)}% {t('marketSentiment.strength')}
-                    </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              {data.signals.slice(0, 18).map((signal, i) => (
+                <div key={i} className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border ${
+                  signal.type === 'bullish' ? 'bg-emerald-900/25 border-emerald-700/50' :
+                  signal.type === 'bearish' ? 'bg-red-900/25 border-red-700/50' :
+                  signal.type === 'cautionary' ? 'bg-amber-900/25 border-amber-700/50' :
+                  'bg-gray-800/50 border-gray-700'
+                }`}>
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg sm:text-xl shrink-0">{signal.emoji}</span>
+                    <div className="min-w-0">
+                      <p className="font-medium text-white text-xs sm:text-sm leading-snug">{signal.description}</p>
+                      <div className="flex items-center justify-between mt-1.5">
+                        <span className="text-[10px] text-gray-500 uppercase">{signal.source.replace(/_/g, ' ')}</span>
+                        <span className={`text-[10px] font-medium ${signal.type === 'bullish' ? 'text-green-400' : signal.type === 'bearish' ? 'text-red-400' : 'text-amber-400'}`}>
+                          {(signal.strength * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -505,181 +481,158 @@ export default function MarketSentimentPage() {
           </div>
         )}
 
-        {/* GAINERS & LOSERS */}
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Top Gainers */}
-          <div className="bg-gradient-to-br from-green-950/30 to-emerald-950/20 rounded-3xl p-6 border border-green-700/50">
-            <h3 className="text-xl font-bold text-green-400 mb-4 flex items-center gap-2">
-              🚀 {t('marketSentiment.topGainers')}
-              <span className="text-sm font-normal text-gray-500">({data.moversAnalysis.gainersCount})</span>
-            </h3>
-            {data.moversAnalysis.topGainers.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">{t('marketSentiment.noDataAvailable')}</p>
-            ) : (
-              <div className="space-y-2">
-                {data.moversAnalysis.topGainers.slice(0, 8).map((stock, idx) => (
-                  <Link
-                    key={idx}
-                    href={`/analizar?ticker=${stock.symbol}`}
-                    className="flex items-center justify-between bg-gray-900/50 p-3 rounded-xl hover:bg-gray-800/50 transition"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-600 text-sm w-5">{idx + 1}</span>
-                      <div>
-                        <span className="font-bold text-green-400">{stock.symbol}</span>
-                        <p className="text-gray-500 text-xs truncate max-w-[120px]">{stock.name}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-green-400 font-bold">+{stock.change?.toFixed(2)}%</span>
-                      <p className="text-gray-500 text-sm">${stock.price?.toFixed(2)}</p>
-                    </div>
-                  </Link>
-                ))}
+        {/* ── BREADTH BAR ── */}
+        <div className="bg-gray-900/60 border border-gray-700 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+          <h3 className="text-base sm:text-lg font-bold text-amber-400 mb-4">📊 {t('marketSentiment.marketBreadth')}</h3>
+          <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+            <div className="flex-1 w-full">
+              <div className="h-5 sm:h-6 bg-gray-800 rounded-full overflow-hidden flex">
+                <div className="h-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all" style={{ width: `${data.moversAnalysis.breadthRatio * 100}%` }} />
+                <div className="h-full bg-gradient-to-r from-red-500 to-rose-400" style={{ width: `${(1 - data.moversAnalysis.breadthRatio) * 100}%` }} />
               </div>
-            )}
-          </div>
-
-          {/* Top Losers */}
-          <div className="bg-gradient-to-br from-red-950/30 to-rose-950/20 rounded-3xl p-6 border border-red-700/50">
-            <h3 className="text-xl font-bold text-red-400 mb-4 flex items-center gap-2">
-              📉 {t('marketSentiment.topLosers')}
-              <span className="text-sm font-normal text-gray-500">({data.moversAnalysis.losersCount})</span>
-            </h3>
-            {data.moversAnalysis.topLosers.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">{t('marketSentiment.noDataAvailable')}</p>
-            ) : (
-              <div className="space-y-2">
-                {data.moversAnalysis.topLosers.slice(0, 8).map((stock, idx) => (
-                  <Link
-                    key={idx}
-                    href={`/analizar?ticker=${stock.symbol}`}
-                    className="flex items-center justify-between bg-gray-900/50 p-3 rounded-xl hover:bg-gray-800/50 transition"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-600 text-sm w-5">{idx + 1}</span>
-                      <div>
-                        <span className="font-bold text-red-400">{stock.symbol}</span>
-                        <p className="text-gray-500 text-xs truncate max-w-[120px]">{stock.name}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-red-400 font-bold">{stock.change?.toFixed(2)}%</span>
-                      <p className="text-gray-500 text-sm">${stock.price?.toFixed(2)}</p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* SECTOR ROTATION */}
-        {(data.moversAnalysis.sectorRotation.hot.length > 0 || data.moversAnalysis.sectorRotation.cold.length > 0) && (
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Hot Sectors */}
-            <div className="bg-gray-900/60 border border-gray-700 rounded-3xl p-6">
-              <h3 className="text-green-400 font-bold mb-4 flex items-center gap-2">
-                🔥 {t('marketSentiment.hotSectorsRotation')}
-              </h3>
-              {data.moversAnalysis.sectorRotation.hot.length === 0 ? (
-                <p className="text-gray-500 text-sm">{t('marketSentiment.noHotSectors')}</p>
-              ) : (
-                <div className="space-y-3">
-                  {data.moversAnalysis.sectorRotation.hot.map((s, i) => (
-                    <div key={i} className="bg-green-900/20 border border-green-800/30 rounded-2xl p-4 flex justify-between items-center">
-                      <span className="font-semibold text-green-300">{s.sector}</span>
-                      <span className="text-green-400 text-sm">{s.gainers}↑ / {s.losers}↓</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Cold Sectors */}
-            <div className="bg-gray-900/60 border border-gray-700 rounded-3xl p-6">
-              <h3 className="text-red-400 font-bold mb-4 flex items-center gap-2">
-                ❄️ {t('marketSentiment.coldSectorsRotation')}
-              </h3>
-              {data.moversAnalysis.sectorRotation.cold.length === 0 ? (
-                <p className="text-gray-500 text-sm">{t('marketSentiment.noColdSectors')}</p>
-              ) : (
-                <div className="space-y-3">
-                  {data.moversAnalysis.sectorRotation.cold.map((s, i) => (
-                    <div key={i} className="bg-red-900/20 border border-red-800/30 rounded-2xl p-4 flex justify-between items-center">
-                      <span className="font-semibold text-red-300">{s.sector}</span>
-                      <span className="text-red-400 text-sm">{s.gainers}↑ / {s.losers}↓</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* BREADTH INDICATOR */}
-        <div className="bg-gray-900/60 border border-gray-700 rounded-3xl p-6">
-          <h3 className="text-lg font-bold text-amber-400 mb-4">📊 {t('marketSentiment.marketBreadth')}</h3>
-          <div className="flex items-center gap-6">
-            <div className="flex-1">
-              <div className="h-4 bg-gray-800 rounded-full overflow-hidden flex">
-                <div
-                  className="h-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all"
-                  style={{ width: `${data.moversAnalysis.breadthRatio * 100}%` }}
-                />
-                <div
-                  className="h-full bg-gradient-to-r from-red-500 to-rose-400"
-                  style={{ width: `${(1 - data.moversAnalysis.breadthRatio) * 100}%` }}
-                />
-              </div>
-              <div className="flex justify-between mt-2 text-sm">
+              <div className="flex justify-between mt-2 text-xs">
                 <span className="text-green-400">{t('marketSentiment.gainers')}: {data.moversAnalysis.gainersCount}</span>
-                <span className="text-gray-400 font-bold">{(data.moversAnalysis.breadthRatio * 100).toFixed(0)}%</span>
+                <span className="text-gray-300 font-bold">{(data.moversAnalysis.breadthRatio * 100).toFixed(0)}% advancing</span>
                 <span className="text-red-400">{t('marketSentiment.losers')}: {data.moversAnalysis.losersCount}</span>
               </div>
             </div>
-            <div className="text-center px-6">
-              <div className="text-3xl font-bold text-white">{data.moversAnalysis.breadthLabel}</div>
-              <div className="text-xs text-gray-500">{t('marketSentiment.breadth')}</div>
+            <div className="text-center px-4 sm:px-6 shrink-0">
+              <div className="text-xl sm:text-2xl font-bold text-white">{data.moversAnalysis.breadthLabel}</div>
+              <div className="text-[10px] text-gray-500">{t('marketSentiment.breadth')}</div>
             </div>
           </div>
         </div>
 
-        {/* REASONING CHAIN */}
-        {data.reasoningChain && data.reasoningChain.length > 0 && (
-          <div className="bg-gray-900/60 border border-gray-700 rounded-3xl p-8">
-            <h3 className="text-lg font-bold text-amber-400 mb-6 flex items-center gap-2">
-              🔗 {t('marketSentiment.reasoningChain')}
+        {/* ── GAINERS & LOSERS ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8">
+          <div className="bg-gradient-to-br from-green-950/30 to-emerald-950/20 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-green-700/50">
+            <h3 className="text-base sm:text-xl font-bold text-green-400 mb-3 sm:mb-4 flex items-center gap-2">
+              🚀 {t('marketSentiment.topGainers')}
+              <span className="text-xs font-normal text-gray-500">({data.moversAnalysis.gainersCount})</span>
             </h3>
-            <div className="space-y-3">
-              {data.reasoningChain.map((step, i) => (
-                <div key={i} className="flex items-start gap-4">
-                  <div className="shrink-0 w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-sm font-bold">
-                    {i + 1}
+            {data.moversAnalysis.topGainers.length === 0 ? (
+              <p className="text-gray-500 text-center py-6 text-sm">{t('marketSentiment.noDataAvailable')}</p>
+            ) : (
+              <div className="space-y-1.5 sm:space-y-2">
+                {data.moversAnalysis.topGainers.slice(0, 8).map((stock, idx) => (
+                  <Link key={idx} href={`/analizar?ticker=${stock.symbol}`}
+                    className="flex items-center justify-between bg-gray-900/50 p-2.5 sm:p-3 rounded-xl hover:bg-gray-800/60 transition">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                      <span className="text-gray-600 text-xs w-4 shrink-0">{idx + 1}</span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-green-400 text-sm">{stock.symbol}</span>
+                        <p className="text-gray-500 text-[10px] truncate max-w-[100px] sm:max-w-[140px]">{stock.name}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-green-400 font-bold text-xs sm:text-sm">+{stock.change?.toFixed(2)}%</span>
+                      <p className="text-gray-500 text-[10px] sm:text-xs">${stock.price?.toFixed(2)}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-gradient-to-br from-red-950/30 to-rose-950/20 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-red-700/50">
+            <h3 className="text-base sm:text-xl font-bold text-red-400 mb-3 sm:mb-4 flex items-center gap-2">
+              📉 {t('marketSentiment.topLosers')}
+              <span className="text-xs font-normal text-gray-500">({data.moversAnalysis.losersCount})</span>
+            </h3>
+            {data.moversAnalysis.topLosers.length === 0 ? (
+              <p className="text-gray-500 text-center py-6 text-sm">{t('marketSentiment.noDataAvailable')}</p>
+            ) : (
+              <div className="space-y-1.5 sm:space-y-2">
+                {data.moversAnalysis.topLosers.slice(0, 8).map((stock, idx) => (
+                  <Link key={idx} href={`/analizar?ticker=${stock.symbol}`}
+                    className="flex items-center justify-between bg-gray-900/50 p-2.5 sm:p-3 rounded-xl hover:bg-gray-800/60 transition">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                      <span className="text-gray-600 text-xs w-4 shrink-0">{idx + 1}</span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-red-400 text-sm">{stock.symbol}</span>
+                        <p className="text-gray-500 text-[10px] truncate max-w-[100px] sm:max-w-[140px]">{stock.name}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-red-400 font-bold text-xs sm:text-sm">{stock.change?.toFixed(2)}%</span>
+                      <p className="text-gray-500 text-[10px] sm:text-xs">${stock.price?.toFixed(2)}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── SECTOR ROTATION ── */}
+        {(data.moversAnalysis.sectorRotation.hot.length > 0 || data.moversAnalysis.sectorRotation.cold.length > 0) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
+            <div className="bg-gray-900/60 border border-gray-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6">
+              <h3 className="text-green-400 font-bold mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+                🔥 {t('marketSentiment.hotSectorsRotation')}
+              </h3>
+              <div className="space-y-2 sm:space-y-3">
+                {data.moversAnalysis.sectorRotation.hot.map((s, i) => (
+                  <div key={i} className="bg-green-900/20 border border-green-800/30 rounded-xl p-3 flex justify-between items-center">
+                    <span className="font-semibold text-green-300 text-xs sm:text-sm">{s.sector}</span>
+                    <span className="text-green-400 text-xs">{s.gainers}↑ {s.losers}↓</span>
                   </div>
-                  <p className="text-gray-300 leading-relaxed pt-1">{step}</p>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+            <div className="bg-gray-900/60 border border-gray-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6">
+              <h3 className="text-red-400 font-bold mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+                ❄️ {t('marketSentiment.coldSectorsRotation')}
+              </h3>
+              <div className="space-y-2 sm:space-y-3">
+                {data.moversAnalysis.sectorRotation.cold.map((s, i) => (
+                  <div key={i} className="bg-red-900/20 border border-red-800/30 rounded-xl p-3 flex justify-between items-center">
+                    <span className="font-semibold text-red-300 text-xs sm:text-sm">{s.sector}</span>
+                    <span className="text-red-400 text-xs">{s.gainers}↑ {s.losers}↓</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* FOOTER */}
-        <div className="text-center pt-8 border-t border-gray-800">
-          <p className="text-gray-500 text-sm mb-4">
-            Neural Market Pulse v{data.version} • {t('marketSentiment.realTimeAnalysis')} • {t('marketSentiment.autoRefreshEvery5')}
-          </p>
-          <div className="flex justify-center gap-4">
-            <Link
-              href="/"
-              className="px-6 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition"
+        {/* ── REASONING CHAIN (collapsible) ── */}
+        {data.reasoningChain && data.reasoningChain.length > 0 && (
+          <div className="bg-gray-900/60 border border-gray-700 rounded-2xl sm:rounded-3xl overflow-hidden">
+            <button
+              onClick={() => setShowReasoning(!showReasoning)}
+              className="w-full px-5 sm:px-8 py-4 sm:py-5 flex items-center justify-between hover:bg-gray-800/30 transition"
             >
+              <h3 className="text-sm sm:text-lg font-bold text-amber-400 flex items-center gap-2">
+                🔗 {t('marketSentiment.reasoningChain')} ({data.reasoningChain.length} steps)
+              </h3>
+              <span className="text-gray-400 text-lg">{showReasoning ? '▲' : '▼'}</span>
+            </button>
+            {showReasoning && (
+              <div className="px-5 sm:px-8 pb-5 sm:pb-8 space-y-2 sm:space-y-3 border-t border-gray-800">
+                {data.reasoningChain.map((step, i) => (
+                  <div key={i} className="flex items-start gap-3 pt-2">
+                    <div className="shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-[10px] sm:text-xs font-bold">
+                      {i + 1}
+                    </div>
+                    <p className="text-gray-300 text-xs sm:text-sm leading-relaxed pt-0.5">{step}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── FOOTER ── */}
+        <div className="text-center pt-6 border-t border-gray-800">
+          <p className="text-gray-500 text-xs mb-4">
+            Neural Market Pulse v{data.version} · Real-time analysis · Auto-refresh every 5min
+          </p>
+          <div className="flex justify-center gap-3 sm:gap-4 flex-wrap">
+            <Link href="/" className="px-4 sm:px-6 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition text-xs sm:text-sm">
               ← {t('marketSentiment.backToHome')}
             </Link>
-            <Link
-              href="/analizar"
-              className="px-6 py-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white rounded-lg transition"
-            >
+            <Link href="/analizar" className="px-4 sm:px-6 py-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white rounded-lg transition text-xs sm:text-sm">
               {t('marketSentiment.analyzeStock')} →
             </Link>
           </div>

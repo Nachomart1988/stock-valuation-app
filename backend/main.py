@@ -322,7 +322,7 @@ async def probability_calculate(req: ProbabilityRequest):
 # ════════════════════════════════════════════════════════════════════
 
 class MarketSentimentRequest(BaseModel):
-    """Request body for market sentiment analysis v4.0"""
+    """Request body for market sentiment analysis v5.0"""
     news: Optional[List[Dict[str, Any]]] = None
     gainers: Optional[List[Dict[str, Any]]] = None
     losers: Optional[List[Dict[str, Any]]] = None
@@ -331,6 +331,7 @@ class MarketSentimentRequest(BaseModel):
     indexQuotes: Optional[List[Dict[str, Any]]] = None
     forexQuotes: Optional[List[Dict[str, Any]]] = None
     historicalSectorPerformance: Optional[List[Dict[str, Any]]] = None
+    vixQuote: Optional[Dict[str, Any]] = None
 
 
 @app.post("/market-sentiment/analyze")
@@ -363,6 +364,7 @@ async def analyze_market_sentiment(req: MarketSentimentRequest):
             'indexQuotes': req.indexQuotes or [],
             'forexQuotes': req.forexQuotes or [],
             'historicalSectorPerformance': req.historicalSectorPerformance or [],
+            'vixQuote': req.vixQuote,
         }
 
         result = market_sentiment_engine.analyze(data)

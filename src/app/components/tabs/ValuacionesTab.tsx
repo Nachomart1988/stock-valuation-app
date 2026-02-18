@@ -243,6 +243,7 @@ export default function ValuacionesTab({
   const [glong, setGlong] = useState<number>(0.04);
   const [n, setN] = useState<number>(5);
   const [sharePriceTxCAGR, setSharePriceTxCAGR] = useState<number>(10); // CAGR in % for terminal share price
+  const [manualSharePriceT5, setManualSharePriceT5] = useState<number | null>(null); // null = auto-calculate
 
   // Parámetros adicionales para modelos avanzados
   const [discountRate, setDiscountRate] = useState<number | null>(null); // WACC en %, null = auto-calculate
@@ -279,7 +280,8 @@ export default function ValuacionesTab({
   const effectiveCAGR = (cagrStats?.maxCagr != null && cagrStats?.minCagr != null)
     ? (cagrStats.maxCagr + cagrStats.minCagr) / 2
     : sharePriceTxCAGR;
-  const sharePriceT5 = currentPrice * Math.pow(1 + effectiveCAGR / 100, n);
+  const autoSharePriceT5 = currentPrice * Math.pow(1 + effectiveCAGR / 100, n);
+  const sharePriceT5 = manualSharePriceT5 !== null ? manualSharePriceT5 : autoSharePriceT5;
 
   // Calculate default WACC as average of WACC tab calculation and Advance DCF WACC
   const calculatedDefaultWACC = useMemo(() => {
@@ -2041,10 +2043,32 @@ export default function ValuacionesTab({
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Share Price T{n}</label>
-              <div className="px-3 py-2 border border-blue-600 rounded-lg bg-blue-900/30 text-blue-400 font-semibold text-center">
-                ${sharePriceT5.toFixed(2)}
-              </div>
+              <label className="block text-xs font-medium text-gray-400 mb-1 flex items-center justify-between">
+                <span>Share Price T{n}</span>
+                {manualSharePriceT5 !== null && (
+                  <button
+                    onClick={() => setManualSharePriceT5(null)}
+                    className="text-[10px] text-yellow-400 hover:text-yellow-300 border border-yellow-600/40 rounded px-1.5 py-0.5 transition"
+                    title="Reset to auto-calculated value"
+                  >
+                    ↺ Auto (${autoSharePriceT5.toFixed(2)})
+                  </button>
+                )}
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={manualSharePriceT5 !== null ? manualSharePriceT5 : Number(autoSharePriceT5.toFixed(2))}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setManualSharePriceT5(isNaN(val) ? null : val);
+                }}
+                className={`w-full px-3 py-2 border rounded-lg text-center font-semibold focus:ring-1 focus:ring-blue-500 ${
+                  manualSharePriceT5 !== null
+                    ? 'border-yellow-500 bg-yellow-900/20 text-yellow-300'
+                    : 'border-blue-600 bg-blue-900/30 text-blue-400'
+                }`}
+              />
             </div>
           </div>
 
