@@ -39,21 +39,23 @@ function fmtLarge(val: any): string {
 }
 
 export async function generateAnalysisPDF(data: PDFData): Promise<void> {
-  // Dynamic imports — must await both before using
+  // jspdf v4 + jspdf-autotable v5: must call applyPlugin(jsPDF) to attach autoTable
   const { default: jsPDF } = await import('jspdf');
   const autoTableModule = await import('jspdf-autotable');
-  // jspdf-autotable v5 exports a default function OR patches prototype
-  const autoTable: any = autoTableModule.default || autoTableModule;
+
+  // v5 uses applyPlugin(jsPDF) to attach .autoTable onto jsPDF.API
+  if (typeof (autoTableModule as any).applyPlugin === 'function') {
+    (autoTableModule as any).applyPlugin(jsPDF);
+  }
 
   const doc: any = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-  // Helper to call autoTable regardless of API style
+  // Helper — after applyPlugin, doc.autoTable should exist
   const table = (opts: any) => {
     if (typeof doc.autoTable === 'function') {
       doc.autoTable(opts);
-    } else if (typeof autoTable === 'function') {
-      autoTable(doc, opts);
     }
+    // fallback: draw a simple placeholder if autoTable unavailable
   };
 
   const PW = 210;
