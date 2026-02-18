@@ -268,7 +268,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-sky-400 bg-clip-text text-transparent">
             {t('cagrTab.title')}
@@ -276,7 +276,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
           <p className="text-sm text-gray-400 mt-1">{t('cagrTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-green-900/40 to-sky-900/40 px-4 py-2 rounded-xl border border-green-600">
+          <div className="text-right bg-gradient-to-r bg-gray-950 to-sky-900/40 px-4 py-2 rounded-xl border border-green-600">
             <p className="text-xs text-green-400">{t('cagrTab.daysOfData')}</p>
             <p className="text-xl font-bold text-green-400">{historicalPrices.length.toLocaleString()}</p>
           </div>
@@ -284,7 +284,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
       </div>
 
       {/* Input Controls */}
-      <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-600 shadow-lg">
+      <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.08] shadow-lg">
         <h4 className="text-2xl font-bold text-gray-100 mb-6">{t('cagrTab.parameters')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div>
@@ -322,7 +322,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
               {maxYearsAvailable} {t('cagrTab.available')}
             </p>
           </div>
-          <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-600 flex flex-col justify-center">
+          <div className="bg-gray-800/50 p-4 rounded-xl border border-white/[0.08] flex flex-col justify-center">
             <label className="block text-gray-400 text-sm mb-1">{t('cagrTab.daysOfData')}</label>
             <p className="text-3xl font-bold text-green-400">
               {historicalPrices.length.toLocaleString()}
@@ -355,7 +355,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
               {statistics.week104Low ? `$${statistics.week104Low.toFixed(2)}` : 'N/A'}
             </p>
           </div>
-          <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-5 rounded-2xl border border-gray-600 text-center flex flex-col justify-center min-h-[120px]">
+          <div className="bg-gray-800 p-5 rounded-2xl border border-white/[0.08] text-center flex flex-col justify-center min-h-[120px]">
             <p className="text-sm text-gray-300 mb-2">{t('cagrTab.avgDailyReturn')}</p>
             <p className={`text-2xl font-bold ${statistics.avgReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {statistics.avgReturn.toFixed(4)}%
@@ -398,7 +398,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
 
       {/* CAGR Range Analysis */}
       {statistics && (
-        <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-8 rounded-2xl border border-green-500 shadow-xl">
+        <div className="bg-gray-950 p-8 rounded-2xl border border-green-500 shadow-xl">
           <h4 className="text-2xl font-bold text-green-400 mb-6 text-center">{t('cagrTab.title')} ({yearsToAnalyze}Y)</h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="bg-gray-800/50 p-6 rounded-xl text-center border border-red-700/50">
@@ -428,7 +428,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
 
       {/* Chart */}
       {chartData && (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-xl">
+        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.06] shadow-xl">
           <h4 className="text-2xl font-bold text-gray-100 mb-6">{t('cagrTab.chartTitle')}</h4>
           <div className="h-[500px]">
             <Line

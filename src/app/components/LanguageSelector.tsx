@@ -17,7 +17,7 @@ export default function LanguageSelector() {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition border border-gray-700"
+        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition border border-white/[0.06]"
       >
         <span className="text-lg">{localeFlags[locale]}</span>
         <span className="text-sm text-gray-300">{locale.toUpperCase()}</span>
@@ -37,7 +37,7 @@ export default function LanguageSelector() {
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
 
           {/* Dropdown */}
-          <div className="absolute right-0 mt-2 w-40 bg-gray-800 border border-gray-700 rounded-xl shadow-xl z-20 overflow-hidden">
+          <div className="absolute right-0 mt-2 w-40 bg-gray-800 border border-white/[0.06] rounded-xl shadow-xl z-20 overflow-hidden">
             {(Object.keys(localeNames) as Locale[]).map((loc) => (
               <button
                 key={loc}

@@ -150,7 +150,7 @@ export default function AnalisisFinalTab({
   return (
     <div className="space-y-10">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
             {t('analisisFinalTab.title')}
@@ -159,7 +159,7 @@ export default function AnalisisFinalTab({
         </div>
         <div className="flex items-center gap-4">
           {currentPrice && (
-            <div className="text-right bg-gradient-to-r from-gray-800 to-gray-900 px-4 py-2 rounded-xl border border-gray-600">
+            <div className="text-right bg-gray-900 px-4 py-2 rounded-xl border border-white/[0.08]">
               <p className="text-xs text-gray-400">{t('analisisFinalTab.currentPrice')}</p>
               <p className="text-xl font-bold text-gray-100">${currentPrice.toFixed(2)}</p>
             </div>
@@ -187,7 +187,7 @@ export default function AnalisisFinalTab({
         veredicto === t('analisisFinalTab.cheap') ? 'bg-green-900/20 border-green-500' :
         veredicto === t('analisisFinalTab.fair') ? 'bg-yellow-900/20 border-yellow-500' :
         veredicto === t('analisisFinalTab.expensive') ? 'bg-red-900/20 border-red-500' :
-        'bg-gray-800 border-gray-600'
+        'bg-gray-800 border-white/[0.08]'
       }`}>
         <p className="text-xl text-gray-400 mb-2">{t('analisisFinalTab.verdict')}</p>
         <p className={`text-6xl font-black mb-4 ${color}`}>
@@ -201,7 +201,7 @@ export default function AnalisisFinalTab({
       </div>
 
       {/* Inputs */}
-      <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
+      <div className="bg-gray-800 rounded-2xl p-6 border border-white/[0.06]">
         <h4 className="text-xl font-bold text-gray-200 mb-4">{t('analisisFinalTab.parameters')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
@@ -210,7 +210,7 @@ export default function AnalisisFinalTab({
               type="number"
               value={margenSeguridad}
               onChange={e => setMargenSeguridad(Number(e.target.value) || 15)}
-              className="w-full p-4 bg-gray-900 border border-gray-600 rounded-xl text-gray-100 text-xl font-semibold"
+              className="w-full p-4 bg-gray-900 border border-white/[0.08] rounded-xl text-gray-100 text-xl font-semibold"
             />
           </div>
 
@@ -222,7 +222,7 @@ export default function AnalisisFinalTab({
               max={5}
               value={años}
               onChange={e => setAños(Math.max(1, Math.min(5, Number(e.target.value) || 3)))}
-              className="w-full p-4 bg-gray-900 border border-gray-600 rounded-xl text-gray-100 text-xl font-semibold"
+              className="w-full p-4 bg-gray-900 border border-white/[0.08] rounded-xl text-gray-100 text-xl font-semibold"
             />
           </div>
         </div>
@@ -230,19 +230,19 @@ export default function AnalisisFinalTab({
 
       {/* Resumen de análisis - Larger cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-green-900/40 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
+        <div className="bg-gradient-to-br bg-gray-950 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
           <p className="text-lg text-green-300 mb-2">{t('analisisFinalTab.currentPrice')}</p>
           <p className="text-4xl font-black text-green-400">
             {currentPrice ? `$${currentPrice.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gradient-to-br from-emerald-900/40 to-emerald-800/20 p-6 rounded-2xl border border-emerald-600/50 text-center">
+        <div className="bg-gradient-to-br bg-gray-950 to-emerald-800/20 p-6 rounded-2xl border border-emerald-600/50 text-center">
           <p className="text-lg text-emerald-300 mb-2">{t('analisisFinalTab.avgValuation')}</p>
           <p className="text-4xl font-black text-emerald-400">
             {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gradient-to-br from-green-900/40 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
+        <div className="bg-gradient-to-br bg-gray-950 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
           <p className="text-lg text-green-300 mb-2">{t('analisisFinalTab.suggestedBuyPrice')}</p>
           <p className="text-4xl font-black text-green-400">
             {precioEstimado ? `$${precioEstimado.toFixed(2)}` : 'N/A'}
@@ -251,7 +251,7 @@ export default function AnalisisFinalTab({
         </div>
         <div className={`p-6 rounded-2xl border text-center ${
           upside !== null && upside > 0
-            ? 'bg-gradient-to-br from-green-900/40 to-emerald-800/20 border-green-600/50'
+            ? 'bg-gradient-to-br bg-gray-950 to-emerald-800/20 border-green-600/50'
             : 'bg-gradient-to-br from-red-900/40 to-rose-800/20 border-red-600/50'
         }`}>
           <p className="text-lg text-gray-300 mb-2">{t('analisisFinalTab.upsideDownside')}</p>
@@ -272,7 +272,7 @@ export default function AnalisisFinalTab({
           <p className="text-2xl">{t('analisisFinalTab.noHistoricalData')}</p>
         </div>
       ) : (
-        <div className="bg-gray-800 rounded-2xl border border-gray-700 p-8">
+        <div className="bg-gray-800 rounded-2xl border border-white/[0.06] p-8">
           <h4 className="text-2xl font-bold text-gray-200 mb-6">
             {t('analisisFinalTab.historicalPrice')} ({años} {años === 1 ? t('analisisFinalTab.year') : t('analisisFinalTab.years')})
           </h4>
@@ -332,7 +332,7 @@ export default function AnalisisFinalTab({
       )}
 
       {/* Legend explanation */}
-      <div className="bg-gray-800 rounded-2xl border border-gray-700 p-6">
+      <div className="bg-gray-800 rounded-2xl border border-white/[0.06] p-6">
         <h4 className="text-xl font-bold text-gray-200 mb-4">{t('analisisFinalTab.interpretation')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-base">
           <div className="flex items-center gap-3">

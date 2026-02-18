@@ -166,7 +166,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
             {t('noticiasTab.title')}
@@ -174,7 +174,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
           <p className="text-sm text-gray-400 mt-1">{t('noticiasTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
+          <div className="text-right bg-gray-950 px-4 py-2 rounded-xl border border-green-600">
             <p className="text-xs text-green-400">{t('noticiasTab.total')}</p>
             <p className="text-xl font-bold text-green-400">{companyNews.length + pressReleases.length}</p>
           </div>
@@ -182,7 +182,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
       </div>
 
       {/* Tab Selector */}
-      <div className="flex gap-4 border-b border-gray-700 pb-2">
+      <div className="flex gap-4 border-b border-white/[0.06] pb-2">
         <button
           onClick={() => setActiveTab('news')}
           className={`px-6 py-3 rounded-t-xl font-semibold text-lg transition-all ${
@@ -225,7 +225,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
                   href={news.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block bg-gray-700 rounded-xl border border-gray-600 hover:border-green-500 transition-all hover:shadow-lg hover:shadow-green-500/10 overflow-hidden group"
+                  className="block bg-gray-700 rounded-xl border border-white/[0.08] hover:border-green-500 transition-all hover:shadow-lg hover:shadow-green-500/10 overflow-hidden group"
                 >
                   <div className="flex">
                     {news.image && (
@@ -286,7 +286,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
               {pressReleases.map((pr, idx) => (
                 <div
                   key={idx}
-                  className="bg-gray-700 rounded-xl border border-gray-600 p-6 hover:border-emerald-500 transition-all"
+                  className="bg-gray-700 rounded-xl border border-white/[0.08] p-6 hover:border-emerald-500 transition-all"
                 >
                   <div className="flex items-center gap-3 mb-3">
                     <span className="px-3 py-1 bg-emerald-600/30 text-emerald-400 text-sm rounded-full font-medium">
@@ -310,7 +310,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
       )}
 
       {/* Summary Stats */}
-      <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
+      <div className="bg-gray-800 rounded-xl border border-white/[0.06] p-6">
         <h4 className="text-lg font-semibold text-gray-200 mb-4">{t('noticiasTab.coverageSummary')}</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-700 rounded-lg p-4 text-center">

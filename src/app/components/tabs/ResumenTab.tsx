@@ -206,7 +206,7 @@ export default function ResumenTab({
             href={`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/health`}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-6 py-3 border border-gray-600 text-gray-300 rounded-xl font-semibold hover:bg-gray-800 transition"
+            className="px-6 py-3 border border-white/[0.08] text-gray-300 rounded-xl font-semibold hover:bg-gray-800 transition"
           >
             Verificar Backend
           </a>
@@ -224,7 +224,7 @@ export default function ResumenTab({
         <div className="mt-8 grid grid-cols-6 gap-2 max-w-2xl mx-auto">
           {['Ingesta', 'Sentiment', 'Institucional', 'Técnico', 'Valuación', 'Calidad', 'Growth', 'Forecasts', 'MonteCarlo', 'Correlación', 'Síntesis', 'Output'].map((layer, i) => (
             <div key={layer} className="text-center">
-              <div className="w-8 h-8 mx-auto rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-gray-600 text-[10px]">
+              <div className="w-8 h-8 mx-auto rounded-full bg-gray-800 border border-white/[0.06] flex items-center justify-center text-gray-600 text-[10px]">
                 L{i + 1}
               </div>
               <p className="text-[8px] text-gray-600 mt-1">{layer}</p>
@@ -368,10 +368,10 @@ export default function ResumenTab({
 
       {/* Synthesis Details */}
       {synthesisDetails && (
-        <div className="bg-gray-900/80 rounded-3xl border border-gray-700/50 overflow-hidden">
+        <div className="bg-gray-900/80 rounded-3xl border border-white/[0.06]/50 overflow-hidden">
           <button
             onClick={() => setShowSynthesis(!showSynthesis)}
-            className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r from-emerald-900/30 to-emerald-900/30 hover:from-emerald-900/50 hover:to-emerald-900/50 transition-all"
+            className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r bg-gray-950 to-emerald-900/30 hover:bg-gray-950 hover:to-emerald-900/50 transition-all"
           >
             <div className="flex items-center gap-3">
               <span className="text-2xl">⚡</span>
@@ -472,7 +472,7 @@ export default function ResumenTab({
               return (
                 <div
                   key={dim}
-                  className="bg-gray-900/80 p-4 rounded-2xl border border-gray-700/50 hover:border-emerald-500/50 transition-all group"
+                  className="bg-gray-900/80 p-4 rounded-2xl border border-white/[0.06]/50 hover:border-emerald-500/50 transition-all group"
                 >
                   <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 truncate">
                     {dim.replace(/([A-Z])/g, ' $1').trim()}
@@ -494,14 +494,14 @@ export default function ResumenTab({
       )}
 
       {/* Summary Narrative */}
-      <div className="bg-gray-900/80 p-8 rounded-3xl border border-gray-700/50">
+      <div className="bg-gray-900/80 p-8 rounded-3xl border border-white/[0.06]/50">
         <h4 className="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
           <span className="text-emerald-400">📝</span> Análisis Narrativo
         </h4>
         <p className="text-lg leading-relaxed text-gray-200">{summaryText}</p>
 
         {actionableAdvice && (
-          <div className="mt-8 bg-gradient-to-r from-emerald-900/40 via-emerald-900/40 to-emerald-900/40 p-6 rounded-2xl border border-emerald-500/30">
+          <div className="mt-8 bg-gradient-to-r bg-gray-950 via-emerald-900/40 to-emerald-900/40 p-6 rounded-2xl border border-emerald-500/30">
             <p className="uppercase text-emerald-400 text-xs tracking-[3px] mb-2 flex items-center gap-2">
               <span>🎯</span> PLAN DE ACCIÓN
             </p>

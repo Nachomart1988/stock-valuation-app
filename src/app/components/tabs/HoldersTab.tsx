@@ -381,7 +381,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
             {t('holdersTab.title')}
@@ -390,14 +390,14 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
         </div>
         {(positionsSummary || ownershipSummary) && (
           <div className="flex items-center gap-4">
-            <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
+            <div className="text-right bg-gray-950 px-4 py-2 rounded-xl border border-green-600">
               <p className="text-xs text-green-400">{t('holdersTab.institutionalOwnership')}</p>
               <p className="text-xl font-bold text-green-400">
                 {formatPercent(positionsSummary?.ownershipPercent || ownershipSummary?.institutionalOwnership)}
               </p>
             </div>
             {positionsSummary && (
-              <div className="text-right bg-gradient-to-r from-emerald-900/40 to-pink-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+              <div className="text-right bg-gradient-to-r bg-gray-950 to-pink-900/40 px-4 py-2 rounded-xl border border-emerald-600">
                 <p className="text-xs text-emerald-400">Q{positionsSummary.quarter} {positionsSummary.year}</p>
                 <p className="text-xl font-bold text-emerald-400">
                   {formatNumber(positionsSummary.investorsHolding)} {t('holdersTab.institutionalHolders')}
@@ -410,7 +410,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
 
       {/* Positions Summary Cards - NEW */}
       {positionsSummary && (
-        <div className="bg-gradient-to-r from-green-900/30 to-green-900/30 p-6 rounded-xl border border-green-600">
+        <div className="bg-gray-950 p-6 rounded-xl border border-green-600">
           <h4 className="text-2xl font-bold text-green-400 mb-6 flex items-center gap-3">
             <span>🏛️</span> {t('holdersTab.positionsSummary')}
             <span className="text-sm font-normal text-gray-400">
@@ -541,12 +541,12 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
 
       {/* Quarterly Trend Chart */}
       {positionsHistory.length > 1 && (
-        <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
+        <div className="bg-gradient-to-r bg-gray-950 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
           <h4 className="text-xl font-bold text-emerald-400 mb-4">📊 Quarterly Ownership Trend</h4>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-700">
+                <tr className="border-b border-white/[0.06]">
                   <th className="py-2 px-3 text-left text-gray-400">Quarter</th>
                   <th className="py-2 px-3 text-right text-gray-400">Investors</th>
                   <th className="py-2 px-3 text-right text-gray-400">Ownership %</th>
@@ -641,7 +641,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
       )}
 
       {/* Tab Navigation */}
-      <div className="flex gap-2 border-b border-gray-700 pb-2 overflow-x-auto">
+      <div className="flex gap-2 border-b border-white/[0.06] pb-2 overflow-x-auto">
         <button
           onClick={() => setActiveView('summary')}
           className={`px-4 py-2 rounded-t-xl font-semibold transition-all whitespace-nowrap ${
@@ -688,7 +688,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
 
       {/* Summary View */}
       {activeView === 'summary' && (
-        <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
+        <div className="bg-gray-800 rounded-xl border border-white/[0.06] p-6">
           <h4 className="text-lg font-semibold text-gray-200 mb-4">Quick Summary</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gray-700 rounded-lg p-4 text-center">
@@ -736,7 +736,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="border-b border-gray-700">
+                    <tr className="border-b border-white/[0.06]">
                       <th className="py-3 px-4 text-gray-400 font-semibold">#</th>
                       <th className="py-3 px-4 text-gray-400 font-semibold">{t('holdersTab.holder')}</th>
                       <th className="py-3 px-4 text-gray-400 font-semibold text-right">{t('holdersTab.shares')}</th>
@@ -779,7 +779,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="border-b border-gray-700">
+                  <tr className="border-b border-white/[0.06]">
                     <th className="py-3 px-4 text-gray-400 font-semibold">#</th>
                     <th className="py-3 px-4 text-gray-400 font-semibold">Fund</th>
                     <th className="py-3 px-4 text-gray-400 font-semibold text-right">Shares</th>
@@ -827,7 +827,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="border-b border-gray-700">
+                    <tr className="border-b border-white/[0.06]">
                       <th className="py-3 px-3 text-gray-400 font-semibold">Investor</th>
                       <th className="py-3 px-3 text-gray-400 font-semibold text-right">Shares</th>
                       <th className="py-3 px-3 text-gray-400 font-semibold text-right">Change %</th>

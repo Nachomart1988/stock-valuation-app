@@ -98,7 +98,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
             {t('dupontTab.title')}
@@ -107,7 +107,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
         </div>
         {rows.length > 0 && (
           <div className="flex items-center gap-4">
-            <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
+            <div className="text-right bg-gray-950 px-4 py-2 rounded-xl border border-green-600">
               <p className="text-xs text-green-400">{t('dupontTab.currentRoe')}</p>
               <p className="text-xl font-bold text-green-400">{rows[0]?.roe || '—'}</p>
             </div>
@@ -117,7 +117,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
 
       {/* DuPont Analysis Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+        <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
           <thead className="bg-gray-800">
             <tr>
               <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">{t('dupontTab.date')}</th>
@@ -150,7 +150,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
       </div>
 
       {/* Company Notes/Bonds Section */}
-      <div className="bg-gray-800/50 rounded-xl p-8 border border-gray-700">
+      <div className="bg-gray-800/50 rounded-xl p-8 border border-white/[0.06]">
         <h3 className="text-2xl font-bold text-gray-100 mb-6 flex items-center gap-3">
           <span className="text-yellow-400">📜</span>
           {t('dupontTab.companyNotes')}
@@ -174,7 +174,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full border border-gray-600 rounded-lg overflow-hidden">
+            <table className="min-w-full border border-white/[0.08] rounded-lg overflow-hidden">
               <thead className="bg-gray-700">
                 <tr>
                   <th className="px-6 py-4 text-left text-gray-200 font-bold">{t('dupontTab.bondTitle')}</th>

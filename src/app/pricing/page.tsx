@@ -119,7 +119,7 @@ export default function PricingPage() {
               className={`relative bg-gray-900/80 backdrop-blur rounded-3xl p-5 sm:p-8 border-2 transition-all hover:scale-[1.02] ${
                 plan.popular
                   ? 'border-emerald-500 shadow-2xl shadow-emerald-500/20 md:scale-105'
-                  : 'border-gray-800 hover:border-gray-700'
+                  : 'border-gray-800 hover:border-white/[0.06]'
               }`}
             >
               {plan.popular && (
@@ -285,7 +285,7 @@ export default function PricingPage() {
         </div>
 
         {/* CTA */}
-        <div className="text-center bg-gradient-to-r from-emerald-900/30 to-emerald-900/30 rounded-3xl p-6 sm:p-12 border border-emerald-500/30">
+        <div className="text-center bg-gradient-to-r bg-gray-950 to-emerald-900/30 rounded-3xl p-6 sm:p-12 border border-emerald-500/30">
           <h2 className="text-xl sm:text-3xl font-bold mb-4">
             ¿Listo para empezar?
           </h2>

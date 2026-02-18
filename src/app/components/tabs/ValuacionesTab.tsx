@@ -49,10 +49,10 @@ function CollapsibleSection({
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
-    <div className="border border-gray-700 rounded-xl overflow-hidden bg-gray-800/50 backdrop-blur">
+    <div className="border border-white/[0.06] rounded-xl overflow-hidden bg-gray-800/50 backdrop-blur">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-5 py-4 flex items-center justify-between bg-gradient-to-r from-gray-800 to-gray-900 hover:from-gray-700 hover:to-gray-800 transition-all"
+        className="w-full px-5 py-4 flex items-center justify-between bg-gray-900 hover:from-gray-700 hover:to-gray-800 transition-all"
       >
         <div className="flex items-center gap-3">
           {icon && <span className="text-xl">{icon}</span>}
@@ -109,8 +109,8 @@ function ModelCard({
       className={`relative p-5 rounded-2xl border-2 transition-all duration-200 ${
         enabled
           ? highlight
-            ? 'bg-gradient-to-br from-green-900/40 to-emerald-900/40 border-green-500 shadow-lg shadow-green-500/20'
-            : 'bg-gradient-to-br from-gray-800 to-gray-900 border-gray-600 hover:border-gray-500'
+            ? 'bg-gray-950 border-green-500 shadow-lg shadow-green-500/20'
+            : 'bg-gray-900 border-white/[0.08] hover:border-gray-500'
           : 'bg-gray-900/50 border-gray-800 opacity-60'
       }`}
     >
@@ -132,7 +132,7 @@ function ModelCard({
           type="checkbox"
           checked={enabled}
           onChange={onToggle}
-          className="w-5 h-5 text-green-600 focus:ring-green-500 border-gray-600 rounded cursor-pointer accent-green-500"
+          className="w-5 h-5 text-green-600 focus:ring-green-500 border-white/[0.08] rounded cursor-pointer accent-green-500"
         />
       </div>
 
@@ -160,7 +160,7 @@ function ModelCard({
 
       {/* Collapsible Inputs Editor */}
       {showInputs && inputs && inputs.length > 0 && onInputChange && (
-        <div className="mt-3 pt-3 border-t border-gray-700 space-y-2">
+        <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
           <p className="text-xs text-green-400 font-semibold mb-2">📝 Ajustar Inputs:</p>
           {inputs.map((input) => (
             <div key={input.key} className="flex items-center gap-2">
@@ -174,7 +174,7 @@ function ModelCard({
                 max={input.max}
                 value={input.value}
                 onChange={(e) => onInputChange(input.key, parseFloat(e.target.value) || 0)}
-                className="w-20 px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                className="w-20 px-2 py-1 text-xs bg-gray-800 border border-white/[0.08] rounded text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
               />
             </div>
           ))}
@@ -1957,7 +1957,7 @@ export default function ValuacionesTab({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
             {t('valuacionesTab.title')}
@@ -1969,7 +1969,7 @@ export default function ValuacionesTab({
             <p className="text-xs text-gray-500">{t('valuacionesTab.currentPrice')}</p>
             <p className="text-2xl font-bold text-gray-100">${quote?.price?.toFixed(2) || 'N/A'}</p>
           </div>
-          <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
+          <div className="text-right bg-gray-950 px-4 py-2 rounded-xl border border-green-600">
             <p className="text-xs text-green-400">SGR</p>
             <p className="text-xl font-bold text-green-400">
               {sustainableGrowthRate != null && sustainableGrowthRate !== undefined ? `${(sustainableGrowthRate * 100).toFixed(1)}%` : '8%'}
@@ -1998,7 +1998,7 @@ export default function ValuacionesTab({
                 type="number"
                 value={h}
                 onChange={(e) => setH(Number(e.target.value) || 5)}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                className="w-full px-3 py-2 border border-white/[0.08] rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
               />
             </div>
             <div>
@@ -2008,7 +2008,7 @@ export default function ValuacionesTab({
                 step="0.01"
                 value={glong}
                 onChange={(e) => setGlong(Number(e.target.value) || 0.04)}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                className="w-full px-3 py-2 border border-white/[0.08] rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
               />
             </div>
             <div>
@@ -2017,7 +2017,7 @@ export default function ValuacionesTab({
                 type="number"
                 value={n}
                 onChange={(e) => setN(Number(e.target.value) || 5)}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                className="w-full px-3 py-2 border border-white/[0.08] rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
               />
             </div>
             <div>
@@ -2037,7 +2037,7 @@ export default function ValuacionesTab({
                   : sharePriceTxCAGR}
                 onChange={(e) => setSharePriceTxCAGR(Number(e.target.value) || 10)}
                 className={`w-full px-3 py-2 border rounded-lg text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500 ${
-                  cagrStats?.maxCagr != null ? 'border-green-600 bg-green-900/20' : 'border-gray-600 bg-gray-900'
+                  cagrStats?.maxCagr != null ? 'border-green-600 bg-green-900/20' : 'border-white/[0.08] bg-gray-900'
                 }`}
                 readOnly={cagrStats?.maxCagr != null && cagrStats?.minCagr != null}
               />
@@ -2084,7 +2084,7 @@ export default function ValuacionesTab({
                   const val = parseFloat(e.target.value);
                   setDiscountRate(isNaN(val) ? null : val);
                 }}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                className="w-full px-3 py-2 border border-white/[0.08] rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
               />
             </div>
             <div>
@@ -2094,7 +2094,7 @@ export default function ValuacionesTab({
                 step="0.5"
                 value={exitMultiple}
                 onChange={(e) => setExitMultiple(Number(e.target.value) || 12)}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                className="w-full px-3 py-2 border border-white/[0.08] rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
               />
             </div>
             <div>
@@ -2104,18 +2104,18 @@ export default function ValuacionesTab({
                 step="0.5"
                 value={projectedGrowthRate}
                 onChange={(e) => setProjectedGrowthRate(Number(e.target.value) || 5)}
-                className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                className="w-full px-3 py-2 border border-white/[0.08] rounded-lg bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
               />
             </div>
           </div>
 
           {/* WACC Breakdown */}
-          <div className="grid grid-cols-3 gap-4 p-4 bg-gray-800 rounded-xl border border-gray-700">
+          <div className="grid grid-cols-3 gap-4 p-4 bg-gray-800 rounded-xl border border-white/[0.06]">
             <div className="text-center">
               <p className="text-xs text-gray-500">Advance DCF (API)</p>
               <p className="text-lg font-bold text-emerald-400">{dcfCustom?.wacc ? `${dcfCustom.wacc.toFixed(2)}%` : 'N/A'}</p>
             </div>
-            <div className="text-center border-x border-gray-700">
+            <div className="text-center border-x border-white/[0.06]">
               <p className="text-xs text-gray-500">WACC Calculado</p>
               <p className="text-lg font-bold text-emerald-400">{calculatedDefaultWACC.toFixed(2)}%</p>
             </div>
@@ -2150,14 +2150,14 @@ export default function ValuacionesTab({
                 <label className="block text-xs text-gray-400 mb-1">ω (persistencia)</label>
                 <input type="number" step="0.01" value={omega ?? effectiveOmega}
                   onChange={(e) => setOmega(parseFloat(e.target.value) || null)}
-                  className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 text-sm focus:border-green-500"
+                  className="w-full px-3 py-2 border border-white/[0.08] rounded-lg bg-gray-900 text-gray-100 text-sm focus:border-green-500"
                 />
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">γ (other info)</label>
                 <input type="number" step="0.01" value={gamma ?? effectiveGamma}
                   onChange={(e) => setGamma(parseFloat(e.target.value) || null)}
-                  className="w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-900 text-gray-100 text-sm focus:border-green-500"
+                  className="w-full px-3 py-2 border border-white/[0.08] rounded-lg bg-gray-900 text-gray-100 text-sm focus:border-green-500"
                 />
               </div>
             </div>
@@ -2173,14 +2173,14 @@ export default function ValuacionesTab({
                   <label className="block text-xs text-gray-400 mb-1">σ (vol FCF)</label>
                   <input type="number" step="0.01" value={volatility ?? effectiveVolatility}
                     onChange={(e) => setVolatility(parseFloat(e.target.value) || null)}
-                    className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                    className="w-full px-2 py-1.5 border border-white/[0.08] rounded bg-gray-900 text-gray-100 text-sm"
                   />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">λ (risk price)</label>
                   <input type="number" step="0.1" value={lambda ?? effectiveLambda}
                     onChange={(e) => setLambda(parseFloat(e.target.value) || null)}
-                    className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                    className="w-full px-2 py-1.5 border border-white/[0.08] rounded bg-gray-900 text-gray-100 text-sm"
                   />
                 </div>
               </div>
@@ -2195,14 +2195,14 @@ export default function ValuacionesTab({
                     <label className="block text-xs text-gray-400 mb-1">φπ</label>
                     <input type="number" step="0.1" value={phi_pi ?? effectivePhiPi}
                       onChange={(e) => setPhi_pi(parseFloat(e.target.value) || null)}
-                      className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                      className="w-full px-2 py-1.5 border border-white/[0.08] rounded bg-gray-900 text-gray-100 text-sm"
                     />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">φy</label>
                     <input type="number" step="0.1" value={phi_y ?? effectivePhiY}
                       onChange={(e) => setPhi_y(parseFloat(e.target.value) || null)}
-                      className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                      className="w-full px-2 py-1.5 border border-white/[0.08] rounded bg-gray-900 text-gray-100 text-sm"
                     />
                   </div>
                 </div>
@@ -2211,14 +2211,14 @@ export default function ValuacionesTab({
                     <label className="block text-xs text-gray-400 mb-1">κ</label>
                     <input type="number" step="0.01" value={kappa ?? effectiveKappa}
                       onChange={(e) => setKappa(parseFloat(e.target.value) || null)}
-                      className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                      className="w-full px-2 py-1.5 border border-white/[0.08] rounded bg-gray-900 text-gray-100 text-sm"
                     />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">β</label>
                     <input type="number" step="0.01" value={betaDSGE ?? effectiveBetaDSGE}
                       onChange={(e) => setBetaDSGE(parseFloat(e.target.value) || null)}
-                      className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                      className="w-full px-2 py-1.5 border border-white/[0.08] rounded bg-gray-900 text-gray-100 text-sm"
                     />
                   </div>
                 </div>
@@ -2233,14 +2233,14 @@ export default function ValuacionesTab({
                   <label className="block text-xs text-gray-400 mb-1">σ (fwd rate vol)</label>
                   <input type="number" step="0.001" value={hjmSigma ?? effectiveHjmSigma}
                     onChange={(e) => setHjmSigma(parseFloat(e.target.value) || null)}
-                    className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                    className="w-full px-2 py-1.5 border border-white/[0.08] rounded bg-gray-900 text-gray-100 text-sm"
                   />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">a (mean rev)</label>
                   <input type="number" step="0.01" value={hjmMeanReversion ?? effectiveHjmMeanReversion}
                     onChange={(e) => setHjmMeanReversion(parseFloat(e.target.value) || null)}
-                    className="w-full px-2 py-1.5 border border-gray-600 rounded bg-gray-900 text-gray-100 text-sm"
+                    className="w-full px-2 py-1.5 border border-white/[0.08] rounded bg-gray-900 text-gray-100 text-sm"
                   />
                 </div>
               </div>
@@ -2251,7 +2251,7 @@ export default function ValuacionesTab({
 
       {/* Peer P/E for benchmarking */}
       {peerPE.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-800/50 rounded-xl border border-gray-700">
+        <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-800/50 rounded-xl border border-white/[0.06]">
           <span className="text-xs text-gray-500">P/E Peers:</span>
           {peerPE.slice(0, 5).map((peer) => (
             <span key={peer.symbol} className="px-2 py-1 bg-gray-700/50 rounded text-xs text-gray-400">
@@ -2375,7 +2375,7 @@ export default function ValuacionesTab({
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
               🧠 AdvanceValue Net - Neural Ensemble
             </h4>
-            <div className="bg-gradient-to-br from-emerald-900/30 via-gray-800 to-emerald-900/30 p-5 rounded-2xl border-2 border-emerald-500/40 shadow-lg">
+            <div className="bg-gradient-to-br bg-gray-950 via-gray-800 to-emerald-900/30 p-5 rounded-2xl border-2 border-emerald-500/40 shadow-lg">
               {advanceValueNetLoading && !advanceValueNet && (
                 <div className="flex items-center justify-center py-6 gap-3">
                   <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-500 border-t-transparent"></div>
@@ -2462,7 +2462,7 @@ export default function ValuacionesTab({
           {/* Comparison Grid */}
           {quote?.price && averageVal && (
             <div className="grid grid-cols-3 gap-4 mt-8">
-              <div className="bg-gray-800/80 backdrop-blur p-5 rounded-2xl border border-gray-700 text-center">
+              <div className="bg-gray-800/80 backdrop-blur p-5 rounded-2xl border border-white/[0.06] text-center">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Precio de Mercado</p>
                 <p className="text-3xl font-bold text-gray-100">${quote.price.toFixed(2)}</p>
               </div>

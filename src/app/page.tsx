@@ -128,7 +128,7 @@ export default function Home() {
               value={ticker}
               onChange={(e) => setTicker(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && handleAnalizar()}
-              className="flex-1 px-6 py-4 bg-gray-800/50 border border-gray-700 rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent placeholder-gray-500"
+              className="flex-1 px-6 py-4 bg-gray-800/50 border border-white/[0.06] rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent placeholder-gray-500"
             />
             <button
               onClick={handleAnalizar}
@@ -160,7 +160,7 @@ export default function Home() {
           </div>
 
           {/* Valuation Models Showcase */}
-          <div className="mt-16 p-6 bg-gray-800/30 rounded-2xl border border-gray-700">
+          <div className="mt-16 p-6 bg-gray-800/30 rounded-2xl border border-white/[0.06]">
             <h3 className="text-lg font-semibold text-gray-300 mb-4">{t('landing.valuationModelsIncluded')}</h3>
             <div className="flex flex-wrap justify-center gap-3">
               {[
@@ -172,7 +172,7 @@ export default function Home() {
               ].map((model) => (
                 <span
                   key={model}
-                  className="px-3 py-1.5 bg-gray-700/50 text-gray-300 text-sm rounded-lg border border-gray-600 hover:border-green-500 hover:text-green-400 transition cursor-default"
+                  className="px-3 py-1.5 bg-gray-700/50 text-gray-300 text-sm rounded-lg border border-white/[0.08] hover:border-green-500 hover:text-green-400 transition cursor-default"
                 >
                   {model}
                 </span>
@@ -209,7 +209,7 @@ export default function Home() {
           ) : (
             <div className="grid lg:grid-cols-3 gap-8">
               {/* Top Gainers */}
-              <div className="bg-gray-800/50 rounded-2xl border border-gray-700 p-6">
+              <div className="bg-gray-800/50 rounded-2xl border border-white/[0.06] p-6">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-2xl">📈</span>
                   <h3 className="text-xl font-bold text-green-400">{t('market.topGainers')}</h3>
@@ -244,7 +244,7 @@ export default function Home() {
               </div>
 
               {/* Top Losers */}
-              <div className="bg-gray-800/50 rounded-2xl border border-gray-700 p-6">
+              <div className="bg-gray-800/50 rounded-2xl border border-white/[0.06] p-6">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-2xl">📉</span>
                   <h3 className="text-xl font-bold text-red-400">{t('market.topLosers')}</h3>
@@ -279,7 +279,7 @@ export default function Home() {
               </div>
 
               {/* Latest News */}
-              <div className="bg-gray-800/50 rounded-2xl border border-gray-700 p-6 lg:row-span-1">
+              <div className="bg-gray-800/50 rounded-2xl border border-white/[0.06] p-6 lg:row-span-1">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-2xl">📰</span>
                   <h3 className="text-xl font-bold text-green-400">{t('market.latestNews')}</h3>
@@ -294,7 +294,7 @@ export default function Home() {
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block p-3 rounded-xl bg-gray-700/30 border border-gray-600/30 hover:border-green-500/50 transition"
+                        className="block p-3 rounded-xl bg-gray-700/30 border border-white/[0.08]/30 hover:border-green-500/50 transition"
                       >
                         <div className="flex gap-3">
                           {item.image && (
@@ -384,7 +384,7 @@ export default function Home() {
                 description: t('features.forecasts.description')
               },
             ].map((feature) => (
-              <div key={feature.title} className="p-6 rounded-2xl bg-gray-800/50 border border-gray-700/50 hover:border-green-500/50 transition group">
+              <div key={feature.title} className="p-6 rounded-2xl bg-gray-800/50 border border-white/[0.06]/50 hover:border-green-500/50 transition group">
                 <div className="text-4xl mb-4">{feature.icon}</div>
                 <h3 className="text-xl font-bold mb-2 group-hover:text-green-400 transition">{feature.title}</h3>
                 <p className="text-gray-400">{feature.description}</p>
@@ -463,7 +463,7 @@ export default function Home() {
             ].map((module, i) => (
               <div
                 key={module}
-                className="px-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700/50 text-center hover:border-emerald-500/50 hover:bg-emerald-500/10 transition cursor-pointer"
+                className="px-4 py-3 rounded-xl bg-gray-800/50 border border-white/[0.06]/50 text-center hover:border-emerald-500/50 hover:bg-emerald-500/10 transition cursor-pointer"
               >
                 <span className="text-xs text-gray-500 mr-2">{String(i + 1).padStart(2, '0')}</span>
                 <span className="text-gray-300">{module}</span>
@@ -485,7 +485,7 @@ export default function Home() {
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {/* Free Plan */}
-            <div className="p-8 rounded-2xl bg-gray-800/50 border border-gray-700/50">
+            <div className="p-8 rounded-2xl bg-gray-800/50 border border-white/[0.06]/50">
               <div className="text-lg font-semibold text-gray-400 mb-2">Free</div>
               <div className="text-4xl font-bold mb-6">$0<span className="text-lg text-gray-500">{t('pricing.perMonth')}</span></div>
               <ul className="space-y-3 mb-8">
@@ -498,13 +498,13 @@ export default function Home() {
                   </li>
                 ))}
               </ul>
-              <Link href="/analizar" className="block w-full py-3 rounded-xl border border-gray-600 text-gray-300 font-semibold hover:bg-gray-700/50 transition text-center">
+              <Link href="/analizar" className="block w-full py-3 rounded-xl border border-white/[0.08] text-gray-300 font-semibold hover:bg-gray-700/50 transition text-center">
                 {t('pricing.free.cta')}
               </Link>
             </div>
 
             {/* Pro Plan */}
-            <div className="p-8 rounded-2xl bg-gradient-to-b from-green-900/50 to-emerald-900/50 border-2 border-green-500/50 relative">
+            <div className="p-8 rounded-2xl bg-gray-950 border-2 border-green-500/50 relative">
               <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full text-sm font-semibold">
                 {t('pricing.mostPopular')}
               </div>
@@ -526,7 +526,7 @@ export default function Home() {
             </div>
 
             {/* Elite Plan */}
-            <div className="p-8 rounded-2xl bg-gray-800/50 border border-gray-700/50">
+            <div className="p-8 rounded-2xl bg-gray-800/50 border border-white/[0.06]/50">
               <div className="text-lg font-semibold text-gray-400 mb-2">Elite</div>
               <div className="text-4xl font-bold mb-6">$79<span className="text-lg text-gray-500">{t('pricing.perMonth')}</span></div>
               <ul className="space-y-3 mb-8">
@@ -539,7 +539,7 @@ export default function Home() {
                   </li>
                 ))}
               </ul>
-              <Link href="/pricing" className="block w-full py-3 rounded-xl border border-gray-600 text-gray-300 font-semibold hover:bg-gray-700/50 transition text-center">
+              <Link href="/pricing" className="block w-full py-3 rounded-xl border border-white/[0.08] text-gray-300 font-semibold hover:bg-gray-700/50 transition text-center">
                 {t('pricing.elite.cta')}
               </Link>
             </div>
@@ -580,7 +580,7 @@ export default function Home() {
                 { icon: '💡', title: t('about.innovation.title'), desc: t('about.innovation.description') },
                 { icon: '🤝', title: t('about.trust.title'), desc: t('about.trust.description') },
               ].map((item) => (
-                <div key={item.title} className="p-4 rounded-xl bg-gray-800/50 border border-gray-700/50">
+                <div key={item.title} className="p-4 rounded-xl bg-gray-800/50 border border-white/[0.06]/50">
                   <div className="text-2xl mb-2">{item.icon}</div>
                   <div className="font-semibold mb-1">{item.title}</div>
                   <div className="text-sm text-gray-500">{item.desc}</div>
@@ -609,7 +609,7 @@ export default function Home() {
             </Link>
             <Link
               href="/analizar"
-              className="px-8 py-4 border border-gray-600 rounded-xl text-lg font-semibold hover:bg-gray-800 transition"
+              className="px-8 py-4 border border-white/[0.08] rounded-xl text-lg font-semibold hover:bg-gray-800 transition"
             >
               {t('cta.tryWithoutRegister')}
             </Link>

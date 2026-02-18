@@ -292,7 +292,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
   return (
     <div className="space-y-10">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
             {t('revenueForecastTab.title')}
@@ -300,7 +300,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
           <p className="text-sm text-gray-400 mt-1">{t('revenueForecastTab.subtitle')}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-emerald-900/40 to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+          <div className="text-right bg-gradient-to-r bg-gray-950 to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
             <p className="text-xs text-emerald-400">{t('revenueForecastTab.yearsProjected')}</p>
             <p className="text-xl font-bold text-emerald-400">{forecastYears}</p>
           </div>
@@ -308,7 +308,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       </div>
 
       {/* Info de optimización */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+      <div className="bg-gray-800 p-6 rounded-xl border border-white/[0.06]">
         <h3 className="text-xl font-bold text-emerald-400 mb-4">{t('revenueForecastTab.optimizedParameters')}</h3>
         {isOptimizing ? (
           <p className="text-gray-400">{t('revenueForecastTab.optimizing')}</p>
@@ -338,7 +338,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       </div>
 
       {/* Control de años */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+      <div className="bg-gray-800 p-6 rounded-xl border border-white/[0.06]">
         <div className="max-w-xs">
           <label className="block text-gray-300 mb-2">{t('revenueForecastTab.yearsToProject')}</label>
           <input
@@ -347,13 +347,13 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
             max="10"
             value={forecastYears}
             onChange={(e) => setForecastYears(Math.max(1, parseInt(e.target.value) || 5))}
-            className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white"
+            className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
           />
         </div>
       </div>
 
       {/* Gráfico */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+      <div className="bg-gray-800 p-6 rounded-xl border border-white/[0.06]">
         <h3 className="text-2xl font-bold text-green-400 mb-6 text-center">
           {t('revenueForecastTab.chartTitle')} ({forecastYears} {t('revenueForecastTab.yearsToProject')})
         </h3>
@@ -392,7 +392,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
 
       {/* Tabla comparativa */}
       <div className="overflow-x-auto">
-        <table className="min-w-full bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+        <table className="min-w-full bg-gray-800 border border-white/[0.06] rounded-xl overflow-hidden">
           <thead className="bg-gray-700">
             <tr>
               <th className="px-6 py-4 text-left">{t('revenueForecastTab.yearsProjected').replace('Proyectados', '').replace('Projected', '')}</th>

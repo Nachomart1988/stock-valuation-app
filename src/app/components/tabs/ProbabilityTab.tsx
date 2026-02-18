@@ -212,7 +212,7 @@ export default function ProbabilityTab({
             <label className="block text-xs text-gray-500 mb-1">
               {t('probabilityTab.currentPrice')}
             </label>
-            <div className="px-3 py-2 bg-gray-800/50 border border-gray-600 rounded-lg text-gray-300 text-sm">
+            <div className="px-3 py-2 bg-gray-800/50 border border-white/[0.08] rounded-lg text-gray-300 text-sm">
               ${currentPrice.toFixed(2)}
             </div>
           </div>
@@ -246,7 +246,7 @@ export default function ProbabilityTab({
               type="number"
               value={riskFreeRate}
               onChange={(e) => setRiskFreeRate(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-100 text-sm focus:border-emerald-400 focus:outline-none"
+              className="w-full px-3 py-2 bg-gray-800 border border-white/[0.08] rounded-lg text-gray-100 text-sm focus:border-emerald-400 focus:outline-none"
               step="0.01"
             />
           </div>
@@ -260,7 +260,7 @@ export default function ProbabilityTab({
               type="number"
               value={dividendYield}
               onChange={(e) => setDividendYield(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-100 text-sm focus:border-emerald-400 focus:outline-none"
+              className="w-full px-3 py-2 bg-gray-800 border border-white/[0.08] rounded-lg text-gray-100 text-sm focus:border-emerald-400 focus:outline-none"
               step="0.01"
               min="0"
             />
@@ -290,7 +290,7 @@ export default function ProbabilityTab({
               type="number"
               value={steps}
               onChange={(e) => setSteps(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-100 text-sm focus:border-emerald-400 focus:outline-none"
+              className="w-full px-3 py-2 bg-gray-800 border border-white/[0.08] rounded-lg text-gray-100 text-sm focus:border-emerald-400 focus:outline-none"
               placeholder={`Auto (${Math.min(parseInt(days) || 252, 252)})`}
               min="10"
               max="500"
@@ -307,7 +307,7 @@ export default function ProbabilityTab({
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
                 useImpliedVol
                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
-                  : 'bg-gray-700 text-gray-400 border border-gray-600'
+                  : 'bg-gray-700 text-gray-400 border border-white/[0.08]'
               }`}
             >
               {t('probabilityTab.implied')}
@@ -317,7 +317,7 @@ export default function ProbabilityTab({
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
                 !useImpliedVol
                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
-                  : 'bg-gray-700 text-gray-400 border border-gray-600'
+                  : 'bg-gray-700 text-gray-400 border border-white/[0.08]'
               }`}
             >
               {t('probabilityTab.historical')}
@@ -355,7 +355,7 @@ export default function ProbabilityTab({
       {result && !loading && (
         <div className="space-y-6">
           {/* Main Probability Display */}
-          <div className={`bg-gradient-to-br ${getProbabilityBg(result.probability)} rounded-xl p-8 border border-gray-700 text-center`}>
+          <div className={`bg-gradient-to-br ${getProbabilityBg(result.probability)} rounded-xl p-8 border border-white/[0.06] text-center`}>
             <div className="text-sm text-gray-400 mb-2">
               {t('probabilityTab.probabilityOfReaching')} ${result.targetPrice.toFixed(2)}
             </div>
@@ -370,42 +370,42 @@ export default function ProbabilityTab({
           {/* Model Parameters Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {/* Up Factor */}
-            <div className="bg-gray-900/60 rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900/60 rounded-lg p-4 border border-white/[0.06]">
               <div className="text-xs text-gray-500">{t('probabilityTab.upFactor')} (u)</div>
               <div className="text-xl font-bold text-green-400">{result.upFactor.toFixed(6)}</div>
               <div className="text-xs text-gray-600">e^(σ√ΔT)</div>
             </div>
 
             {/* Down Factor */}
-            <div className="bg-gray-900/60 rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900/60 rounded-lg p-4 border border-white/[0.06]">
               <div className="text-xs text-gray-500">{t('probabilityTab.downFactor')} (d)</div>
               <div className="text-xl font-bold text-red-400">{result.downFactor.toFixed(6)}</div>
               <div className="text-xs text-gray-600">1/u</div>
             </div>
 
             {/* Up Probability */}
-            <div className="bg-gray-900/60 rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900/60 rounded-lg p-4 border border-white/[0.06]">
               <div className="text-xs text-gray-500">{t('probabilityTab.upProbability')} (p)</div>
               <div className="text-xl font-bold text-green-400">{result.upProbability.toFixed(2)}%</div>
               <div className="text-xs text-gray-600">(e^((r-DY)ΔT) - d) / (u - d)</div>
             </div>
 
             {/* Down Probability */}
-            <div className="bg-gray-900/60 rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900/60 rounded-lg p-4 border border-white/[0.06]">
               <div className="text-xs text-gray-500">{t('probabilityTab.downProbability')} (1-p)</div>
               <div className="text-xl font-bold text-red-400">{result.downProbability.toFixed(2)}%</div>
               <div className="text-xs text-gray-600">1 - p</div>
             </div>
 
             {/* Volatility Used */}
-            <div className="bg-gray-900/60 rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900/60 rounded-lg p-4 border border-white/[0.06]">
               <div className="text-xs text-gray-500">{t('probabilityTab.volatilityUsed')} (σ)</div>
               <div className="text-xl font-bold text-emerald-400">{result.volatilityUsed.toFixed(2)}%</div>
               <div className="text-xs text-gray-600">{t('probabilityTab.source')}: {result.volatilitySource}</div>
             </div>
 
             {/* Historical Vol */}
-            <div className="bg-gray-900/60 rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900/60 rounded-lg p-4 border border-white/[0.06]">
               <div className="text-xs text-gray-500">{t('probabilityTab.historicalVol')}</div>
               <div className="text-xl font-bold text-gray-300">
                 {result.historicalVolatility != null ? `${result.historicalVolatility.toFixed(2)}%` : 'N/A'}
@@ -413,7 +413,7 @@ export default function ProbabilityTab({
             </div>
 
             {/* Implied Vol */}
-            <div className="bg-gray-900/60 rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900/60 rounded-lg p-4 border border-white/[0.06]">
               <div className="text-xs text-gray-500">{t('probabilityTab.impliedVol')}</div>
               <div className="text-xl font-bold text-gray-300">
                 {result.impliedVolatility != null ? `${result.impliedVolatility.toFixed(2)}%` : 'N/A'}
@@ -421,7 +421,7 @@ export default function ProbabilityTab({
             </div>
 
             {/* Expected Price */}
-            <div className="bg-gray-900/60 rounded-lg p-4 border border-gray-700">
+            <div className="bg-gray-900/60 rounded-lg p-4 border border-white/[0.06]">
               <div className="text-xs text-gray-500">{t('probabilityTab.expectedPrice')}</div>
               <div className="text-xl font-bold text-green-400">${result.expectedPrice.toFixed(2)}</div>
               <div className="text-xs text-gray-600">
@@ -432,7 +432,7 @@ export default function ProbabilityTab({
 
           {/* Price Distribution Chart */}
           {result.priceDistribution && result.priceDistribution.length > 0 && (
-            <div className="bg-gray-900/60 rounded-xl p-6 border border-gray-700">
+            <div className="bg-gray-900/60 rounded-xl p-6 border border-white/[0.06]">
               <h3 className="text-lg font-semibold text-emerald-400 mb-4">
                 {t('probabilityTab.priceDistribution')}
               </h3>
@@ -454,7 +454,7 @@ export default function ProbabilityTab({
                         style={{ height: `${Math.max(height, 1)}%` }}
                       />
                       {/* Tooltip */}
-                      <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-200 whitespace-nowrap z-10">
+                      <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-800 border border-white/[0.08] rounded px-2 py-1 text-xs text-gray-200 whitespace-nowrap z-10">
                         {bucket.priceRange}<br/>
                         {bucket.probability.toFixed(2)}%
                       </div>
@@ -484,7 +484,7 @@ export default function ProbabilityTab({
 
           {/* Binomial Tree Preview (Collapsible) */}
           {result.treePreview && result.treePreview.length > 0 && (
-            <div className="bg-gray-900/60 rounded-xl border border-gray-700 overflow-hidden">
+            <div className="bg-gray-900/60 rounded-xl border border-white/[0.06] overflow-hidden">
               <button
                 onClick={() => setShowTree(!showTree)}
                 className="w-full px-6 py-4 flex justify-between items-center text-left hover:bg-gray-800/50 transition-colors"
@@ -535,7 +535,7 @@ export default function ProbabilityTab({
 
           {/* Options Chain (Collapsible) */}
           {result.optionsChain && result.optionsChain.length > 0 && (
-            <div className="bg-gray-900/60 rounded-xl border border-gray-700 overflow-hidden">
+            <div className="bg-gray-900/60 rounded-xl border border-white/[0.06] overflow-hidden">
               <button
                 onClick={() => setShowOptions(!showOptions)}
                 className="w-full px-6 py-4 flex justify-between items-center text-left hover:bg-gray-800/50 transition-colors"
@@ -550,7 +550,7 @@ export default function ProbabilityTab({
                 <div className="px-6 pb-6 overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-700">
+                      <tr className="border-b border-white/[0.06]">
                         <th className="py-2 px-3 text-left text-gray-400">Strike</th>
                         <th className="py-2 px-3 text-right text-gray-400">Last</th>
                         <th className="py-2 px-3 text-right text-gray-400">Bid</th>

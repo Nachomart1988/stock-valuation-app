@@ -94,7 +94,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
   return (
     <div className="space-y-10">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">
             {t('forecastsTab.title')}
@@ -102,7 +102,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
           <p className="text-sm text-gray-400 mt-1">{t('forecastsTab.subtitle')} {ticker} - {t('forecastsTab.nextYears')}: {estimates.length}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-emerald-900/40 to-green-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+          <div className="text-right bg-gray-950 px-4 py-2 rounded-xl border border-emerald-600">
             <p className="text-xs text-emerald-400">{t('forecastsTab.periods')}</p>
             <p className="text-xl font-bold text-emerald-400">{estimates.length}</p>
           </div>
@@ -110,7 +110,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+        <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
           <thead className="bg-gray-800">
             <tr>
               <th className="px-6 py-4 text-left font-bold text-gray-200 sticky left-0 bg-gray-800 z-10 min-w-[220px]">
@@ -126,7 +126,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
           <tbody className="divide-y divide-gray-700">
             {/* Revenue Avg */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-200">
                 {t('forecastsTab.revenueAvg')}
               </td>
               {estimates.map((est, idx) => (
@@ -138,7 +138,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* Revenue Low */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('forecastsTab.revenueLow')}
               </td>
               {estimates.map((est, idx) => (
@@ -150,7 +150,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* Revenue High */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('forecastsTab.revenueHigh')}
               </td>
               {estimates.map((est, idx) => (
@@ -162,7 +162,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* EPS Avg */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-200">
                 {t('forecastsTab.epsAvg')}
               </td>
               {estimates.map((est, idx) => (
@@ -174,7 +174,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* EPS Low */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('forecastsTab.epsLow')}
               </td>
               {estimates.map((est, idx) => (
@@ -186,7 +186,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* EPS High */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('forecastsTab.epsHigh')}
               </td>
               {estimates.map((est, idx) => (
@@ -198,7 +198,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* Net Income Avg */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-200">
                 {t('forecastsTab.netIncomeAvg')}
               </td>
               {estimates.map((est, idx) => (
@@ -210,7 +210,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* Net Income Low */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('forecastsTab.netIncomeLow')}
               </td>
               {estimates.map((est, idx) => (
@@ -222,7 +222,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* Net Income High */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('forecastsTab.netIncomeHigh')}
               </td>
               {estimates.map((est, idx) => (
@@ -234,7 +234,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* EBITDA Avg */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-200">
                 {t('forecastsTab.ebitdaAvg')}
               </td>
               {estimates.map((est, idx) => (
@@ -246,7 +246,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* EBITDA Low */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('forecastsTab.ebitdaLow')}
               </td>
               {estimates.map((est, idx) => (
@@ -258,7 +258,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* EBITDA High */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('forecastsTab.ebitdaHigh')}
               </td>
               {estimates.map((est, idx) => (
@@ -270,7 +270,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* EBIT Avg */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-200">
                 {t('forecastsTab.ebitAvg')}
               </td>
               {estimates.map((est, idx) => (
@@ -282,7 +282,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* EBIT Low */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('forecastsTab.ebitLow')}
               </td>
               {estimates.map((est, idx) => (
@@ -294,7 +294,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* EBIT High */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('forecastsTab.ebitHigh')}
               </td>
               {estimates.map((est, idx) => (
@@ -306,7 +306,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* SGA Expense Avg */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-200">
                 SGA Expense (Avg)
               </td>
               {estimates.map((est, idx) => (
@@ -318,7 +318,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* SGA Expense Low */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 SGA Expense (Low)
               </td>
               {estimates.map((est, idx) => (
@@ -330,7 +330,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* SGA Expense High */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-300">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
                 SGA Expense (High)
               </td>
               {estimates.map((est, idx) => (
@@ -342,7 +342,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* # Analistas Revenue */}
             <tr className="hover:bg-gray-700 bg-gray-800/50">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-200">
                 {t('forecastsTab.numAnalystsRevenue')}
               </td>
               {estimates.map((est, idx) => (
@@ -354,7 +354,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
 
             {/* # Analistas EPS */}
             <tr className="hover:bg-gray-700">
-              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-gray-700 text-gray-200">
+              <td className="px-6 py-4 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-200">
                 {t('forecastsTab.numAnalystsEps')}
               </td>
               {estimates.map((est, idx) => (

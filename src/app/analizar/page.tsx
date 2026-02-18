@@ -840,7 +840,7 @@ function AnalizarContent() {
           <h1 className="text-3xl sm:text-5xl font-extrabold text-green-400 mb-6 sm:mb-8 text-center">
             Analizador de Acciones
           </h1>
-          <div className="bg-gray-800 p-5 sm:p-8 md:p-10 rounded-2xl shadow-2xl border border-gray-700">
+          <div className="bg-gray-800 p-5 sm:p-8 md:p-10 rounded-2xl shadow-2xl border border-white/[0.06]">
             <label className="block text-base sm:text-xl font-semibold text-gray-200 mb-3 sm:mb-4">
               Ingresa el Ticker
             </label>
@@ -851,7 +851,7 @@ function AnalizarContent() {
                 onChange={(e) => setTicker(e.target.value.toUpperCase())}
                 onKeyDown={(e) => e.key === 'Enter' && handleAnalizar(ticker)}
                 placeholder="Ej: AAPL, MSFT, GOOGL"
-                className="flex-1 px-4 sm:px-6 py-3 sm:py-4 text-lg sm:text-2xl border-2 border-gray-600 rounded-xl bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-green-500 placeholder-gray-500"
+                className="flex-1 px-4 sm:px-6 py-3 sm:py-4 text-lg sm:text-2xl border-2 border-white/[0.08] rounded-xl bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-green-500 placeholder-gray-500"
               />
               <button
                 onClick={() => handleAnalizar(ticker)}
@@ -1021,7 +1021,7 @@ function AnalizarContent() {
 
 <Tab.Panels className="mt-2">
   {/* 1. Inicio */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <InicioTab
       ticker={activeTicker}
       quote={quote}
@@ -1035,7 +1035,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 2. Financial Statements (Income, Balance, CashFlow) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <FinancialStatementsGroup
       IncomeTab={<FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} secData={secData} growthData={incomeGrowth} asReportedData={incomeAsReported} financialGrowth={financialGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} />}
       BalanceTab={<FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} secData={secData} growthData={balanceGrowth} asReportedData={balanceAsReported} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} enterpriseValue={enterpriseValue} />}
@@ -1044,7 +1044,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 3. Forecasts (Forecasts + Revenue Forecast) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <ForecastsGroup
       ForecastsTab={<ForecastsTab ticker={ticker} />}
       RevenueForecastTab={<RevenueForecastTab income={income} />}
@@ -1052,7 +1052,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 4. Info General (Analisis General, Key Metrics, Analistas, DuPont) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <GeneralInfoGroup
       AnalisisGeneralTab={<GeneralTab profile={profile} quote={quote} ticker={activeTicker} />}
       KeyMetricsTab={<KeyMetricsTab ticker={activeTicker} industry={profile?.industry} onCompanyQualityNetChange={setSharedCompanyQualityNet} />}
@@ -1062,7 +1062,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 5. Compañía (Competidores, Industry, Segmentation, Holders) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <CompanyGroup
       CompetidoresTab={<CompetidoresTab ticker={ticker} />}
       IndustryTab={<IndustryTab ticker={activeTicker} />}
@@ -1072,12 +1072,12 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 6. Noticias */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <NoticiasTab ticker={activeTicker} />
   </Tab.Panel>
 
   {/* 7. Inputs (Sustainable Growth, Beta, CAGR, Pivots, WACC) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <InputsGroup
       SustainableGrowthTab={
         <SustainableGrowthTab
@@ -1108,7 +1108,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 8. DCF (Cálculos, DCF Models) con valores intrínsecos en header */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <DCFGroup
       CalculosTab={
         <CalculosTab
@@ -1135,7 +1135,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 9. Valuaciones */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <ValuacionesTab
       ticker={activeTicker}
       income={income}
@@ -1158,7 +1158,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 10. Probability */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <ProbabilityTab
       ticker={activeTicker}
       quote={quote}
@@ -1170,12 +1170,12 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 11. Diario Inversor */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <DiarioInversorTab />
   </Tab.Panel>
 
   {/* 11. Resumen Maestro */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-gray-700">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <ResumenTab
       ticker={activeTicker}
       currentPrice={quote?.price || 0}
@@ -1549,7 +1549,7 @@ function InicioTab({
       {/* Header con company info */}
       <div className="flex flex-col md:flex-row gap-4 sm:gap-8 items-start">
         {/* Company Info Card */}
-        <div className="flex-1 bg-gradient-to-br from-gray-700 to-gray-800 p-4 sm:p-6 md:p-8 rounded-2xl border border-gray-600">
+        <div className="flex-1 bg-gray-800 p-4 sm:p-6 md:p-8 rounded-2xl border border-white/[0.08]">
           <div className="flex items-center gap-3 sm:gap-6 mb-4 sm:mb-6">
             {profile?.image && (
               <img
@@ -1577,7 +1577,7 @@ function InicioTab({
         </div>
 
         {/* Ticker Search */}
-        <div className="w-full md:w-auto bg-gray-700 p-4 sm:p-6 rounded-xl border border-gray-600">
+        <div className="w-full md:w-auto bg-gray-700 p-4 sm:p-6 rounded-xl border border-white/[0.08]">
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
             <input
               type="text"
@@ -1585,7 +1585,7 @@ function InicioTab({
               onChange={(e) => setInputTicker(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && onAnalizar(inputTicker)}
               placeholder={t('analysis.searchTicker')}
-              className="w-full sm:w-44 md:w-48 px-4 sm:px-5 py-3 sm:py-4 border border-gray-600 rounded-xl text-gray-100 text-base sm:text-xl bg-gray-900 focus:border-green-500 focus:ring-green-500 placeholder-gray-500"
+              className="w-full sm:w-44 md:w-48 px-4 sm:px-5 py-3 sm:py-4 border border-white/[0.08] rounded-xl text-gray-100 text-base sm:text-xl bg-gray-900 focus:border-green-500 focus:ring-green-500 placeholder-gray-500"
             />
             <button
               onClick={() => onAnalizar(inputTicker)}
@@ -1615,12 +1615,12 @@ function InicioTab({
           { label: t('analysis.precio.upside'), value: sharedAverageVal && currentPrice ? `${(((sharedAverageVal - currentPrice) / currentPrice) * 100).toFixed(1)}%` : 'N/A', color: sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400' },
           { label: t('analysis.precio.peRatio'), value: (() => { const ttmEPS = incomeTTM?.eps || incomeTTM?.epsdiluted || quote?.eps || profile?.ttmEPS; if (currentPrice && ttmEPS && ttmEPS > 0) return (currentPrice / ttmEPS).toFixed(1); return quote?.pe?.toFixed(1) || 'N/A'; })(), color: 'text-emerald-400' },
         ].map(({ label, value, color }) => (
-          <div key={label} className="bg-gradient-to-br from-gray-700 to-gray-800 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
+          <div key={label} className="bg-gray-800 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center border border-white/[0.08] flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
             <p className="text-gray-400 text-[10px] sm:text-xs mb-1 leading-tight">{label}</p>
             <p className={`text-lg sm:text-2xl md:text-3xl font-bold ${color}`}>{value}</p>
           </div>
         ))}
-        <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
+        <div className="bg-gray-800 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center border border-white/[0.08] flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
           <p className="text-gray-400 text-[10px] sm:text-xs mb-1">{t('analysis.precio.margenSeguridad')}</p>
           <input
             type="number"
@@ -1656,7 +1656,7 @@ function InicioTab({
           <p className="text-gray-400 text-base sm:text-2xl">No hay datos historicos disponibles</p>
         </div>
       ) : (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 sm:p-6 md:p-8 rounded-2xl border border-gray-700 shadow-2xl">
+        <div className="bg-gray-900 p-4 sm:p-6 md:p-8 rounded-2xl border border-white/[0.06] shadow-2xl">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0 mb-4 sm:mb-8">
             <h3 className="text-base sm:text-xl md:text-2xl font-semibold text-gray-100">Precio Historico (Ultimo Ano)</h3>
             {priceStats && (
@@ -1682,7 +1682,7 @@ function InicioTab({
           { label: 'Div Yield', value: annualDividendYield !== null ? `${annualDividendYield.toFixed(2)}%` : (profile?.lastDiv && currentPrice ? `${((profile.lastDiv * 4 / currentPrice) * 100).toFixed(2)}%` : 'N/A') },
           { label: 'Volumen', value: quote?.volume ? (quote.volume / 1e6).toFixed(1) + 'M' : 'N/A' },
         ].map(({ label, value }) => (
-          <div key={label} className="bg-gray-700/50 p-3 sm:p-5 md:p-6 rounded-xl border border-gray-600">
+          <div key={label} className="bg-gray-700/50 p-3 sm:p-5 md:p-6 rounded-xl border border-white/[0.08]">
             <p className="text-gray-400 text-xs sm:text-sm md:text-lg mb-1">{label}</p>
             <p className="text-lg sm:text-2xl md:text-3xl font-semibold text-gray-100 truncate">{value}</p>
           </div>
@@ -1690,7 +1690,7 @@ function InicioTab({
       </div>
 
       {/* Technical Indicators */}
-      <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-4 sm:p-6 rounded-xl border border-green-600">
+      <div className="bg-gray-950 p-4 sm:p-6 rounded-xl border border-green-600">
         <h4 className="text-base sm:text-xl md:text-2xl font-bold text-green-400 mb-4 sm:mb-6">Technical Indicators</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
           {/* RSI */}
@@ -1829,7 +1829,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
 
   return (
     <div className="space-y-6 sm:space-y-12">
-      <section className="bg-gray-800 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-gray-700">
+      <section className="bg-gray-800 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-white/[0.06]">
         <h3 className="text-xl sm:text-3xl font-bold text-gray-100 mb-4 sm:mb-8">Información Básica</h3>
         <p className="text-sm sm:text-xl text-gray-300 leading-relaxed mb-4 sm:mb-8">
           {profile.description || 'No hay descripción disponible.'}
@@ -1849,7 +1849,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
         </div>
       </section>
 
-      <section className="bg-gray-800 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-gray-700">
+      <section className="bg-gray-800 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-white/[0.06]">
         <h3 className="text-xl sm:text-3xl font-bold text-gray-100 mb-4 sm:mb-8">Datos de Mercado</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-10 text-center">
           <div>
@@ -1874,7 +1874,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
       </section>
 
       {/* Float & Liquidity Section */}
-      <section className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-green-600">
+      <section className="bg-gray-950 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-green-600">
         <h3 className="text-xl sm:text-3xl font-bold text-green-400 mb-4 sm:mb-8">Float & Liquidity</h3>
         {loading ? (
           <div className="text-center py-8">
@@ -1907,7 +1907,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
       </section>
 
       {/* Executives Section */}
-      <section className="bg-gradient-to-r from-emerald-900/30 to-pink-900/30 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-emerald-600">
+      <section className="bg-gradient-to-r bg-gray-950 to-pink-900/30 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-emerald-600">
         <h3 className="text-xl sm:text-3xl font-bold text-emerald-400 mb-4 sm:mb-8">Key Executives</h3>
         {loading ? (
           <div className="text-center py-8">
@@ -1916,7 +1916,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
         ) : executives.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {executives.map((exec, idx) => (
-              <div key={idx} className="bg-gray-800/50 p-5 rounded-xl flex items-center gap-4 border border-gray-700">
+              <div key={idx} className="bg-gray-800/50 p-5 rounded-xl flex items-center gap-4 border border-white/[0.06]">
                 <div className="w-12 h-12 bg-emerald-600/30 rounded-full flex items-center justify-center text-emerald-400 text-xl font-bold">
                   {exec.name?.charAt(0) || '?'}
                 </div>
@@ -2332,7 +2332,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
     <div className="space-y-8">
       <h3 className="text-4xl font-bold text-gray-100 mb-8">{title}</h3>
       <div className="overflow-x-auto">
-        <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+        <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
           <thead className="bg-gray-800">
             <tr>
               <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg sticky left-0 bg-gray-800 z-10 min-w-[280px]">
@@ -2353,7 +2353,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
           <tbody className="divide-y divide-gray-700">
             {metrics.map((metric) => (
               <tr key={metric.key} className={`hover:bg-gray-700/50 transition ${metric.isSEC ? 'bg-emerald-900/10' : ''}`}>
-                <td className={`px-8 py-4 font-medium text-base sticky left-0 z-10 border-r border-gray-700 ${metric.isSEC ? 'bg-emerald-900/20 text-emerald-300' : 'bg-gray-900 text-gray-200'}`}>
+                <td className={`px-8 py-4 font-medium text-base sticky left-0 z-10 border-r border-white/[0.06] ${metric.isSEC ? 'bg-emerald-900/20 text-emerald-300' : 'bg-gray-900 text-gray-200'}`}>
                   {metric.label}
                   {metric.isSEC && <span className="ml-2 text-xs text-emerald-400" title="Data from SEC 10-K/10-Q filings">*</span>}
                 </td>
@@ -2386,7 +2386,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
         <div className="mt-10">
           <h4 className="text-3xl font-bold text-green-400 mb-6">📈 Year-over-Year Growth Rates</h4>
           <div className="overflow-x-auto">
-            <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+            <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
               <thead className="bg-green-900/30">
                 <tr>
                   <th className="px-8 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-green-900/30 z-10 min-w-[280px]">
@@ -2447,7 +2447,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
         <div className="mt-10">
           <h4 className="text-3xl font-bold text-green-400 mb-6">📊 Financial Growth Summary</h4>
           <div className="overflow-x-auto">
-            <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+            <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
               <thead className="bg-green-900/30">
                 <tr>
                   <th className="px-8 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-green-900/30 z-10 min-w-[280px]">
@@ -2608,7 +2608,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
 
           {showKeyMetrics && (
             <div className="overflow-x-auto">
-              <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+              <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
                 <thead className="bg-green-900/30">
                   <tr>
                     <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-green-900/30 z-10 min-w-[280px]">
@@ -2701,7 +2701,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
 
           {showRatios && (
             <div className="overflow-x-auto">
-              <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+              <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
                 <thead className="bg-green-900/30">
                   <tr>
                     <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-green-900/30 z-10 min-w-[280px]">
@@ -2784,7 +2784,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
 
           {showEnterpriseValue && (
             <div className="overflow-x-auto">
-              <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+              <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
                 <thead className="bg-amber-900/30">
                   <tr>
                     <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-amber-900/30 z-10 min-w-[280px]">
@@ -2824,7 +2824,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
 
           {showOwnerEarnings && (
             <div className="overflow-x-auto">
-              <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+              <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
                 <thead className="bg-emerald-900/30">
                   <tr>
                     <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-emerald-900/30 z-10 min-w-[280px]">
@@ -2891,7 +2891,7 @@ function KeyMetricRow({ data, ttmData, metricKey, label, isPerShare, isRatio, is
 
   return (
     <tr className="hover:bg-gray-700/50 transition">
-      <td className="px-6 py-3 font-medium text-base sticky left-0 z-10 border-r border-gray-700 bg-gray-900 text-gray-200">
+      <td className="px-6 py-3 font-medium text-base sticky left-0 z-10 border-r border-white/[0.06] bg-gray-900 text-gray-200">
         {label}
       </td>
       {ttmData && (
@@ -2927,7 +2927,7 @@ function GrowthRow({ data, metricKey, label }: { data: any[]; metricKey: string;
 
   return (
     <tr className="hover:bg-gray-700/50 transition">
-      <td className="px-8 py-3 font-medium text-base sticky left-0 z-10 border-r border-gray-700 bg-gray-900 text-gray-200">
+      <td className="px-8 py-3 font-medium text-base sticky left-0 z-10 border-r border-white/[0.06] bg-gray-900 text-gray-200">
         {label}
       </td>
       {data.slice(0, 8).map((row: any, i: number) => (
@@ -2993,11 +2993,11 @@ function AnalistasTab({ priceTarget, ticker }: { priceTarget: any; ticker: strin
   return (
     <div className="space-y-10">
       {/* Price Targets Section */}
-      <section className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-700">
+      <section className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-white/[0.06]">
         <h3 className="text-3xl font-bold text-gray-100 mb-6">Price Targets de Analistas</h3>
         {priceTarget && Object.keys(priceTarget).length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden">
+            <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden">
               <thead className="bg-gray-700">
                 <tr>
                   <th className="px-6 py-4 text-left font-bold text-gray-100">Periodo</th>
@@ -3043,7 +3043,7 @@ function AnalistasTab({ priceTarget, ticker }: { priceTarget: any; ticker: strin
       </section>
 
       {/* Analyst Grades Summary */}
-      <section className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-700">
+      <section className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-white/[0.06]">
         <h3 className="text-3xl font-bold text-gray-100 mb-6">Calificaciones de Analistas (Grades)</h3>
 
         {loadingGrades ? (
@@ -3068,7 +3068,7 @@ function AnalistasTab({ priceTarget, ticker }: { priceTarget: any; ticker: strin
             {/* Recent Grades Table */}
             <h4 className="text-xl font-semibold text-gray-200 mb-4">Calificaciones Recientes</h4>
             <div className="overflow-x-auto">
-              <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden">
+              <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden">
                 <thead className="bg-gray-700">
                   <tr>
                     <th className="px-4 py-3 text-left text-gray-100">Fecha</th>
@@ -3158,25 +3158,25 @@ function DCFTab({ dcfStandard, dcfCustom, quote, income }: { dcfStandard: any; d
 
   return (
     <div className="space-y-12">
-      <section className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-700">
+      <section className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-white/[0.06]">
         <h3 className="text-3xl font-bold text-gray-100 mb-6">DCF Valuation (Estándar)</h3>
         {dcfStandard && Object.keys(dcfStandard).length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="bg-gray-700 p-6 rounded-xl border border-gray-600 text-center">
+            <div className="bg-gray-700 p-6 rounded-xl border border-white/[0.08] text-center">
               <p className="text-lg text-gray-400 mb-2">Valor Intrínseco (DCF)</p>
               <p className="text-4xl font-bold text-green-400">
                 ${dcfStandard.dcf?.toFixed(2) || 'N/A'}
               </p>
             </div>
 
-            <div className="bg-gray-700 p-6 rounded-xl border border-gray-600 text-center">
+            <div className="bg-gray-700 p-6 rounded-xl border border-white/[0.08] text-center">
               <p className="text-lg text-gray-400 mb-2">Precio Actual del Mercado</p>
               <p className="text-4xl font-bold text-green-400">
                 {currentPrice ? `$${currentPrice.toFixed(2)}` : 'N/A'}
               </p>
             </div>
 
-            <div className="bg-gray-700 p-6 rounded-xl border border-gray-600 text-center">
+            <div className="bg-gray-700 p-6 rounded-xl border border-white/[0.08] text-center">
               <p className="text-lg text-gray-400 mb-2">Upside/Downside</p>
               {dcfStandard.dcf && currentPrice ? (
                 <p className={`text-4xl font-bold ${dcfStandard.dcf > currentPrice ? 'text-green-400' : 'text-red-400'}`}>
@@ -3187,7 +3187,7 @@ function DCFTab({ dcfStandard, dcfCustom, quote, income }: { dcfStandard: any; d
               )}
             </div>
 
-            <div className="bg-gray-700 p-6 rounded-xl border border-gray-600 text-center">
+            <div className="bg-gray-700 p-6 rounded-xl border border-white/[0.08] text-center">
               <p className="text-lg text-gray-400 mb-2">Fecha de Cálculo</p>
               <p className="text-2xl font-semibold text-gray-300">
                 {dcfStandard.date || 'N/A'}
@@ -3199,11 +3199,11 @@ function DCFTab({ dcfStandard, dcfCustom, quote, income }: { dcfStandard: any; d
         )}
       </section>
 
-      <section className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-700">
+      <section className="bg-gray-800 p-8 rounded-2xl shadow-xl border border-white/[0.06]">
         <h3 className="text-3xl font-bold text-gray-100 mb-6">Custom DCF Advanced</h3>
         {dcfCustom && Object.keys(dcfCustom).length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden">
+            <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden">
               <thead className="bg-gray-700">
                 <tr>
                   <th className="px-6 py-4 text-left font-bold text-gray-100">Métrica</th>
@@ -3280,7 +3280,7 @@ function DCFTab({ dcfStandard, dcfCustom, quote, income }: { dcfStandard: any; d
 
         {/* Resumen destacado de Equity Value Per Share */}
         {dcfCustom?.equityValue && sharesOutstanding && (
-          <div className="mt-6 bg-gray-700 p-6 rounded-xl border border-gray-600">
+          <div className="mt-6 bg-gray-700 p-6 rounded-xl border border-white/[0.08]">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
               <div>
                 <p className="text-sm text-gray-400 mb-1">Equity Value Per Share (Custom DCF)</p>

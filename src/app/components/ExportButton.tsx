@@ -51,7 +51,7 @@ export default function ExportButton({ onExportPDF, onExportExcel, disabled = fa
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
 
           {/* Dropdown */}
-          <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-xl shadow-xl z-20 overflow-hidden">
+          <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-white/[0.06] rounded-xl shadow-xl z-20 overflow-hidden">
             <button
               onClick={() => handleExport('pdf')}
               disabled={exporting !== null}
@@ -74,7 +74,7 @@ export default function ExportButton({ onExportPDF, onExportExcel, disabled = fa
               <button
                 onClick={() => handleExport('excel')}
                 disabled={exporting !== null}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-700 transition text-left border-t border-gray-700"
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-700 transition text-left border-t border-white/[0.06]"
               >
                 {exporting === 'excel' ? (
                   <div className="w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />

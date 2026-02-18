@@ -530,7 +530,7 @@ export default function SustainableGrowthTab({
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
             {t('sgrTab.title')}
@@ -538,7 +538,7 @@ export default function SustainableGrowthTab({
           <p className="text-sm text-gray-400 mt-1">{t('sgrTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
+          <div className="text-right bg-gray-950 px-4 py-2 rounded-xl border border-green-600">
             <p className="text-xs text-green-400">{t('sgrTab.avgSgr')}</p>
             <p className="text-xl font-bold text-green-400">
               {averageSGR !== null ? (averageSGR * 100).toFixed(2) + '%' : '—'}
@@ -554,7 +554,7 @@ export default function SustainableGrowthTab({
           <select
             value={years}
             onChange={(e) => setYears(Number(e.target.value))}
-            className="w-full px-4 py-3 border border-gray-600 rounded-lg focus:border-green-400 focus:ring-green-400 bg-gray-800 text-gray-100 text-lg"
+            className="w-full px-4 py-3 border border-white/[0.08] rounded-lg focus:border-green-400 focus:ring-green-400 bg-gray-800 text-gray-100 text-lg"
           >
             {Array.from({ length: 9 }, (_, i) => i + 2).map(y => (
               <option key={y} value={y}>{y}</option>
@@ -569,7 +569,7 @@ export default function SustainableGrowthTab({
             step="0.1"
             value={waccPercent}
             onChange={(e) => setWaccPercent(parseFloat(e.target.value) || 8.5)}
-            className="w-full px-4 py-3 border border-gray-600 rounded-lg focus:border-green-400 focus:ring-green-400 bg-gray-800 text-gray-100 text-lg"
+            className="w-full px-4 py-3 border border-white/[0.08] rounded-lg focus:border-green-400 focus:ring-green-400 bg-gray-800 text-gray-100 text-lg"
             placeholder="8.5"
           />
           <p className="text-xs text-gray-500 mt-1">
@@ -581,7 +581,7 @@ export default function SustainableGrowthTab({
       {/* ═══════════════════════════════════════════════════════════════
           TOP-DOWN ANALYSIS
           ═══════════════════════════════════════════════════════════════ */}
-      <div className={`bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border ${topdownMethods[0]?.enabled ? 'border-green-500' : 'border-gray-600 opacity-60'}`}>
+      <div className={`bg-gray-950 p-6 rounded-xl border ${topdownMethods[0]?.enabled ? 'border-green-500' : 'border-white/[0.08] opacity-60'}`}>
         <div className="flex items-center justify-between mb-4">
           <h4 className="text-2xl font-bold text-green-400">{t('sgrTab.topDown')}</h4>
           {topdownMethods[0] && (
@@ -590,7 +590,7 @@ export default function SustainableGrowthTab({
                 type="checkbox"
                 checked={topdownMethods[0].enabled}
                 onChange={() => toggleMethod(methods.indexOf(topdownMethods[0]))}
-                className="w-5 h-5 text-green-600 focus:ring-green-500 border-gray-600 rounded"
+                className="w-5 h-5 text-green-600 focus:ring-green-500 border-white/[0.08] rounded"
               />
               <span className="text-sm text-gray-300">{t('sgrTab.includeInAverage')}</span>
             </label>
@@ -630,7 +630,7 @@ export default function SustainableGrowthTab({
       {/* ═══════════════════════════════════════════════════════════════
           BOTTOM-UP ANALYSIS (DuPont)
           ═══════════════════════════════════════════════════════════════ */}
-      <div className={`bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border ${bottomupMethods[0]?.enabled ? 'border-green-500' : 'border-gray-600 opacity-60'}`}>
+      <div className={`bg-gray-950 p-6 rounded-xl border ${bottomupMethods[0]?.enabled ? 'border-green-500' : 'border-white/[0.08] opacity-60'}`}>
         <div className="flex items-center justify-between mb-4">
           <h4 className="text-2xl font-bold text-green-400">{t('sgrTab.bottomUp')}</h4>
           {bottomupMethods[0] && (
@@ -639,7 +639,7 @@ export default function SustainableGrowthTab({
                 type="checkbox"
                 checked={bottomupMethods[0].enabled}
                 onChange={() => toggleMethod(methods.indexOf(bottomupMethods[0]))}
-                className="w-5 h-5 text-green-600 focus:ring-green-500 border-gray-600 rounded"
+                className="w-5 h-5 text-green-600 focus:ring-green-500 border-white/[0.08] rounded"
               />
               <span className="text-sm text-gray-300">{t('sgrTab.includeInAverage')}</span>
             </label>
@@ -691,7 +691,7 @@ export default function SustainableGrowthTab({
       {/* ═══════════════════════════════════════════════════════════════
           ROE METHODS (2 variants)
           ═══════════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-r from-green-900/30 to-green-900/30 p-6 rounded-xl border border-green-600">
+      <div className="bg-gray-950 p-6 rounded-xl border border-green-600">
         <h4 className="text-2xl font-bold text-green-400 mb-4">{t('sgrTab.roeMethods')}</h4>
         <p className="text-gray-400 mb-4">
           {t('sgrTab.roeMethodsDesc')}
@@ -733,7 +733,7 @@ export default function SustainableGrowthTab({
       {/* ═══════════════════════════════════════════════════════════════
           FULL RETENTION METHODS
           ═══════════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-r from-emerald-900/30 to-pink-900/30 p-6 rounded-xl border border-emerald-600">
+      <div className="bg-gradient-to-r bg-gray-950 to-pink-900/30 p-6 rounded-xl border border-emerald-600">
         <h4 className="text-2xl font-bold text-emerald-400 mb-4">{t('sgrTab.fullRetention')}</h4>
         <p className="text-gray-400 mb-4">
           {t('sgrTab.fullRetentionDesc')}
@@ -754,7 +754,7 @@ export default function SustainableGrowthTab({
       {/* ═══════════════════════════════════════════════════════════════
           HISTORICAL CAGR
           ═══════════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
+      <div className="bg-gradient-to-r bg-gray-950 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
         <h4 className="text-2xl font-bold text-emerald-400 mb-4">{t('sgrTab.historicalGrowth')}</h4>
         <p className="text-gray-400 mb-4">
           {t('sgrTab.historicalGrowthDesc')}
@@ -775,7 +775,7 @@ export default function SustainableGrowthTab({
       {/* ═══════════════════════════════════════════════════════════════
           AVERAGE SGR
           ═══════════════════════════════════════════════════════════════ */}
-      <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 shadow-xl text-center mt-12">
+      <div className="bg-gray-800 p-8 rounded-2xl border border-white/[0.06] shadow-xl text-center mt-12">
         <h4 className="text-3xl font-bold text-gray-100 mb-4">
           {t('sgrTab.averageSgr')}
         </h4>
@@ -841,7 +841,7 @@ function MethodCard({
   return (
     <div
       className={`bg-gray-800 p-5 rounded-xl border shadow-sm transition-all ${
-        method.enabled ? 'border-gray-700' : 'border-gray-800 opacity-50'
+        method.enabled ? 'border-white/[0.06]' : 'border-gray-800 opacity-50'
       }`}
     >
       <div className="flex items-center justify-between mb-3">
@@ -850,7 +850,7 @@ function MethodCard({
             type="checkbox"
             checked={method.enabled}
             onChange={() => onToggle(index)}
-            className={`w-4 h-4 focus:ring-2 border-gray-600 rounded cursor-pointer`}
+            className={`w-4 h-4 focus:ring-2 border-white/[0.08] rounded cursor-pointer`}
           />
           <h4 className="text-lg font-semibold text-gray-100">{method.name}</h4>
         </div>
@@ -871,7 +871,7 @@ function MethodCard({
       </p>
 
       {showDetails && (
-        <div className="mt-3 pt-3 border-t border-gray-700 space-y-1 max-h-40 overflow-y-auto">
+        <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-1 max-h-40 overflow-y-auto">
           {method.inputs.map((input, i) => (
             <div key={i} className="flex justify-between text-xs">
               <span className="text-gray-400">{input.label}:</span>

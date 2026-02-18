@@ -242,7 +242,7 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent">
             {t('betaTab.title')}
@@ -261,14 +261,14 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
 
       {/* Risk Free Rate y Market Risk Premium */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
+        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.06] shadow-lg text-center">
           <h4 className="text-lg font-semibold text-gray-400 mb-2">{t('betaTab.riskFreeRate')}</h4>
           <p className="text-5xl font-bold text-green-400">
             {riskFreeRate !== null ? riskFreeRate.toFixed(2) + '%' : '—'}
           </p>
         </div>
 
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
+        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.06] shadow-lg text-center">
           <h4 className="text-lg font-semibold text-gray-400 mb-2">{t('betaTab.marketRiskPremium')}</h4>
           <p className="text-5xl font-bold text-emerald-400">
             {marketRiskPremium !== null ? marketRiskPremium.toFixed(2) + '%' : '—'}
@@ -278,7 +278,7 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
 
       {/* Betas + CAPM */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
+        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.06] shadow-lg text-center">
           <h4 className="text-lg font-semibold text-gray-400 mb-3">{t('betaTab.betaOfficial')}</h4>
           <p className="text-5xl font-bold text-green-400 mb-4">
             {betaApi !== null ? betaApi.toFixed(2) : '—'}
@@ -309,7 +309,7 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
           </p>
         </div>
 
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700 shadow-lg text-center">
+        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.06] shadow-lg text-center">
           <h4 className="text-lg font-semibold text-gray-400 mb-3">{t('betaTab.betaCalculated')}</h4>
           <p className="text-5xl font-bold text-green-400 mb-4">
             {betaCalculated !== null ? betaCalculated.toFixed(2) : '—'}
@@ -321,7 +321,7 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
       </div>
 
       {/* Average Beta and CAPM */}
-      <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-8 rounded-2xl border border-green-500">
+      <div className="bg-gray-950 p-8 rounded-2xl border border-green-500">
         <h4 className="text-2xl font-bold text-green-400 mb-6 text-center">{t('betaTab.avgBeta')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="bg-gray-800/50 p-6 rounded-xl text-center">

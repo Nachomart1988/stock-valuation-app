@@ -581,7 +581,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-pink-400 bg-clip-text text-transparent">
             {t('pivotsTab.title')}
@@ -594,7 +594,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
             <p className="text-xl font-bold text-yellow-400">${currentPrice.toFixed(2)}</p>
           </div>
           {standardPivots && standardPivots.length > 0 && (
-            <div className="text-right bg-gradient-to-r from-emerald-900/40 to-pink-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+            <div className="text-right bg-gradient-to-r bg-gray-950 to-pink-900/40 px-4 py-2 rounded-xl border border-emerald-600">
               <p className="text-xs text-emerald-400">{t('pivotsTab.pivotPoint')}</p>
               <p className="text-xl font-bold text-emerald-400">
                 ${standardPivots.find(p => p.name === 'PP')?.value.toFixed(2) || '—'}
@@ -605,7 +605,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       </div>
 
       {/* Configuration Panel */}
-      <div className="bg-gradient-to-r from-emerald-900/30 to-green-900/30 p-6 rounded-2xl border border-emerald-600">
+      <div className="bg-gray-950 p-6 rounded-2xl border border-emerald-600">
         <h4 className="text-xl font-bold text-emerald-300 mb-4">{t('pivotsTab.configuration')}</h4>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
@@ -709,7 +709,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Current Pivot Levels */}
       {currentPivots && (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700">
+        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.06]">
           <h4 className="text-xl font-bold text-gray-100 mb-4">
             {pivotMethod.charAt(0).toUpperCase() + pivotMethod.slice(1)} Pivot Points ({timeframe})
           </h4>
@@ -745,7 +745,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
           </div>
 
           {/* Method Description */}
-          <div className="mt-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+          <div className="mt-4 p-4 bg-gray-800/50 rounded-lg border border-white/[0.06]">
             <p className="text-sm text-gray-400">
               {pivotMethod === 'standard' && t('pivotsTab.standardDesc')}
               {pivotMethod === 'fibonacci' && t('pivotsTab.fibonacciDesc')}
@@ -759,7 +759,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Chart with Pivot Lines */}
       {chartData && (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-700">
+        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.06]">
           <h4 className="text-xl font-bold text-gray-100 mb-4">{t('pivotsTab.chartTitle')}</h4>
           <div className="h-[500px]">
             <Line
@@ -797,7 +797,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Historical Support/Resistance Levels */}
       {showHistoricalLevels && historicalPivots.length > 0 && (
-        <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 p-6 rounded-2xl border border-emerald-600">
+        <div className="bg-gradient-to-r bg-gray-950 to-teal-900/30 p-6 rounded-2xl border border-emerald-600">
           <h4 className="text-xl font-bold text-emerald-400 mb-4">
             {t('pivotsTab.historicalLevels')}
           </h4>
@@ -876,7 +876,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Volume Profile & POC */}
       {volumeProfile && pocLevel && (
-        <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-2xl border border-green-600">
+        <div className="bg-gray-950 p-6 rounded-2xl border border-green-600">
           <h4 className="text-xl font-bold text-green-400 mb-4">{t('pivotsTab.volumeProfile')}</h4>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -940,7 +940,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Summary / Signal */}
       {currentPivots && (
-        <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-6 rounded-2xl border border-gray-600">
+        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.08]">
           <h4 className="text-xl font-bold text-gray-100 mb-4">{t('pivotsTab.analysisSummary')}</h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Nearest Support */}

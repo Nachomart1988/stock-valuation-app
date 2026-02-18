@@ -207,7 +207,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
 
       {/* Company Info */}
       {companyProfile && (
-        <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border border-green-600">
+        <div className="bg-gray-950 p-6 rounded-xl border border-green-600">
           <h4 className="text-2xl font-bold text-green-400 mb-4">{t('industryTab.companyClassification')}</h4>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-gray-800/50 p-4 rounded-lg">
@@ -236,11 +236,11 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
 
       {/* Market Indices */}
       {marketSummary.length > 0 && (
-        <div className="bg-gradient-to-r from-gray-900/50 to-gray-800/50 p-6 rounded-xl border border-gray-600">
+        <div className="bg-gradient-to-r from-gray-900/50 to-gray-800/50 p-6 rounded-xl border border-white/[0.08]">
           <h4 className="text-2xl font-bold text-gray-200 mb-6">{t('industryTab.majorIndices')}</h4>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {marketSummary.map((index, idx) => (
-              <div key={idx} className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+              <div key={idx} className="bg-gray-800 p-4 rounded-lg border border-white/[0.06]">
                 <p className="text-xs text-gray-400 mb-1">{index.symbol}</p>
                 <p className="text-sm font-semibold text-gray-200 mb-2">
                   {index.indexName || index.symbol}
@@ -259,7 +259,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
 
       {/* Sector Performance */}
       {sectorPerformance.length > 0 && (
-        <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border border-green-600">
+        <div className="bg-gray-950 p-6 rounded-xl border border-green-600">
           <h4 className="text-2xl font-bold text-green-400 mb-6">
             {t('industryTab.sectorPerformance')} - {t('industryTab.allSectors')} {sectorPerformance.length} {t('industryTab.sector')}s
           </h4>
@@ -275,7 +275,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                     className={`p-4 rounded-lg border ${
                       isCompanySector
                         ? 'bg-green-900/50 border-green-500 ring-2 ring-green-400'
-                        : 'bg-gray-800/50 border-gray-700'
+                        : 'bg-gray-800/50 border-white/[0.06]'
                     }`}
                   >
                     <div className="flex justify-between items-start mb-2">
@@ -303,14 +303,14 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
 
       {/* Sector P/E Ratios */}
       {industryPE.length > 0 && (
-        <div className="bg-gradient-to-r from-emerald-900/30 to-pink-900/30 p-6 rounded-xl border border-emerald-600">
+        <div className="bg-gradient-to-r bg-gray-950 to-pink-900/30 p-6 rounded-xl border border-emerald-600">
           <h4 className="text-2xl font-bold text-emerald-400 mb-6">
             {t('industryTab.sectorPERatios')} - {t('industryTab.allExchanges')} ({industryPE.length} {t('industryTab.entries')})
           </h4>
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full text-left">
               <thead className="sticky top-0 bg-gray-900 z-10">
-                <tr className="border-b border-gray-700">
+                <tr className="border-b border-white/[0.06]">
                   <th className="py-3 px-4 text-gray-400 font-semibold">{t('industryTab.sector')}</th>
                   <th className="py-3 px-4 text-gray-400 font-semibold text-right">{t('industryTab.peRatio')}</th>
                   <th className="py-3 px-4 text-gray-400 font-semibold text-right">Exchange</th>
@@ -385,7 +385,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                     className={`p-4 rounded-lg border ${
                       isCompanyIndustry
                         ? 'bg-amber-900/50 border-amber-500 ring-2 ring-amber-400'
-                        : 'bg-gray-800/50 border-gray-700'
+                        : 'bg-gray-800/50 border-white/[0.06]'
                     }`}
                   >
                     <div className="flex justify-between items-start mb-2">
@@ -410,14 +410,14 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
 
       {/* Industry P/E Ratios */}
       {industryPESnapshot.length > 0 && (
-        <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
+        <div className="bg-gradient-to-r bg-gray-950 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
           <h4 className="text-2xl font-bold text-emerald-400 mb-6">
             {t('industryTab.industryPERatios')} - {t('industryTab.allIndustries')} {industryPESnapshot.length} {t('industryTab.industry')}s
           </h4>
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full text-left">
               <thead className="sticky top-0 bg-gray-900 z-10">
-                <tr className="border-b border-gray-700">
+                <tr className="border-b border-white/[0.06]">
                   <th className="py-3 px-4 text-gray-400 font-semibold">{t('industryTab.industry')}</th>
                   <th className="py-3 px-4 text-gray-400 font-semibold text-right">{t('industryTab.peRatio')}</th>
                   <th className="py-3 px-4 text-gray-400 font-semibold text-right">Exchange</th>
@@ -465,7 +465,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
       )}
 
       {/* Summary */}
-      <div className="bg-gray-800 rounded-xl border border-gray-700 p-6">
+      <div className="bg-gray-800 rounded-xl border border-white/[0.06] p-6">
         <h4 className="text-lg font-semibold text-gray-200 mb-4">📊 {t('industryTab.completeSummary')}</h4>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-gray-700 rounded-lg p-4 text-center">

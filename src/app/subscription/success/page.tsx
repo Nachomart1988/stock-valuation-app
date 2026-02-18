@@ -45,7 +45,7 @@ function SubscriptionSuccessContent() {
           </div>
 
           {/* Features unlocked */}
-          <div className="bg-gray-800/50 rounded-2xl p-6 border border-gray-700">
+          <div className="bg-gray-800/50 rounded-2xl p-6 border border-white/[0.06]">
             <h3 className="font-semibold mb-4 text-green-400">Funcionalidades Desbloqueadas:</h3>
             <ul className="space-y-2 text-left">
               {[

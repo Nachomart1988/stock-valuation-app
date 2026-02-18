@@ -1515,7 +1515,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
             {t('keyMetricsTab.title')}
@@ -1528,7 +1528,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
               {industry}
             </span>
           )}
-          <div className="text-right bg-gradient-to-r from-emerald-900/40 to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+          <div className="text-right bg-gradient-to-r bg-gray-950 to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
             <p className="text-xs text-emerald-400">Benchmark Score</p>
             <p className="text-xl font-bold text-emerald-400">
               {benchmarkSummary.good}/{benchmarkSummary.good + benchmarkSummary.neutral + benchmarkSummary.bad}
@@ -1538,7 +1538,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
       </div>
 
       {/* Industry Benchmark Summary & Legend */}
-      <div className="bg-gradient-to-r from-gray-800/80 to-gray-900/80 p-6 rounded-xl border border-gray-600">
+      <div className="bg-gradient-to-r from-gray-800/80 to-gray-900/80 p-6 rounded-xl border border-white/[0.08]">
         <div className="flex flex-wrap justify-between items-start gap-6">
           {/* Summary Score */}
           <div className="flex-1 min-w-[250px]">
@@ -1679,7 +1679,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
 
       {/* Financial Scores */}
       {scores && (
-        <div className="bg-gradient-to-r from-emerald-900/30 to-green-900/30 p-6 rounded-xl border border-emerald-600">
+        <div className="bg-gray-950 p-6 rounded-xl border border-emerald-600">
           <h4 className="text-2xl font-bold text-emerald-400 mb-6">Financial Health Scores</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Altman Z-Score */}
@@ -2021,7 +2021,7 @@ function MetricCard({
   };
 
   return (
-    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+    <div className="bg-gray-800 p-4 rounded-lg border border-white/[0.06]">
       <p className="text-xs text-gray-400 mb-1">{label}</p>
       <p className={`text-xl font-bold ${colorClasses[color]}`}>{value}</p>
     </div>
@@ -2051,7 +2051,7 @@ function MetricCardWithBenchmark({
   };
 
   return (
-    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 relative group">
+    <div className="bg-gray-800 p-4 rounded-lg border border-white/[0.06] relative group">
       <div className="flex items-center justify-between">
         <p className="text-xs text-gray-400 mb-1">{label}</p>
         {comparison.indicator && (
@@ -2062,7 +2062,7 @@ function MetricCardWithBenchmark({
       </div>
       <p className={`text-xl font-bold ${colorClasses[color]}`}>{value}</p>
       {/* Tooltip on hover */}
-      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-gray-300 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 border border-gray-600">
+      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-gray-300 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 border border-white/[0.08]">
         {comparison.tooltip}
       </div>
     </div>

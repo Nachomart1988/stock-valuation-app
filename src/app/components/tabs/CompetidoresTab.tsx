@@ -164,7 +164,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
   return (
     <div className="space-y-10">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
           <h3 className="text-3xl font-bold bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
             {t('competidoresTab.title')}
@@ -180,7 +180,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
+        <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
           <thead className="bg-gray-800">
             <tr>
               <th className="px-6 py-4 text-left font-bold text-gray-200 sticky left-0 bg-gray-800 z-10 min-w-[220px]">
@@ -208,7 +208,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
                     isMainTicker ? 'bg-green-900/30 border-l-4 border-green-500' : ''
                   }`}
                 >
-                  <td className={`px-6 py-4 font-medium sticky left-0 z-10 border-r border-gray-700 ${
+                  <td className={`px-6 py-4 font-medium sticky left-0 z-10 border-r border-white/[0.06] ${
                     isMainTicker ? 'bg-green-900/30' : 'bg-gray-900'
                   }`}>
                     <span className={`font-semibold ${isMainTicker ? 'text-green-400' : 'text-gray-100'}`}>
