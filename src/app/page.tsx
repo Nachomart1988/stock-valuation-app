@@ -473,6 +473,91 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Diario del Inversor Feature Section */}
+      <section className="py-20 px-4 bg-gray-800/30">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-16 items-center">
+            {/* Left: Description */}
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 mb-6">
+                <span className="text-green-400 text-xs font-semibold tracking-widest uppercase">Nuevo</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+                Diario del{' '}
+                <span className="bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                  Inversor
+                </span>
+              </h2>
+              <p className="text-gray-400 mb-6 leading-relaxed">
+                Lleva un registro profesional de cada operación. Registra entradas, salidas, niveles de stop, price targets y análisis post-trade — todo en un solo lugar.
+              </p>
+              <ul className="space-y-3 mb-8">
+                {[
+                  { icon: '📋', text: 'Tabla maestra de swings con P&L automático' },
+                  { icon: '📊', text: 'Seguimiento semanal de rendimiento y drawdown' },
+                  { icon: '🎯', text: 'Múltiples price targets y ventas parciales' },
+                  { icon: '🔒', text: 'Datos privados por usuario — sincronizados en la nube' },
+                  { icon: '📝', text: 'Post-análisis y notas por operación' },
+                ].map((item) => (
+                  <li key={item.text} className="flex items-start gap-3">
+                    <span className="text-lg leading-none mt-0.5">{item.icon}</span>
+                    <span className="text-gray-300 text-sm">{item.text}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/analizar"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 transition"
+              >
+                Acceder al Diario
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+
+            {/* Right: Preview Card */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-green-500/5 rounded-3xl blur-3xl"></div>
+              <div className="relative bg-gray-900 border border-white/[0.06] rounded-2xl p-6 space-y-3">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                  <span className="text-sm font-semibold text-gray-300">📒 Mis Operaciones</span>
+                  <span className="text-xs text-green-400 bg-green-500/10 px-2 py-1 rounded-full">3 abiertas</span>
+                </div>
+                {/* Mock trade rows */}
+                {[
+                  { sym: 'AAPL', side: 'Long', entry: 185.40, current: 194.20, pnl: '+4.75%', pnlColor: 'text-green-400', setup: 'Breakout' },
+                  { sym: 'NVDA', side: 'Long', entry: 870.00, current: 912.50, pnl: '+4.89%', pnlColor: 'text-green-400', setup: 'WB' },
+                  { sym: 'META', side: 'Long', entry: 510.00, current: 498.30, pnl: '-2.29%', pnlColor: 'text-red-400', setup: 'BORS' },
+                ].map((trade) => (
+                  <div key={trade.sym} className="flex items-center justify-between py-2 border-b border-white/[0.04]">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                        <span className="text-xs font-bold text-green-400">{trade.sym[0]}</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-100">{trade.sym}</p>
+                        <p className="text-xs text-gray-500">{trade.setup} · {trade.side}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-sm font-bold ${trade.pnlColor}`}>{trade.pnl}</p>
+                      <p className="text-xs text-gray-500">${trade.current}</p>
+                    </div>
+                  </div>
+                ))}
+                {/* Weekly P&L */}
+                <div className="pt-2 flex items-center justify-between">
+                  <span className="text-xs text-gray-500">Semana actual</span>
+                  <span className="text-sm font-bold text-green-400">+$1,240 (+3.2%)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Pricing */}
       <section id="pricing" className="py-20 px-4 bg-gray-800/30">
         <div className="max-w-6xl mx-auto">

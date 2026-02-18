@@ -258,6 +258,7 @@ export default function ValuacionesTab({
   const [userBookValue, setUserBookValue] = useState<number | null>(null); // Override for Book Value
   const [userPeerPE, setUserPeerPE] = useState<number | null>(null); // Override for Peer P/E
   const [userNetDebt, setUserNetDebt] = useState<number | null>(null); // Override for Net Debt (in billions)
+  const [userFcfo, setUserFcfo] = useState<number | null>(null); // Override for FCF0 per share
 
   // Estados para variables calculadas (usadas en getModelInputs)
   const [calcD0, setCalcD0] = useState<number>(0);
@@ -880,6 +881,7 @@ export default function ValuacionesTab({
         console.log('[Valuaciones] Ks > glong (required for terminal)?', ks > glong, `(${(ks * 100).toFixed(2)}% vs ${(glong * 100).toFixed(2)}%)`);
         const beta = profile.beta || 1;
         const fcfo = (lastCashFlow.freeCashFlow || 0) / (lastIncome.weightedAverageShsOutDil || 1);
+        const effectiveFcfo = userFcfo !== null ? userFcfo : fcfo;
         const bookValue = (lastBalance.totalStockholdersEquity || 0) / (lastIncome.weightedAverageShsOutDil || 1);
         const epsTTM = lastIncome.epsdiluted || lastIncome.eps || (lastIncome.netIncome / lastIncome.weightedAverageShsOutDil) || 0;
         const meanTarget = priceTarget?.lastQuarterAvgPriceTarget || 0;
@@ -974,7 +976,7 @@ export default function ValuacionesTab({
         const dsgeDiscountRate = Math.max(0.05, policyRate + dsgeRiskPremium);
 
         // Gordon Growth Model with DSGE discount rate
-        const expectedCashFlow = fcfo * (1 + glong);
+        const expectedCashFlow = effectiveFcfo * (1 + glong);
         const bayesianValue = expectedCashFlow > 0 && dsgeDiscountRate > glong
           ? expectedCashFlow / (dsgeDiscountRate - glong)
           : bookValue; // Fallback to book value
@@ -1022,8 +1024,8 @@ export default function ValuacionesTab({
         const hjmGrowthRate = projectedGrowthRate / 100;
 
         // Use fcfo if positive, otherwise try to use a normalized FCF based on earnings
-        const hjmBaseFCF = fcfo > 0
-          ? fcfo
+        const hjmBaseFCF = effectiveFcfo > 0
+          ? effectiveFcfo
           : epsTTM > 0
             ? epsTTM * 0.8 // Approximate FCF as 80% of EPS if direct FCF is negative
             : bookValue * 0.05; // Or 5% of book value as last resort
@@ -1201,7 +1203,7 @@ export default function ValuacionesTab({
         const safeKsMinusGlong = Math.max(ks - glong, 0.01);
 
         // Use positive FCF base for traditional models
-        const fcfoPositive = fcfo > 0 ? fcfo : epsTTM > 0 ? epsTTM * 0.8 : 0;
+        const fcfoPositive = effectiveFcfo > 0 ? effectiveFcfo : epsTTM > 0 ? epsTTM * 0.8 : 0;
 
         // ────────────────────────────────────────────────
         // MULTI-STAGE VALUATION MODELS
@@ -1439,6 +1441,22 @@ export default function ValuacionesTab({
               ? `Owner Earnings GGM (OE/Share=$${ownerEarnings[0]?.ownersEarningsPerShare?.toFixed(2) || 0})`
               : 'Owner Earnings (Buffett method) - data not available',
           },
+          // ────────────────────────────────────────────────
+          // Price Return Model (uses sharePriceT5 target)
+          // PV = sharePriceT5 / (1+ks)^n + PV of dividends over period
+          // ────────────────────────────────────────────────
+          {
+            name: 'Price Return (T5)',
+            value: (() => {
+              if (sharePriceT5 <= 0 || ks <= 0) return null;
+              const pvTerminalPrice = sharePriceT5 / Math.pow(1 + ks, n);
+              const pvDividends = d0 > 0 && ks > gs ? calcPVGrowingAnnuity(d0, gs, ks, n) : 0;
+              const result = pvTerminalPrice + pvDividends;
+              return result > 0 && isFinite(result) ? result : null;
+            })(),
+            enabled: true,
+            description: `PV of T${n} target $${sharePriceT5.toFixed(2)} discounted at Ks=${(ks * 100).toFixed(1)}%`,
+          },
           // NOTE: AdvanceValue Net is rendered separately to avoid infinite loop
         ];
 
@@ -1477,6 +1495,7 @@ export default function ValuacionesTab({
     effectivePhiPi, effectivePhiY, effectiveBetaDSGE, effectiveKappa, // DSGE params
     effectiveHjmSigma, effectiveHjmMeanReversion, // HJM params
     peerPE, dcfCalculation, dcfCustom, dividends, cashFlowAsReported, // Include dividend sources
+    userFcfo, // User override for FCF0
     sustainableGrowthRate, // SGR from SustainableGrowthTab
     avgCAPMFromBeta, // Average CAPM from BetaTab for Ks
     keyMetricsTTM, // FMP Key Metrics TTM (Graham Number, Net-Net, etc.)
@@ -1735,7 +1754,7 @@ export default function ValuacionesTab({
     // 2-Stage FCF
     if (methodName === '2-Stage FCF') {
       return [
-        { label: 'FCF0 (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'FCF0 (Base)', key: 'fcf0', value: userFcfo !== null ? userFcfo : calcFcfo, step: 0.1 },
         { label: 'Ks (Discount) %', key: 'ks', value: ksVal * 100, step: 0.1, min: 0.1 },
         { label: 'gs (Growth S1) %', key: 'gs', value: gsVal * 100, step: 0.5 },
         { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
@@ -1746,7 +1765,7 @@ export default function ValuacionesTab({
     // 3-Stage FCF
     if (methodName === '3-Stage FCF') {
       return [
-        { label: 'FCF0 (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'FCF0 (Base)', key: 'fcf0', value: userFcfo !== null ? userFcfo : calcFcfo, step: 0.1 },
         { label: 'Ks (Discount) %', key: 'ks', value: ksVal * 100, step: 0.1, min: 0.1 },
         { label: 'gs (Growth S1) %', key: 'gs', value: gsVal * 100, step: 0.5 },
         { label: 'g∞ (Long-term) %', key: 'glong', value: glong * 100, step: 0.1 },
@@ -1777,7 +1796,7 @@ export default function ValuacionesTab({
     // DCF general
     if (methodName === 'DCF') {
       return [
-        { label: 'FCF (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'FCF (Base)', key: 'fcf0', value: userFcfo !== null ? userFcfo : calcFcfo, step: 0.1 },
         { label: 'WACC %', key: 'discountRate', value: effectiveDiscountRate, step: 0.25, min: 0.1 },
         { label: 'Exit Multiple', key: 'exitMultiple', value: exitMultiple, step: 0.5, min: 1, max: 50 },
         { label: 'Growth %', key: 'projectedGrowthRate', value: projectedGrowthRate, step: 0.5 },
@@ -1796,7 +1815,7 @@ export default function ValuacionesTab({
     // Stochastic DCF
     if (methodName.includes('Stochastic')) {
       return [
-        { label: 'FCF (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'FCF (Base)', key: 'fcf0', value: userFcfo !== null ? userFcfo : calcFcfo, step: 0.1 },
         { label: 'WACC %', key: 'discountRate', value: effectiveDiscountRate, step: 0.25 },
         { label: 'σ (FCF Vol)', key: 'volatility', value: effectiveVolatility, step: 0.01, min: 0, max: 1 },
         { label: 'λ (Risk Price)', key: 'lambda', value: effectiveLambda, step: 0.1 },
@@ -1818,7 +1837,7 @@ export default function ValuacionesTab({
     // HJM
     if (methodName.includes('HJM')) {
       return [
-        { label: 'FCF (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'FCF (Base)', key: 'fcf0', value: userFcfo !== null ? userFcfo : calcFcfo, step: 0.1 },
         { label: 'Ks (Discount) %', key: 'ks', value: ksVal * 100, step: 0.1 },
         { label: 'σ (Fwd Vol)', key: 'hjmSigma', value: effectiveHjmSigma, step: 0.001, min: 0 },
         { label: 'a (Mean Rev)', key: 'hjmMeanReversion', value: effectiveHjmMeanReversion, step: 0.01, min: 0 },
@@ -1877,7 +1896,7 @@ export default function ValuacionesTab({
     // Monte Carlo DCF
     if (methodName.includes('Monte Carlo')) {
       return [
-        { label: 'FCF (Base)', key: 'fcf0', value: calcFcfo, step: 0.1 },
+        { label: 'FCF (Base)', key: 'fcf0', value: userFcfo !== null ? userFcfo : calcFcfo, step: 0.1 },
         { label: 'WACC %', key: 'discountRate', value: effectiveDiscountRate, step: 0.25, min: 0.1 },
         { label: 'Exit Multiple', key: 'exitMultiple', value: exitMultiple, step: 0.5, min: 1, max: 50 },
         { label: 'Growth %', key: 'projectedGrowthRate', value: projectedGrowthRate, step: 0.5 },
@@ -1930,6 +1949,7 @@ export default function ValuacionesTab({
       case 'bookValue': setUserBookValue(value); break;
       case 'peerPE': setUserPeerPE(value); break;
       case 'netDebt': setUserNetDebt(value); break;
+      case 'fcf0': setUserFcfo(value); break;
 
       // RIM/Ohlson
       case 'omega': setOmega(value); break;

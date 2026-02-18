@@ -215,12 +215,24 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
     return result.slice(0, periodsToReturn);
   }, [priceData, timeframe, lookbackPeriods]);
 
+  // Build pivot base bar from the lookback window (aggregate of all closed periods)
+  // This ensures changing lookbackPeriods actually recalculates pivot levels
+  const pivotBaseBar = useMemo(() => {
+    if (aggregatedData.length < 2) return null;
+    const lookback = aggregatedData.slice(1); // exclude today
+    return {
+      high: Math.max(...lookback.map(d => d.high)),
+      low: Math.min(...lookback.map(d => d.low)),
+      close: lookback[0].close, // most recent closed period
+      open: lookback[lookback.length - 1].open,
+    };
+  }, [aggregatedData]);
+
   // Calculate Standard Pivot Points (Classic)
   const standardPivots = useMemo((): PivotLevel[] | null => {
-    if (aggregatedData.length < 2) return null;
+    if (!pivotBaseBar) return null;
 
-    const prev = aggregatedData[1]; // Yesterday/last week/last month
-    const { high, low, close } = prev;
+    const { high, low, close } = pivotBaseBar;
 
     const PP = (high + low + close) / 3;
     const R1 = 2 * PP - low;
@@ -247,10 +259,9 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
   // Calculate Fibonacci Pivot Points
   const fibonacciPivots = useMemo((): PivotLevel[] | null => {
-    if (aggregatedData.length < 2) return null;
+    if (!pivotBaseBar) return null;
 
-    const prev = aggregatedData[1];
-    const { high, low, close } = prev;
+    const { high, low, close } = pivotBaseBar;
 
     const PP = (high + low + close) / 3;
     const range = high - low;
@@ -268,10 +279,9 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
   // Calculate Camarilla Pivot Points
   const camarillaPivots = useMemo((): PivotLevel[] | null => {
-    if (aggregatedData.length < 2) return null;
+    if (!pivotBaseBar) return null;
 
-    const prev = aggregatedData[1];
-    const { high, low, close } = prev;
+    const { high, low, close } = pivotBaseBar;
     const range = high - low;
 
     // Camarilla formula
@@ -298,12 +308,10 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
   // Calculate Woodie Pivot Points
   const woodiePivots = useMemo((): PivotLevel[] | null => {
-    if (aggregatedData.length < 2) return null;
+    if (!pivotBaseBar || aggregatedData.length < 1) return null;
 
-    const prev = aggregatedData[1];
-    const today = aggregatedData[0];
-    const { high, low } = prev;
-    const openToday = today?.open || prev.close;
+    const { high, low } = pivotBaseBar;
+    const openToday = aggregatedData[0]?.open || pivotBaseBar.close;
 
     // Woodie uses today's open, giving more weight to current trading
     const PP = (high + low + 2 * openToday) / 4;
@@ -327,10 +335,9 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
   // Calculate DeMark Pivot Points
   const demarkPivots = useMemo((): PivotLevel[] | null => {
-    if (aggregatedData.length < 2) return null;
+    if (!pivotBaseBar) return null;
 
-    const prev = aggregatedData[1];
-    const { high, low, close, open } = prev;
+    const { high, low, close, open } = pivotBaseBar;
 
     let X: number;
     if (close < open) {

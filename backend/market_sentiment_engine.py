@@ -333,6 +333,37 @@ class NeuralReasoningMarketSentimentEngine:
                       + (f" vs 200DMA ${ma200:.0f}" if ma200 else ""))
             except Exception as e:
                 print(f"[NeuralMSE v6] yfinance {sym} error: {e}")
+
+        # ── Market Breadth Indicators ─────────────────────────────────────
+        # ^ADD = NYSE Advance-Decline Line (cumulative breadth)
+        # ^NAHL = NYSE New Highs - New Lows Index
+        breadth_targets = {
+            '^ADD': 'ad_line',    # NYSE Advance-Decline cumulative line
+            '^NAHL': 'nhl_index', # NYSE New Highs - New Lows
+        }
+        for sym, key in breadth_targets.items():
+            try:
+                ticker = yf.Ticker(sym)
+                hist = ticker.history(period='3mo', interval='1d', auto_adjust=True)
+                if hist.empty or len(hist) < 5:
+                    continue
+                closes = hist['Close']
+                current = float(closes.iloc[-1])
+                prev = float(closes.iloc[-2]) if len(closes) > 1 else current
+                ma10 = float(closes.tail(10).mean()) if len(closes) >= 10 else None
+                ma20 = float(closes.tail(20).mean()) if len(closes) >= 20 else None
+                change_1d = current - prev  # A/D line uses absolute change, not %
+                result[key] = {
+                    'value': round(current, 0),
+                    'change_1d': round(change_1d, 0),
+                    'ma10': round(ma10, 0) if ma10 else None,
+                    'ma20': round(ma20, 0) if ma20 else None,
+                    'trend': 'up' if ma10 and current > ma10 else 'down' if ma10 else 'neutral',
+                }
+                print(f"[NeuralMSE v6] Breadth {sym}: {current:.0f} (1d: {change_1d:+.0f})")
+            except Exception as e:
+                print(f"[NeuralMSE v6] Breadth {sym} error: {e}")
+
         return result
 
     def _fill_missing_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -487,10 +518,18 @@ class NeuralReasoningMarketSentimentEngine:
         signals.extend(news_signals)
         full_reasoning.extend(news_reasoning)
 
-        # LAYER 2 — MARKET BREADTH (Gainers vs Losers)
-        movers_score, movers_signals, breadth_ratio, sector_rotation, top_gainers, top_losers = self._layer2_breadth(gainers, losers)
+        # LAYER 2 — MARKET BREADTH (Gainers vs Losers + A/D Line + New Highs/Lows)
+        movers_score, movers_signals, breadth_ratio, sector_rotation, top_gainers, top_losers = self._layer2_breadth(gainers, losers, yf_data)
         signals.extend(movers_signals)
-        full_reasoning.append(f"**LAYER 2 — BREADTH:** {breadth_ratio:.0%} advancing | {len(gainers)}↑ {len(losers)}↓")
+        ad_info = ""
+        nhl_info = ""
+        if yf_data.get('ad_line'):
+            ad = yf_data['ad_line']
+            ad_info = f" | A/D Line: {ad.get('value', 0):,.0f} ({ad.get('trend', '?')})"
+        if yf_data.get('nhl_index'):
+            nhl = yf_data['nhl_index']
+            nhl_info = f" | NHL: {nhl.get('value', 0):+.0f}"
+        full_reasoning.append(f"**LAYER 2 — BREADTH:** {breadth_ratio:.0%} advancing | {len(gainers)}↑ {len(losers)}↓{ad_info}{nhl_info}")
 
         # LAYER 3 — SECTOR & INDUSTRY MACRO
         sector_score, sector_signals, sector_breadth, hot_sectors, cold_sectors, sector_reasoning = self._layer3_sectors(sectors)
@@ -597,9 +636,10 @@ class NeuralReasoningMarketSentimentEngine:
 
     # ====================== LAYER IMPLEMENTATIONS ======================
 
-    def _layer2_breadth(self, gainers, losers):
-        """Layer 2: Market breadth — Zweig Breadth Thrust style analysis."""
+    def _layer2_breadth(self, gainers, losers, yf_data: Dict[str, Any] = None):
+        """Layer 2: Market breadth — Zweig Breadth Thrust + A/D Line + New Highs/Lows."""
         signals = []
+        yf_data = yf_data or {}
         total = len(gainers) + len(losers)
         if total == 0:
             return 50.0, [], 0.5, {"hot": [], "cold": []}, [], []
@@ -627,6 +667,44 @@ class NeuralReasoningMarketSentimentEngine:
         else:
             signals.append(MarketSignal("breadth", "neutral", 0.50, 0.10,
                 f"Neutral breadth: {breadth_ratio:.0%} advancing", emoji="⚖️"))
+
+        # ── A/D Line: NYSE Advance-Decline cumulative trend ───────────────
+        ad_data = yf_data.get('ad_line')
+        if ad_data:
+            ad_trend = ad_data.get('trend', 'neutral')
+            ad_change = ad_data.get('change_1d', 0)
+            if ad_trend == 'up' and ad_change > 0:
+                signals.append(MarketSignal("ad_line", "bullish", 0.75, 0.18,
+                    f"A/D Line rising (+{ad_change:,.0f} today, above 10DMA) — broad market participation", emoji="📊"))
+                score += 8
+            elif ad_trend == 'down' and ad_change < 0:
+                signals.append(MarketSignal("ad_line", "bearish", 0.75, 0.18,
+                    f"A/D Line declining ({ad_change:,.0f} today, below 10DMA) — narrow leadership, market weakness", emoji="📉"))
+                score -= 8
+            elif ad_trend == 'up' and ad_change < 0:
+                signals.append(MarketSignal("ad_line", "cautionary", 0.50, 0.08,
+                    f"A/D Line above 10DMA but pulled back today ({ad_change:,.0f}) — watch for momentum shift", emoji="⚠️"))
+            print(f"[NeuralMSE v6] A/D Line: {ad_data.get('value', 0):,.0f} trend={ad_trend} 1d={ad_change:+,.0f}")
+
+        # ── New Highs / New Lows: Market internal strength ────────────────
+        nhl_data = yf_data.get('nhl_index')
+        if nhl_data:
+            nhl_value = nhl_data.get('value', 0)
+            nhl_trend = nhl_data.get('trend', 'neutral')
+            nhl_ma10 = nhl_data.get('ma10')
+            if nhl_value > 100 and nhl_trend == 'up':
+                signals.append(MarketSignal("new_highs", "bullish", 0.70, 0.15,
+                    f"New Highs dominating ({nhl_value:+.0f} NHL index) — expanding market leadership", emoji="🏔️"))
+                score += 6
+            elif nhl_value < -100 and nhl_trend == 'down':
+                signals.append(MarketSignal("new_lows", "bearish", 0.70, 0.15,
+                    f"New Lows dominating ({nhl_value:+.0f} NHL index) — distribution phase underway", emoji="🕳️"))
+                score -= 6
+            elif nhl_value < 0 and nhl_trend == 'down' and nhl_ma10 and nhl_value < nhl_ma10:
+                signals.append(MarketSignal("new_lows", "cautionary", 0.55, 0.08,
+                    f"New Lows outpacing New Highs ({nhl_value:+.0f}) — breadth deteriorating", emoji="⚠️"))
+                score -= 3
+            print(f"[NeuralMSE v6] NHL Index: {nhl_value:+.0f} trend={nhl_trend}")
 
         # Momentum asymmetry
         if avg_gainer > 0 and avg_loser > 0:
