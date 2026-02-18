@@ -608,9 +608,11 @@ class NeuralReasoningMarketSentimentEngine:
 
         reasoning = [f"**LAYER 3 — SECTORS ({len(sectors)}):** {len(up)}/{len(sectors)} green | avg {avg_change:+.2f}% | spread {dispersion:.1f}%"]
         if hot:
-            reasoning.append(f"  Hot: {', '.join([h.get('sector','?') + f' ({h.get(\"averageChange\",0) or 0:+.1f}%)' for h in hot[:3]])}")
+            hot_parts = [h.get('sector', '?') + ' ({:+.1f}%)'.format(h.get('averageChange', 0) or 0) for h in hot[:3]]
+            reasoning.append(f"  Hot: {', '.join(hot_parts)}")
         if cold:
-            reasoning.append(f"  Cold: {', '.join([c.get('sector','?') + f' ({c.get(\"averageChange\",0) or 0:+.1f}%)' for c in cold[:3]])}")
+            cold_parts = [c.get('sector', '?') + ' ({:+.1f}%)'.format(c.get('averageChange', 0) or 0) for c in cold[:3]]
+            reasoning.append(f"  Cold: {', '.join(cold_parts)}")
 
         return score, signals, breadth, hot, cold, reasoning
 
