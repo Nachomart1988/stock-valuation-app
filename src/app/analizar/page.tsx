@@ -3,6 +3,7 @@
 import { Tab } from '@headlessui/react';
 import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 import Header from '@/app/components/Header';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Line } from 'react-chartjs-2';
@@ -373,10 +374,12 @@ function getArrow(curr: string, prev: string) {
 function AnalizarContent() {
   const searchParams = useSearchParams();
   const { t } = useLanguage();
+  const { user, isSignedIn } = useUser();
   const [ticker, setTicker] = useState('');
   const [activeTicker, setActiveTicker] = useState(''); // El ticker activo para el cual se cargaron los datos
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sharedAverageVal, setSharedAverageVal] = useState<number | null>(null);
   const [sharedSGR, setSharedSGR] = useState<number | null>(null);
@@ -901,6 +904,39 @@ function AnalizarContent() {
 
   const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM, secData, secReportsRaw, cashFlowAsReported, dividends, incomeAsReported, balanceAsReported, incomeGrowth, balanceGrowth, cashFlowGrowth, financialGrowth, keyMetrics, keyMetricsTTM, ratios, ratiosTTM, enterpriseValue, ownerEarnings } = data;
 
+  // PDF Export handler
+  const handleExportPDF = async () => {
+    if (pdfExporting) return;
+    setPdfExporting(true);
+    try {
+      const { generateAnalysisPDF } = await import('@/app/utils/generateAnalysisPDF');
+      await generateAnalysisPDF({
+        ticker: activeTicker,
+        profile,
+        quote,
+        income: income || [],
+        balance: balance || [],
+        cashFlow: cashFlow || [],
+        incomeTTM,
+        priceTarget: priceTarget || {},
+        sharedAverageVal,
+        sharedWACC,
+        sharedAvgCAPM,
+        sharedForecasts,
+        sharedKeyMetricsSummary,
+        sharedAdvanceValueNet,
+        sharedCompanyQualityNet,
+        sharedCagrStats,
+        sharedPivotAnalysis,
+      });
+    } catch (err) {
+      console.error('[PDF] Export error:', err);
+      alert('Error al generar el PDF. Por favor intenta de nuevo.');
+    } finally {
+      setPdfExporting(false);
+    }
+  };
+
   // New simplified category structure
   const categories = [
     t('analysis.categories.inicio'),
@@ -921,12 +957,42 @@ function AnalizarContent() {
     <main className="min-h-screen bg-gray-900 text-gray-100">
       <Header />
       <div className="max-w-[1600px] mx-auto px-3 sm:px-5 md:px-8 pt-20 sm:pt-24 pb-8">
-        <h1 className="text-xl sm:text-3xl md:text-5xl font-extrabold text-green-400 mb-1 sm:mb-4">
-          {t('analysis.resultsFor')} {activeTicker}
-        </h1>
-        <h2 className="text-base sm:text-xl md:text-3xl font-bold text-gray-300 mb-5 sm:mb-8 md:mb-12 truncate">
-          {profile.companyName || t('analysis.company')}
-        </h2>
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-5 sm:mb-8 md:mb-12">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-3xl md:text-5xl font-extrabold text-green-400 mb-1 sm:mb-2">
+              {t('analysis.resultsFor')} {activeTicker}
+            </h1>
+            <h2 className="text-base sm:text-xl md:text-3xl font-bold text-gray-300 truncate">
+              {profile.companyName || t('analysis.company')}
+            </h2>
+          </div>
+          {/* PDF Export Button — shown to all signed-in users */}
+          {isSignedIn && (
+            <button
+              onClick={handleExportPDF}
+              disabled={pdfExporting}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-700 to-emerald-700 hover:from-green-600 hover:to-emerald-600 text-white font-semibold rounded-xl border border-green-500 shadow-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0 text-sm"
+              title="Download full investment analysis as PDF"
+            >
+              {pdfExporting ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Generating PDF...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Download PDF Report
+                </>
+              )}
+            </button>
+          )}
+        </div>
 
         <Tab.Group selectedIndex={selectedTabIndex} onChange={setSelectedTabIndex}>
           {/* Tab bar: horizontal scroll on mobile, wrap on desktop */}
