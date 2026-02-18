@@ -14,60 +14,61 @@ except ImportError:
     print("[WARNING] PyTorch not available - using fallback quality predictor")
 
 
-class CompanyQualityNet(nn.Module):
-    """
-    Neural network for company quality assessment.
+if TORCH_AVAILABLE:
+    class CompanyQualityNet(nn.Module):
+        """
+        Neural network for company quality assessment.
 
-    Takes ~45 financial metrics and outputs:
-    - Overall quality score (0-100)
-    - 5 dimension subscores
-    - Risk classification
-    - Quality recommendation
-    """
+        Takes ~45 financial metrics and outputs:
+        - Overall quality score (0-100)
+        - 5 dimension subscores
+        - Risk classification
+        - Quality recommendation
+        """
 
-    def __init__(self, input_dim: int = 45):
-        super().__init__()
+        def __init__(self, input_dim: int = 45):
+            super().__init__()
 
-        # Feature processing layers
-        self.fc1 = nn.Linear(input_dim, 256)
-        self.bn1 = nn.BatchNorm1d(256)
-        self.drop1 = nn.Dropout(0.2)
+            # Feature processing layers
+            self.fc1 = nn.Linear(input_dim, 256)
+            self.bn1 = nn.BatchNorm1d(256)
+            self.drop1 = nn.Dropout(0.2)
 
-        self.fc2 = nn.Linear(256, 128)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.drop2 = nn.Dropout(0.2)
+            self.fc2 = nn.Linear(256, 128)
+            self.bn2 = nn.BatchNorm1d(128)
+            self.drop2 = nn.Dropout(0.2)
 
-        self.fc3 = nn.Linear(128, 64)
-        self.bn3 = nn.BatchNorm1d(64)
+            self.fc3 = nn.Linear(128, 64)
+            self.bn3 = nn.BatchNorm1d(64)
 
-        # Output heads
-        self.overall_head = nn.Linear(64, 1)           # Overall score 0-100
-        self.subscores_head = nn.Linear(64, 5)         # 5 dimension scores
-        self.risk_head = nn.Linear(64, 3)              # Low/Medium/High
-        self.recommendation_head = nn.Linear(64, 5)    # Excellent/Strong/Average/Weak/Poor
+            # Output heads
+            self.overall_head = nn.Linear(64, 1)           # Overall score 0-100
+            self.subscores_head = nn.Linear(64, 5)         # 5 dimension scores
+            self.risk_head = nn.Linear(64, 3)              # Low/Medium/High
+            self.recommendation_head = nn.Linear(64, 5)    # Excellent/Strong/Average/Weak/Poor
 
-    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
-        # Feature extraction
-        x = F.relu(self.bn1(self.fc1(x)))
-        x = self.drop1(x)
+        def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+            # Feature extraction
+            x = F.relu(self.bn1(self.fc1(x)))
+            x = self.drop1(x)
 
-        x = F.relu(self.bn2(self.fc2(x)))
-        x = self.drop2(x)
+            x = F.relu(self.bn2(self.fc2(x)))
+            x = self.drop2(x)
 
-        x = F.relu(self.bn3(self.fc3(x)))
+            x = F.relu(self.bn3(self.fc3(x)))
 
-        # Generate outputs
-        overall = torch.sigmoid(self.overall_head(x)) * 100
-        subscores = torch.sigmoid(self.subscores_head(x)) * 100
-        risk = F.softmax(self.risk_head(x), dim=-1)
-        recommendation = F.softmax(self.recommendation_head(x), dim=-1)
+            # Generate outputs
+            overall = torch.sigmoid(self.overall_head(x)) * 100
+            subscores = torch.sigmoid(self.subscores_head(x)) * 100
+            risk = F.softmax(self.risk_head(x), dim=-1)
+            recommendation = F.softmax(self.recommendation_head(x), dim=-1)
 
-        return {
-            'overall': overall,
-            'subscores': subscores,
-            'risk': risk,
-            'recommendation': recommendation
-        }
+            return {
+                'overall': overall,
+                'subscores': subscores,
+                'risk': risk,
+                'recommendation': recommendation
+            }
 
 
 class CompanyQualityPredictor:
