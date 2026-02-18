@@ -303,7 +303,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
 
       {/* Sector P/E Ratios */}
       {industryPE.length > 0 && (
-        <div className="bg-gradient-to-r bg-gray-950 to-pink-900/30 p-6 rounded-xl border border-emerald-600">
+        <div className="bg-gradient-to-r bg-gray-900 p-6 rounded-xl border border-emerald-600">
           <h4 className="text-2xl font-bold text-emerald-400 mb-6">
             {t('industryTab.sectorPERatios')} - {t('industryTab.allExchanges')} ({industryPE.length} {t('industryTab.entries')})
           </h4>

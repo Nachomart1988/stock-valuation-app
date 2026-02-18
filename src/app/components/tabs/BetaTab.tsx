@@ -250,9 +250,9 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
           <p className="text-sm text-gray-400 mt-1">{t('betaTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-pink-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-pink-600">
-            <p className="text-xs text-pink-400">{t('betaTab.avgCapm')}</p>
-            <p className="text-xl font-bold text-pink-400">
+          <div className="text-right bg-gradient-to-r from-green-900/20 to-emerald-900/20 px-4 py-2 rounded-xl border border-green-600">
+            <p className="text-xs text-green-400">{t('betaTab.avgCapm')}</p>
+            <p className="text-xl font-bold text-green-400">
               {avgCAPM !== null ? avgCAPM.toFixed(2) + '%' : '—'}
             </p>
           </div>
@@ -335,7 +335,7 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
           </div>
           <div className="bg-gray-800/50 p-6 rounded-xl text-center">
             <p className="text-gray-400 text-lg mb-2">{t('betaTab.avgCapm')}</p>
-            <p className="text-5xl font-bold text-pink-400">
+            <p className="text-5xl font-bold text-green-400">
               {avgCAPM !== null ? avgCAPM.toFixed(2) + '%' : '—'}
             </p>
             <p className="text-sm text-gray-500 mt-2">

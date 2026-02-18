@@ -583,7 +583,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
-          <h3 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-pink-400 bg-clip-text text-transparent">
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-400 bg-clip-text text-transparent">
             {t('pivotsTab.title')}
           </h3>
           <p className="text-sm text-gray-400 mt-1">{t('pivotsTab.subtitle')} {ticker}</p>
@@ -594,7 +594,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
             <p className="text-xl font-bold text-yellow-400">${currentPrice.toFixed(2)}</p>
           </div>
           {standardPivots && standardPivots.length > 0 && (
-            <div className="text-right bg-gradient-to-r bg-gray-950 to-pink-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+            <div className="text-right bg-gradient-to-r bg-gray-900 px-4 py-2 rounded-xl border border-emerald-600">
               <p className="text-xs text-emerald-400">{t('pivotsTab.pivotPoint')}</p>
               <p className="text-xl font-bold text-emerald-400">
                 ${standardPivots.find(p => p.name === 'PP')?.value.toFixed(2) || '—'}

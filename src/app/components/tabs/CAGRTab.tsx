@@ -349,9 +349,9 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
               {statistics.week104High ? `$${statistics.week104High.toFixed(2)}` : 'N/A'}
             </p>
           </div>
-          <div className="bg-gradient-to-br from-rose-800/50 to-rose-900/50 p-5 rounded-2xl border border-rose-700 text-center flex flex-col justify-center min-h-[120px]">
+          <div className="bg-gradient-to-br from-red-950/80 to-red-950/40 p-5 rounded-2xl border border-red-700 text-center flex flex-col justify-center min-h-[120px]">
             <p className="text-sm text-gray-300 mb-2">{t('cagrTab.week104Low')}</p>
-            <p className="text-3xl font-bold text-rose-400">
+            <p className="text-3xl font-bold text-red-400">
               {statistics.week104Low ? `$${statistics.week104Low.toFixed(2)}` : 'N/A'}
             </p>
           </div>

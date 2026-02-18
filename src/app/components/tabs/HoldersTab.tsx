@@ -397,7 +397,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
               </p>
             </div>
             {positionsSummary && (
-              <div className="text-right bg-gradient-to-r bg-gray-950 to-pink-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+              <div className="text-right bg-gradient-to-r bg-gray-900 px-4 py-2 rounded-xl border border-emerald-600">
                 <p className="text-xs text-emerald-400">Q{positionsSummary.quarter} {positionsSummary.year}</p>
                 <p className="text-xl font-bold text-emerald-400">
                   {formatNumber(positionsSummary.investorsHolding)} {t('holdersTab.institutionalHolders')}

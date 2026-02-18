@@ -97,7 +97,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-emerald-500 via-emerald-500 to-pink-500 hover:from-emerald-400 hover:via-emerald-400 hover:to-pink-400 text-white font-bold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 bg-gradient-to-r from-green-600 via-green-500 to-emerald-400 hover:from-emerald-400 hover:via-emerald-400 hover:to-pink-400 text-white font-bold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? t('auth.signingIn') : t('auth.signIn')}
               </button>

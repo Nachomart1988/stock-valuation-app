@@ -1545,7 +1545,7 @@ function PortfolioTab({
                       setupExposure[trade.setup] = (setupExposure[trade.setup] || 0) + metrics.currentValue;
                     });
                     const totalExp = Object.values(setupExposure).reduce((a, b) => a + b, 0);
-                    const colors = ['bg-green-500', 'bg-emerald-500', 'bg-emerald-500', 'bg-pink-500', 'bg-amber-500', 'bg-green-500'];
+                    const colors = ['bg-green-500', 'bg-emerald-500', 'bg-emerald-500', 'bg-green-600', 'bg-amber-500', 'bg-green-500'];
                     return Object.entries(setupExposure).map(([setup, value], idx) => {
                       const pct = totalExp > 0 ? (value / totalExp) * 100 : 0;
                       return (

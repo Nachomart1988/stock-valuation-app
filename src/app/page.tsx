@@ -110,7 +110,7 @@ export default function Home() {
           <h1 className="text-3xl sm:text-5xl md:text-7xl font-black mb-6 leading-tight">
             {t('hero.title')}
             <br />
-            <span className="bg-gradient-to-r from-green-400 via-emerald-400 to-pink-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-green-600 via-emerald-500 to-green-400 bg-clip-text text-transparent">
               {t('hero.titleHighlight')}
             </span>
           </h1>
@@ -416,7 +416,7 @@ export default function Home() {
                 step: '02',
                 title: t('howItWorks.step2.title'),
                 description: t('howItWorks.step2.description'),
-                color: 'from-emerald-500 to-pink-500'
+                color: 'from-green-600 to-emerald-400'
               },
               {
                 step: '03',

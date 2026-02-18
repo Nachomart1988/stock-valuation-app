@@ -263,10 +263,10 @@ export default function ResumenTab({
       return 'border-green-400 bg-gradient-to-br from-green-950/70 to-emerald-950/40';
     }
     if (finalRecommendation.includes('Strong Sell')) {
-      return 'border-red-400 bg-gradient-to-br from-red-950/80 to-rose-950/40';
+      return 'border-red-400 bg-gradient-to-br from-red-950/80 to-red-950/40';
     }
     if (finalRecommendation.includes('Sell')) {
-      return 'border-rose-400 bg-gradient-to-br from-rose-950/60 to-red-950/30';
+      return 'border-red-700 bg-gradient-to-br from-red-950/80 to-red-950/30';
     }
     return 'border-yellow-400 bg-gradient-to-br from-yellow-950/50 to-amber-950/30';
   };
@@ -349,7 +349,7 @@ export default function ResumenTab({
           </div>
           <div className="text-center bg-black/40 backdrop-blur rounded-2xl p-4 border border-white/10">
             <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">Upside</p>
-            <p className={`text-3xl font-bold ${upsidePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <p className={`text-3xl font-bold ${upsidePct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {upsidePct >= 0 ? '+' : ''}{upsidePct?.toFixed(1)}%
             </p>
           </div>
@@ -513,7 +513,7 @@ export default function ResumenTab({
       {/* Risks & Catalysts */}
       <div className="grid md:grid-cols-2 gap-6">
         {keyRisks && keyRisks.length > 0 && (
-          <div className="bg-gradient-to-br from-red-950/30 to-rose-950/20 border border-red-900/40 p-6 rounded-2xl">
+          <div className="bg-gradient-to-br from-red-950/30 to-red-950/40 border border-red-900/40 p-6 rounded-2xl">
             <h5 className="text-red-400 font-semibold mb-4 flex items-center gap-2">
               <span>⚠️</span> Riesgos Identificados
             </h5>

@@ -1907,7 +1907,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
       </section>
 
       {/* Executives Section */}
-      <section className="bg-gradient-to-r bg-gray-950 to-pink-900/30 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-emerald-600">
+      <section className="bg-gradient-to-r bg-gray-900 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-emerald-600">
         <h3 className="text-xl sm:text-3xl font-bold text-emerald-400 mb-4 sm:mb-8">Key Executives</h3>
         {loading ? (
           <div className="text-center py-8">

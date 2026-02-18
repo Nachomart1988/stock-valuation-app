@@ -1,5 +1,5 @@
 // src/app/utils/generateAnalysisPDF.ts
-// Professional financial analysis PDF generator using jsPDF + jsPDF-AutoTable
+// Professional Financial Analysis PDF — Black + Deutsche Bank Green #00A651
 
 export interface PDFData {
   ticker: string;
@@ -21,509 +21,715 @@ export interface PDFData {
   sharedPivotAnalysis: any;
 }
 
-function fmt(val: any, decimals = 2): string {
-  if (val === null || val === undefined || isNaN(Number(val))) return '-';
-  return Number(val).toFixed(decimals);
-}
-function fmtPct(val: any, decimals = 2): string {
-  if (val === null || val === undefined || isNaN(Number(val))) return '-';
-  return Number(val).toFixed(decimals) + '%';
-}
-function fmtLarge(val: any): string {
-  if (val === null || val === undefined || isNaN(Number(val))) return '-';
-  const n = Number(val);
-  if (Math.abs(n) >= 1e12) return '$' + (n / 1e12).toFixed(2) + 'T';
-  if (Math.abs(n) >= 1e9)  return '$' + (n / 1e9).toFixed(2)  + 'B';
-  if (Math.abs(n) >= 1e6)  return '$' + (n / 1e6).toFixed(2)  + 'M';
-  return '$' + n.toFixed(2);
-}
+const f  = (v: any, d = 2) => (v == null || isNaN(+v)) ? '-' : (+v).toFixed(d);
+const fp = (v: any, d = 1) => (v == null || isNaN(+v)) ? '-' : (+v).toFixed(d) + '%';
+const fl = (v: any) => {
+  if (v == null || isNaN(+v)) return '-';
+  const n = +v;
+  if (Math.abs(n) >= 1e12) return (n/1e12).toFixed(1)+'T';
+  if (Math.abs(n) >= 1e9)  return (n/1e9).toFixed(1)+'B';
+  if (Math.abs(n) >= 1e6)  return (n/1e6).toFixed(1)+'M';
+  if (Math.abs(n) >= 1e3)  return (n/1e3).toFixed(1)+'K';
+  return n.toFixed(0);
+};
 
-export async function generateAnalysisPDF(data: PDFData): Promise<void> {
-  // jspdf v4 + jspdf-autotable v5: must call applyPlugin(jsPDF) to attach autoTable
+type RGB = [number, number, number];
+
+export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   const { default: jsPDF } = await import('jspdf');
-  const autoTableModule = await import('jspdf-autotable');
-
-  // v5 uses applyPlugin(jsPDF) to attach .autoTable onto jsPDF.API
-  if (typeof (autoTableModule as any).applyPlugin === 'function') {
-    (autoTableModule as any).applyPlugin(jsPDF);
+  const atMod = await import('jspdf-autotable');
+  if (typeof (atMod as any).applyPlugin === 'function') {
+    (atMod as any).applyPlugin(jsPDF);
   }
-
   const doc: any = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-  // Helper — after applyPlugin, doc.autoTable should exist
-  const table = (opts: any) => {
-    if (typeof doc.autoTable === 'function') {
-      doc.autoTable(opts);
-    }
-    // fallback: draw a simple placeholder if autoTable unavailable
-  };
+  // ── Palette ────────────────────────────────────────────────────────────
+  const G:  RGB = [0,  166, 81];   // #00A651 Deutsche Bank Green
+  const G2: RGB = [0,  100, 44];   // darker green
+  const W:  RGB = [255,255,255];
+  const BK: RGB = [0,  0,  0];
+  const D1: RGB = [8,  8,  8];     // card background
+  const D3: RGB = [22, 22, 22];    // subtle divider
+  const TW: RGB = [220,220,220];   // main text
+  const TG: RGB = [130,130,130];   // muted text
+  const RD: RGB = [220, 50, 50];   // negative/red
 
-  const PW = 210;
-  const PH = 297;
-  const M  = 15;
-  const CW = PW - 2 * M;
+  const sf = (c: RGB) => doc.setFillColor(c[0], c[1], c[2]);
+  const ss = (c: RGB) => doc.setDrawColor(c[0], c[1], c[2]);
+  const st = (c: RGB) => doc.setTextColor(c[0], c[1], c[2]);
 
-  const today   = new Date();
-  const dateStr = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const PW = 210, PH = 297, M = 14, CW = PW - 2*M;
+  const today = new Date();
+  const date  = today.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
 
   const { ticker, profile, quote, income, balance, cashFlow, incomeTTM,
           priceTarget, sharedAverageVal, sharedWACC, sharedAvgCAPM,
           sharedForecasts, sharedKeyMetricsSummary, sharedAdvanceValueNet,
-          sharedCompanyQualityNet, sharedCagrStats, sharedPivotAnalysis } = data;
+          sharedCompanyQualityNet, sharedCagrStats, sharedPivotAnalysis } = d;
 
-  const companyName = profile?.companyName || ticker;
-  const sector      = profile?.sector   || '-';
-  const industry    = profile?.industry || '-';
-  const exchange    = profile?.exchangeShortName || profile?.exchange || '-';
+  const co    = profile?.companyName || ticker;
+  const sect  = profile?.sector   || '-';
+  const ind   = profile?.industry || '-';
+  const exch  = profile?.exchangeShortName || '-';
+  const price = quote?.price;
 
-  // ── Color helpers ────────────────────────────────────────────────────────
-  const G  = { r: 0,   g: 166, b: 81  }; // Deutsche Bank Green #00A651
-  const DG = { r: 0,   g: 100, b: 48  };
-  const W  = { r: 255, g: 255, b: 255 };
-  const BK = { r: 0,   g: 0,   b: 0   };
-  const LG = { r: 240, g: 242, b: 244 };
-  const TX = { r: 20,  g: 20,  b: 20  };
+  let pg = 1;
 
-  const setFill   = (c: {r:number,g:number,b:number}) => doc.setFillColor(c.r, c.g, c.b);
-  const setStroke = (c: {r:number,g:number,b:number}) => doc.setDrawColor(c.r, c.g, c.b);
-  const setTxt    = (c: {r:number,g:number,b:number}) => doc.setTextColor(c.r, c.g, c.b);
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  let currentPage = 1;
-
-  function addFooter(y_ignore?: number) {
-    doc.setFontSize(7);
-    setTxt({ r: 120, g: 120, b: 120 });
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${companyName} (${ticker})  |  Investment Analysis  |  ${dateStr}`, M, PH - 8);
-    doc.text(`${currentPage}`, PW - M, PH - 8, { align: 'right' });
-    setStroke(G);
-    doc.setLineWidth(0.4);
-    doc.line(M, PH - 13, PW - M, PH - 13);
-    setTxt(TX);
+  // ── App Logo (green square "P") ────────────────────────────────────────
+  function appLogo(x: number, y: number, sz = 8) {
+    sf(G); doc.roundedRect(x, y, sz, sz, 1.2, 1.2, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(sz * 0.8);
+    st(W); doc.text('P', x + sz/2, y + sz*0.72, { align:'center' });
   }
 
-  function addHeader() {
-    setFill(BK);
-    doc.rect(0, 0, PW, 11, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    setTxt(G);
-    doc.text('INVESTMENT ANALYSIS REPORT', M, 7.5);
-    setTxt({ r: 160, g: 160, b: 160 });
-    doc.text(`${ticker}  |  ${companyName}`, PW - M, 7.5, { align: 'right' });
-    setTxt(TX);
+  // ── Page header ────────────────────────────────────────────────────────
+  function pageHeader() {
+    sf(BK); doc.rect(0, 0, PW, 11, 'F');
+    ss(G);  doc.setLineWidth(0.25); doc.line(0, 11, PW, 11);
+    appLogo(M, 2, 7);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7); st(G);
+    doc.text('Prismo', M+9.5, 7);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.5); st(TG);
+    doc.text(`${ticker}  ·  ${co}`, M+22, 7);
+    doc.text(`p.${pg}  ·  ${date}`, PW-M, 7, { align:'right' });
   }
 
-  function newPage() {
-    addFooter();
-    doc.addPage();
-    currentPage++;
-    addHeader();
-    return 20;
+  // ── Page footer ────────────────────────────────────────────────────────
+  function pageFooter() {
+    ss(D3); doc.setLineWidth(0.2); doc.line(M, PH-11, PW-M, PH-11);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+    doc.text('Prismo Investment Intelligence  ·  For informational purposes only  ·  Not financial advice', PW/2, PH-6.5, { align:'center' });
   }
 
-  function checkY(y: number, needed = 30): number {
-    return y + needed > PH - 20 ? newPage() : y;
+  function newPage(): number {
+    pageFooter();
+    doc.addPage(); pg++;
+    sf(BK); doc.rect(0, 0, PW, PH, 'F');
+    pageHeader();
+    return 18;
   }
 
-  function sectionHeader(y: number, title: string): number {
-    setFill(G);
-    doc.rect(M, y, CW, 7.5, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    setTxt(W);
-    doc.text(title, M + 4, y + 5.2);
-    setTxt(TX);
-    return y + 11;
+  function checkY(y: number, need = 28): number {
+    return y+need > PH-15 ? newPage() : y;
   }
 
-  function twoColRow(y: number, rows: [string, string, string, string][]): number {
-    table({
-      startY: y,
-      head: [],
-      body: rows,
+  // ── Section heading ────────────────────────────────────────────────────
+  function section(y: number, title: string): number {
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); st(G);
+    doc.text(title.toUpperCase(), M, y);
+    ss(G); doc.setLineWidth(0.25); doc.line(M, y+1.8, PW-M, y+1.8);
+    return y+7;
+  }
+
+  // ── Small metric pill ──────────────────────────────────────────────────
+  function pill(x: number, y: number, w: number, label: string, val: string, vc?: RGB) {
+    sf(D1); doc.roundedRect(x, y, w, 13, 1.5, 1.5, 'F');
+    ss(D3); doc.setLineWidth(0.15); doc.roundedRect(x, y, w, 13, 1.5, 1.5, 'S');
+    doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+    doc.text(label, x+w/2, y+5, { align:'center' });
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); st(vc||TW);
+    doc.text(val, x+w/2, y+11, { align:'center' });
+  }
+
+  // ── Bar chart ─────────────────────────────────────────────────────────
+  function barChart(x: number, y: number, w: number, h: number,
+                    labels: string[], values: number[], color: RGB, isPct = false) {
+    const n   = labels.length;
+    if (n === 0) return;
+    const bw  = (w - (n-1)*1.5) / n;
+    const maxV = Math.max(...values.filter(isFinite), 1);
+    const minV = Math.min(...values.filter(isFinite), 0);
+    const span = maxV - Math.min(minV, 0) || 1;
+
+    // Grid
+    ss(D3); doc.setLineWidth(0.12);
+    for (let i=0; i<=4; i++) {
+      const gy = y + h*(1 - i/4);
+      doc.line(x, gy, x+w, gy);
+    }
+
+    labels.forEach((lbl, i) => {
+      const v  = isFinite(values[i]) ? values[i] : 0;
+      const bh = Math.max(0.5, (Math.abs(v) / span) * h);
+      const bx = x + i*(bw+1.5);
+      const by = v >= 0 ? y+h-bh : y+h;
+
+      sf(v < 0 ? RD : color);
+      doc.roundedRect(bx, by, bw, bh, 0.8, 0.8, 'F');
+
+      doc.setFont('helvetica','bold'); doc.setFontSize(5); st(v<0 ? RD : G);
+      const lv = isPct ? fp(v) : fl(v);
+      doc.text(lv, bx+bw/2, by-(v>=0?1.5:-1.5), { align:'center' });
+
+      doc.setFont('helvetica','normal'); doc.setFontSize(5.5); st(TG);
+      doc.text(lbl, bx+bw/2, y+h+4, { align:'center' });
+    });
+  }
+
+  // ── Horizontal score bar ──────────────────────────────────────────────
+  function scoreBar(x: number, y: number, w: number, label: string, pct: number) {
+    const c: RGB = pct>=70 ? G : pct>=45 ? [190,140,0] : RD;
+    doc.setFont('helvetica','normal'); doc.setFontSize(7); st(TW);
+    doc.text(label, x, y+3.5);
+    const bx = x+55, bw = w-65;
+    sf(D3); doc.roundedRect(bx, y, bw, 4.5, 1, 1, 'F');
+    const fw = Math.max(1.5, bw*pct/100);
+    sf(c); doc.roundedRect(bx, y, fw, 4.5, 1, 1, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); st(c);
+    doc.text(`${pct.toFixed(0)}%`, bx+bw+3, y+3.5);
+  }
+
+  // ── autoTable helper ───────────────────────────────────────────────────
+  function atable(opts: any): number {
+    doc.autoTable({
       theme: 'plain',
-      styles: { fontSize: 8.5, cellPadding: 2.5, textColor: [20, 20, 20] },
-      columnStyles: {
-        0: { fontStyle: 'bold', fillColor: [240, 242, 244], cellWidth: 47 },
-        1: { cellWidth: 43 },
-        2: { fontStyle: 'bold', fillColor: [240, 242, 244], cellWidth: 47 },
-        3: { cellWidth: 43 },
-      },
-      margin: { left: M, right: M },
+      styles: { fontSize: 7.5, cellPadding:[1.8,3], textColor:TW, fillColor:D1 },
+      headStyles: { fillColor:G, textColor:W, fontStyle:'bold', fontSize:7.5, cellPadding:[2,3] },
+      alternateRowStyles: { fillColor:[12,12,12] },
+      tableLineColor: D3, tableLineWidth: 0,
+      margin: { left:M, right:M },
+      ...opts,
     });
-    return doc.lastAutoTable?.finalY + 8 || y + 30;
-  }
-
-  function striped(y: number, head: string[], rows: any[][], colWidths?: number[]): number {
-    const colStyles: any = {};
-    if (colWidths) colWidths.forEach((w, i) => { colStyles[i] = { cellWidth: w }; });
-    colStyles[0] = { ...colStyles[0], fontStyle: 'bold' };
-    table({
-      startY: y,
-      head: [head],
-      body: rows,
-      theme: 'striped',
-      headStyles: { fillColor: [G.r, G.g, G.b], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
-      styles: { fontSize: 8.5, cellPadding: 2.5 },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      columnStyles: colStyles,
-      margin: { left: M, right: M },
-    });
-    return doc.lastAutoTable?.finalY + 8 || y + 30;
+    return (doc.lastAutoTable?.finalY || opts.startY+20) + 6;
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  // PAGE 1: COVER
+  // PAGE 1 — COVER
   // ════════════════════════════════════════════════════════════════════════
-  setFill(BK);
-  doc.rect(0, 0, PW, PH, 'F');
+  sf(BK); doc.rect(0, 0, PW, PH, 'F');
+  // Green left edge
+  sf(G); doc.rect(0, 0, 2.5, PH, 'F');
+  // Green top edge
+  sf(G); doc.rect(0, 0, PW, 1.5, 'F');
 
-  // Green top bar
-  setFill(G);
-  doc.rect(0, 0, PW, 2.5, 'F');
+  // App branding top-left
+  appLogo(M+2, 14, 11);
+  doc.setFont('helvetica','black'); doc.setFontSize(14); st(G);
+  doc.text('Prismo', M+16, 21.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); st(TG);
+  doc.text('Investment Intelligence Platform', M+16, 27);
 
-  // Green left accent
-  setFill(G);
-  doc.rect(0, 0, 3, PH, 'F');
+  // Thin divider
+  ss(D3); doc.setLineWidth(0.3); doc.line(M+2, 32, PW-M, 32);
 
-  // Try to load company logo
+  // Company logo (right side)
   if (profile?.image) {
     try {
       const res = await fetch(profile.image);
       if (res.ok) {
         const blob = await res.blob();
-        const logoUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload  = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
+        const url  = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload  = () => resolve(r.result as string);
+          r.onerror = reject;
+          r.readAsDataURL(blob);
         });
-        doc.addImage(logoUrl, 'JPEG', PW - M - 42, 18, 38, 38, '', 'FAST');
+        // White bg circle for logo
+        sf(W); doc.circle(PW-M-15, 22, 14, 'F');
+        doc.addImage(url, 'JPEG', PW-M-26, 11, 22, 22, '', 'FAST');
       }
-    } catch { /* logo optional */ }
+    } catch { /* skip */ }
   }
 
   // Company name
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(26);
-  setTxt(W);
-  const nameLines: string[] = doc.splitTextToSize(companyName, 125);
-  doc.text(nameLines, 18, 46);
+  doc.setFont('helvetica','black'); doc.setFontSize(24); st(W);
+  const nameLn: string[] = doc.splitTextToSize(co, 140);
+  doc.text(nameLn, M+2, 47);
+  const afterName = 47 + nameLn.length*11;
 
-  // Badges
-  const badgeY = 46 + nameLines.length * 12;
-  setFill(G);
-  doc.roundedRect(18, badgeY, 34, 11, 1.5, 1.5, 'F');
-  doc.setFontSize(10);
-  setTxt(W);
-  doc.text(ticker, 35, badgeY + 7.5, { align: 'center' });
+  // Ticker + exchange
+  sf(G); doc.roundedRect(M+2, afterName, 30, 10, 2, 2, 'F');
+  sf([28,28,28]); doc.roundedRect(M+35, afterName, 26, 10, 2, 2, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); st(W);
+  doc.text(ticker, M+17, afterName+7, { align:'center' });
+  doc.setFontSize(8); st(TG);
+  doc.text(exch, M+48, afterName+7, { align:'center' });
 
-  setFill({ r: 40, g: 40, b: 40 });
-  doc.roundedRect(56, badgeY, 34, 11, 1.5, 1.5, 'F');
-  setTxt({ r: 180, g: 180, b: 180 });
-  doc.text(exchange, 73, badgeY + 7.5, { align: 'center' });
+  // Sector / industry
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); st(TG);
+  doc.text(`${sect}  ·  ${ind}`, M+2, afterName+17);
 
-  // Report title
-  doc.setFontSize(15);
-  doc.setFont('helvetica', 'normal');
-  setTxt(G);
-  doc.text('INVESTMENT ANALYSIS REPORT', 18, badgeY + 24);
-  setStroke(G);
-  doc.setLineWidth(0.5);
-  doc.line(18, badgeY + 27, PW - 18, badgeY + 27);
-
-  // Summary boxes
-  const boxY = badgeY + 34;
-  const bw   = (CW - 12) / 4;
-  const boxes = [
-    { label: 'Current Price',   val: `$${fmt(quote?.price)}` },
-    { label: 'Market Cap',      val: fmtLarge(quote?.marketCap) },
-    { label: 'P/E Ratio',       val: fmt(quote?.pe) },
-    { label: 'Avg Valuation',   val: sharedAverageVal ? `$${fmt(sharedAverageVal)}` : '-' },
-  ];
-  boxes.forEach((b, i) => {
-    const bx = 18 + i * (bw + 4);
-    setFill({ r: 15, g: 15, b: 15 });
-    doc.roundedRect(bx, boxY, bw, 20, 1.5, 1.5, 'F');
-    setStroke(G);
-    doc.setLineWidth(0.25);
-    doc.roundedRect(bx, boxY, bw, 20, 1.5, 1.5, 'S');
-    doc.setFontSize(6.5);
-    setTxt({ r: 120, g: 120, b: 120 });
-    doc.setFont('helvetica', 'normal');
-    doc.text(b.label, bx + bw / 2, boxY + 7, { align: 'center' });
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    setTxt(G);
-    doc.text(b.val, bx + bw / 2, boxY + 15.5, { align: 'center' });
+  // ── 4 KPI cards ──────────────────────────────────────────────────────
+  const kY  = afterName+23;
+  const kW  = (CW-9)/4;
+  [
+    { l:'Current Price',  v:`$${f(price)}`,                           c:TW },
+    { l:'Market Cap',     v:fl(quote?.marketCap),                     c:TW },
+    { l:'P/E Ratio',      v:f(quote?.pe),                             c:TW },
+    { l:'Avg Valuation',  v:sharedAverageVal?`$${f(sharedAverageVal)}`:'-', c:G },
+  ].forEach((k, i) => {
+    const bx = M + i*(kW+3);
+    sf(D1); doc.roundedRect(bx, kY, kW, 20, 2, 2, 'F');
+    ss(i===3 ? G : D3); doc.setLineWidth(i===3 ? 0.4 : 0.15);
+    doc.roundedRect(bx, kY, kW, 20, 2, 2, 'S');
+    doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+    doc.text(k.l, bx+kW/2, kY+6, { align:'center' });
+    doc.setFont('helvetica','black'); doc.setFontSize(11); st(k.c as RGB);
+    doc.text(k.v, bx+kW/2, kY+14.5, { align:'center' });
   });
 
-  // Sector / date
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  setTxt({ r: 160, g: 160, b: 160 });
-  doc.text(`Sector: ${sector}   |   Industry: ${industry}   |   ${dateStr}`, 18, boxY + 28);
-
-  // Description
-  if (profile?.description) {
-    const desc = profile.description.substring(0, 360) + (profile.description.length > 360 ? '...' : '');
-    doc.setFontSize(7.5);
-    setTxt({ r: 140, g: 140, b: 140 });
-    const dl: string[] = doc.splitTextToSize(desc, CW - 8);
-    doc.text(dl.slice(0, 7), 18, boxY + 37);
+  // ── Upside/downside ───────────────────────────────────────────────────
+  if (sharedAverageVal && price) {
+    const up   = (sharedAverageVal - price) / price * 100;
+    const isUp = up >= 0;
+    const uy   = kY + 26;
+    sf(isUp ? [0,45,22] as RGB : [60,5,5] as RGB);
+    doc.roundedRect(M+2, uy, 58, 14, 2, 2, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); st(TG);
+    doc.text(isUp ? 'POTENTIAL UPSIDE' : 'POTENTIAL DOWNSIDE', M+31, uy+4.5, { align:'center' });
+    doc.setFont('helvetica','black'); doc.setFontSize(13);
+    st(isUp ? [90,255,150] as RGB : [255,110,110] as RGB);
+    doc.text(`${isUp?'+':''}${up.toFixed(1)}%`, M+31, uy+12, { align:'center' });
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.5); st(TG);
+    doc.text(`vs avg model valuation $${f(sharedAverageVal)}`, M+64, uy+9);
   }
 
-  // Upside/downside badge
-  if (sharedAverageVal && quote?.price) {
-    const up = ((sharedAverageVal - quote.price) / quote.price) * 100;
-    const isUp = up >= 0;
-    const uy = PH - 68;
-    setFill(isUp ? { r: 0, g: 80, b: 35 } : { r: 100, g: 0, b: 0 });
-    doc.roundedRect(18, uy, 78, 28, 2, 2, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    setTxt(W);
-    doc.text(isUp ? 'POTENTIAL UPSIDE' : 'POTENTIAL DOWNSIDE', 57, uy + 9, { align: 'center' });
-    doc.setFontSize(18);
-    setTxt(isUp ? { r: 100, g: 255, b: 150 } : { r: 255, g: 120, b: 120 });
-    doc.text(`${isUp ? '+' : ''}${up.toFixed(1)}%`, 57, uy + 21, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    setTxt({ r: 160, g: 160, b: 160 });
-    doc.text(`vs. avg. model valuation of $${fmt(sharedAverageVal)}`, 18, uy + 32);
+  // ── Revenue preview chart on cover ───────────────────────────────────
+  const covInc = (income||[]).slice(0,5).reverse();
+  if (covInc.length >= 2) {
+    const cchY = kY + 48;
+    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); st(TG);
+    doc.text('REVENUE TREND', M+2, cchY-2);
+    barChart(M+2, cchY, CW-4, 36,
+      covInc.map((i:any) => i.date?.substring(0,4)||''),
+      covInc.map((i:any) => i.revenue||0), G);
+  }
+
+  // ── Description ──────────────────────────────────────────────────────
+  if (profile?.description) {
+    const dY = kY + 93;
+    const desc = profile.description.substring(0, 350)+(profile.description.length>350?'...':'');
+    doc.setFont('helvetica','normal'); doc.setFontSize(7); st(TG);
+    const dl:string[] = doc.splitTextToSize(desc, CW-4);
+    doc.text(dl.slice(0,5), M+2, dY);
   }
 
   // Cover footer
-  setStroke(G);
-  doc.setLineWidth(0.5);
-  doc.line(18, PH - 18, PW - 18, PH - 18);
-  doc.setFontSize(6.5);
-  setTxt({ r: 80, g: 80, b: 80 });
-  doc.text('For informational purposes only. Not financial advice.', PW / 2, PH - 11, { align: 'center' });
+  ss(G); doc.setLineWidth(0.5); doc.line(M, PH-20, PW-M, PH-20);
+  doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+  doc.text('For informational purposes only · Not financial advice · Generated by Prismo', PW/2, PH-14, { align:'center' });
+  doc.setFontSize(7); st(TG);
+  doc.text(date, PW/2, PH-8.5, { align:'center' });
 
   // ════════════════════════════════════════════════════════════════════════
-  // PAGE 2: FINANCIAL HIGHLIGHTS
+  // PAGE 2 — FINANCIAL HIGHLIGHTS
   // ════════════════════════════════════════════════════════════════════════
   let y = newPage();
 
-  // Price & Market Data
-  y = sectionHeader(y, 'PRICE & MARKET DATA');
-  y = twoColRow(y, [
-    ['Current Price',   `$${fmt(quote?.price)}`,        'Day Change',    fmtPct(quote?.changesPercentage)],
-    ['52-Week High',    `$${fmt(quote?.yearHigh)}`,      '52-Week Low',   `$${fmt(quote?.yearLow)}`],
-    ['MA 50-Day',       `$${fmt(quote?.priceAvg50)}`,    'MA 200-Day',    `$${fmt(quote?.priceAvg200)}`],
-    ['Market Cap',      fmtLarge(quote?.marketCap),      'Volume',        (quote?.volume ? Number(quote.volume).toLocaleString() : '-')],
-    ['P/E Ratio',       fmt(quote?.pe),                  'EPS (TTM)',     `$${fmt(quote?.eps)}`],
-    ['Dividend Yield',  fmtPct(quote?.dividendYield ? quote.dividendYield * 100 : 0), 'Beta', fmt(quote?.beta)],
-  ]);
+  // Market summary pills
+  y = section(y, 'Market Summary');
+  const pills = [
+    ['Price',    `$${f(price)}`],
+    ['Day Chg',  fp(quote?.changesPercentage)],
+    ['Mkt Cap',  fl(quote?.marketCap)],
+    ['52W High', `$${f(quote?.yearHigh)}`],
+    ['52W Low',  `$${f(quote?.yearLow)}`],
+    ['Vol',      fl(quote?.volume)],
+    ['MA50',     `$${f(quote?.priceAvg50)}`],
+    ['MA200',    `$${f(quote?.priceAvg200)}`],
+    ['P/E',      f(quote?.pe)],
+    ['EPS',      `$${f(quote?.eps)}`],
+    ['Div Yld',  fp((quote?.dividendYield||0)*100)],
+    ['Beta',     f(quote?.beta)],
+  ];
+  const pW = (CW - 5*2) / 6;
+  pills.forEach(([l, v], i) => {
+    const row = Math.floor(i/6), col = i%6;
+    const vc = l==='Day Chg' && quote?.changesPercentage<0 ? RD : undefined;
+    pill(M + col*(pW+2), y + row*16, pW, l, v, vc);
+  });
+  y += 34;
 
-  // Income Statement
-  y = checkY(y, 55);
-  y = sectionHeader(y, 'INCOME STATEMENT — LAST 3 YEARS');
-  const inc = (income || []).slice(0, 3);
-  if (inc.length > 0) {
-    const hd = ['Metric', ...inc.map((i: any) => i.date?.substring(0, 4) || 'N/A')];
-    y = striped(y, hd, [
-      ['Revenue',        ...inc.map((i: any) => fmtLarge(i.revenue))],
-      ['Gross Profit',   ...inc.map((i: any) => fmtLarge(i.grossProfit))],
-      ['Gross Margin',   ...inc.map((i: any) => fmtPct((i.grossProfitRatio || 0) * 100))],
-      ['Operating Income',...inc.map((i: any) => fmtLarge(i.operatingIncome))],
-      ['Net Income',     ...inc.map((i: any) => fmtLarge(i.netIncome))],
-      ['Net Margin',     ...inc.map((i: any) => fmtPct((i.netIncomeRatio || 0) * 100))],
-      ['EBITDA',         ...inc.map((i: any) => fmtLarge(i.ebitda))],
-      ['EPS Diluted',    ...inc.map((i: any) => `$${fmt(i.epsdiluted || i.eps)}`)],
-    ], [55, 42, 42, 42]);
+  // Charts: Revenue + Net Income side by side
+  const inc5 = (income||[]).slice(0,5).reverse();
+  if (inc5.length >= 2) {
+    y = checkY(y, 58);
+    y = section(y, 'Revenue & Net Income Trend');
+    const hw = (CW/2) - 4;
+    barChart(M, y, hw, 40, inc5.map((i:any)=>i.date?.substring(0,4)||''), inc5.map((i:any)=>i.revenue||0), G);
+    barChart(M+hw+8, y, hw, 40, inc5.map((i:any)=>i.date?.substring(0,4)||''), inc5.map((i:any)=>i.netIncome||0), [80,190,130] as RGB);
+    doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+    doc.text('Revenue', M+hw/2, y+47, { align:'center' });
+    doc.text('Net Income', M+hw+8+hw/2, y+47, { align:'center' });
+    y += 52;
   }
 
-  // Balance Sheet
-  y = checkY(y, 45);
-  y = sectionHeader(y, 'BALANCE SHEET — LATEST YEAR');
-  const bal = (balance || [])[0] || {};
-  y = twoColRow(y, [
-    ['Total Assets',        fmtLarge(bal.totalAssets),                                        'Total Liabilities',    fmtLarge(bal.totalLiabilities)],
-    ['Total Equity',        fmtLarge(bal.totalStockholdersEquity || bal.totalEquity),          'Total Debt',           fmtLarge(bal.totalDebt)],
-    ['Cash & Equivalents',  fmtLarge(bal.cashAndCashEquivalents),                             'Net Debt',             fmtLarge(bal.netDebt)],
-    ['Current Assets',      fmtLarge(bal.totalCurrentAssets),                                 'Current Liabilities',  fmtLarge(bal.totalCurrentLiabilities)],
-    ['Goodwill + Intang.',  fmtLarge((bal.goodwill || 0) + (bal.intangibleAssets || 0)),       'PP&E',                 fmtLarge(bal.propertyPlantEquipmentNet)],
-  ]);
+  // Margins chart
+  if (inc5.length >= 2) {
+    y = checkY(y, 50);
+    y = section(y, 'Profit Margins (%)');
+    const mW = (CW-8)/3;
+    const margins = [
+      { label:'Gross Margin',    key:'grossProfitRatio',      color:G },
+      { label:'Operating Margin',key:'operatingIncomeRatio',  color:[0,140,200] as RGB },
+      { label:'Net Margin',      key:'netIncomeRatio',        color:[80,190,130] as RGB },
+    ];
+    margins.forEach((m, mi) => {
+      barChart(M+mi*(mW+4), y, mW, 30,
+        inc5.map((i:any)=>i.date?.substring(0,4)||''),
+        inc5.map((i:any)=>(i[m.key]||0)*100),
+        m.color, true);
+      doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+      doc.text(m.label, M+mi*(mW+4)+mW/2, y+37, { align:'center' });
+    });
+    y += 43;
+  }
 
-  // Cash Flow
-  y = checkY(y, 40);
-  y = sectionHeader(y, 'CASH FLOW — LAST 3 YEARS');
-  const cf = (cashFlow || []).slice(0, 3);
-  if (cf.length > 0) {
-    const hd2 = ['Metric', ...cf.map((c: any) => c.date?.substring(0, 4) || 'N/A')];
-    y = striped(y, hd2, [
-      ['Operating Cash Flow', ...cf.map((c: any) => fmtLarge(c.operatingCashFlow || c.netCashProvidedByOperatingActivities))],
-      ['Free Cash Flow',      ...cf.map((c: any) => fmtLarge(c.freeCashFlow))],
-      ['Capital Expenditure', ...cf.map((c: any) => fmtLarge(c.capitalExpenditure))],
-      ['Dividends Paid',      ...cf.map((c: any) => fmtLarge(c.dividendsPaid))],
-    ], [55, 42, 42, 42]);
+  // Balance sheet table
+  y = checkY(y, 45);
+  y = section(y, 'Balance Sheet — Latest Year');
+  const bal = (balance||[])[0] || {};
+  y = atable({
+    startY: y,
+    body: [
+      ['Total Assets',       fl(bal.totalAssets),                              'Total Liabilities',  fl(bal.totalLiabilities)],
+      ['Shareholders Equity',fl(bal.totalStockholdersEquity||bal.totalEquity), 'Total Debt',         fl(bal.totalDebt)],
+      ['Cash & Equiv.',      fl(bal.cashAndCashEquivalents),                   'Net Debt',           fl(bal.netDebt)],
+      ['Current Assets',     fl(bal.totalCurrentAssets),                       'Current Liabilities',fl(bal.totalCurrentLiabilities)],
+    ],
+    columnStyles: {
+      0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:48},
+      1:{cellWidth:42},
+      2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:48},
+      3:{cellWidth:42},
+    },
+  });
+
+  // Cash flow highlights
+  const cf3 = (cashFlow||[]).slice(0,3).reverse();
+  if (cf3.length > 0) {
+    y = checkY(y, 45);
+    y = section(y, 'Cash Flow Statement');
+    const cfH = ['',  ...cf3.map((c:any)=>c.date?.substring(0,4)||'')];
+    y = atable({
+      startY: y,
+      head: [cfH],
+      body: [
+        ['Operating Cash Flow', ...cf3.map((c:any)=>fl(c.operatingCashFlow||c.netCashProvidedByOperatingActivities))],
+        ['Free Cash Flow',      ...cf3.map((c:any)=>fl(c.freeCashFlow))],
+        ['CapEx',               ...cf3.map((c:any)=>fl(c.capitalExpenditure))],
+        ['Dividends Paid',      ...cf3.map((c:any)=>fl(c.dividendsPaid))],
+      ],
+      columnStyles: {0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:52}},
+    });
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  // PAGE 3: VALUATION & KEY METRICS
+  // PAGE 3 — VALUATION
   // ════════════════════════════════════════════════════════════════════════
   y = newPage();
 
-  // Valuation Summary
-  y = sectionHeader(y, 'VALUATION SUMMARY');
-  const valRows: [string, string, string, string][] = [];
-  if (sharedAverageVal && quote?.price) {
-    const upside = ((sharedAverageVal - quote.price) / quote.price * 100).toFixed(1);
-    valRows.push(['Avg Model Valuation', `$${fmt(sharedAverageVal)}`, 'vs. Current Price', `${Number(upside) >= 0 ? '+' : ''}${upside}%`]);
-  }
-  if (sharedWACC) valRows.push(['WACC', fmtPct(sharedWACC), 'Cost of Equity (CAPM)', fmtPct(sharedAvgCAPM)]);
-  if (sharedCagrStats) valRows.push(['Avg CAGR', fmtPct(sharedCagrStats.avgCagr), 'CAGR Range', `${fmtPct(sharedCagrStats.minCagr)} - ${fmtPct(sharedCagrStats.maxCagr)}`]);
-  if (priceTarget?.priceTarget || priceTarget?.priceTargetAvg) {
-    valRows.push(['Analyst Target (Avg)', `$${fmt(priceTarget.priceTarget || priceTarget.priceTargetAvg)}`,
-                  'Target Range', `$${fmt(priceTarget.priceTargetLow)} - $${fmt(priceTarget.priceTargetHigh)}`]);
-  }
-  if (valRows.length > 0) y = twoColRow(y, valRows);
-
-  // AdvanceValueNet breakdown
-  if (sharedAdvanceValueNet?.valuations) {
-    y = checkY(y, 50);
-    y = sectionHeader(y, 'MULTI-MODEL VALUATION (AdvanceValueNet)');
-    const avnRows = Object.entries(sharedAdvanceValueNet.valuations)
-      .filter(([, v]) => typeof v === 'number')
-      .map(([model, val]: any) => [
-        model.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
-        `$${fmt(val)}`,
-        quote?.price ? `${((val / quote.price - 1) * 100).toFixed(1)}%` : '-',
-      ]);
-    if (avnRows.length > 0) {
-      y = striped(y, ['Valuation Model', 'Intrinsic Value', 'vs. Market Price'], avnRows, [85, 45, 45]);
-    }
-  }
-
-  // Company Quality Net
-  if (sharedCompanyQualityNet?.scores) {
-    y = checkY(y, 50);
-    y = sectionHeader(y, 'COMPANY QUALITY SCORE (CompanyQualityNet)');
-    const scoreRows = Object.entries(sharedCompanyQualityNet.scores).map(([dim, score]: any) => {
-      const pct = typeof score === 'number' ? Math.round(score * 100) : 0;
-      const bars = pct >= 70 ? '●●●●●' : pct >= 50 ? '●●●●○' : pct >= 30 ? '●●●○○' : '●●○○○';
-      return [
-        dim.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
-        `${pct}/100`,
-        bars,
-      ];
+  // Valuation model visual bars
+  y = section(y, 'Valuation Model Comparison vs Current Price');
+  const avnVals = sharedAdvanceValueNet?.valuations;
+  const models: {name:string; val:number}[] = [];
+  if (avnVals) {
+    Object.entries(avnVals).forEach(([k,v]) => {
+      if (typeof v==='number' && isFinite(v) && v>0) {
+        models.push({ name:k.replace(/_/g,' ').replace(/\b\w/g,(c:string)=>c.toUpperCase()).substring(0,18), val:+v });
+      }
     });
-    const total = sharedCompanyQualityNet.totalScore;
-    if (total !== undefined) scoreRows.push(['TOTAL SCORE', `${Math.round(total * 100)}/100`, sharedCompanyQualityNet.rating || '']);
-    y = striped(y, ['Dimension', 'Score', 'Visual'], scoreRows, [75, 35, 65]);
+  }
+  if (sharedAverageVal) models.push({ name:'Average', val:sharedAverageVal });
+
+  if (models.length>0 && price) {
+    const maxV = Math.max(...models.map(m=>m.val), price)*1.08;
+    const bH=5, bSp=8, barMaxW=CW-42;
+    const pLine = M+36 + (price/maxV)*barMaxW;
+
+    models.slice(0,10).forEach((m,i) => {
+      const by = y + i*bSp;
+      const bw = Math.max(2, (m.val/maxV)*barMaxW);
+      // Label
+      doc.setFont('helvetica','normal'); doc.setFontSize(6.5); st(TG);
+      doc.text(m.name, M, by+bH-0.5);
+      // Bar
+      sf(m.name==='Average' ? G : [20,60,35] as RGB);
+      doc.roundedRect(M+36, by, bw, bH, 0.8, 0.8, 'F');
+      // Value
+      doc.setFont('helvetica','bold'); doc.setFontSize(6);
+      st(m.name==='Average' ? G : TW);
+      doc.text(`$${f(m.val,0)}`, M+36+bw+2, by+bH-0.5);
+    });
+
+    // Current price vertical line
+    ss(W); doc.setLineWidth(0.5);
+    doc.line(pLine, y-2, pLine, y + Math.min(models.length,10)*bSp+2);
+    // Price label
+    sf(W); doc.roundedRect(pLine-8, y-7, 16, 5, 1, 1, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(6); st(BK);
+    doc.text(`$${f(price,0)}`, pLine, y-3.5, { align:'center' });
+
+    y += Math.min(models.length,10)*bSp + 10;
   }
 
   // Key Ratios
   y = checkY(y, 45);
-  y = sectionHeader(y, 'KEY FINANCIAL RATIOS');
+  y = section(y, 'Key Financial Ratios');
   const km = sharedKeyMetricsSummary || {};
-  y = twoColRow(y, [
-    ['Return on Equity (ROE)', fmtPct((km.roe || 0) * 100),          'Return on Assets (ROA)', fmtPct((km.roa || 0) * 100)],
-    ['Debt / Equity',          fmt(km.debtToEquity),                   'Current Ratio',          fmt(km.currentRatio)],
-    ['Gross Margin',           fmtPct((income?.[0]?.grossProfitRatio || 0) * 100), 'Net Margin', fmtPct((income?.[0]?.netIncomeRatio || 0) * 100)],
-    ['P/E Ratio',              fmt(quote?.pe),                         'P/B Ratio',              fmt(km.priceToBook)],
-    ['EV/EBITDA',              fmt(km.evToEbitda),                     'Interest Coverage',      fmt(km.interestCoverage)],
-  ]);
-
-  // Pivot Analysis
-  if (sharedPivotAnalysis) {
-    y = checkY(y, 50);
-    y = sectionHeader(y, 'TECHNICAL — PIVOT POINTS & FIBONACCI');
-    const pa = sharedPivotAnalysis;
-    y = twoColRow(y, [
-      ['Pivot Point',    `$${fmt(pa.pivotPoint)}`,              'Current Price',     `$${fmt(pa.currentPrice)}`],
-      ['Resistance R1',  `$${fmt(pa.resistance?.R1)}`,          'Resistance R2',     `$${fmt(pa.resistance?.R2)}`],
-      ['Support S1',     `$${fmt(pa.support?.S1)}`,             'Support S2',        `$${fmt(pa.support?.S2)}`],
-      ['52-Week High',   `$${fmt(pa.high52Week)}`,              '52-Week Low',       `$${fmt(pa.low52Week)}`],
-      ['Fib 38.2%',      `$${fmt(pa.fibonacci?.level382)}`,     'Fib 61.8%',         `$${fmt(pa.fibonacci?.level618)}`],
-      ['% from 52W High',fmtPct(pa.priceVsHigh),                '% from 52W Low',   fmtPct(pa.priceVsLow)],
-    ]);
-  }
-
-  // ════════════════════════════════════════════════════════════════════════
-  // PAGE 4: ANALYST FORECASTS (only if data exists)
-  // ════════════════════════════════════════════════════════════════════════
-  if (sharedForecasts && sharedForecasts.length > 0) {
-    y = newPage();
-    y = sectionHeader(y, 'ANALYST CONSENSUS ESTIMATES');
-    y = striped(y,
-      ['Year', 'Revenue (Est.)', 'EPS (Est.)', 'Net Income (Est.)', 'EBITDA (Est.)'],
-      sharedForecasts.slice(0, 5).map((f: any) => [
-        f.date?.substring(0, 4) || '-',
-        fmtLarge(f.estimatedRevenueAvg),
-        `$${fmt(f.estimatedEpsAvg)}`,
-        fmtLarge(f.estimatedNetIncomeAvg),
-        fmtLarge(f.estimatedEbitdaAvg),
-      ]),
-      [20, 45, 35, 45, 45]
-    );
-
-    // Price target
-    if (priceTarget?.priceTarget || priceTarget?.priceTargetAvg) {
-      y = checkY(y, 35);
-      y = sectionHeader(y, 'ANALYST PRICE TARGET');
-      y = twoColRow(y, [
-        ['Average Target', `$${fmt(priceTarget.priceTarget || priceTarget.priceTargetAvg)}`, 'Median Target', `$${fmt(priceTarget.priceTargetMedian)}`],
-        ['High Target',    `$${fmt(priceTarget.priceTargetHigh)}`,                           'Low Target',    `$${fmt(priceTarget.priceTargetLow)}`],
-        ['# of Analysts',  fmt(priceTarget.numberOfAnalysts || priceTarget.lastMonthNumberOfAnalysts, 0), 'Consensus', priceTarget.consensus || '-'],
-      ]);
-    }
-
-    // TTM
-    const ttm = Array.isArray(incomeTTM) ? incomeTTM[0] : incomeTTM;
-    if (ttm) {
-      y = checkY(y, 40);
-      y = sectionHeader(y, 'TRAILING TWELVE MONTHS (TTM)');
-      y = twoColRow(y, [
-        ['Revenue (TTM)',        fmtLarge(ttm.revenue),                                  'Gross Profit (TTM)',    fmtLarge(ttm.grossProfit)],
-        ['EBITDA (TTM)',         fmtLarge(ttm.ebitda),                                   'Net Income (TTM)',      fmtLarge(ttm.netIncome)],
-        ['EPS Diluted (TTM)',    `$${fmt(ttm.epsdiluted || ttm.eps)}`,                   'Gross Margin (TTM)',    fmtPct((ttm.grossProfitRatio || 0) * 100)],
-        ['Operating Margin TTM',fmtPct((ttm.operatingIncomeRatio || 0) * 100),           'Net Margin (TTM)',      fmtPct((ttm.netIncomeRatio || 0) * 100)],
-      ]);
-    }
-  }
-
-  // ════════════════════════════════════════════════════════════════════════
-  // LAST PAGE: DISCLAIMER
-  // ════════════════════════════════════════════════════════════════════════
-  y = newPage();
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  setTxt(G);
-  doc.text('DISCLAIMER & IMPORTANT DISCLOSURES', M, y);
-  y += 10;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  setTxt({ r: 50, g: 50, b: 50 });
-  const disclaimer = [
-    'This Investment Analysis Report has been generated automatically by an AI-powered financial analysis',
-    'platform for informational and educational purposes only. It does not constitute financial advice,',
-    'investment recommendations, or an offer to buy or sell any security.',
-    '',
-    'All data is sourced from Financial Modeling Prep (FMP) API and third-party providers. No guarantee',
-    'is made regarding accuracy, completeness, or timeliness. Investing involves risk including possible',
-    'loss of principal. Past performance does not guarantee future results.',
-    '',
-    'Valuation models (DCF, DDM, Graham Number, etc.) rely on assumptions that may not reflect actual',
-    'future performance. Different analysts using different assumptions may reach different conclusions.',
-    '',
-    'Consult a qualified financial advisor before making any investment decision.',
-    '',
-    `Report generated: ${dateStr}   |   ${companyName} (${ticker})`,
-  ];
-  disclaimer.forEach(line => {
-    doc.text(line, M, y);
-    y += 5.5;
+  y = atable({
+    startY: y,
+    head: [['Metric','Value','Metric','Value']],
+    body: [
+      ['P/E Ratio',         f(quote?.pe),               'P/B Ratio',          f(km.priceToBook)],
+      ['EV/EBITDA',         f(km.evToEbitda),            'P/FCF',              f(km.priceToFCF)],
+      ['ROE',               fp((km.roe||0)*100),         'ROA',                fp((km.roa||0)*100)],
+      ['Debt / Equity',     f(km.debtToEquity),          'Current Ratio',      f(km.currentRatio)],
+      ['Gross Margin',      fp((income?.[0]?.grossProfitRatio||0)*100), 'Net Margin', fp((income?.[0]?.netIncomeRatio||0)*100)],
+      ['Interest Coverage', f(km.interestCoverage),      'Quick Ratio',        f(km.quickRatio)],
+    ],
+    columnStyles:{
+      0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:46},
+      1:{cellWidth:42},
+      2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:46},
+      3:{cellWidth:46},
+    },
   });
 
-  addFooter();
+  // Quality score bars
+  if (sharedCompanyQualityNet?.scores) {
+    y = checkY(y, 65);
+    y = section(y, 'Company Quality Score — CompanyQualityNet AI');
+    const sc = sharedCompanyQualityNet.scores;
+    Object.entries(sc).forEach(([dim, score]:any) => {
+      const pct = typeof score==='number' ? +(score*100).toFixed(0) : 0;
+      const lbl = dim.replace(/_/g,' ').replace(/\b\w/g,(c:string)=>c.toUpperCase());
+      y = checkY(y, 9);
+      scoreBar(M, y, CW, lbl, pct);
+      y += 8;
+    });
+    const total = sharedCompanyQualityNet.totalScore;
+    if (total != null) {
+      ss(D3); doc.setLineWidth(0.2); doc.line(M, y+1, PW-M, y+1);
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); st(G);
+      doc.text(`Overall: ${(total*100).toFixed(0)}/100  ·  ${sharedCompanyQualityNet.rating||''}`, M, y+8);
+      y += 13;
+    }
+  }
 
-  // ── Save ──────────────────────────────────────────────────────────────────
-  const filename = `${ticker}_Analysis_${today.toISOString().split('T')[0]}.pdf`;
-  doc.save(filename);
+  // Cost of Capital
+  y = checkY(y, 35);
+  y = section(y, 'Cost of Capital');
+  const capRows:any[] = [];
+  if (sharedWACC)     capRows.push(['WACC (Weighted Avg Cost of Capital)',      fp(sharedWACC)]);
+  if (sharedAvgCAPM)  capRows.push(['Cost of Equity — CAPM Average',            fp(sharedAvgCAPM)]);
+  if (sharedCagrStats?.avgCagr != null) capRows.push(['Historical Revenue CAGR (Avg)', fp(sharedCagrStats.avgCagr)]);
+  if (sharedCagrStats?.minCagr != null) capRows.push(['CAGR Range (Min – Max)', `${fp(sharedCagrStats.minCagr)} – ${fp(sharedCagrStats.maxCagr)}`]);
+  if (capRows.length>0) {
+    y = atable({ startY:y, head:[['Metric','Value']], body:capRows,
+      columnStyles:{0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:120},1:{cellWidth:60}} });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // PAGE 4 — ANALYST FORECASTS
+  // ════════════════════════════════════════════════════════════════════════
+  if (sharedForecasts?.length) {
+    y = newPage();
+    y = section(y, 'Analyst Consensus Estimates');
+    y = atable({
+      startY: y,
+      head: [['Year','Revenue Est.','EPS Est.','Net Income','EBITDA Est.']],
+      body: sharedForecasts.slice(0,6).map((fc:any) => [
+        fc.date?.substring(0,4)||'-',
+        fl(fc.estimatedRevenueAvg),
+        `$${f(fc.estimatedEpsAvg)}`,
+        fl(fc.estimatedNetIncomeAvg),
+        fl(fc.estimatedEbitdaAvg),
+      ]),
+    });
+
+    // Revenue forecast bar chart
+    if (sharedForecasts.length >= 2) {
+      y = checkY(y, 58);
+      y = section(y, 'Revenue Forecast Chart (Analyst Consensus)');
+      const fcD = sharedForecasts.slice(0,6);
+      barChart(M, y, CW, 42,
+        fcD.map((fc:any)=>fc.date?.substring(0,4)||''),
+        fcD.map((fc:any)=>fc.estimatedRevenueAvg||0), G);
+      y += 50;
+    }
+
+    // Price target visual
+    const tgt  = priceTarget?.priceTarget || priceTarget?.priceTargetAvg;
+    const tgtH = priceTarget?.priceTargetHigh;
+    const tgtL = priceTarget?.priceTargetLow;
+
+    if (tgt && tgtL && tgtH && price) {
+      y = checkY(y, 45);
+      y = section(y, 'Analyst Price Target');
+
+      const mn  = Math.min(+price, +tgtL)*0.94;
+      const mx  = Math.max(+price, +tgtH)*1.06;
+      const rng = mx - mn;
+      const scl = (CW-20) / rng;
+      const tY  = y + 12;
+
+      // Track
+      sf(D3); doc.roundedRect(M+10, tY, CW-20, 5, 1.5, 1.5, 'F');
+      // Range band (green)
+      sf([0,55,28] as RGB);
+      doc.roundedRect(M+10+(tgtL-mn)*scl, tY, (tgtH-tgtL)*scl, 5, 1, 1, 'F');
+      // Current price dot
+      const pX = M+10+(price-mn)*scl;
+      sf(W); doc.circle(pX, tY+2.5, 2.5, 'F');
+      // Target dot
+      const tX2 = M+10+(tgt-mn)*scl;
+      sf(G); doc.circle(tX2, tY+2.5, 2.5, 'F');
+
+      doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
+      st(W); doc.text(`$${f(price,0)}`, pX, tY+11, { align:'center' });
+      st(G); doc.text(`$${f(tgt,0)}\nTarget`, tX2, tY+11, { align:'center' });
+      st(TG); doc.setFontSize(5.5);
+      doc.text(`L $${f(tgtL,0)}`, M+10+(tgtL-mn)*scl, tY-2, { align:'center' });
+      doc.text(`H $${f(tgtH,0)}`, M+10+(tgtH-mn)*scl, tY-2, { align:'center' });
+
+      y = tY + 22;
+      y = atable({
+        startY: y,
+        head:[['Metric','Value']],
+        body:[
+          ['Average Price Target', `$${f(tgt)}`],
+          ['Median Target',        `$${f(priceTarget.priceTargetMedian)}`],
+          ['High / Low Target',    `$${f(tgtH)} / $${f(tgtL)}`],
+          ['Number of Analysts',   f(priceTarget.numberOfAnalysts||priceTarget.lastMonthNumberOfAnalysts,0)],
+          ['Consensus Rating',     priceTarget.consensus||priceTarget.lastMonthConsensus||'-'],
+        ],
+        columnStyles:{0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:90},1:{cellWidth:90}},
+      });
+    }
+
+    // TTM snapshot
+    const ttm = Array.isArray(incomeTTM) ? incomeTTM[0] : incomeTTM;
+    if (ttm) {
+      y = checkY(y, 42);
+      y = section(y, 'Trailing Twelve Months (TTM)');
+      y = atable({
+        startY: y,
+        body:[
+          ['Revenue TTM',        fl(ttm.revenue),                          'Gross Profit TTM',  fl(ttm.grossProfit)],
+          ['EBITDA TTM',         fl(ttm.ebitda),                           'Net Income TTM',    fl(ttm.netIncome)],
+          ['EPS Diluted TTM',    `$${f(ttm.epsdiluted||ttm.eps)}`,         'Gross Margin TTM',  fp((ttm.grossProfitRatio||0)*100)],
+          ['Oper Margin TTM',    fp((ttm.operatingIncomeRatio||0)*100),     'Net Margin TTM',    fp((ttm.netIncomeRatio||0)*100)],
+        ],
+        columnStyles:{
+          0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:48},
+          1:{cellWidth:42},
+          2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:48},
+          3:{cellWidth:42},
+        },
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // PAGE 5 — TECHNICAL
+  // ════════════════════════════════════════════════════════════════════════
+  if (sharedPivotAnalysis) {
+    y = newPage();
+    const pa = sharedPivotAnalysis;
+
+    // 52-week price position visual
+    if (pa.low52Week && pa.high52Week && price) {
+      y = section(y, '52-Week Price Position');
+      const lo = +pa.low52Week*0.96, hi = +pa.high52Week*1.04;
+      const sp = hi-lo, sc = (CW-20)/sp;
+      const tY = y+10;
+
+      // Track
+      sf(D3); doc.roundedRect(M+10, tY, CW-20, 6, 2, 2, 'F');
+      // Fill to price
+      const ppos = M+10+(price-lo)*sc;
+      sf(G); doc.roundedRect(M+10, tY, ppos-(M+10), 6, 2, 2, 'F');
+
+      // Dot
+      sf(W); doc.circle(ppos, tY+3, 3, 'F');
+
+      doc.setFont('helvetica','bold'); doc.setFontSize(7); st(W);
+      doc.text(`$${f(price,0)}`, ppos, tY+13, { align:'center' });
+      st(TG); doc.setFontSize(6);
+      doc.text(`$${f(pa.low52Week,0)}  52W Low`, M+10, tY+13);
+      doc.text(`52W High  $${f(pa.high52Week,0)}`, PW-M-10, tY+13, { align:'right' });
+
+      // % from high
+      doc.setFont('helvetica','bold'); doc.setFontSize(8);
+      const fromHigh = ((price/pa.high52Week)-1)*100;
+      st(fromHigh < -20 ? RD : fromHigh < -5 ? [200,150,0] as RGB : G);
+      doc.text(`${fromHigh.toFixed(1)}% from 52W High`, PW/2, tY+21, { align:'center' });
+
+      y = tY + 27;
+    }
+
+    y = section(y, 'Pivot Points & Fibonacci Levels');
+    y = atable({
+      startY: y,
+      head:[['Level','Price','Level','Price']],
+      body:[
+        ['Pivot Point',    `$${f(pa.pivotPoint)}`,          'Current Price',   `$${f(pa.currentPrice)}`],
+        ['Resistance R1',  `$${f(pa.resistance?.R1)}`,      'Resistance R2',   `$${f(pa.resistance?.R2)}`],
+        ['Support S1',     `$${f(pa.support?.S1)}`,         'Support S2',      `$${f(pa.support?.S2)}`],
+        ['Fibonacci 23.6%',`$${f(pa.fibonacci?.level236)}`, 'Fibonacci 38.2%', `$${f(pa.fibonacci?.level382)}`],
+        ['Fibonacci 50.0%',`$${f(pa.fibonacci?.level500)}`, 'Fibonacci 61.8%', `$${f(pa.fibonacci?.level618)}`],
+        ['Fibonacci 78.6%',`$${f(pa.fibonacci?.level786)}`, '% from 52W Low',  fp(pa.priceVsLow)],
+      ],
+      columnStyles:{
+        0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:48},
+        1:{cellWidth:42},
+        2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:48},
+        3:{cellWidth:42},
+      },
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // FINAL PAGE — DISCLAIMER
+  // ════════════════════════════════════════════════════════════════════════
+  y = newPage();
+
+  // Centered branding
+  appLogo(PW/2 - 6, y, 12);
+  doc.setFont('helvetica','black'); doc.setFontSize(18); st(G);
+  doc.text('Prismo', PW/2, y+22, { align:'center' });
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); st(TG);
+  doc.text('Investment Intelligence Platform', PW/2, y+29, { align:'center' });
+
+  y += 38;
+  ss(G); doc.setLineWidth(0.3); doc.line(M+20, y, PW-M-20, y);
+  y += 8;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); st(TW);
+  doc.text('Disclaimer & Important Disclosures', PW/2, y, { align:'center' });
+  y += 10;
+
+  const disc = [
+    'This Investment Analysis Report has been generated automatically by the Prismo platform for',
+    'informational and educational purposes only. It does not constitute financial advice, investment',
+    'recommendations, or an offer to buy or sell any security.',
+    '',
+    'All data is sourced from Financial Modeling Prep (FMP) and third-party data providers. No guarantee',
+    'is made regarding accuracy, completeness, or timeliness. Investing in securities involves risk,',
+    'including possible loss of principal. Past performance does not guarantee future results.',
+    '',
+    'Valuation models (DCF, DDM, Graham Number, Multiples, etc.) rely on assumptions and estimates',
+    'that may not reflect actual future performance. Different analysts may reach different conclusions.',
+    '',
+    'Always consult a qualified financial advisor before making any investment decisions.',
+  ];
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); st(TW);
+  disc.forEach(line => {
+    st(line==='' ? TG : TW);
+    if (line !== '') doc.text(line, PW/2, y, { align:'center' });
+    y += line==='' ? 4 : 5.5;
+  });
+
+  y += 6;
+  ss(D3); doc.setLineWidth(0.2); doc.line(M+30, y, PW-M-30, y);
+  y += 6;
+  doc.setFontSize(7); st(TG);
+  doc.text(`${co}  (${ticker})  ·  ${date}`, PW/2, y, { align:'center' });
+
+  pageFooter();
+
+  // ── Save ──────────────────────────────────────────────────────────────
+  doc.save(`${ticker}_Prismo_${today.toISOString().split('T')[0]}.pdf`);
 }

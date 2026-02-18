@@ -165,9 +165,9 @@ export default function AnalisisFinalTab({
             </div>
           )}
           {precioEstimado && (
-            <div className="text-right bg-gradient-to-r from-rose-900/40 to-pink-900/40 px-4 py-2 rounded-xl border border-rose-600">
-              <p className="text-xs text-rose-400">{t('analisisFinalTab.estimatedPrice')}</p>
-              <p className="text-xl font-bold text-rose-400">${precioEstimado.toFixed(2)}</p>
+            <div className="text-right bg-gradient-to-r from-red-950/80 to-pink-900/40 px-4 py-2 rounded-xl border border-red-700">
+              <p className="text-xs text-red-400">{t('analisisFinalTab.estimatedPrice')}</p>
+              <p className="text-xl font-bold text-red-400">${precioEstimado.toFixed(2)}</p>
             </div>
           )}
         </div>
@@ -252,7 +252,7 @@ export default function AnalisisFinalTab({
         <div className={`p-6 rounded-2xl border text-center ${
           upside !== null && upside > 0
             ? 'bg-gradient-to-br bg-gray-950 to-emerald-800/20 border-green-600/50'
-            : 'bg-gradient-to-br from-red-900/40 to-rose-800/20 border-red-600/50'
+            : 'bg-gradient-to-br from-red-900/40 to-red-950/40 border-red-600/50'
         }`}>
           <p className="text-lg text-gray-300 mb-2">{t('analisisFinalTab.upsideDownside')}</p>
           <p className={`text-4xl font-black ${upside !== null && upside > 0 ? 'text-green-400' : 'text-red-400'}`}>

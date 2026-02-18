@@ -733,7 +733,7 @@ export default function SustainableGrowthTab({
       {/* ═══════════════════════════════════════════════════════════════
           FULL RETENTION METHODS
           ═══════════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-r bg-gray-950 to-pink-900/30 p-6 rounded-xl border border-emerald-600">
+      <div className="bg-gradient-to-r bg-gray-900 p-6 rounded-xl border border-emerald-600">
         <h4 className="text-2xl font-bold text-emerald-400 mb-4">{t('sgrTab.fullRetention')}</h4>
         <p className="text-gray-400 mb-4">
           {t('sgrTab.fullRetentionDesc')}

@@ -213,7 +213,7 @@ export default function MarketSentimentPage() {
       case 'bullish': return 'from-green-950/80 to-emerald-950/60 border-green-500/50';
       case 'neutral': return 'from-amber-950/70 to-yellow-950/50 border-amber-500/40';
       case 'bearish': return 'from-orange-950/70 to-red-950/50 border-orange-500/40';
-      case 'very_bearish': return 'from-red-950/90 to-rose-950/70 border-red-500/60';
+      case 'very_bearish': return 'from-red-950/90 to-red-950/40 border-red-500/60';
       default: return 'from-gray-900 to-slate-900 border-white/[0.08]';
     }
   };
@@ -534,7 +534,7 @@ export default function MarketSentimentPage() {
             )}
           </div>
 
-          <div className="bg-gradient-to-br from-red-950/30 to-rose-950/20 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-red-700/50">
+          <div className="bg-gradient-to-br from-red-950/30 to-red-950/40 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-red-700/50">
             <h3 className="text-base sm:text-xl font-bold text-red-400 mb-3 sm:mb-4 flex items-center gap-2">
               📉 {t('marketSentiment.topLosers')}
               <span className="text-xs font-normal text-gray-500">({data.moversAnalysis.losersCount})</span>

@@ -140,7 +140,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
     'rgba(239, 68, 68, 0.8)',    // red
     'rgba(139, 92, 246, 0.8)',   // purple
     'rgba(6, 182, 212, 0.8)',    // cyan
-    'rgba(236, 72, 153, 0.8)',   // pink
+    'rgba(0, 166, 81, 0.8)',   // pink
     'rgba(249, 115, 22, 0.8)',   // orange
     'rgba(132, 204, 22, 0.8)',   // lime
     'rgba(99, 102, 241, 0.8)',   // indigo
@@ -295,13 +295,13 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
-          <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-fuchsia-400 bg-clip-text text-transparent">
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-400 bg-clip-text text-transparent">
             {t('segmentationTab.title')}
           </h3>
           <p className="text-sm text-gray-400 mt-1">{t('segmentationTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r bg-gray-950 to-fuchsia-900/40 px-4 py-2 rounded-xl border border-green-600">
+          <div className="text-right bg-gradient-to-r bg-gray-900 px-4 py-2 rounded-xl border border-green-600">
             <p className="text-xs text-green-400">{t('segmentationTab.segments')}</p>
             <p className="text-xl font-bold text-green-400">{latestProductData.length + latestGeoData.length}</p>
           </div>
