@@ -96,15 +96,15 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
-          <h3 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent">
             {t('forecastsTab.title')}
           </h3>
           <p className="text-sm text-gray-400 mt-1">{t('forecastsTab.subtitle')} {ticker} - {t('forecastsTab.nextYears')}: {estimates.length}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-cyan-900/40 to-blue-900/40 px-4 py-2 rounded-xl border border-cyan-600">
-            <p className="text-xs text-cyan-400">{t('forecastsTab.periods')}</p>
-            <p className="text-xl font-bold text-cyan-400">{estimates.length}</p>
+          <div className="text-right bg-gradient-to-r from-emerald-900/40 to-green-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+            <p className="text-xs text-emerald-400">{t('forecastsTab.periods')}</p>
+            <p className="text-xl font-bold text-emerald-400">{estimates.length}</p>
           </div>
         </div>
       </div>
@@ -130,7 +130,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
                 {t('forecastsTab.revenueAvg')}
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right text-blue-400 font-semibold">
+                <td key={idx} className="px-6 py-4 text-right text-green-400 font-semibold">
                   {formatNumber(est.revenueAvg, true)}
                 </td>
               ))}
@@ -202,7 +202,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
                 {t('forecastsTab.netIncomeAvg')}
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right text-purple-400 font-semibold">
+                <td key={idx} className="px-6 py-4 text-right text-emerald-400 font-semibold">
                   {formatNumber(est.netIncomeAvg, true)}
                 </td>
               ))}
@@ -238,7 +238,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
                 {t('forecastsTab.ebitdaAvg')}
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right text-indigo-400 font-semibold">
+                <td key={idx} className="px-6 py-4 text-right text-green-400 font-semibold">
                   {formatNumber(est.ebitdaAvg, true)}
                 </td>
               ))}
@@ -274,7 +274,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
                 {t('forecastsTab.ebitAvg')}
               </td>
               {estimates.map((est, idx) => (
-                <td key={idx} className="px-6 py-4 text-right text-cyan-400 font-semibold">
+                <td key={idx} className="px-6 py-4 text-right text-emerald-400 font-semibold">
                   {formatNumber(est.ebitAvg, true)}
                 </td>
               ))}

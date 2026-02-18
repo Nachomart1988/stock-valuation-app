@@ -102,22 +102,22 @@ export default function Home() {
       <section className="pt-32 pb-20 px-4">
         <div className="max-w-6xl mx-auto text-center">
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 mb-8">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20 mb-8">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-            <span className="text-sm text-blue-400">{t('hero.badge')}</span>
+            <span className="text-sm text-green-400">{t('hero.badge')}</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl md:text-7xl font-black mb-6 leading-tight">
             {t('hero.title')}
             <br />
-            <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-green-400 via-emerald-400 to-pink-400 bg-clip-text text-transparent">
               {t('hero.titleHighlight')}
             </span>
           </h1>
 
           <p className="text-base sm:text-xl text-gray-400 max-w-3xl mx-auto mb-8 sm:mb-12">
             {t('hero.description')}
-            <span className="text-blue-400 font-semibold"> {t('hero.descriptionHighlight')}</span> {t('hero.descriptionEnd')}
+            <span className="text-green-400 font-semibold"> {t('hero.descriptionHighlight')}</span> {t('hero.descriptionEnd')}
           </p>
 
           {/* Quick Analysis Form */}
@@ -128,11 +128,11 @@ export default function Home() {
               value={ticker}
               onChange={(e) => setTicker(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && handleAnalizar()}
-              className="flex-1 px-6 py-4 bg-gray-800/50 border border-gray-700 rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-500"
+              className="flex-1 px-6 py-4 bg-gray-800/50 border border-gray-700 rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent placeholder-gray-500"
             />
             <button
               onClick={handleAnalizar}
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl text-lg font-bold hover:from-blue-600 hover:to-purple-700 transition transform hover:scale-105 shadow-lg shadow-blue-500/25"
+              className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl text-lg font-bold hover:from-green-600 hover:to-emerald-700 transition transform hover:scale-105 shadow-lg shadow-green-500/25"
             >
               {t('hero.analyzeButton')}
             </button>
@@ -151,7 +151,7 @@ export default function Home() {
               { number: '5000', label: t('stats.monteCarloSims') },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
-                <div className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                <div className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
                   {stat.number}
                 </div>
                 <div className="text-sm text-gray-500 mt-1">{stat.label}</div>
@@ -172,7 +172,7 @@ export default function Home() {
               ].map((model) => (
                 <span
                   key={model}
-                  className="px-3 py-1.5 bg-gray-700/50 text-gray-300 text-sm rounded-lg border border-gray-600 hover:border-blue-500 hover:text-blue-400 transition cursor-default"
+                  className="px-3 py-1.5 bg-gray-700/50 text-gray-300 text-sm rounded-lg border border-gray-600 hover:border-green-500 hover:text-green-400 transition cursor-default"
                 >
                   {model}
                 </span>
@@ -192,7 +192,7 @@ export default function Home() {
             </p>
             <Link
               href="/market-sentiment"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-purple-500/25"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-600 to-emerald-600 hover:from-emerald-500 hover:to-emerald-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/25"
             >
               <span className="text-xl">🧠</span>
               {t('market.neuralAnalysis')}
@@ -204,7 +204,7 @@ export default function Home() {
 
           {loadingMarket ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
             </div>
           ) : (
             <div className="grid lg:grid-cols-3 gap-8">
@@ -282,7 +282,7 @@ export default function Home() {
               <div className="bg-gray-800/50 rounded-2xl border border-gray-700 p-6 lg:row-span-1">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-2xl">📰</span>
-                  <h3 className="text-xl font-bold text-blue-400">{t('market.latestNews')}</h3>
+                  <h3 className="text-xl font-bold text-green-400">{t('market.latestNews')}</h3>
                 </div>
                 {news.length === 0 ? (
                   <p className="text-gray-500 text-center py-4">{t('landing.noNewsAvailable')}</p>
@@ -294,7 +294,7 @@ export default function Home() {
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block p-3 rounded-xl bg-gray-700/30 border border-gray-600/30 hover:border-blue-500/50 transition"
+                        className="block p-3 rounded-xl bg-gray-700/30 border border-gray-600/30 hover:border-green-500/50 transition"
                       >
                         <div className="flex gap-3">
                           {item.image && (
@@ -306,7 +306,7 @@ export default function Home() {
                             />
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-200 line-clamp-2 hover:text-blue-400 transition">
+                            <p className="text-sm font-medium text-gray-200 line-clamp-2 hover:text-green-400 transition">
                               {item.title}
                             </p>
                             <div className="flex items-center gap-2 mt-1">
@@ -384,9 +384,9 @@ export default function Home() {
                 description: t('features.forecasts.description')
               },
             ].map((feature) => (
-              <div key={feature.title} className="p-6 rounded-2xl bg-gray-800/50 border border-gray-700/50 hover:border-blue-500/50 transition group">
+              <div key={feature.title} className="p-6 rounded-2xl bg-gray-800/50 border border-gray-700/50 hover:border-green-500/50 transition group">
                 <div className="text-4xl mb-4">{feature.icon}</div>
-                <h3 className="text-xl font-bold mb-2 group-hover:text-blue-400 transition">{feature.title}</h3>
+                <h3 className="text-xl font-bold mb-2 group-hover:text-green-400 transition">{feature.title}</h3>
                 <p className="text-gray-400">{feature.description}</p>
               </div>
             ))}
@@ -410,13 +410,13 @@ export default function Home() {
                 step: '01',
                 title: t('howItWorks.step1.title'),
                 description: t('howItWorks.step1.description'),
-                color: 'from-blue-500 to-cyan-500'
+                color: 'from-green-500 to-emerald-500'
               },
               {
                 step: '02',
                 title: t('howItWorks.step2.title'),
                 description: t('howItWorks.step2.description'),
-                color: 'from-purple-500 to-pink-500'
+                color: 'from-emerald-500 to-pink-500'
               },
               {
                 step: '03',
@@ -463,7 +463,7 @@ export default function Home() {
             ].map((module, i) => (
               <div
                 key={module}
-                className="px-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700/50 text-center hover:border-purple-500/50 hover:bg-purple-500/10 transition cursor-pointer"
+                className="px-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700/50 text-center hover:border-emerald-500/50 hover:bg-emerald-500/10 transition cursor-pointer"
               >
                 <span className="text-xs text-gray-500 mr-2">{String(i + 1).padStart(2, '0')}</span>
                 <span className="text-gray-300">{module}</span>
@@ -504,23 +504,23 @@ export default function Home() {
             </div>
 
             {/* Pro Plan */}
-            <div className="p-8 rounded-2xl bg-gradient-to-b from-blue-900/50 to-purple-900/50 border-2 border-blue-500/50 relative">
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full text-sm font-semibold">
+            <div className="p-8 rounded-2xl bg-gradient-to-b from-green-900/50 to-emerald-900/50 border-2 border-green-500/50 relative">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full text-sm font-semibold">
                 {t('pricing.mostPopular')}
               </div>
-              <div className="text-lg font-semibold text-blue-400 mb-2">Pro</div>
+              <div className="text-lg font-semibold text-green-400 mb-2">Pro</div>
               <div className="text-4xl font-bold mb-6">$29<span className="text-lg text-gray-500">{t('pricing.perMonth')}</span></div>
               <ul className="space-y-3 mb-8">
                 {[t('pricing.features.unlimitedAnalyses'), t('pricing.features.allTabs'), t('pricing.features.neuralSummary'), t('pricing.features.valuationModels'), t('pricing.features.customInputs'), t('pricing.features.exportPdfExcel')].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-gray-300">
-                    <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     {item}
                   </li>
                 ))}
               </ul>
-              <Link href="/pricing" className="block w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 font-semibold hover:from-blue-600 hover:to-purple-700 transition text-center">
+              <Link href="/pricing" className="block w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:from-green-600 hover:to-emerald-700 transition text-center">
                 {t('pricing.pro.cta')}
               </Link>
             </div>
@@ -532,7 +532,7 @@ export default function Home() {
               <ul className="space-y-3 mb-8">
                 {[t('pricing.features.everythingInPro'), t('pricing.features.apiAccess'), t('pricing.features.customReports'), t('pricing.features.vipSupport'), t('pricing.features.privateWebinars'), t('pricing.features.consulting')].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-gray-400">
-                    <svg className="w-5 h-5 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     {item}
@@ -547,7 +547,7 @@ export default function Home() {
 
           {/* Link to full pricing page */}
           <div className="text-center mt-8">
-            <Link href="/pricing" className="text-blue-400 hover:text-blue-300 transition inline-flex items-center gap-2">
+            <Link href="/pricing" className="text-green-400 hover:text-green-300 transition inline-flex items-center gap-2">
               {t('pricing.viewFullComparison')}
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -603,7 +603,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/register"
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl text-lg font-bold hover:from-blue-600 hover:to-purple-700 transition"
+              className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl text-lg font-bold hover:from-green-600 hover:to-emerald-700 transition"
             >
               {t('cta.createAccount')}
             </Link>

@@ -192,7 +192,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
       </div>
     );
   }
@@ -207,8 +207,8 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
 
       {/* Company Info */}
       {companyProfile && (
-        <div className="bg-gradient-to-r from-blue-900/30 to-cyan-900/30 p-6 rounded-xl border border-blue-600">
-          <h4 className="text-2xl font-bold text-blue-400 mb-4">{t('industryTab.companyClassification')}</h4>
+        <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border border-green-600">
+          <h4 className="text-2xl font-bold text-green-400 mb-4">{t('industryTab.companyClassification')}</h4>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-gray-800/50 p-4 rounded-lg">
               <p className="text-sm text-gray-400">{t('industryTab.sector')}</p>
@@ -220,13 +220,13 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
             </div>
             <div className="bg-gray-800/50 p-4 rounded-lg">
               <p className="text-sm text-gray-400">{t('industryTab.sectorPE')}</p>
-              <p className="text-xl font-bold text-purple-400">
+              <p className="text-xl font-bold text-emerald-400">
                 {sectorPE ? sectorPE.pe.toFixed(2) + 'x' : 'N/A'}
               </p>
             </div>
             <div className="bg-gray-800/50 p-4 rounded-lg">
               <p className="text-sm text-gray-400">{t('industryTab.industryPE')}</p>
-              <p className="text-xl font-bold text-cyan-400">
+              <p className="text-xl font-bold text-emerald-400">
                 {companyIndustryPE ? companyIndustryPE.pe.toFixed(2) + 'x' : 'N/A'}
               </p>
             </div>
@@ -274,16 +274,16 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                     key={idx}
                     className={`p-4 rounded-lg border ${
                       isCompanySector
-                        ? 'bg-blue-900/50 border-blue-500 ring-2 ring-blue-400'
+                        ? 'bg-green-900/50 border-green-500 ring-2 ring-green-400'
                         : 'bg-gray-800/50 border-gray-700'
                     }`}
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <p className={`text-sm font-semibold ${isCompanySector ? 'text-blue-400' : 'text-gray-200'}`}>
+                      <p className={`text-sm font-semibold ${isCompanySector ? 'text-green-400' : 'text-gray-200'}`}>
                         {sector.sector}
                       </p>
                       {isCompanySector && (
-                        <span className="px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                        <span className="px-2 py-0.5 bg-green-600 text-white text-xs rounded-full">
                           {t('industryTab.yourSector')}
                         </span>
                       )}
@@ -303,8 +303,8 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
 
       {/* Sector P/E Ratios */}
       {industryPE.length > 0 && (
-        <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 p-6 rounded-xl border border-purple-600">
-          <h4 className="text-2xl font-bold text-purple-400 mb-6">
+        <div className="bg-gradient-to-r from-emerald-900/30 to-pink-900/30 p-6 rounded-xl border border-emerald-600">
+          <h4 className="text-2xl font-bold text-emerald-400 mb-6">
             {t('industryTab.sectorPERatios')} - {t('industryTab.allExchanges')} ({industryPE.length} {t('industryTab.entries')})
           </h4>
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
@@ -336,23 +336,23 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                       <tr
                         key={idx}
                         className={`border-b border-gray-800 ${
-                          isCompanySector ? 'bg-purple-900/40 ring-2 ring-inset ring-purple-500' : ''
+                          isCompanySector ? 'bg-emerald-900/40 ring-2 ring-inset ring-emerald-500' : ''
                         }`}
                       >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
-                            <span className={isCompanySector ? 'text-purple-400 font-bold' : 'text-gray-200'}>
+                            <span className={isCompanySector ? 'text-emerald-400 font-bold' : 'text-gray-200'}>
                               {item.sector}
                             </span>
                             {isCompanySector && (
-                              <span className="px-2 py-0.5 bg-purple-600 text-white text-xs rounded-full">
+                              <span className="px-2 py-0.5 bg-emerald-600 text-white text-xs rounded-full">
                                 {ticker}
                               </span>
                             )}
                           </div>
                         </td>
                         <td className={`py-3 px-4 text-right font-semibold ${
-                          isCompanySector ? 'text-purple-400 text-lg' : 'text-gray-100'
+                          isCompanySector ? 'text-emerald-400 text-lg' : 'text-gray-100'
                         }`}>
                           {item.pe?.toFixed(2)}x
                         </td>
@@ -410,8 +410,8 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
 
       {/* Industry P/E Ratios */}
       {industryPESnapshot.length > 0 && (
-        <div className="bg-gradient-to-r from-cyan-900/30 to-teal-900/30 p-6 rounded-xl border border-cyan-600">
-          <h4 className="text-2xl font-bold text-cyan-400 mb-6">
+        <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
+          <h4 className="text-2xl font-bold text-emerald-400 mb-6">
             {t('industryTab.industryPERatios')} - {t('industryTab.allIndustries')} {industryPESnapshot.length} {t('industryTab.industry')}s
           </h4>
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
@@ -433,23 +433,23 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
                       <tr
                         key={idx}
                         className={`border-b border-gray-800 ${
-                          isCompanyIndustry ? 'bg-cyan-900/40 ring-2 ring-inset ring-cyan-500' : ''
+                          isCompanyIndustry ? 'bg-emerald-900/40 ring-2 ring-inset ring-emerald-500' : ''
                         }`}
                       >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
-                            <span className={isCompanyIndustry ? 'text-cyan-400 font-bold' : 'text-gray-200'}>
+                            <span className={isCompanyIndustry ? 'text-emerald-400 font-bold' : 'text-gray-200'}>
                               {item.industry}
                             </span>
                             {isCompanyIndustry && (
-                              <span className="px-2 py-0.5 bg-cyan-600 text-white text-xs rounded-full">
+                              <span className="px-2 py-0.5 bg-emerald-600 text-white text-xs rounded-full">
                                 {ticker}
                               </span>
                             )}
                           </div>
                         </td>
                         <td className={`py-3 px-4 text-right font-semibold ${
-                          isCompanyIndustry ? 'text-cyan-400 text-lg' : 'text-gray-100'
+                          isCompanyIndustry ? 'text-emerald-400 text-lg' : 'text-gray-100'
                         }`}>
                           {item.pe?.toFixed(2)}x
                         </td>
@@ -469,7 +469,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
         <h4 className="text-lg font-semibold text-gray-200 mb-4">📊 {t('industryTab.completeSummary')}</h4>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-gray-700 rounded-lg p-4 text-center">
-            <p className="text-3xl font-bold text-blue-400">{sectorPerformance.length}</p>
+            <p className="text-3xl font-bold text-green-400">{sectorPerformance.length}</p>
             <p className="text-sm text-gray-400">{t('industryTab.sectorsTracked')}</p>
           </div>
           <div className="bg-gray-700 rounded-lg p-4 text-center">
@@ -489,13 +489,13 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
             <p className="text-sm text-gray-400">{t('industryTab.sectorsDown')}</p>
           </div>
           <div className="bg-gray-700 rounded-lg p-4 text-center">
-            <p className="text-2xl font-bold text-purple-400">
+            <p className="text-2xl font-bold text-emerald-400">
               {sectorPE ? sectorPE.pe.toFixed(1) + 'x' : 'N/A'}
             </p>
             <p className="text-sm text-gray-400">{companySector} {t('industryTab.sectorPE')}</p>
           </div>
           <div className="bg-gray-700 rounded-lg p-4 text-center">
-            <p className="text-2xl font-bold text-cyan-400">
+            <p className="text-2xl font-bold text-emerald-400">
               {companyIndustryPE ? companyIndustryPE.pe.toFixed(1) + 'x' : 'N/A'}
             </p>
             <p className="text-sm text-gray-400">{companyIndustry} {t('industryTab.industryPE')}</p>
@@ -503,8 +503,8 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
         </div>
       </div>
 
-      <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
-        <p className="text-center text-sm text-blue-300">
+      <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
+        <p className="text-center text-sm text-green-300">
           ✅ <strong>{t('industryTab.showingAllData')}</strong> - {ticker}
         </p>
         <p className="text-center text-xs text-gray-400 mt-2">

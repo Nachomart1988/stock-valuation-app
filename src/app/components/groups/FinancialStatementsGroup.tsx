@@ -18,7 +18,7 @@ export default function FinancialStatementsGroup({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-2xl font-bold text-blue-400">Financial Statements</h3>
+      <h3 className="text-2xl font-bold text-green-400">Financial Statements</h3>
 
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg">
@@ -28,7 +28,7 @@ export default function FinancialStatementsGroup({
               className={({ selected }) =>
                 `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
                   selected
-                    ? 'bg-blue-600 text-white shadow-lg'
+                    ? 'bg-green-600 text-white shadow-lg'
                     : 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white'
                 }`
               }

@@ -834,7 +834,7 @@ function AnalizarContent() {
       <main className="min-h-screen bg-gray-900 text-gray-100">
         <Header />
         <div className="max-w-2xl mx-auto pt-20 sm:pt-24 px-4 sm:px-8">
-          <h1 className="text-3xl sm:text-5xl font-extrabold text-blue-400 mb-6 sm:mb-8 text-center">
+          <h1 className="text-3xl sm:text-5xl font-extrabold text-green-400 mb-6 sm:mb-8 text-center">
             Analizador de Acciones
           </h1>
           <div className="bg-gray-800 p-5 sm:p-8 md:p-10 rounded-2xl shadow-2xl border border-gray-700">
@@ -848,18 +848,18 @@ function AnalizarContent() {
                 onChange={(e) => setTicker(e.target.value.toUpperCase())}
                 onKeyDown={(e) => e.key === 'Enter' && handleAnalizar(ticker)}
                 placeholder="Ej: AAPL, MSFT, GOOGL"
-                className="flex-1 px-4 sm:px-6 py-3 sm:py-4 text-lg sm:text-2xl border-2 border-gray-600 rounded-xl bg-gray-900 text-gray-100 focus:border-blue-500 focus:ring-blue-500 placeholder-gray-500"
+                className="flex-1 px-4 sm:px-6 py-3 sm:py-4 text-lg sm:text-2xl border-2 border-gray-600 rounded-xl bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-green-500 placeholder-gray-500"
               />
               <button
                 onClick={() => handleAnalizar(ticker)}
                 disabled={!ticker.trim() || loading}
-                className="px-6 sm:px-8 py-3 sm:py-4 bg-blue-600 text-white text-base sm:text-xl font-bold rounded-xl hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                className="px-6 sm:px-8 py-3 sm:py-4 bg-green-600 text-white text-base sm:text-xl font-bold rounded-xl hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
               >
                 {loading ? 'Cargando...' : 'Analizar'}
               </button>
             </div>
             {loading && (
-              <p className="mt-4 sm:mt-6 text-center text-blue-400 text-base sm:text-lg">Cargando datos para {activeTicker}...</p>
+              <p className="mt-4 sm:mt-6 text-center text-green-400 text-base sm:text-lg">Cargando datos para {activeTicker}...</p>
             )}
             {error && (
               <div className="mt-4 sm:mt-6 p-4 bg-red-900/30 border border-red-600 rounded-xl">
@@ -878,7 +878,7 @@ function AnalizarContent() {
       <main className="min-h-screen bg-gray-900">
         <Header />
         <div className="flex items-center justify-center pt-20 sm:pt-24 min-h-[80vh] px-4">
-          <p className="text-lg sm:text-2xl font-bold text-blue-400 text-center">{t('analysis.loadingData')} {activeTicker}...</p>
+          <p className="text-lg sm:text-2xl font-bold text-green-400 text-center">{t('analysis.loadingData')} {activeTicker}...</p>
         </div>
       </main>
     );
@@ -921,7 +921,7 @@ function AnalizarContent() {
     <main className="min-h-screen bg-gray-900 text-gray-100">
       <Header />
       <div className="max-w-[1600px] mx-auto px-3 sm:px-5 md:px-8 pt-20 sm:pt-24 pb-8">
-        <h1 className="text-xl sm:text-3xl md:text-5xl font-extrabold text-blue-400 mb-1 sm:mb-4">
+        <h1 className="text-xl sm:text-3xl md:text-5xl font-extrabold text-green-400 mb-1 sm:mb-4">
           {t('analysis.resultsFor')} {activeTicker}
         </h1>
         <h2 className="text-base sm:text-xl md:text-3xl font-bold text-gray-300 mb-5 sm:mb-8 md:mb-12 truncate">
@@ -939,9 +939,9 @@ function AnalizarContent() {
                     className={({ selected }) =>
                       classNames(
                         'shrink-0 rounded-lg sm:rounded-xl py-2 px-3 sm:py-3 sm:px-4 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap',
-                        'focus:outline-none focus:ring-2 focus:ring-blue-500',
+                        'focus:outline-none focus:ring-2 focus:ring-green-500',
                         selected
-                          ? 'bg-gray-700 text-white shadow-lg border-b-4 border-blue-500'
+                          ? 'bg-gray-700 text-white shadow-lg border-b-4 border-green-500'
                           : 'text-gray-400 hover:bg-gray-700 hover:text-white hover:shadow'
                       )
                     }
@@ -1151,7 +1151,7 @@ function AnalizarContent() {
                 {selectedTabIndex + 1} / {categories.length}
               </span>
               <span className="hidden sm:inline text-gray-400">|</span>
-              <span className="hidden sm:inline text-blue-400 font-medium">
+              <span className="hidden sm:inline text-green-400 font-medium">
                 {categories[selectedTabIndex]}
               </span>
             </div>
@@ -1162,7 +1162,7 @@ function AnalizarContent() {
               className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all ${
                 selectedTabIndex === categories.length - 1
                   ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-500 hover:shadow-lg shadow-blue-500/25'
+                  : 'bg-green-600 text-white hover:bg-green-500 hover:shadow-lg shadow-green-500/25'
               }`}
             >
               <span className="hidden sm:inline">Siguiente</span>
@@ -1183,7 +1183,7 @@ export default function AnalizarPage() {
     <Suspense fallback={
       <main className="min-h-screen flex items-center justify-center bg-gray-900">
         <div className="text-center">
-          <p className="text-2xl font-bold text-blue-400">Cargando...</p>
+          <p className="text-2xl font-bold text-green-400">Cargando...</p>
         </div>
       </main>
     }>
@@ -1499,8 +1499,8 @@ function InicioTab({
             </div>
           </div>
           <div className="flex flex-wrap gap-2 sm:gap-3">
-            <span className="px-2 sm:px-4 py-1 sm:py-2 bg-blue-600/30 text-blue-400 rounded-full text-xs sm:text-sm">{profile?.sector || 'N/A'}</span>
-            <span className="px-2 sm:px-4 py-1 sm:py-2 bg-purple-600/30 text-purple-400 rounded-full text-xs sm:text-sm">{profile?.industry || 'N/A'}</span>
+            <span className="px-2 sm:px-4 py-1 sm:py-2 bg-green-600/30 text-green-400 rounded-full text-xs sm:text-sm">{profile?.sector || 'N/A'}</span>
+            <span className="px-2 sm:px-4 py-1 sm:py-2 bg-emerald-600/30 text-emerald-400 rounded-full text-xs sm:text-sm">{profile?.industry || 'N/A'}</span>
             <span className="px-2 sm:px-4 py-1 sm:py-2 bg-green-600/30 text-green-400 rounded-full text-xs sm:text-sm">{profile?.exchangeShortName || 'N/A'}</span>
             {currencyInfo && (
               <span className="px-2 sm:px-4 py-1 sm:py-2 bg-amber-600/30 text-amber-400 rounded-full text-xs sm:text-sm" title={`Original: ${currencyInfo.original} → USD (rate: ${currencyInfo.rate.toFixed(4)})`}>
@@ -1519,12 +1519,12 @@ function InicioTab({
               onChange={(e) => setInputTicker(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && onAnalizar(inputTicker)}
               placeholder={t('analysis.searchTicker')}
-              className="w-full sm:w-44 md:w-48 px-4 sm:px-5 py-3 sm:py-4 border border-gray-600 rounded-xl text-gray-100 text-base sm:text-xl bg-gray-900 focus:border-blue-500 focus:ring-blue-500 placeholder-gray-500"
+              className="w-full sm:w-44 md:w-48 px-4 sm:px-5 py-3 sm:py-4 border border-gray-600 rounded-xl text-gray-100 text-base sm:text-xl bg-gray-900 focus:border-green-500 focus:ring-green-500 placeholder-gray-500"
             />
             <button
               onClick={() => onAnalizar(inputTicker)}
               disabled={!inputTicker.trim()}
-              className="px-6 sm:px-8 py-3 sm:py-4 bg-blue-600 text-white text-base sm:text-lg font-semibold rounded-xl hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+              className="px-6 sm:px-8 py-3 sm:py-4 bg-green-600 text-white text-base sm:text-lg font-semibold rounded-xl hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
             >
               Analizar
             </button>
@@ -1534,8 +1534,8 @@ function InicioTab({
 
       {/* Price Hero Section */}
       <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-4">
-        <div className="col-span-3 sm:col-span-1 bg-gradient-to-br from-blue-600 to-blue-800 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
-          <p className="text-blue-200 text-xs mb-1">{t('analysis.precio.actual')}</p>
+        <div className="col-span-3 sm:col-span-1 bg-gradient-to-br from-green-600 to-green-800 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
+          <p className="text-green-200 text-xs mb-1">{t('analysis.precio.actual')}</p>
           <p className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">${currentPrice?.toFixed(2) || 'N/A'}</p>
           {priceStats && (
             <p className={`text-xs mt-1 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
@@ -1544,10 +1544,10 @@ function InicioTab({
           )}
         </div>
         {[
-          { label: t('analysis.precio.intrinseco'), value: sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A', color: 'text-purple-400' },
+          { label: t('analysis.precio.intrinseco'), value: sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A', color: 'text-emerald-400' },
           { label: t('analysis.precio.compraSugerida'), value: precioCompraSugerido ? `$${precioCompraSugerido.toFixed(2)}` : 'N/A', color: 'text-green-400' },
           { label: t('analysis.precio.upside'), value: sharedAverageVal && currentPrice ? `${(((sharedAverageVal - currentPrice) / currentPrice) * 100).toFixed(1)}%` : 'N/A', color: sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400' },
-          { label: t('analysis.precio.peRatio'), value: (() => { const ttmEPS = incomeTTM?.eps || incomeTTM?.epsdiluted || quote?.eps || profile?.ttmEPS; if (currentPrice && ttmEPS && ttmEPS > 0) return (currentPrice / ttmEPS).toFixed(1); return quote?.pe?.toFixed(1) || 'N/A'; })(), color: 'text-cyan-400' },
+          { label: t('analysis.precio.peRatio'), value: (() => { const ttmEPS = incomeTTM?.eps || incomeTTM?.epsdiluted || quote?.eps || profile?.ttmEPS; if (currentPrice && ttmEPS && ttmEPS > 0) return (currentPrice / ttmEPS).toFixed(1); return quote?.pe?.toFixed(1) || 'N/A'; })(), color: 'text-emerald-400' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-gradient-to-br from-gray-700 to-gray-800 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center border border-gray-600 flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
             <p className="text-gray-400 text-[10px] sm:text-xs mb-1 leading-tight">{label}</p>
@@ -1581,7 +1581,7 @@ function InicioTab({
       {loading ? (
         <div className="h-[260px] sm:h-[400px] md:h-[550px] bg-gray-700/50 rounded-2xl flex items-center justify-center">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-4 border-blue-500 border-t-transparent mb-4 sm:mb-6"></div>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-4 border-green-500 border-t-transparent mb-4 sm:mb-6"></div>
             <p className="text-gray-400 text-base sm:text-xl">Cargando grafico...</p>
           </div>
         </div>
@@ -1597,7 +1597,7 @@ function InicioTab({
               <div className="flex flex-wrap gap-3 sm:gap-6 text-xs sm:text-base">
                 <span className="text-gray-400">Min: <span className="text-red-400 font-semibold">${priceStats.min.toFixed(2)}</span></span>
                 <span className="text-gray-400">Max: <span className="text-green-400 font-semibold">${priceStats.max.toFixed(2)}</span></span>
-                <span className="text-gray-400">Prom: <span className="text-blue-400 font-semibold">${priceStats.avg.toFixed(2)}</span></span>
+                <span className="text-gray-400">Prom: <span className="text-green-400 font-semibold">${priceStats.avg.toFixed(2)}</span></span>
               </div>
             )}
           </div>
@@ -1624,8 +1624,8 @@ function InicioTab({
       </div>
 
       {/* Technical Indicators */}
-      <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/30 p-4 sm:p-6 rounded-xl border border-indigo-600">
-        <h4 className="text-base sm:text-xl md:text-2xl font-bold text-indigo-400 mb-4 sm:mb-6">Technical Indicators</h4>
+      <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-4 sm:p-6 rounded-xl border border-green-600">
+        <h4 className="text-base sm:text-xl md:text-2xl font-bold text-green-400 mb-4 sm:mb-6">Technical Indicators</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
           {/* RSI */}
           <div className="bg-gray-800/50 p-3 sm:p-5 rounded-xl">
@@ -1692,19 +1692,19 @@ function InicioTab({
         {/* Indicator Legend */}
         <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div className="bg-gray-800/30 p-3 rounded-lg">
-            <p className="text-indigo-400 font-semibold mb-1">RSI</p>
+            <p className="text-green-400 font-semibold mb-1">RSI</p>
             <p className="text-gray-400">&gt;70 = Overbought, &lt;30 = Oversold</p>
           </div>
           <div className="bg-gray-800/30 p-3 rounded-lg">
-            <p className="text-indigo-400 font-semibold mb-1">Williams %R</p>
+            <p className="text-green-400 font-semibold mb-1">Williams %R</p>
             <p className="text-gray-400">&gt;-20 = Overbought, &lt;-80 = Oversold</p>
           </div>
           <div className="bg-gray-800/30 p-3 rounded-lg">
-            <p className="text-indigo-400 font-semibold mb-1">ADX</p>
+            <p className="text-green-400 font-semibold mb-1">ADX</p>
             <p className="text-gray-400">&gt;25 = Strong Trend, &lt;25 = Weak</p>
           </div>
           <div className="bg-gray-800/30 p-3 rounded-lg">
-            <p className="text-indigo-400 font-semibold mb-1">Std Dev</p>
+            <p className="text-green-400 font-semibold mb-1">Std Dev</p>
             <p className="text-gray-400">Higher = More Volatile</p>
           </div>
         </div>
@@ -1775,7 +1775,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
           <p>
             <strong className="text-gray-200">Sitio web:</strong>{' '}
             {profile.website ? (
-              <a href={profile.website} className="text-blue-400 hover:underline text-sm sm:text-xl break-all" target="_blank" rel="noopener noreferrer">
+              <a href={profile.website} className="text-green-400 hover:underline text-sm sm:text-xl break-all" target="_blank" rel="noopener noreferrer">
                 {profile.website}
               </a>
             ) : 'N/A'}
@@ -1794,7 +1794,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
           </div>
           <div>
             <p className="text-sm sm:text-xl text-gray-400 mb-2 sm:mb-3">Market Cap</p>
-            <p className="text-3xl sm:text-5xl font-bold text-indigo-400">
+            <p className="text-3xl sm:text-5xl font-bold text-green-400">
               ${(quote.marketCap / 1e9)?.toFixed(1) || 'N/A'}B
             </p>
           </div>
@@ -1808,21 +1808,21 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
       </section>
 
       {/* Float & Liquidity Section */}
-      <section className="bg-gradient-to-r from-blue-900/30 to-cyan-900/30 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-blue-600">
-        <h3 className="text-xl sm:text-3xl font-bold text-blue-400 mb-4 sm:mb-8">Float & Liquidity</h3>
+      <section className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-green-600">
+        <h3 className="text-xl sm:text-3xl font-bold text-green-400 mb-4 sm:mb-8">Float & Liquidity</h3>
         {loading ? (
           <div className="text-center py-8">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-green-500 border-t-transparent"></div>
           </div>
         ) : floatData ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
             <div className="bg-gray-800/50 p-3 sm:p-6 rounded-xl text-center">
               <p className="text-gray-400 text-xs sm:text-base mb-1 sm:mb-2">Float Shares</p>
-              <p className="text-xl sm:text-3xl font-bold text-blue-400">{formatNumber(floatData.floatShares)}</p>
+              <p className="text-xl sm:text-3xl font-bold text-green-400">{formatNumber(floatData.floatShares)}</p>
             </div>
             <div className="bg-gray-800/50 p-3 sm:p-6 rounded-xl text-center">
               <p className="text-gray-400 text-xs sm:text-base mb-1 sm:mb-2">Outstanding Shares</p>
-              <p className="text-xl sm:text-3xl font-bold text-cyan-400">{formatNumber(floatData.outstandingShares)}</p>
+              <p className="text-xl sm:text-3xl font-bold text-emerald-400">{formatNumber(floatData.outstandingShares)}</p>
             </div>
             <div className="bg-gray-800/50 p-3 sm:p-6 rounded-xl text-center">
               <p className="text-gray-400 text-xs sm:text-base mb-1 sm:mb-2">Free Float %</p>
@@ -1832,7 +1832,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
             </div>
             <div className="bg-gray-800/50 p-3 sm:p-6 rounded-xl text-center">
               <p className="text-gray-400 text-xs sm:text-base mb-1 sm:mb-2">Avg Volume</p>
-              <p className="text-xl sm:text-3xl font-bold text-purple-400">{formatNumber(quote.avgVolume)}</p>
+              <p className="text-xl sm:text-3xl font-bold text-emerald-400">{formatNumber(quote.avgVolume)}</p>
             </div>
           </div>
         ) : (
@@ -1841,17 +1841,17 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
       </section>
 
       {/* Executives Section */}
-      <section className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-purple-600">
-        <h3 className="text-xl sm:text-3xl font-bold text-purple-400 mb-4 sm:mb-8">Key Executives</h3>
+      <section className="bg-gradient-to-r from-emerald-900/30 to-pink-900/30 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-emerald-600">
+        <h3 className="text-xl sm:text-3xl font-bold text-emerald-400 mb-4 sm:mb-8">Key Executives</h3>
         {loading ? (
           <div className="text-center py-8">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-purple-500 border-t-transparent"></div>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
           </div>
         ) : executives.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {executives.map((exec, idx) => (
               <div key={idx} className="bg-gray-800/50 p-5 rounded-xl flex items-center gap-4 border border-gray-700">
-                <div className="w-12 h-12 bg-purple-600/30 rounded-full flex items-center justify-center text-purple-400 text-xl font-bold">
+                <div className="w-12 h-12 bg-emerald-600/30 rounded-full flex items-center justify-center text-emerald-400 text-xl font-bold">
                   {exec.name?.charAt(0) || '?'}
                 </div>
                 <div className="flex-1">
@@ -2276,7 +2276,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
                 <th
                   key={row.date || i}
                   className={`px-6 py-5 text-center font-bold text-lg min-w-[140px] ${
-                    row.isTTM ? 'text-blue-400 bg-blue-900/30' : 'text-gray-200'
+                    row.isTTM ? 'text-green-400 bg-green-900/30' : 'text-gray-200'
                   }`}
                 >
                   {row.isTTM ? 'TTM' : new Date(row.date).getFullYear()}
@@ -2286,10 +2286,10 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
           </thead>
           <tbody className="divide-y divide-gray-700">
             {metrics.map((metric) => (
-              <tr key={metric.key} className={`hover:bg-gray-700/50 transition ${metric.isSEC ? 'bg-purple-900/10' : ''}`}>
-                <td className={`px-8 py-4 font-medium text-base sticky left-0 z-10 border-r border-gray-700 ${metric.isSEC ? 'bg-purple-900/20 text-purple-300' : 'bg-gray-900 text-gray-200'}`}>
+              <tr key={metric.key} className={`hover:bg-gray-700/50 transition ${metric.isSEC ? 'bg-emerald-900/10' : ''}`}>
+                <td className={`px-8 py-4 font-medium text-base sticky left-0 z-10 border-r border-gray-700 ${metric.isSEC ? 'bg-emerald-900/20 text-emerald-300' : 'bg-gray-900 text-gray-200'}`}>
                   {metric.label}
-                  {metric.isSEC && <span className="ml-2 text-xs text-purple-400" title="Data from SEC 10-K/10-Q filings">*</span>}
+                  {metric.isSEC && <span className="ml-2 text-xs text-emerald-400" title="Data from SEC 10-K/10-Q filings">*</span>}
                 </td>
                 {allData.map((row, i) => {
                   // Get the year for SEC data lookup
@@ -2298,7 +2298,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
                     <td
                       key={i}
                       className={`px-6 py-4 text-center text-base font-medium ${
-                        row.isTTM ? 'text-blue-300 bg-blue-900/10' : metric.isSEC ? 'text-purple-200' : 'text-gray-100'
+                        row.isTTM ? 'text-green-300 bg-green-900/10' : metric.isSEC ? 'text-emerald-200' : 'text-gray-100'
                       }`}
                     >
                       {formatValue(getValueWithFallback(row, metric.key, itemYear), metric)}
@@ -2312,7 +2312,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
       </div>
       <div className="flex justify-between items-center text-base text-gray-400">
         <p>Datos ordenados del mas reciente (izquierda) al mas antiguo (derecha).</p>
-        <p className="text-purple-400 text-sm">* Datos adicionales de SEC 10-K filings</p>
+        <p className="text-emerald-400 text-sm">* Datos adicionales de SEC 10-K filings</p>
       </div>
 
       {/* Growth Rates Section */}
@@ -2379,12 +2379,12 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
       {/* Financial Growth Summary (only for income tab) */}
       {financialGrowth && financialGrowth.length > 0 && type === 'income' && (
         <div className="mt-10">
-          <h4 className="text-3xl font-bold text-blue-400 mb-6">📊 Financial Growth Summary</h4>
+          <h4 className="text-3xl font-bold text-green-400 mb-6">📊 Financial Growth Summary</h4>
           <div className="overflow-x-auto">
             <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
-              <thead className="bg-blue-900/30">
+              <thead className="bg-green-900/30">
                 <tr>
-                  <th className="px-8 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-blue-900/30 z-10 min-w-[280px]">
+                  <th className="px-8 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-green-900/30 z-10 min-w-[280px]">
                     Financial Growth Metric
                   </th>
                   {financialGrowth.slice(0, 8).map((row: any, i: number) => (
@@ -2423,7 +2423,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
         <div className="mt-10">
           <button
             onClick={() => setShowSecDetails(!showSecDetails)}
-            className="flex items-center gap-3 text-2xl font-bold text-purple-400 mb-6 hover:text-purple-300 transition"
+            className="flex items-center gap-3 text-2xl font-bold text-emerald-400 mb-6 hover:text-emerald-300 transition"
           >
             <span>{showSecDetails ? '▼' : '▶'}</span>
             <span>📋 SEC 10-K/10-Q Complete Data ({secReportsRaw.length} reports) - Click to expand ALL available data</span>
@@ -2445,8 +2445,8 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
                 if (allSections.length === 0) return null;
 
                 return (
-                  <div key={reportIdx} className="bg-purple-900/20 rounded-xl border border-purple-600 p-6">
-                    <h5 className="text-xl font-bold text-purple-300 mb-4">
+                  <div key={reportIdx} className="bg-emerald-900/20 rounded-xl border border-emerald-600 p-6">
+                    <h5 className="text-xl font-bold text-emerald-300 mb-4">
                       📄 FY {report.year} - {report.symbol} ({report.period || 'Annual'}) - {allSections.length} sections available
                     </h5>
 
@@ -2483,9 +2483,9 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
 
                       return (
                         <div key={sectionName} className="mb-6">
-                          <h6 className="text-lg font-semibold text-purple-200 mb-3 bg-purple-800/30 px-4 py-2 rounded flex justify-between items-center">
+                          <h6 className="text-lg font-semibold text-emerald-200 mb-3 bg-emerald-800/30 px-4 py-2 rounded flex justify-between items-center">
                             <span>{sectionName}</span>
-                            <span className="text-sm text-purple-400">({extractedItems.length} metrics)</span>
+                            <span className="text-sm text-emerald-400">({extractedItems.length} metrics)</span>
                           </h6>
                           <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                             <table className="w-full text-sm">
@@ -2500,7 +2500,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
                               </thead>
                               <tbody>
                                 {extractedItems.map((item, itemIdx) => (
-                                  <tr key={itemIdx} className="border-b border-purple-800/30 hover:bg-purple-800/20">
+                                  <tr key={itemIdx} className="border-b border-emerald-800/30 hover:bg-emerald-800/20">
                                     <td className="py-2 px-4 text-gray-300 font-medium">
                                       {item.label}
                                     </td>
@@ -2534,7 +2534,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
         <div className="mt-10">
           <button
             onClick={() => setShowKeyMetrics(!showKeyMetrics)}
-            className="flex items-center gap-3 text-2xl font-bold text-blue-400 mb-6 hover:text-blue-300 transition"
+            className="flex items-center gap-3 text-2xl font-bold text-green-400 mb-6 hover:text-green-300 transition"
           >
             <span>{showKeyMetrics ? '▼' : '▶'}</span>
             <span>📊 Key Metrics ({keyMetrics.length} periods)</span>
@@ -2543,13 +2543,13 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
           {showKeyMetrics && (
             <div className="overflow-x-auto">
               <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
-                <thead className="bg-blue-900/30">
+                <thead className="bg-green-900/30">
                   <tr>
-                    <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-blue-900/30 z-10 min-w-[280px]">
+                    <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-green-900/30 z-10 min-w-[280px]">
                       Key Metric
                     </th>
                     {keyMetricsTTM && (
-                      <th className="px-6 py-4 text-center text-blue-400 font-bold text-base min-w-[120px] bg-blue-900/50">TTM</th>
+                      <th className="px-6 py-4 text-center text-green-400 font-bold text-base min-w-[120px] bg-green-900/50">TTM</th>
                     )}
                     {keyMetrics.slice(0, 8).map((row: any, i: number) => (
                       <th key={i} className="px-6 py-4 text-center font-bold text-base min-w-[120px] text-gray-200">
@@ -2750,7 +2750,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
         <div className="mt-10">
           <button
             onClick={() => setShowOwnerEarnings(!showOwnerEarnings)}
-            className="flex items-center gap-3 text-2xl font-bold text-cyan-400 mb-6 hover:text-cyan-300 transition"
+            className="flex items-center gap-3 text-2xl font-bold text-emerald-400 mb-6 hover:text-emerald-300 transition"
           >
             <span>{showOwnerEarnings ? '▼' : '▶'}</span>
             <span>💰 Owner Earnings (Buffett) ({ownerEarnings.length} periods)</span>
@@ -2759,9 +2759,9 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
           {showOwnerEarnings && (
             <div className="overflow-x-auto">
               <table className="w-full border border-gray-700 rounded-xl overflow-hidden shadow-lg">
-                <thead className="bg-cyan-900/30">
+                <thead className="bg-emerald-900/30">
                   <tr>
-                    <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-cyan-900/30 z-10 min-w-[280px]">
+                    <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-emerald-900/30 z-10 min-w-[280px]">
                       Component
                     </th>
                     {ownerEarnings.slice(0, 10).map((row: any, i: number) => (
@@ -2829,7 +2829,7 @@ function KeyMetricRow({ data, ttmData, metricKey, label, isPerShare, isRatio, is
         {label}
       </td>
       {ttmData && (
-        <td className="px-6 py-3 text-center text-base font-semibold text-blue-300 bg-blue-900/10">
+        <td className="px-6 py-3 text-center text-base font-semibold text-green-300 bg-green-900/10">
           {formatMetricValue(ttmData[metricKey])}
         </td>
       )}
@@ -2982,7 +2982,7 @@ function AnalistasTab({ priceTarget, ticker }: { priceTarget: any; ticker: strin
 
         {loadingGrades ? (
           <div className="text-center py-10">
-            <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent"></div>
+            <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-green-500 border-t-transparent"></div>
             <p className="mt-4 text-gray-400">Cargando calificaciones...</p>
           </div>
         ) : grades.length === 0 ? (
@@ -3105,7 +3105,7 @@ function DCFTab({ dcfStandard, dcfCustom, quote, income }: { dcfStandard: any; d
 
             <div className="bg-gray-700 p-6 rounded-xl border border-gray-600 text-center">
               <p className="text-lg text-gray-400 mb-2">Precio Actual del Mercado</p>
-              <p className="text-4xl font-bold text-blue-400">
+              <p className="text-4xl font-bold text-green-400">
                 {currentPrice ? `$${currentPrice.toFixed(2)}` : 'N/A'}
               </p>
             </div>
@@ -3147,13 +3147,13 @@ function DCFTab({ dcfStandard, dcfCustom, quote, income }: { dcfStandard: any; d
               <tbody className="divide-y divide-gray-700">
                 <tr>
                   <td className="px-6 py-4 font-medium text-gray-300">WACC (Cost of Capital)</td>
-                  <td className="px-6 py-4 text-right text-indigo-400 font-bold">
+                  <td className="px-6 py-4 text-right text-green-400 font-bold">
                     {formatPercent(dcfCustom.wacc)}
                   </td>
                 </tr>
                 <tr>
                   <td className="px-6 py-4 font-medium text-gray-300">Crecimiento a Largo Plazo</td>
-                  <td className="px-6 py-4 text-right text-indigo-400 font-bold">
+                  <td className="px-6 py-4 text-right text-green-400 font-bold">
                     {formatPercent(dcfCustom.longTermGrowthRate)}
                   </td>
                 </tr>
@@ -3224,7 +3224,7 @@ function DCFTab({ dcfStandard, dcfCustom, quote, income }: { dcfStandard: any; d
               </div>
               <div>
                 <p className="text-sm text-gray-400 mb-1">Precio Actual</p>
-                <p className="text-3xl font-bold text-blue-400">
+                <p className="text-3xl font-bold text-green-400">
                   ${quote?.price?.toFixed(2) || 'N/A'}
                 </p>
               </div>

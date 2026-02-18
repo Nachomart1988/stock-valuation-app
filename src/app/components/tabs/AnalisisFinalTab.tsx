@@ -230,15 +230,15 @@ export default function AnalisisFinalTab({
 
       {/* Resumen de análisis - Larger cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-blue-900/40 to-blue-800/20 p-6 rounded-2xl border border-blue-600/50 text-center">
-          <p className="text-lg text-blue-300 mb-2">{t('analisisFinalTab.currentPrice')}</p>
-          <p className="text-4xl font-black text-blue-400">
+        <div className="bg-gradient-to-br from-green-900/40 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
+          <p className="text-lg text-green-300 mb-2">{t('analisisFinalTab.currentPrice')}</p>
+          <p className="text-4xl font-black text-green-400">
             {currentPrice ? `$${currentPrice.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gradient-to-br from-purple-900/40 to-purple-800/20 p-6 rounded-2xl border border-purple-600/50 text-center">
-          <p className="text-lg text-purple-300 mb-2">{t('analisisFinalTab.avgValuation')}</p>
-          <p className="text-4xl font-black text-purple-400">
+        <div className="bg-gradient-to-br from-emerald-900/40 to-emerald-800/20 p-6 rounded-2xl border border-emerald-600/50 text-center">
+          <p className="text-lg text-emerald-300 mb-2">{t('analisisFinalTab.avgValuation')}</p>
+          <p className="text-4xl font-black text-emerald-400">
             {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
           </p>
         </div>
@@ -264,7 +264,7 @@ export default function AnalisisFinalTab({
       {/* Chart Section */}
       {loading ? (
         <div className="text-center py-16">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
           <p className="mt-4 text-gray-400 text-lg">{t('analisisFinalTab.loading')}</p>
         </div>
       ) : historical.length === 0 ? (
@@ -336,11 +336,11 @@ export default function AnalisisFinalTab({
         <h4 className="text-xl font-bold text-gray-200 mb-4">{t('analisisFinalTab.interpretation')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-base">
           <div className="flex items-center gap-3">
-            <div className="w-6 h-1 bg-cyan-400 rounded"></div>
+            <div className="w-6 h-1 bg-emerald-400 rounded"></div>
             <span className="text-gray-300">{t('analisisFinalTab.closingPrice')}</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-6 h-1 bg-purple-500 rounded" style={{ borderStyle: 'dashed' }}></div>
+            <div className="w-6 h-1 bg-emerald-500 rounded" style={{ borderStyle: 'dashed' }}></div>
             <span className="text-gray-300">{t('analisisFinalTab.avgValuationDesc')}</span>
           </div>
           <div className="flex items-center gap-3">

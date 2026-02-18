@@ -312,7 +312,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
               <span className="text-gray-400">%</span>
             </div>
             {capitalStructure.preferredStock > 0 && preferredEquityRate === null && (
-              <p className="text-xs text-blue-400 mt-1">{t('waccTab.autoCalculated')}</p>
+              <p className="text-xs text-green-400 mt-1">{t('waccTab.autoCalculated')}</p>
             )}
           </div>
         </div>
@@ -326,7 +326,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 type="radio"
                 checked={selectedBetaSource === 'levered'}
                 onChange={() => setSelectedBetaSource('levered')}
-                className="text-blue-500"
+                className="text-green-500"
               />
               <span className="text-gray-300">{t('waccTab.leveredBeta')} ({profile?.beta?.toFixed(2) || 'N/A'})</span>
             </label>
@@ -335,7 +335,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 type="radio"
                 checked={selectedBetaSource === 'unlevered'}
                 onChange={() => setSelectedBetaSource('unlevered')}
-                className="text-blue-500"
+                className="text-green-500"
               />
               <span className="text-gray-300">{t('waccTab.unleveredBeta')}</span>
             </label>
@@ -344,7 +344,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 type="radio"
                 checked={selectedBetaSource === 'custom'}
                 onChange={() => setSelectedBetaSource('custom')}
-                className="text-blue-500"
+                className="text-green-500"
               />
               <span className="text-gray-300">{t('waccTab.customBeta')}</span>
               <input
@@ -370,7 +370,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
             {/* Cost of Debt Branch */}
             <div className="space-y-4">
               <div className="bg-gray-700 p-4 rounded-lg border border-gray-600">
-                <h5 className="text-lg font-bold text-blue-400 mb-3">{t('waccTab.costOfDebt')}</h5>
+                <h5 className="text-lg font-bold text-green-400 mb-3">{t('waccTab.costOfDebt')}</h5>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-400">{t('waccTab.ebit')}</span>
@@ -386,7 +386,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">{t('waccTab.syntheticRating')}</span>
-                    <span className="text-purple-400 font-bold">{costOfDebtCalc.rating}</span>
+                    <span className="text-emerald-400 font-bold">{costOfDebtCalc.rating}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">{t('waccTab.defaultSpread')}</span>
@@ -395,10 +395,10 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 </div>
               </div>
               <div className="text-center text-2xl text-gray-500">↓</div>
-              <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-600">
+              <div className="bg-green-900/30 p-4 rounded-lg border border-green-600">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-300">{t('waccTab.preTaxCost')}</span>
-                  <span className="text-blue-400 font-bold text-xl">{formatPct(costOfDebtCalc.preTaxCostOfDebt)}</span>
+                  <span className="text-green-400 font-bold text-xl">{formatPct(costOfDebtCalc.preTaxCostOfDebt)}</span>
                 </div>
                 <div className="text-xs text-gray-500 mt-1">Rf ({formatPct(riskFreeRate)}) + Spread ({formatPct(costOfDebtCalc.spread)})</div>
               </div>
@@ -417,7 +417,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
             {/* Cost of Equity Branch */}
             <div className="space-y-4">
               <div className="bg-gray-700 p-4 rounded-lg border border-gray-600">
-                <h5 className="text-lg font-bold text-purple-400 mb-3">{t('waccTab.costOfEquity')}</h5>
+                <h5 className="text-lg font-bold text-emerald-400 mb-3">{t('waccTab.costOfEquity')}</h5>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-400">Risk Free Rate (Rf)</span>
@@ -434,10 +434,10 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 </div>
               </div>
               <div className="text-center text-2xl text-gray-500">↓</div>
-              <div className="bg-purple-900/30 p-4 rounded-lg border border-purple-600">
+              <div className="bg-emerald-900/30 p-4 rounded-lg border border-emerald-600">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-300">{t('waccTab.costOfEquity')}</span>
-                  <span className="text-purple-400 font-bold text-xl">{formatPct(costOfEquityCalc.costOfEquity)}</span>
+                  <span className="text-emerald-400 font-bold text-xl">{formatPct(costOfEquityCalc.costOfEquity)}</span>
                 </div>
                 <div className="text-xs text-gray-500 mt-1">Rf + β × ERP = {formatPct(riskFreeRate)} + {costOfEquityCalc.beta.toFixed(2)} × {formatPct(equityRiskPremium)}</div>
               </div>
@@ -474,12 +474,12 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl">
             <div className="bg-gray-700/50 p-4 rounded-lg text-center">
               <p className="text-gray-400 text-sm">{t('waccTab.debtWeight')}</p>
-              <p className="text-2xl font-bold text-blue-400">{formatPct(capitalStructure.debtPct)}</p>
+              <p className="text-2xl font-bold text-green-400">{formatPct(capitalStructure.debtPct)}</p>
               <p className="text-xs text-gray-500">{formatMoney(capitalStructure.totalDebt)} / {formatMoney(capitalStructure.totalCapital)}</p>
             </div>
             <div className="bg-gray-700/50 p-4 rounded-lg text-center">
               <p className="text-gray-400 text-sm">{t('waccTab.equityWeight')}</p>
-              <p className="text-2xl font-bold text-purple-400">{formatPct(capitalStructure.equityPct)}</p>
+              <p className="text-2xl font-bold text-emerald-400">{formatPct(capitalStructure.equityPct)}</p>
               <p className="text-xs text-gray-500">{formatMoney(capitalStructure.marketCap)} / {formatMoney(capitalStructure.totalCapital)}</p>
             </div>
             <div className="bg-gray-700/50 p-4 rounded-lg text-center">
@@ -493,14 +493,14 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
           <div className="text-center text-2xl text-gray-500">↓</div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl">
-            <div className="bg-blue-900/20 p-4 rounded-lg text-center border border-blue-700">
+            <div className="bg-green-900/20 p-4 rounded-lg text-center border border-green-700">
               <p className="text-gray-400 text-sm">{t('waccTab.weightedCostOfDebt')}</p>
-              <p className="text-2xl font-bold text-blue-400">{formatPct(weightedCostOfDebt)}</p>
+              <p className="text-2xl font-bold text-green-400">{formatPct(weightedCostOfDebt)}</p>
               <p className="text-xs text-gray-500">{formatPct(capitalStructure.debtPct)} × {formatPct(costOfDebtCalc.afterTaxCostOfDebt)}</p>
             </div>
-            <div className="bg-purple-900/20 p-4 rounded-lg text-center border border-purple-700">
+            <div className="bg-emerald-900/20 p-4 rounded-lg text-center border border-emerald-700">
               <p className="text-gray-400 text-sm">{t('waccTab.weightedCostOfEquity')}</p>
-              <p className="text-2xl font-bold text-purple-400">{formatPct(weightedCostOfEquity)}</p>
+              <p className="text-2xl font-bold text-emerald-400">{formatPct(weightedCostOfEquity)}</p>
               <p className="text-xs text-gray-500">{formatPct(capitalStructure.equityPct)} × {formatPct(costOfEquityCalc.costOfEquity)}</p>
             </div>
             <div className="bg-orange-900/20 p-4 rounded-lg text-center border border-orange-700">
@@ -539,15 +539,15 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
             <tbody className="divide-y divide-gray-700">
               <tr>
                 <td className="px-4 py-3 text-gray-200">{t('waccTab.debtAfterTax')}</td>
-                <td className="px-4 py-3 text-right text-blue-400">{formatPct(costOfDebtCalc.afterTaxCostOfDebt)}</td>
+                <td className="px-4 py-3 text-right text-green-400">{formatPct(costOfDebtCalc.afterTaxCostOfDebt)}</td>
                 <td className="px-4 py-3 text-right text-gray-300">{formatPct(capitalStructure.debtPct)}</td>
-                <td className="px-4 py-3 text-right text-blue-400 font-bold">{formatPct(weightedCostOfDebt)}</td>
+                <td className="px-4 py-3 text-right text-green-400 font-bold">{formatPct(weightedCostOfDebt)}</td>
               </tr>
               <tr>
                 <td className="px-4 py-3 text-gray-200">{t('waccTab.equity')}</td>
-                <td className="px-4 py-3 text-right text-purple-400">{formatPct(costOfEquityCalc.costOfEquity)}</td>
+                <td className="px-4 py-3 text-right text-emerald-400">{formatPct(costOfEquityCalc.costOfEquity)}</td>
                 <td className="px-4 py-3 text-right text-gray-300">{formatPct(capitalStructure.equityPct)}</td>
-                <td className="px-4 py-3 text-right text-purple-400 font-bold">{formatPct(weightedCostOfEquity)}</td>
+                <td className="px-4 py-3 text-right text-emerald-400 font-bold">{formatPct(weightedCostOfEquity)}</td>
               </tr>
               <tr>
                 <td className="px-4 py-3 text-gray-200">{t('waccTab.preferred')}</td>

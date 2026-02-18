@@ -354,7 +354,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
 
       {/* Gráfico */}
       <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-        <h3 className="text-2xl font-bold text-blue-400 mb-6 text-center">
+        <h3 className="text-2xl font-bold text-green-400 mb-6 text-center">
           {t('revenueForecastTab.chartTitle')} ({forecastYears} {t('revenueForecastTab.yearsToProject')})
         </h3>
         <div className="h-96">
@@ -415,7 +415,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
               return (
                 <tr key={year} className={isHistorical ? '' : 'bg-gray-900/50'}>
                   <td className="px-6 py-4 font-medium">{year}</td>
-                  <td className="px-6 py-4 text-right text-blue-400 font-semibold">
+                  <td className="px-6 py-4 text-right text-green-400 font-semibold">
                     {histRev ? histRev.toFixed(2) : '—'}
                   </td>
                   <td className="px-6 py-4 text-right text-emerald-300">

@@ -457,14 +457,14 @@ export default function CalculosTab({
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
-          <h3 className="text-3xl font-bold bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent">
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-teal-400 to-emerald-400 bg-clip-text text-transparent">
             {t('calculosTab.title')}
           </h3>
           <p className="text-sm text-gray-400 mt-1">{t('calculosTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
           {impliedValuePerShare && impliedValuePerShare > 0 && (
-            <div className="text-right bg-gradient-to-r from-teal-900/40 to-cyan-900/40 px-4 py-2 rounded-xl border border-teal-600">
+            <div className="text-right bg-gradient-to-r from-teal-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-teal-600">
               <p className="text-xs text-teal-400">{t('calculosTab.intrinsicValue')}</p>
               <p className="text-xl font-bold text-teal-400">${impliedValuePerShare.toFixed(2)}</p>
             </div>
@@ -523,7 +523,7 @@ export default function CalculosTab({
               />
               <span className="text-gray-400">%</span>
             </div>
-            <p className="text-xs text-blue-400 mt-1">Avg Holt + Regression</p>
+            <p className="text-xs text-green-400 mt-1">Avg Holt + Regression</p>
           </div>
           <div>
             <label className="block text-gray-300 mb-2">{t('calculosTab.yearsToProject')}</label>
@@ -569,7 +569,7 @@ export default function CalculosTab({
               {projections.map((p: Projection) => (
                 <th
                   key={p.year}
-                  className={`px-4 py-4 text-center font-bold min-w-[120px] ${p.isProjected ? 'text-blue-300 bg-gray-750' : 'text-gray-200'}`}
+                  className={`px-4 py-4 text-center font-bold min-w-[120px] ${p.isProjected ? 'text-green-300 bg-gray-750' : 'text-gray-200'}`}
                 >
                   {p.year}{p.isProjected ? 'E' : ''}
                 </th>
@@ -582,7 +582,7 @@ export default function CalculosTab({
                 {t('calculosTab.revenue')}
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-green-300' : 'text-gray-300'}`}>
                   {formatValue(p.revenue)}
                 </td>
               ))}
@@ -593,7 +593,7 @@ export default function CalculosTab({
                 {t('calculosTab.growth')}
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-green-300' : 'text-gray-300'}`}>
                   {p.revenueGrowth !== null ? `${p.revenueGrowth.toFixed(1)}%` : '—'}
                 </td>
               ))}
@@ -604,7 +604,7 @@ export default function CalculosTab({
                 EBITDA
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-green-300' : 'text-gray-300'}`}>
                   {formatValue(p.ebitda)}
                 </td>
               ))}
@@ -615,7 +615,7 @@ export default function CalculosTab({
                 {t('calculosTab.margin')}
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-green-300' : 'text-gray-300'}`}>
                   {p.ebitdaMargin ? `${p.ebitdaMargin.toFixed(1)}%` : '—'}
                 </td>
               ))}
@@ -626,7 +626,7 @@ export default function CalculosTab({
                 {t('calculosTab.depreciation')}
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-green-300' : 'text-gray-300'}`}>
                   {formatValue(p.depreciation)}
                 </td>
               ))}
@@ -637,7 +637,7 @@ export default function CalculosTab({
                 {t('calculosTab.nopat')}
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-green-300' : 'text-gray-300'}`}>
                   {formatValue(p.netOpProfitAfterTax)}
                 </td>
               ))}
@@ -648,7 +648,7 @@ export default function CalculosTab({
                 {t('calculosTab.capex')}
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-green-300' : 'text-gray-300'}`}>
                   {formatValue(-p.capex)}
                 </td>
               ))}
@@ -659,7 +659,7 @@ export default function CalculosTab({
                 {t('calculosTab.changeInWC')}
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-300'}`}>
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-green-300' : 'text-gray-300'}`}>
                   {formatValue(-p.changeInWC)}
                 </td>
               ))}
@@ -670,7 +670,7 @@ export default function CalculosTab({
                 {t('calculosTab.fcfUnlevered')}
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className={`px-4 py-3 text-right font-bold ${p.isProjected ? 'text-blue-300' : 'text-gray-100'}`}>
+                <td key={i} className={`px-4 py-3 text-right font-bold ${p.isProjected ? 'text-green-300' : 'text-gray-100'}`}>
                   {formatValue(p.unleveredFCF)}
                 </td>
               ))}
@@ -682,7 +682,7 @@ export default function CalculosTab({
                 {t('calculosTab.discountFactor')} (WACC={wacc?.toFixed(1)}%)
               </td>
               {projections.map((p: Projection, i: number) => (
-                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-blue-300' : 'text-gray-500'}`}>
+                <td key={i} className={`px-4 py-3 text-right ${p.isProjected ? 'text-green-300' : 'text-gray-500'}`}>
                   {p.isProjected ? p.discountFactor.toFixed(4) : '—'}
                 </td>
               ))}
@@ -771,7 +771,7 @@ export default function CalculosTab({
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           <div className="text-center">
             <p className="text-gray-400 text-sm mb-1">{t('calculosTab.currentPrice')}</p>
-            <p className="text-2xl font-bold text-blue-400">${currentPrice?.toFixed(2) || 'N/A'}</p>
+            <p className="text-2xl font-bold text-green-400">${currentPrice?.toFixed(2) || 'N/A'}</p>
           </div>
           <div className="text-center">
             <p className="text-gray-400 text-sm mb-1">{t('calculosTab.intrinsicValue')}</p>
@@ -789,7 +789,7 @@ export default function CalculosTab({
           </div>
           <div className="text-center">
             <p className="text-gray-400 text-sm mb-1">TTM EV/EBITDA</p>
-            <p className="text-2xl font-bold text-purple-400">{calculatedTTMMultiple?.toFixed(1)}x</p>
+            <p className="text-2xl font-bold text-emerald-400">{calculatedTTMMultiple?.toFixed(1)}x</p>
           </div>
         </div>
       </div>

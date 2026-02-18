@@ -205,13 +205,13 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
                 <tr
                   key={peer.symbol}
                   className={`hover:bg-gray-700 transition-colors ${
-                    isMainTicker ? 'bg-blue-900/30 border-l-4 border-blue-500' : ''
+                    isMainTicker ? 'bg-green-900/30 border-l-4 border-green-500' : ''
                   }`}
                 >
                   <td className={`px-6 py-4 font-medium sticky left-0 z-10 border-r border-gray-700 ${
-                    isMainTicker ? 'bg-blue-900/30' : 'bg-gray-900'
+                    isMainTicker ? 'bg-green-900/30' : 'bg-gray-900'
                   }`}>
-                    <span className={`font-semibold ${isMainTicker ? 'text-blue-400' : 'text-gray-100'}`}>
+                    <span className={`font-semibold ${isMainTicker ? 'text-green-400' : 'text-gray-100'}`}>
                       {peer.symbol}
                     </span>
                     <span className="text-gray-400 text-sm ml-2">
@@ -223,7 +223,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
                   </td>
                   <td className="px-6 py-4 text-right font-semibold">
                     {peer.marketCap !== null ? (
-                      <span className="text-indigo-400">
+                      <span className="text-green-400">
                         ${(peer.marketCap / 1e9).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}B
                       </span>
                     ) : (

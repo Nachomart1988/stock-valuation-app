@@ -278,7 +278,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
       </div>
     );
   }
@@ -295,22 +295,22 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
-          <h3 className="text-3xl font-bold bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-fuchsia-400 bg-clip-text text-transparent">
             {t('segmentationTab.title')}
           </h3>
           <p className="text-sm text-gray-400 mt-1">{t('segmentationTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-violet-900/40 to-fuchsia-900/40 px-4 py-2 rounded-xl border border-violet-600">
-            <p className="text-xs text-violet-400">{t('segmentationTab.segments')}</p>
-            <p className="text-xl font-bold text-violet-400">{latestProductData.length + latestGeoData.length}</p>
+          <div className="text-right bg-gradient-to-r from-green-900/40 to-fuchsia-900/40 px-4 py-2 rounded-xl border border-green-600">
+            <p className="text-xs text-green-400">{t('segmentationTab.segments')}</p>
+            <p className="text-xl font-bold text-green-400">{latestProductData.length + latestGeoData.length}</p>
           </div>
         </div>
       </div>
 
       {/* Product Segmentation */}
-      <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-6 rounded-xl border border-blue-600">
-        <h4 className="text-2xl font-bold text-blue-400 mb-6">{t('segmentationTab.productSegmentation')}</h4>
+      <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-xl border border-green-600">
+        <h4 className="text-2xl font-bold text-green-400 mb-6">{t('segmentationTab.productSegmentation')}</h4>
 
         {latestProductData.length === 0 ? (
           <p className="text-gray-400 text-center py-8">{t('segmentationTab.noProductData')} {ticker}</p>
@@ -349,9 +349,9 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
                       </div>
                     );
                   })}
-                <div className="flex items-center justify-between p-3 bg-blue-900/30 rounded-lg border border-blue-600">
-                  <span className="text-blue-400 font-semibold">{t('segmentationTab.totalRevenue')}</span>
-                  <span className="text-blue-400 font-bold">{formatCurrency(totalProductRevenue)}</span>
+                <div className="flex items-center justify-between p-3 bg-green-900/30 rounded-lg border border-green-600">
+                  <span className="text-green-400 font-semibold">{t('segmentationTab.totalRevenue')}</span>
+                  <span className="text-green-400 font-bold">{formatCurrency(totalProductRevenue)}</span>
                 </div>
               </div>
             </div>
@@ -436,7 +436,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
           <h4 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.summaryTitle')}</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gray-700 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-blue-400">{latestProductData.length}</p>
+              <p className="text-3xl font-bold text-green-400">{latestProductData.length}</p>
               <p className="text-sm text-gray-400">{t('segmentationTab.productSegments')}</p>
             </div>
             <div className="bg-gray-700 rounded-lg p-4 text-center">
@@ -444,7 +444,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
               <p className="text-sm text-gray-400">{t('segmentationTab.geographicRegions')}</p>
             </div>
             <div className="bg-gray-700 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-purple-400">
+              <p className="text-2xl font-bold text-emerald-400">
                 {latestProductData.length > 0 ? latestProductData.sort((a, b) => b.revenue - a.revenue)[0]?.segment : 'N/A'}
               </p>
               <p className="text-sm text-gray-400">{t('segmentationTab.topProduct')}</p>

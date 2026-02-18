@@ -758,7 +758,7 @@ export default function DiarioInversorTab() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
-          <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-green-400 bg-clip-text text-transparent">
             📊 {t('diarioTab.title')}
           </h3>
           <p className="text-sm text-gray-400 mt-1">{t('diarioTab.subtitle')}</p>
@@ -787,7 +787,7 @@ export default function DiarioInversorTab() {
             📤 {t('diarioTab.export')}
           </button>
 
-          <label className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white cursor-pointer">
+          <label className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white cursor-pointer">
             📥 {t('diarioTab.import')}
             <input type="file" accept=".json" onChange={importData} className="hidden" />
           </label>
@@ -795,7 +795,7 @@ export default function DiarioInversorTab() {
           {/* Sync status badge */}
           {user ? (
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-              syncStatus === 'saving' ? 'bg-blue-900/40 border-blue-500/40 text-blue-300' :
+              syncStatus === 'saving' ? 'bg-green-900/40 border-green-500/40 text-green-300' :
               syncStatus === 'saved'  ? 'bg-green-900/40 border-green-500/40 text-green-300' :
               syncStatus === 'error'  ? 'bg-red-900/40 border-red-500/40 text-red-300' :
               'bg-gray-800 border-gray-600 text-gray-400'
@@ -822,7 +822,7 @@ export default function DiarioInversorTab() {
               className={({ selected }) =>
                 `flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
                   selected
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-green-600 text-white'
                     : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
                 }`
               }
@@ -933,7 +933,7 @@ function SwingTab({
       {/* Stats Summary */}
       {stats && (
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-          <h3 className="text-lg font-bold text-blue-400 mb-4">📈 {t('diarioTab.statistics')}</h3>
+          <h3 className="text-lg font-bold text-green-400 mb-4">📈 {t('diarioTab.statistics')}</h3>
 
           {/* Main stats grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
@@ -994,7 +994,7 @@ function SwingTab({
               {Object.entries(stats.setupStats).map(([setup, data]: [string, any]) => (
                 data.count > 0 && (
                   <div key={setup} className="bg-gray-700 rounded p-2 text-sm">
-                    <div className="font-semibold text-blue-300">{setup}</div>
+                    <div className="font-semibold text-green-300">{setup}</div>
                     <div className="text-gray-400">Trades: {data.count}</div>
                     <div className={data.wins / data.count >= 0.5 ? 'text-green-400' : 'text-red-400'}>
                       Win: {formatPercent(data.count > 0 ? data.wins / data.count : 0)}
@@ -1010,7 +1010,7 @@ function SwingTab({
 
       {/* Actions */}
       <div className="flex gap-2">
-        <button onClick={onAddTrade} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-semibold">
+        <button onClick={onAddTrade} className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-semibold">
           ➕ Nuevo Trade
         </button>
       </div>
@@ -1046,7 +1046,7 @@ function SwingTab({
               return (
                 <tr key={trade.id} className="border-b border-gray-800 hover:bg-gray-750">
                   <td className="px-2 py-2 text-gray-500">{idx + 1}</td>
-                  <td className="px-2 py-2 font-semibold text-blue-300">{trade.symbol}</td>
+                  <td className="px-2 py-2 font-semibold text-green-300">{trade.symbol}</td>
                   <td className="px-2 py-2 text-gray-300">{trade.name}</td>
                   <td className={`px-2 py-2 ${trade.side === 'Long' ? 'text-green-400' : 'text-red-400'}`}>
                     {trade.side}
@@ -1057,7 +1057,7 @@ function SwingTab({
                   <td className="px-2 py-2">{formatCurrency(trade.value)}</td>
                   <td className="px-2 py-2 text-red-400">{formatCurrency(trade.sl)}</td>
                   <td className="px-2 py-2 text-green-400">{trade.pt1Price ? formatCurrency(trade.pt1Price) : '-'}</td>
-                  <td className="px-2 py-2 text-purple-300">{trade.setup}</td>
+                  <td className="px-2 py-2 text-emerald-300">{trade.setup}</td>
                   <td className={`px-2 py-2 font-semibold ${trade.state === 'Open' ? 'text-yellow-400' : 'text-gray-400'}`}>
                     {trade.state}
                   </td>
@@ -1235,7 +1235,7 @@ function PLTab({
 
       {/* Weekly Table */}
       <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-        <h3 className="text-lg font-bold text-blue-400 mb-4">📅 Weekly Performance</h3>
+        <h3 className="text-lg font-bold text-green-400 mb-4">📅 Weekly Performance</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -1253,7 +1253,7 @@ function PLTab({
             <tbody>
               {weeklyData.map(week => (
                 <tr key={week.weekStart} className="border-b border-gray-800">
-                  <td className="px-2 py-2 font-semibold text-blue-300">{week.weekLabel}</td>
+                  <td className="px-2 py-2 font-semibold text-green-300">{week.weekLabel}</td>
                   <td className="px-2 py-2 text-gray-400">{week.weekStart}</td>
                   <td className="px-2 py-2 text-center">{week.trades}</td>
                   <td className={`px-2 py-2 text-center ${week.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -1281,7 +1281,7 @@ function PLTab({
       {/* Visual Charts */}
       {weeklyData.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-          <h3 className="text-lg font-bold text-blue-400 mb-4">📈 Weekly P&L Chart</h3>
+          <h3 className="text-lg font-bold text-green-400 mb-4">📈 Weekly P&L Chart</h3>
           <div className="h-48 flex items-end justify-center gap-1">
             {(() => {
               const maxAbs = Math.max(...weeklyData.map(w => Math.abs(w.pnl)), 1);
@@ -1307,7 +1307,7 @@ function PLTab({
       {/* Cumulative Equity Curve */}
       {weeklyData.length > 1 && (
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-          <h3 className="text-lg font-bold text-purple-400 mb-4">📊 Equity Curve (Cumulative)</h3>
+          <h3 className="text-lg font-bold text-emerald-400 mb-4">📊 Equity Curve (Cumulative)</h3>
           <div className="h-32 flex items-end gap-1">
             {(() => {
               const maxCumul = Math.max(...weeklyData.map(w => Math.abs(w.cumulative)), 1);
@@ -1318,7 +1318,7 @@ function PLTab({
                 return (
                   <div key={idx} className="flex flex-col items-center justify-end h-full w-full">
                     <div
-                      className={`w-full rounded-t transition-all ${week.cumulative >= 0 ? 'bg-gradient-to-t from-purple-600 to-purple-400' : 'bg-gradient-to-t from-red-600 to-red-400'}`}
+                      className={`w-full rounded-t transition-all ${week.cumulative >= 0 ? 'bg-gradient-to-t from-emerald-600 to-emerald-400' : 'bg-gradient-to-t from-red-600 to-red-400'}`}
                       style={{ height: `${Math.max(heightPct, 2)}%` }}
                       title={`${week.weekLabel}: ${formatCurrency(week.cumulative)}`}
                     />
@@ -1340,7 +1340,7 @@ function PLTab({
       <div className="grid md:grid-cols-2 gap-4">
         {/* Monthly with bars */}
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-          <h3 className="text-lg font-bold text-blue-400 mb-4">📆 Monthly Summary</h3>
+          <h3 className="text-lg font-bold text-green-400 mb-4">📆 Monthly Summary</h3>
           <div className="space-y-2">
             {(() => {
               const maxMonthAbs = Math.max(...monthlyData.map(([, pnl]) => Math.abs(pnl)), 1);
@@ -1367,7 +1367,7 @@ function PLTab({
 
         {/* Quarterly with visual blocks */}
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-          <h3 className="text-lg font-bold text-blue-400 mb-4">📊 Quarterly Summary</h3>
+          <h3 className="text-lg font-bold text-green-400 mb-4">📊 Quarterly Summary</h3>
           <div className="grid grid-cols-4 gap-2">
             {['Q1', 'Q2', 'Q3', 'Q4'].map(q => {
               const entry = quarterlyData.find(([quarter]) => quarter === q);
@@ -1430,7 +1430,7 @@ function PortfolioTab({
       {/* Header with refresh button */}
       <div className="flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h3 className="text-xl font-bold text-blue-400">💼 {t('diarioTab.portfolioRealTime')}</h3>
+          <h3 className="text-xl font-bold text-green-400">💼 {t('diarioTab.portfolioRealTime')}</h3>
           {lastUpdate && (
             <p className="text-sm text-green-400">✓ {t('diarioTab.lastUpdate')}: {lastUpdate}</p>
           )}
@@ -1444,7 +1444,7 @@ function PortfolioTab({
           className={`px-6 py-3 rounded-lg text-white font-semibold transition-all ${
             loadingPrices
               ? 'bg-gray-600 cursor-not-allowed'
-              : 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 shadow-lg hover:shadow-xl'
+              : 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 shadow-lg hover:shadow-xl'
           }`}
         >
           {loadingPrices ? `⏳ ${t('diarioTab.updating')}...` : `🔄 ${t('diarioTab.refreshPrices')}`}
@@ -1510,7 +1510,7 @@ function PortfolioTab({
             <div className="grid md:grid-cols-2 gap-4">
               {/* P&L Distribution by Position */}
               <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <h3 className="text-lg font-bold text-purple-400 mb-4">📊 P&L by Position</h3>
+                <h3 className="text-lg font-bold text-emerald-400 mb-4">📊 P&L by Position</h3>
                 <div className="space-y-2">
                   {openTrades.map(trade => {
                     const metrics = calculateMetrics(trade);
@@ -1518,7 +1518,7 @@ function PortfolioTab({
                     const widthPct = Math.abs(metrics.pnl) / maxPnl * 100;
                     return (
                       <div key={trade.id} className="flex items-center gap-2">
-                        <span className="text-blue-300 w-16 text-sm font-medium">{trade.symbol}</span>
+                        <span className="text-green-300 w-16 text-sm font-medium">{trade.symbol}</span>
                         <div className="flex-1 h-4 bg-gray-700 rounded overflow-hidden">
                           <div
                             className={`h-full rounded transition-all ${metrics.pnl >= 0 ? 'bg-gradient-to-r from-green-600 to-green-400' : 'bg-gradient-to-r from-red-600 to-red-400'}`}
@@ -1536,7 +1536,7 @@ function PortfolioTab({
 
               {/* Exposure by Setup */}
               <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                <h3 className="text-lg font-bold text-cyan-400 mb-4">🎯 Exposure by Setup</h3>
+                <h3 className="text-lg font-bold text-emerald-400 mb-4">🎯 Exposure by Setup</h3>
                 <div className="space-y-2">
                   {(() => {
                     const setupExposure: Record<string, number> = {};
@@ -1545,7 +1545,7 @@ function PortfolioTab({
                       setupExposure[trade.setup] = (setupExposure[trade.setup] || 0) + metrics.currentValue;
                     });
                     const totalExp = Object.values(setupExposure).reduce((a, b) => a + b, 0);
-                    const colors = ['bg-blue-500', 'bg-purple-500', 'bg-cyan-500', 'bg-pink-500', 'bg-amber-500', 'bg-green-500'];
+                    const colors = ['bg-green-500', 'bg-emerald-500', 'bg-emerald-500', 'bg-pink-500', 'bg-amber-500', 'bg-green-500'];
                     return Object.entries(setupExposure).map(([setup, value], idx) => {
                       const pct = totalExp > 0 ? (value / totalExp) * 100 : 0;
                       return (
@@ -1603,7 +1603,7 @@ function PortfolioTab({
               const weight = accountBalance > 0 ? metrics.currentValue / accountBalance : 0;
               return (
                 <tr key={trade.id} className="border-b border-gray-800 hover:bg-gray-750">
-                  <td className="px-2 py-2 font-semibold text-blue-300">{trade.symbol}</td>
+                  <td className="px-2 py-2 font-semibold text-green-300">{trade.symbol}</td>
                   <td className="px-2 py-2 text-gray-400">{trade.industry || '-'}</td>
                   <td className={`px-2 py-2 ${trade.side === 'Long' ? 'text-green-400' : 'text-red-400'}`}>
                     {trade.side}
@@ -1618,7 +1618,7 @@ function PortfolioTab({
                   <td className="px-2 py-2 text-red-400">{formatCurrency(trade.sl)}</td>
                   <td className="px-2 py-2 text-yellow-400">{formatCurrency(metrics.openRisk)}</td>
                   <td className="px-2 py-2 text-green-400">{trade.pt1Price ? formatCurrency(trade.pt1Price) : '-'}</td>
-                  <td className="px-2 py-2 text-purple-300">{trade.setup}</td>
+                  <td className="px-2 py-2 text-emerald-300">{trade.setup}</td>
                   <td className="px-2 py-2">{formatNumber(metrics.rr)}</td>
                   <td className={`px-2 py-2 font-semibold ${metrics.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     {formatCurrency(metrics.pnl)}
@@ -1683,7 +1683,7 @@ function PTATab({
       {/* Actions */}
       <button
         onClick={() => { setEditingEntry(createEmpty()); setShowForm(true); }}
-        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-semibold"
+        className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-semibold"
       >
         ➕ {t('diarioTab.newPTAEntry')}
       </button>
@@ -1694,7 +1694,7 @@ function PTATab({
           <div key={entry.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <div className="text-lg font-semibold text-blue-300">{entry.date}</div>
+                <div className="text-lg font-semibold text-green-300">{entry.date}</div>
                 <div className="text-sm text-gray-400">Score: {entry.score}/10 | P&L: {formatCurrency(entry.plDay)}</div>
               </div>
               <div className="flex gap-2">
@@ -1779,9 +1779,9 @@ function StatCard({
     gray: 'text-gray-100',
     green: 'text-green-400',
     red: 'text-red-400',
-    blue: 'text-blue-400',
+    blue: 'text-green-400',
     yellow: 'text-yellow-400',
-    purple: 'text-purple-400',
+    purple: 'text-emerald-400',
   };
 
   return (
@@ -1914,7 +1914,7 @@ function TradeFormModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
       <div className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <h3 className="text-xl font-bold text-blue-400 mb-6">
+        <h3 className="text-xl font-bold text-green-400 mb-6">
           {trade.symbol ? `${t('diarioTab.editTradeTitle')}: ${trade.symbol}` : t('diarioTab.newTrade')}
         </h3>
 
@@ -1924,7 +1924,7 @@ function TradeFormModal({
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
               <div>
                 <div className="text-xs text-gray-400">Position Value</div>
-                <div className="text-lg font-bold text-blue-400">${(form.entryPrice * form.qty).toLocaleString()}</div>
+                <div className="text-lg font-bold text-green-400">${(form.entryPrice * form.qty).toLocaleString()}</div>
               </div>
               <div>
                 <div className="text-xs text-gray-400">Risk per Share</div>
@@ -1958,13 +1958,13 @@ function TradeFormModal({
           {/* Basic Info */}
           <div>
             <label className="block text-sm text-gray-400 mb-1">
-              Symbol * {loadingQuote && <span className="text-blue-400 animate-pulse">⏳</span>}
+              Symbol * {loadingQuote && <span className="text-green-400 animate-pulse">⏳</span>}
             </label>
             <input
               type="text"
               value={form.symbol}
               onChange={(e) => updateField('symbol', e.target.value.toUpperCase())}
-              className={`w-full px-3 py-2 bg-gray-700 border rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
+              className={`w-full px-3 py-2 bg-gray-700 border rounded focus:border-green-500 focus:ring-1 focus:ring-green-500 ${
                 quoteError ? 'border-red-500' : form.currentPrice ? 'border-green-500' : 'border-gray-600'
               }`}
               placeholder="AAPL"
@@ -1982,7 +1982,7 @@ function TradeFormModal({
               type="text"
               value={form.name}
               onChange={(e) => updateField('name', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:border-blue-500"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:border-green-500"
               placeholder="Apple Inc"
             />
           </div>
@@ -2008,14 +2008,14 @@ function TradeFormModal({
           </div>
 
           {/* Position Size - Entry Price first! */}
-          <div className="bg-blue-900/30 p-3 rounded border border-blue-600">
-            <label className="block text-sm text-blue-300 mb-1 font-semibold">Entry Price * 💰</label>
+          <div className="bg-green-900/30 p-3 rounded border border-green-600">
+            <label className="block text-sm text-green-300 mb-1 font-semibold">Entry Price * 💰</label>
             <input
               type="number"
               step="0.01"
               value={form.entryPrice || ''}
               onChange={(e) => updateField('entryPrice', Number(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-700 border border-blue-500 rounded text-lg font-bold"
+              className="w-full px-3 py-2 bg-gray-700 border border-green-500 rounded text-lg font-bold"
               placeholder="150.00"
             />
           </div>
@@ -2280,7 +2280,7 @@ function PTAFormModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
       <div className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <h3 className="text-xl font-bold text-blue-400 mb-6">{t('diarioTab.ptaEntry')}</h3>
+        <h3 className="text-xl font-bold text-green-400 mb-6">{t('diarioTab.ptaEntry')}</h3>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div>

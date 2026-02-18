@@ -84,7 +84,7 @@ function SubscriptionSuccessContent() {
           {/* Support note */}
           <p className="text-sm text-gray-500">
             ¿Tienes preguntas? Contacta a nuestro{' '}
-            <Link href="/contact" className="text-blue-400 hover:text-blue-300">
+            <Link href="/contact" className="text-green-400 hover:text-green-300">
               soporte prioritario
             </Link>
           </p>

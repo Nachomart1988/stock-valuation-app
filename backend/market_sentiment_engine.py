@@ -13,6 +13,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from collections import defaultdict
 
+try:
+    import yfinance as yf
+    YF_AVAILABLE = True
+except ImportError:
+    YF_AVAILABLE = False
+    print("[NeuralMSE] yfinance not available — technical analysis layer disabled")
+
 
 @dataclass
 class MarketSignal:
@@ -181,8 +188,23 @@ class NeuralReasoningMarketSentimentEngine:
     MAJOR_INDICES = ['^GSPC', '^DJI', '^IXIC', '^RUT', '^FTSE', '^N225', '^GDAXI']
     VIX_SYMBOL = '^VIX'
 
+    # Sector semantic classification for qualitative reasoning
+    SECTOR_SEMANTICS = {
+        'Technology': ('growth', 'Risk-ON: Tech rally signals growth appetite & AI/innovation premium'),
+        'Consumer Cyclical': ('cyclical', 'Risk-ON: Discretionary strength = consumer confidence & spending'),
+        'Financial Services': ('cyclical', 'Rate-sensitive: Financials up = yield curve favorable or credit expanding'),
+        'Industrials': ('cyclical', 'Risk-ON: Industrial strength = capex recovery & supply chain health'),
+        'Basic Materials': ('cyclical', 'Cyclical: Materials demand rising with global economic activity'),
+        'Energy': ('inflation', 'Inflationary/geopolitical: Energy rally drives input cost pressures'),
+        'Utilities': ('defensive', 'Risk-OFF: Flight to yield/safety — investors seeking stable dividends'),
+        'Consumer Defensive': ('defensive', 'Risk-OFF: Staples outperforming = defensive positioning underway'),
+        'Healthcare': ('defensive', 'Defensive/Secular: Healthcare is non-cyclical, recession-resilient'),
+        'Real Estate': ('rate_sensitive', 'Rate-sensitive: REITs inversely correlated with interest rates'),
+        'Communication Services': ('mixed', 'Mixed: Growth tech (GOOGL/META) + defensive telecom (T/VZ)'),
+    }
+
     def __init__(self):
-        self.version = "5.0"
+        self.version = "6.0"
         self.news_analyzer = AdvancedNewsSentimentAnalyzer()
         self._cache: Dict[str, Any] = {}
         self._cache_ttl = 300  # 5 min cache
@@ -249,8 +271,72 @@ class NeuralReasoningMarketSentimentEngine:
             d -= timedelta(days=1)
         return d.strftime('%Y-%m-%d')
 
+    def _calc_rsi(self, prices, period: int = 14) -> float:
+        """Calculate RSI(14) from a pandas price series."""
+        try:
+            delta = prices.diff().dropna()
+            gain = delta.clip(lower=0).rolling(window=period).mean()
+            loss = (-delta.clip(upper=0)).rolling(window=period).mean()
+            last_loss = loss.iloc[-1]
+            if last_loss == 0:
+                return 100.0
+            rs = gain.iloc[-1] / last_loss
+            return float(100 - (100 / (1 + rs)))
+        except Exception:
+            return 50.0
+
+    def _fetch_yfinance_data(self) -> Dict[str, Any]:
+        """
+        Fetch index/ETF data via yfinance for technical analysis.
+        Returns RSI, moving averages, and price context for SPY, QQQ, IWM, DIA, VIX, 10Y yield.
+        """
+        if not YF_AVAILABLE:
+            return {}
+        result = {}
+        targets = {
+            'SPY': 'spy',    # S&P 500 ETF
+            'QQQ': 'qqq',    # Nasdaq-100 ETF
+            'IWM': 'iwm',    # Russell 2000 small caps
+            'DIA': 'dia',    # Dow Jones ETF
+            '^VIX': 'vix',   # Volatility Index
+            '^TNX': 'tnx',   # 10-Year Treasury Yield
+        }
+        for sym, key in targets.items():
+            try:
+                ticker = yf.Ticker(sym)
+                hist = ticker.history(period='1y', interval='1d', auto_adjust=True)
+                if hist.empty or len(hist) < 5:
+                    continue
+                closes = hist['Close']
+                price = float(closes.iloc[-1])
+                prev = float(closes.iloc[-2]) if len(closes) > 1 else price
+                change_pct = (price / prev - 1) * 100 if prev != 0 else 0
+                ma20 = float(closes.tail(20).mean()) if len(closes) >= 20 else None
+                ma50 = float(closes.tail(50).mean()) if len(closes) >= 50 else None
+                ma200 = float(closes.tail(200).mean()) if len(closes) >= 200 else None
+                rsi = self._calc_rsi(closes)
+                high_52w = float(hist['High'].max())
+                low_52w = float(hist['Low'].min())
+                pct_from_high = (price - high_52w) / high_52w * 100 if high_52w else 0
+                result[key] = {
+                    'price': price,
+                    'change_1d': round(change_pct, 2),
+                    'rsi': round(rsi, 1),
+                    'ma20': round(ma20, 2) if ma20 else None,
+                    'ma50': round(ma50, 2) if ma50 else None,
+                    'ma200': round(ma200, 2) if ma200 else None,
+                    'high_52w': round(high_52w, 2),
+                    'low_52w': round(low_52w, 2),
+                    'pct_from_high': round(pct_from_high, 1),
+                }
+                print(f"[NeuralMSE v6] yfinance {sym}: ${price:.2f} RSI={rsi:.0f}"
+                      + (f" vs 200DMA ${ma200:.0f}" if ma200 else ""))
+            except Exception as e:
+                print(f"[NeuralMSE v6] yfinance {sym} error: {e}")
+        return result
+
     def _fill_missing_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Auto-fetch any missing market data from FMP API."""
+        """Auto-fetch any missing market data from FMP API and yfinance."""
         filled = dict(data)
 
         # ── Sector performance ──────────────────────────────────────────
@@ -343,6 +429,31 @@ class NeuralReasoningMarketSentimentEngine:
                     filled['sp500YearLow'] = q.get('yearLow', 0) or 0
                     break
 
+        # ── yfinance: technical analysis + VIX fallback ──────────────────
+        yf_data = self._fetch_yfinance_data()
+        if yf_data:
+            filled['yfinanceData'] = yf_data
+            # Use yfinance VIX if FMP didn't deliver it
+            if (not filled.get('vixQuote') or not (filled['vixQuote'] or {}).get('price')) and yf_data.get('vix'):
+                vd = yf_data['vix']
+                filled['vixQuote'] = {'price': vd['price'], 'changesPercentage': vd['change_1d']}
+                print(f"[NeuralMSE v6] VIX from yfinance: {vd['price']:.1f} ({vd['change_1d']:+.2f}%)")
+            # Use yfinance SPY data as S&P500 proxy if FMP indices are missing
+            if not filled.get('indexQuotes') and yf_data.get('spy'):
+                spy = yf_data['spy']
+                filled['indexQuotes'] = [
+                    {'symbol': 'SPY', 'name': 'S&P 500 ETF', 'price': spy['price'],
+                     'changesPercentage': spy['change_1d'], 'yearHigh': spy['high_52w'], 'yearLow': spy['low_52w']},
+                ]
+                if yf_data.get('qqq'):
+                    q = yf_data['qqq']
+                    filled['indexQuotes'].append({'symbol': 'QQQ', 'name': 'Nasdaq-100 ETF',
+                        'price': q['price'], 'changesPercentage': q['change_1d']})
+                if yf_data.get('iwm'):
+                    r = yf_data['iwm']
+                    filled['indexQuotes'].append({'symbol': '^RUT', 'name': 'Russell 2000',
+                        'price': r['price'], 'changesPercentage': r['change_1d']})
+
         return filled
 
     # ====================== 8 ANALYSIS LAYERS ======================
@@ -362,6 +473,7 @@ class NeuralReasoningMarketSentimentEngine:
         forex = data.get('forexQuotes', [])
         hist_sectors = data.get('historicalSectorPerformance', [])
         vix_quote = data.get('vixQuote')
+        yf_data = data.get('yfinanceData', {})
 
         signals: List[MarketSignal] = []
         full_reasoning: List[str] = [f"**NEURAL ENGINE v{self.version} — ANALYSIS INITIATED**"]
@@ -388,8 +500,8 @@ class NeuralReasoningMarketSentimentEngine:
         industry_score, industry_signals, industry_breadth = self._layer3b_industries(industries)
         signals.extend(industry_signals)
 
-        # LAYER 4 — MAJOR INDICES
-        index_score, index_signals, index_reasoning, sp500_change = self._layer4_indices(indices)
+        # LAYER 4 — MAJOR INDICES + TECHNICAL (yfinance)
+        index_score, index_signals, index_reasoning, sp500_change = self._layer4_indices(indices, yf_data)
         signals.extend(index_signals)
         full_reasoning.extend(index_reasoning)
 
@@ -606,6 +718,39 @@ class NeuralReasoningMarketSentimentEngine:
             signals.append(MarketSignal("risk_off_rotation", "bearish", 0.70, 0.08,
                 f"Risk-OFF rotation: defensives {def_change:+.2f}% vs cyclicals {cyc_change:+.2f}%", emoji="🛡️"))
 
+        # ── Semantic sector interpretation ────────────────────────────────
+        hot_types = []
+        cold_types = []
+        for sector in hot[:5]:
+            name = sector.get('sector', '')
+            chg = sector.get('averageChange', 0) or sector.get('changesPercentage', 0) or 0
+            for key, (stype, _) in self.SECTOR_SEMANTICS.items():
+                if key.lower() in name.lower():
+                    hot_types.append(stype)
+                    break
+        for sector in cold[:5]:
+            name = sector.get('sector', '')
+            for key, (stype, _) in self.SECTOR_SEMANTICS.items():
+                if key.lower() in name.lower():
+                    cold_types.append(stype)
+                    break
+
+        defensive_hot = hot_types.count('defensive')
+        cyclical_hot = hot_types.count('cyclical') + hot_types.count('growth')
+        defensive_cold = cold_types.count('defensive')
+        cyclical_cold = cold_types.count('cyclical') + cold_types.count('growth')
+
+        if defensive_hot >= 2 and cyclical_cold >= 1:
+            signals.append(MarketSignal("defensive_bid", "bearish", 0.75, 0.10,
+                "DEFENSIVE BID: Multiple safe-haven sectors leading — institutional risk-off positioning", emoji="🛡️"))
+        elif cyclical_hot >= 2 and defensive_cold >= 1:
+            signals.append(MarketSignal("cyclical_leadership", "bullish", 0.75, 0.10,
+                "CYCLICAL LEADERSHIP: Growth & cyclical sectors dominating — genuine risk-on environment", emoji="🔥"))
+        hot_energy = any('Energy' in (s.get('sector', '') or '') for s in hot[:3])
+        if hot_energy and cyclical_hot < 2:
+            signals.append(MarketSignal("energy_solo", "cautionary", 0.55, 0.05,
+                "Energy rallying in isolation — possible inflation pressure or geopolitical tension", emoji="⛽"))
+
         reasoning = [f"**LAYER 3 — SECTORS ({len(sectors)}):** {len(up)}/{len(sectors)} green | avg {avg_change:+.2f}% | spread {dispersion:.1f}%"]
         if hot:
             hot_parts = [h.get('sector', '?') + ' ({:+.1f}%)'.format(h.get('averageChange', 0) or 0) for h in hot[:3]]
@@ -613,6 +758,23 @@ class NeuralReasoningMarketSentimentEngine:
         if cold:
             cold_parts = [c.get('sector', '?') + ' ({:+.1f}%)'.format(c.get('averageChange', 0) or 0) for c in cold[:3]]
             reasoning.append(f"  Cold: {', '.join(cold_parts)}")
+
+        # Add qualitative interpretation for top 3 hot sectors
+        for sector in hot[:3]:
+            name = sector.get('sector', '')
+            chg = sector.get('averageChange', 0) or sector.get('changesPercentage', 0) or 0
+            for key, (stype, desc) in self.SECTOR_SEMANTICS.items():
+                if key.lower() in name.lower():
+                    reasoning.append(f"  📌 {name} ({chg:+.1f}%): {desc}")
+                    break
+
+        rotation_summary = []
+        if cyc_change > def_change + 0.5:
+            rotation_summary.append(f"Cyclicals outperforming defensives by {cyc_change - def_change:.1f}% → risk-on rotation")
+        elif def_change > cyc_change + 0.5:
+            rotation_summary.append(f"Defensives outperforming cyclicals by {def_change - cyc_change:.1f}% → defensive rotation")
+        if rotation_summary:
+            reasoning.append("  🔄 " + rotation_summary[0])
 
         return score, signals, breadth, hot, cold, reasoning
 
@@ -636,10 +798,13 @@ class NeuralReasoningMarketSentimentEngine:
                 f"Industry weakness: only {len(up)}/{len(industries)} positive", emoji="🏭"))
         return score, signals, breadth
 
-    def _layer4_indices(self, indices):
-        """Layer 4: Major indices analysis — S&P500, Dow, Nasdaq, Russell."""
-        if not indices:
+    def _layer4_indices(self, indices, yf_data: Dict = None):
+        """Layer 4: Major indices analysis — S&P500, Dow, Nasdaq, Russell + Technical via yfinance."""
+        yf_data = yf_data or {}
+        if not indices and not yf_data:
             return 50.0, [], ["**LAYER 4 — INDICES:** No data available"], 0.0
+        if not indices:
+            indices = []
 
         # Exclude VIX from scoring (it's inverse)
         price_indices = [i for i in indices if 'VIX' not in (i.get('symbol', '') + i.get('name', ''))]
@@ -692,6 +857,102 @@ class NeuralReasoningMarketSentimentEngine:
         reasoning = [f"**LAYER 4 — INDICES:** {up_count}/{len(price_indices)} green | avg {avg_change:+.2f}%"]
         for idx in price_indices[:5]:
             reasoning.append(f"  {idx.get('symbol','?')}: {idx.get('changesPercentage', 0) or 0:+.2f}%")
+
+        # ── yfinance Technical Analysis ─────────────────────────────────
+        if yf_data:
+            reasoning.append("**LAYER 4b — TECHNICAL ANALYSIS (yfinance):**")
+            spy = yf_data.get('spy', {})
+            qqq = yf_data.get('qqq', {})
+            iwm = yf_data.get('iwm', {})
+            tnx = yf_data.get('tnx', {})
+
+            if spy:
+                price = spy.get('price', 0)
+                ma50 = spy.get('ma50')
+                ma200 = spy.get('ma200')
+                rsi = spy.get('rsi', 50)
+                pct_high = spy.get('pct_from_high', 0)
+                reasoning.append(f"  SPY ${price:.2f} | RSI={rsi:.0f}"
+                    + (f" | vs 50DMA ${ma50:.0f} ({'✅ ABOVE' if price > ma50 else '❌ BELOW'})" if ma50 else "")
+                    + (f" | vs 200DMA ${ma200:.0f} ({'🐂 BULL' if price > ma200 else '🐻 BEAR'})" if ma200 else ""))
+                if ma200:
+                    if price > ma200 * 1.002:
+                        signals.append(MarketSignal("spy_above_200dma", "bullish", 0.82, 0.14,
+                            f"SPY ${price:.0f} ABOVE 200DMA ${ma200:.0f} — Secular bull market regime confirmed", emoji="🐂"))
+                        if price > ma50 * 1.002 and ma50 > ma200:
+                            signals.append(MarketSignal("golden_cross_intact", "bullish", 0.70, 0.08,
+                                f"50DMA ${ma50:.0f} > 200DMA ${ma200:.0f} — Golden Cross structure intact", emoji="⭐"))
+                    else:
+                        signals.append(MarketSignal("spy_below_200dma", "bearish", 0.88, 0.16,
+                            f"SPY ${price:.0f} BELOW 200DMA ${ma200:.0f} — Bear market risk elevated, reduce exposure", emoji="🐻"))
+                        if ma50 < ma200:
+                            signals.append(MarketSignal("death_cross", "bearish", 0.80, 0.10,
+                                f"Death Cross: 50DMA ${ma50:.0f} < 200DMA ${ma200:.0f} — Bearish long-term structure", emoji="💀"))
+
+                if rsi >= 75:
+                    signals.append(MarketSignal("spy_rsi_overbought", "cautionary", 0.75, 0.08,
+                        f"SPY RSI={rsi:.0f} — Extreme overbought, high pullback risk", emoji="🔴"))
+                    reasoning.append(f"  ⚠️ SPY RSI={rsi:.0f} — Overbought (>75), contrarian caution advised")
+                elif rsi >= 65:
+                    reasoning.append(f"  ⚠️ SPY RSI={rsi:.0f} — Elevated, monitor for distribution")
+                elif rsi <= 28:
+                    signals.append(MarketSignal("spy_rsi_oversold", "bullish", 0.78, 0.10,
+                        f"SPY RSI={rsi:.0f} — Deeply oversold, mean reversion opportunity", emoji="💚"))
+                    reasoning.append(f"  ✅ SPY RSI={rsi:.0f} — Oversold (<30), high mean reversion probability")
+                elif rsi <= 40:
+                    reasoning.append(f"  ✅ SPY RSI={rsi:.0f} — Approaching oversold territory")
+                else:
+                    reasoning.append(f"  ✅ SPY RSI={rsi:.0f} — Healthy momentum range")
+
+                if pct_high <= -20:
+                    signals.append(MarketSignal("bear_market_confirmed", "bearish", 0.90, 0.12,
+                        f"SPY in bear market territory: {pct_high:.1f}% from 52W high", emoji="🔻"))
+                elif pct_high <= -10:
+                    signals.append(MarketSignal("correction_zone", "bearish", 0.65, 0.07,
+                        f"SPY correction: {pct_high:.1f}% from 52W high", emoji="📉"))
+                elif pct_high >= -2:
+                    signals.append(MarketSignal("new_highs_territory", "bullish", 0.72, 0.07,
+                        f"SPY near 52W high ({pct_high:.1f}%) — strong momentum", emoji="🏔️"))
+
+            if qqq and iwm:
+                qqq_chg = qqq.get('change_1d', 0)
+                iwm_chg = iwm.get('change_1d', 0)
+                qqq_rsi = qqq.get('rsi', 50)
+                iwm_rsi = iwm.get('rsi', 50)
+                reasoning.append(f"  QQQ (Nasdaq-100): {qqq_chg:+.2f}% | RSI={qqq_rsi:.0f}")
+                reasoning.append(f"  IWM (Russell 2000): {iwm_chg:+.2f}% | RSI={iwm_rsi:.0f}")
+                if iwm_chg > qqq_chg + 0.8:
+                    signals.append(MarketSignal("small_cap_leadership", "bullish", 0.68, 0.07,
+                        f"Small caps (IWM {iwm_chg:+.1f}%) > Nasdaq (QQQ {qqq_chg:+.1f}%) — broad risk-on rally", emoji="🏃"))
+                    reasoning.append("  ✅ Small-cap leadership confirms broad risk appetite (not just mega-cap driven)")
+                elif qqq_chg > iwm_chg + 1.5:
+                    reasoning.append("  ⚠️ Narrow rally: Mega-cap tech leading, small caps lagging — watch for breadth divergence")
+
+            if tnx:
+                tnx_price = tnx.get('price', 0)
+                tnx_chg = tnx.get('change_1d', 0)
+                tnx_rsi = tnx.get('rsi', 50)
+                reasoning.append(f"  10Y Treasury Yield: {tnx_price:.2f}% ({tnx_chg:+.3f}% today | RSI={tnx_rsi:.0f})")
+                if tnx_chg > 0.04:
+                    signals.append(MarketSignal("yields_rising", "bearish", 0.58, 0.06,
+                        f"10Y yield rising to {tnx_price:.2f}% — higher cost of capital pressures growth valuations", emoji="📈💰"))
+                    reasoning.append(f"  ⚠️ Rising yields ({tnx_price:.2f}%) = pressure on growth/tech multiples & REIT sector")
+                elif tnx_chg < -0.04:
+                    signals.append(MarketSignal("yields_falling", "bullish", 0.55, 0.05,
+                        f"10Y yield falling to {tnx_price:.2f}% — rate relief for equities & growth stocks", emoji="📉💰"))
+                    reasoning.append(f"  ✅ Falling yields ({tnx_price:.2f}%) = positive for growth/tech multiples & dividend stocks")
+                if tnx_price > 5.0:
+                    reasoning.append(f"  🔴 Yield at {tnx_price:.2f}% — historically high level competes with equity risk premium")
+                elif tnx_price < 3.5:
+                    reasoning.append(f"  🟢 Yield at {tnx_price:.2f}% — supportive for equity valuations (TINA regime)")
+
+            # Score adjustment based on technical regime
+            spy_above_200 = spy and spy.get('ma200') and spy.get('price', 0) > spy.get('ma200', 0)
+            spy_rsi_val = spy.get('rsi', 50) if spy else 50
+            if spy_above_200 and spy_rsi_val < 70:
+                score = min(95, score * 1.05)  # Bull regime bonus
+            elif not spy_above_200:
+                score = max(5, score * 0.90)  # Bear regime penalty
 
         return score, signals, reasoning, sp500_change
 

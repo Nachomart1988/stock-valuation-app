@@ -118,12 +118,12 @@ export default function PricingPage() {
               key={plan.name}
               className={`relative bg-gray-900/80 backdrop-blur rounded-3xl p-5 sm:p-8 border-2 transition-all hover:scale-[1.02] ${
                 plan.popular
-                  ? 'border-purple-500 shadow-2xl shadow-purple-500/20 md:scale-105'
+                  ? 'border-emerald-500 shadow-2xl shadow-emerald-500/20 md:scale-105'
                   : 'border-gray-800 hover:border-gray-700'
               }`}
             >
               {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-cyan-600 text-white text-xs font-bold px-6 py-2 rounded-full shadow-lg">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-emerald-600 to-emerald-600 text-white text-xs font-bold px-6 py-2 rounded-full shadow-lg">
                   MÁS POPULAR
                 </div>
               )}
@@ -166,7 +166,7 @@ export default function PricingPage() {
                 href={plan.ctaLink}
                 className={`block w-full py-4 rounded-2xl font-bold text-lg text-center transition-all ${
                   plan.popular
-                    ? 'bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white shadow-lg shadow-purple-500/25'
+                    ? 'bg-gradient-to-r from-emerald-600 to-emerald-600 hover:from-emerald-500 hover:to-emerald-500 text-white shadow-lg shadow-emerald-500/25'
                     : plan.price === 0
                     ? 'bg-gray-800 hover:bg-gray-700 text-white'
                     : 'bg-white hover:bg-gray-100 text-black'
@@ -190,7 +190,7 @@ export default function PricingPage() {
                   <tr className="border-b border-gray-800">
                     <th className="text-left p-4 text-gray-400 font-semibold">Feature</th>
                     <th className="p-4 text-center text-gray-400 font-semibold">Free</th>
-                    <th className="p-4 text-center text-purple-400 font-semibold bg-purple-500/10">Pro</th>
+                    <th className="p-4 text-center text-emerald-400 font-semibold bg-emerald-500/10">Pro</th>
                     <th className="p-4 text-center text-gray-400 font-semibold">Elite</th>
                   </tr>
                 </thead>
@@ -219,7 +219,7 @@ export default function PricingPage() {
                           <span className="text-gray-400">{row.free}</span>
                         )}
                       </td>
-                      <td className="p-4 text-center bg-purple-500/5">
+                      <td className="p-4 text-center bg-emerald-500/5">
                         {row.pro === "No" ? (
                           <span className="text-gray-600">—</span>
                         ) : row.pro === "Sí" ? (
@@ -227,7 +227,7 @@ export default function PricingPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         ) : (
-                          <span className="text-purple-400 font-semibold">{row.pro}</span>
+                          <span className="text-emerald-400 font-semibold">{row.pro}</span>
                         )}
                       </td>
                       <td className="p-4 text-center">
@@ -285,7 +285,7 @@ export default function PricingPage() {
         </div>
 
         {/* CTA */}
-        <div className="text-center bg-gradient-to-r from-purple-900/30 to-cyan-900/30 rounded-3xl p-6 sm:p-12 border border-purple-500/30">
+        <div className="text-center bg-gradient-to-r from-emerald-900/30 to-emerald-900/30 rounded-3xl p-6 sm:p-12 border border-emerald-500/30">
           <h2 className="text-xl sm:text-3xl font-bold mb-4">
             ¿Listo para empezar?
           </h2>
@@ -301,7 +301,7 @@ export default function PricingPage() {
             </Link>
             <Link
               href="/auth/sign-up?plan=pro"
-              className="px-8 py-4 bg-gradient-to-r from-purple-600 to-cyan-600 text-white font-bold rounded-xl hover:from-purple-500 hover:to-cyan-500 transition"
+              className="px-8 py-4 bg-gradient-to-r from-emerald-600 to-emerald-600 text-white font-bold rounded-xl hover:from-emerald-500 hover:to-emerald-500 transition"
             >
               Empezar con Pro
             </Link>

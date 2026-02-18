@@ -157,13 +157,13 @@ export default function ResumenTab({
       <div className="min-h-[600px] flex flex-col items-center justify-center">
         <div className="relative w-24 h-24">
           {/* Multi-layer animation */}
-          <div className="absolute inset-0 border-4 border-purple-500/20 rounded-full animate-ping"></div>
-          <div className="absolute inset-2 border-4 border-cyan-500/30 rounded-full animate-ping" style={{ animationDelay: '0.2s' }}></div>
+          <div className="absolute inset-0 border-4 border-emerald-500/20 rounded-full animate-ping"></div>
+          <div className="absolute inset-2 border-4 border-emerald-500/30 rounded-full animate-ping" style={{ animationDelay: '0.2s' }}></div>
           <div className="absolute inset-4 border-4 border-emerald-500/40 rounded-full animate-ping" style={{ animationDelay: '0.4s' }}></div>
-          <div className="absolute inset-0 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-          <div className="absolute inset-4 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }}></div>
+          <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <div className="absolute inset-4 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }}></div>
         </div>
-        <p className="mt-8 text-2xl font-light text-purple-400">Ejecutando Motor de Razonamiento...</p>
+        <p className="mt-8 text-2xl font-light text-emerald-400">Ejecutando Motor de Razonamiento...</p>
         <div className="flex flex-col items-center gap-2 mt-4 text-gray-500 text-sm">
           <p className="animate-pulse">Layer 1: Ingesta de Datos</p>
           <p className="animate-pulse" style={{ animationDelay: '0.3s' }}>Layer 2: Análisis Sentimiento (NLP)</p>
@@ -198,7 +198,7 @@ export default function ResumenTab({
                 setLoading(false);
               }, 100);
             }}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-500 transition"
+            className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-500 transition"
           >
             Reintentar
           </button>
@@ -257,7 +257,7 @@ export default function ResumenTab({
   // Determine colors based on recommendation
   const getRecommendationStyle = () => {
     if (finalRecommendation.includes('Strong Buy')) {
-      return 'border-emerald-400 bg-gradient-to-br from-emerald-950/80 via-cyan-950/60 to-teal-950/40';
+      return 'border-emerald-400 bg-gradient-to-br from-emerald-950/80 via-emerald-950/60 to-teal-950/40';
     }
     if (finalRecommendation.includes('Buy')) {
       return 'border-green-400 bg-gradient-to-br from-green-950/70 to-emerald-950/40';
@@ -288,7 +288,7 @@ export default function ResumenTab({
   };
 
   const getBarColor = (score: number) => {
-    if (score >= 75) return 'from-emerald-500 to-cyan-400';
+    if (score >= 75) return 'from-emerald-500 to-emerald-400';
     if (score >= 60) return 'from-green-500 to-emerald-400';
     if (score >= 45) return 'from-yellow-500 to-amber-400';
     if (score >= 30) return 'from-orange-500 to-amber-400';
@@ -305,7 +305,7 @@ export default function ResumenTab({
             <div className="flex items-center gap-2">
               <div className="w-32 h-2 bg-gray-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-purple-500 to-cyan-400 rounded-full transition-all"
+                  className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all"
                   style={{ width: `${dataQuality.completeness}%` }}
                 />
               </div>
@@ -334,7 +334,7 @@ export default function ResumenTab({
             <div className="w-px h-12 bg-gray-600"></div>
             <div className="text-center">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Confianza Motor</p>
-              <p className="text-3xl font-bold text-purple-400">{synthesisDetails?.confidence?.toFixed(0) || '--'}%</p>
+              <p className="text-3xl font-bold text-emerald-400">{synthesisDetails?.confidence?.toFixed(0) || '--'}%</p>
             </div>
           </div>
         </div>
@@ -371,12 +371,12 @@ export default function ResumenTab({
         <div className="bg-gray-900/80 rounded-3xl border border-gray-700/50 overflow-hidden">
           <button
             onClick={() => setShowSynthesis(!showSynthesis)}
-            className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r from-cyan-900/30 to-emerald-900/30 hover:from-cyan-900/50 hover:to-emerald-900/50 transition-all"
+            className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r from-emerald-900/30 to-emerald-900/30 hover:from-emerald-900/50 hover:to-emerald-900/50 transition-all"
           >
             <div className="flex items-center gap-3">
               <span className="text-2xl">⚡</span>
               <span className="text-lg font-semibold text-gray-100">Síntesis de Componentes</span>
-              <span className="px-2 py-1 rounded-full bg-cyan-500/20 text-cyan-400 text-xs">
+              <span className="px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
                 Score Final: {synthesisDetails.finalScore}
               </span>
             </div>
@@ -452,7 +452,7 @@ export default function ResumenTab({
                 <span className="text-gray-600">→</span>
                 <div className="text-center">
                   <p className="text-xs text-gray-500">Confianza</p>
-                  <p className="text-2xl font-bold text-purple-400">{synthesisDetails.confidence}%</p>
+                  <p className="text-2xl font-bold text-emerald-400">{synthesisDetails.confidence}%</p>
                 </div>
               </div>
             </div>
@@ -464,7 +464,7 @@ export default function ResumenTab({
       {dimensionScores && Object.keys(dimensionScores).length > 0 && (
         <div>
           <h4 className="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
-            <span className="text-purple-400">📊</span> Puntuación por Dimensión
+            <span className="text-emerald-400">📊</span> Puntuación por Dimensión
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
             {Object.entries(dimensionScores).map(([dim, score]) => {
@@ -472,7 +472,7 @@ export default function ResumenTab({
               return (
                 <div
                   key={dim}
-                  className="bg-gray-900/80 p-4 rounded-2xl border border-gray-700/50 hover:border-purple-500/50 transition-all group"
+                  className="bg-gray-900/80 p-4 rounded-2xl border border-gray-700/50 hover:border-emerald-500/50 transition-all group"
                 >
                   <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 truncate">
                     {dim.replace(/([A-Z])/g, ' $1').trim()}
@@ -496,12 +496,12 @@ export default function ResumenTab({
       {/* Summary Narrative */}
       <div className="bg-gray-900/80 p-8 rounded-3xl border border-gray-700/50">
         <h4 className="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
-          <span className="text-purple-400">📝</span> Análisis Narrativo
+          <span className="text-emerald-400">📝</span> Análisis Narrativo
         </h4>
         <p className="text-lg leading-relaxed text-gray-200">{summaryText}</p>
 
         {actionableAdvice && (
-          <div className="mt-8 bg-gradient-to-r from-emerald-900/40 via-cyan-900/40 to-emerald-900/40 p-6 rounded-2xl border border-emerald-500/30">
+          <div className="mt-8 bg-gradient-to-r from-emerald-900/40 via-emerald-900/40 to-emerald-900/40 p-6 rounded-2xl border border-emerald-500/30">
             <p className="uppercase text-emerald-400 text-xs tracking-[3px] mb-2 flex items-center gap-2">
               <span>🎯</span> PLAN DE ACCIÓN
             </p>
@@ -529,7 +529,7 @@ export default function ResumenTab({
         )}
 
         {catalysts && catalysts.length > 0 && (
-          <div className="bg-gradient-to-br from-emerald-950/30 to-cyan-950/20 border border-emerald-900/40 p-6 rounded-2xl">
+          <div className="bg-gradient-to-br from-emerald-950/30 to-emerald-950/20 border border-emerald-900/40 p-6 rounded-2xl">
             <h5 className="text-emerald-400 font-semibold mb-4 flex items-center gap-2">
               <span>🚀</span> Catalizadores
             </h5>

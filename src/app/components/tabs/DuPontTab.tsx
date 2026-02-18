@@ -100,16 +100,16 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
-          <h3 className="text-3xl font-bold bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
             {t('dupontTab.title')}
           </h3>
           <p className="text-sm text-gray-400 mt-1">{t('dupontTab.subtitle')} {ticker}</p>
         </div>
         {rows.length > 0 && (
           <div className="flex items-center gap-4">
-            <div className="text-right bg-gradient-to-r from-violet-900/40 to-purple-900/40 px-4 py-2 rounded-xl border border-violet-600">
-              <p className="text-xs text-violet-400">{t('dupontTab.currentRoe')}</p>
-              <p className="text-xl font-bold text-violet-400">{rows[0]?.roe || '—'}</p>
+            <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
+              <p className="text-xs text-green-400">{t('dupontTab.currentRoe')}</p>
+              <p className="text-xl font-bold text-green-400">{rows[0]?.roe || '—'}</p>
             </div>
           </div>
         )}
@@ -158,7 +158,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
 
         {notesLoading ? (
           <div className="flex items-center justify-center py-10">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-400"></div>
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-400"></div>
             <span className="ml-4 text-gray-400 text-lg">{t('dupontTab.loadingNotes')}</span>
           </div>
         ) : notesError ? (

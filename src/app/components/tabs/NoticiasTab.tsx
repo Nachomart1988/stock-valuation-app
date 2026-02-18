@@ -168,15 +168,15 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
-          <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
             {t('noticiasTab.title')}
           </h3>
           <p className="text-sm text-gray-400 mt-1">{t('noticiasTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-blue-900/40 to-purple-900/40 px-4 py-2 rounded-xl border border-blue-600">
-            <p className="text-xs text-blue-400">{t('noticiasTab.total')}</p>
-            <p className="text-xl font-bold text-blue-400">{companyNews.length + pressReleases.length}</p>
+          <div className="text-right bg-gradient-to-r from-green-900/40 to-emerald-900/40 px-4 py-2 rounded-xl border border-green-600">
+            <p className="text-xs text-green-400">{t('noticiasTab.total')}</p>
+            <p className="text-xl font-bold text-green-400">{companyNews.length + pressReleases.length}</p>
           </div>
         </div>
       </div>
@@ -187,7 +187,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
           onClick={() => setActiveTab('news')}
           className={`px-6 py-3 rounded-t-xl font-semibold text-lg transition-all ${
             activeTab === 'news'
-              ? 'bg-blue-600 text-white'
+              ? 'bg-green-600 text-white'
               : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
           }`}
         >
@@ -197,7 +197,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
           onClick={() => setActiveTab('prs')}
           className={`px-6 py-3 rounded-t-xl font-semibold text-lg transition-all ${
             activeTab === 'prs'
-              ? 'bg-purple-600 text-white'
+              ? 'bg-emerald-600 text-white'
               : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
           }`}
         >
@@ -210,7 +210,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
         <div className="space-y-6">
           {loadingNews ? (
             <div className="text-center py-16">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
               <p className="mt-4 text-gray-400 text-lg">{t('noticiasTab.loading')}</p>
             </div>
           ) : companyNews.length === 0 ? (
@@ -225,7 +225,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
                   href={news.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block bg-gray-700 rounded-xl border border-gray-600 hover:border-blue-500 transition-all hover:shadow-lg hover:shadow-blue-500/10 overflow-hidden group"
+                  className="block bg-gray-700 rounded-xl border border-gray-600 hover:border-green-500 transition-all hover:shadow-lg hover:shadow-green-500/10 overflow-hidden group"
                 >
                   <div className="flex">
                     {news.image && (
@@ -242,14 +242,14 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
                     )}
                     <div className="p-4 flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="px-2 py-0.5 bg-blue-600/30 text-blue-400 text-xs rounded-full font-medium">
+                        <span className="px-2 py-0.5 bg-green-600/30 text-green-400 text-xs rounded-full font-medium">
                           {news.symbol || ticker}
                         </span>
                         {news.site && (
                           <span className="text-xs text-gray-500">{news.site}</span>
                         )}
                       </div>
-                      <h4 className="text-lg font-semibold text-gray-100 group-hover:text-blue-400 transition-colors line-clamp-2 mb-2">
+                      <h4 className="text-lg font-semibold text-gray-100 group-hover:text-green-400 transition-colors line-clamp-2 mb-2">
                         {news.title}
                       </h4>
                       {news.text && (
@@ -274,7 +274,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
         <div className="space-y-6">
           {loadingPRs ? (
             <div className="text-center py-16">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent"></div>
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-emerald-500 border-t-transparent"></div>
               <p className="mt-4 text-gray-400 text-lg">{t('noticiasTab.loadingPressReleases')}</p>
             </div>
           ) : pressReleases.length === 0 ? (
@@ -286,10 +286,10 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
               {pressReleases.map((pr, idx) => (
                 <div
                   key={idx}
-                  className="bg-gray-700 rounded-xl border border-gray-600 p-6 hover:border-purple-500 transition-all"
+                  className="bg-gray-700 rounded-xl border border-gray-600 p-6 hover:border-emerald-500 transition-all"
                 >
                   <div className="flex items-center gap-3 mb-3">
-                    <span className="px-3 py-1 bg-purple-600/30 text-purple-400 text-sm rounded-full font-medium">
+                    <span className="px-3 py-1 bg-emerald-600/30 text-emerald-400 text-sm rounded-full font-medium">
                       {pr.symbol}
                     </span>
                     <span className="text-sm text-gray-500">
@@ -314,11 +314,11 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
         <h4 className="text-lg font-semibold text-gray-200 mb-4">{t('noticiasTab.coverageSummary')}</h4>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-700 rounded-lg p-4 text-center">
-            <p className="text-3xl font-bold text-blue-400">{companyNews.length}</p>
+            <p className="text-3xl font-bold text-green-400">{companyNews.length}</p>
             <p className="text-sm text-gray-400">{t('noticiasTab.recentNews')}</p>
           </div>
           <div className="bg-gray-700 rounded-lg p-4 text-center">
-            <p className="text-3xl font-bold text-purple-400">{pressReleases.length}</p>
+            <p className="text-3xl font-bold text-emerald-400">{pressReleases.length}</p>
             <p className="text-sm text-gray-400">{t('noticiasTab.pressReleases')}</p>
           </div>
           <div className="bg-gray-700 rounded-lg p-4 text-center">

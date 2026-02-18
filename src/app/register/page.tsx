@@ -72,7 +72,7 @@ export default function RegisterPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   placeholder={t('auth.namePlaceholder')}
                 />
               </div>
@@ -87,7 +87,7 @@ export default function RegisterPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   placeholder={t('auth.emailPlaceholder')}
                 />
               </div>
@@ -103,7 +103,7 @@ export default function RegisterPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={8}
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   placeholder={t('auth.minChars')}
                 />
               </div>
@@ -118,7 +118,7 @@ export default function RegisterPage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   placeholder={t('auth.confirmPasswordPlaceholder')}
                 />
               </div>
@@ -128,20 +128,20 @@ export default function RegisterPage() {
                   type="checkbox"
                   id="terms"
                   required
-                  className="w-4 h-4 mt-1 rounded border-gray-600 bg-gray-800 text-purple-500 focus:ring-purple-500"
+                  className="w-4 h-4 mt-1 rounded border-gray-600 bg-gray-800 text-emerald-500 focus:ring-emerald-500"
                 />
                 <label htmlFor="terms" className="text-sm text-gray-400">
                   {t('auth.acceptTerms')}{' '}
-                  <Link href="/terms" className="text-purple-400 hover:text-purple-300">{t('auth.termsOfService')}</Link>{' '}
+                  <Link href="/terms" className="text-emerald-400 hover:text-emerald-300">{t('auth.termsOfService')}</Link>{' '}
                   {t('auth.andThe')}{' '}
-                  <Link href="/privacy" className="text-purple-400 hover:text-purple-300">{t('auth.privacyPolicy')}</Link>
+                  <Link href="/privacy" className="text-emerald-400 hover:text-emerald-300">{t('auth.privacyPolicy')}</Link>
                 </label>
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 hover:from-cyan-400 hover:via-purple-400 hover:to-pink-400 text-white font-bold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 via-emerald-500 to-pink-500 hover:from-emerald-400 hover:via-emerald-400 hover:to-pink-400 text-white font-bold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? t('auth.creatingAccount') : t('auth.createAccountFree')}
               </button>
@@ -179,7 +179,7 @@ export default function RegisterPage() {
             {/* Login Link */}
             <p className="text-center mt-8 text-gray-400">
               {t('auth.alreadyHaveAccount')}{' '}
-              <Link href="/login" className="text-purple-400 hover:text-purple-300 font-medium">
+              <Link href="/login" className="text-emerald-400 hover:text-emerald-300 font-medium">
                 {t('auth.signInLink')}
               </Link>
             </p>

@@ -64,7 +64,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   placeholder={t('auth.emailPlaceholder')}
                 />
               </div>
@@ -79,17 +79,17 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   placeholder={t('auth.passwordPlaceholder')}
                 />
               </div>
 
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-purple-500 focus:ring-purple-500" />
+                  <input type="checkbox" className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-emerald-500 focus:ring-emerald-500" />
                   <span className="text-sm text-gray-400">{t('auth.rememberMe')}</span>
                 </label>
-                <Link href="/forgot-password" className="text-sm text-purple-400 hover:text-purple-300">
+                <Link href="/forgot-password" className="text-sm text-emerald-400 hover:text-emerald-300">
                   {t('auth.forgotPassword')}
                 </Link>
               </div>
@@ -97,7 +97,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 hover:from-cyan-400 hover:via-purple-400 hover:to-pink-400 text-white font-bold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 via-emerald-500 to-pink-500 hover:from-emerald-400 hover:via-emerald-400 hover:to-pink-400 text-white font-bold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? t('auth.signingIn') : t('auth.signIn')}
               </button>
@@ -135,7 +135,7 @@ export default function LoginPage() {
             {/* Register Link */}
             <p className="text-center mt-8 text-gray-400">
               {t('auth.noAccount')}{' '}
-              <Link href="/register" className="text-purple-400 hover:text-purple-300 font-medium">
+              <Link href="/register" className="text-emerald-400 hover:text-emerald-300 font-medium">
                 {t('auth.registerFree')}
               </Link>
             </p>

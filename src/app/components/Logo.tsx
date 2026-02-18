@@ -40,12 +40,12 @@ export default function Logo({
           className={`${icon} rounded-xl`}
         />
       ) : (
-        <div className={`${icon} rounded-xl bg-gradient-to-br from-cyan-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30`}>
+        <div className={`${icon} rounded-xl bg-gradient-to-br from-emerald-500 via-emerald-500 to-pink-500 flex items-center justify-center shadow-lg shadow-emerald-500/30`}>
           <span className={`${iconInner} font-black text-white tracking-tighter`}>P</span>
         </div>
       )}
       {showText && (
-        <span className={`${text} font-black bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent tracking-tight`}>
+        <span className={`${text} font-black bg-gradient-to-r from-emerald-400 via-emerald-400 to-pink-400 bg-clip-text text-transparent tracking-tight`}>
           Prismo
         </span>
       )}
@@ -66,7 +66,7 @@ export default function Logo({
 // Compact version for tight spaces
 export function LogoCompact({ className = '' }: { className?: string }) {
   return (
-    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 via-purple-500 to-pink-500 flex items-center justify-center ${className}`}>
+    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 via-emerald-500 to-pink-500 flex items-center justify-center ${className}`}>
       <span className="text-xs font-black text-white">P</span>
     </div>
   );

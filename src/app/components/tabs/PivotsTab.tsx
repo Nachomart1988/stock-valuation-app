@@ -583,7 +583,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-gray-700">
         <div>
-          <h3 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+          <h3 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-pink-400 bg-clip-text text-transparent">
             {t('pivotsTab.title')}
           </h3>
           <p className="text-sm text-gray-400 mt-1">{t('pivotsTab.subtitle')} {ticker}</p>
@@ -594,9 +594,9 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
             <p className="text-xl font-bold text-yellow-400">${currentPrice.toFixed(2)}</p>
           </div>
           {standardPivots && standardPivots.length > 0 && (
-            <div className="text-right bg-gradient-to-r from-purple-900/40 to-pink-900/40 px-4 py-2 rounded-xl border border-purple-600">
-              <p className="text-xs text-purple-400">{t('pivotsTab.pivotPoint')}</p>
-              <p className="text-xl font-bold text-purple-400">
+            <div className="text-right bg-gradient-to-r from-emerald-900/40 to-pink-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+              <p className="text-xs text-emerald-400">{t('pivotsTab.pivotPoint')}</p>
+              <p className="text-xl font-bold text-emerald-400">
                 ${standardPivots.find(p => p.name === 'PP')?.value.toFixed(2) || '—'}
               </p>
             </div>
@@ -605,15 +605,15 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       </div>
 
       {/* Configuration Panel */}
-      <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 p-6 rounded-2xl border border-purple-600">
-        <h4 className="text-xl font-bold text-purple-300 mb-4">{t('pivotsTab.configuration')}</h4>
+      <div className="bg-gradient-to-r from-emerald-900/30 to-green-900/30 p-6 rounded-2xl border border-emerald-600">
+        <h4 className="text-xl font-bold text-emerald-300 mb-4">{t('pivotsTab.configuration')}</h4>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm text-gray-300 mb-2">{t('pivotsTab.pivotMethod')}</label>
             <select
               value={pivotMethod}
               onChange={(e) => setPivotMethod(e.target.value as any)}
-              className="w-full px-3 py-2 bg-gray-800 border border-purple-500/50 rounded-lg text-gray-100 focus:border-purple-400"
+              className="w-full px-3 py-2 bg-gray-800 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
             >
               <option value="standard">{t('pivotsTab.standard')}</option>
               <option value="fibonacci">{t('pivotsTab.fibonacci')}</option>
@@ -627,7 +627,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
             <select
               value={timeframe}
               onChange={(e) => setTimeframe(e.target.value as any)}
-              className="w-full px-3 py-2 bg-gray-800 border border-purple-500/50 rounded-lg text-gray-100 focus:border-purple-400"
+              className="w-full px-3 py-2 bg-gray-800 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
             >
               <option value="daily">{t('pivotsTab.daily')}</option>
               <option value="weekly">{t('pivotsTab.weekly')}</option>
@@ -660,7 +660,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                   (e.target as HTMLInputElement).blur();
                 }
               }}
-              className="w-full px-3 py-2 bg-gray-800 border border-purple-500/50 rounded-lg text-gray-100 focus:border-purple-400"
+              className="w-full px-3 py-2 bg-gray-800 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
             />
           </div>
           <div>
@@ -690,7 +690,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                   (e.target as HTMLInputElement).blur();
                 }
               }}
-              className="w-full px-3 py-2 bg-gray-800 border border-purple-500/50 rounded-lg text-gray-100 focus:border-purple-400"
+              className="w-full px-3 py-2 bg-gray-800 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
             />
           </div>
           <div className="flex items-end gap-4">
@@ -699,7 +699,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                 type="checkbox"
                 checked={volumeWeighted}
                 onChange={(e) => setVolumeWeighted(e.target.checked)}
-                className="w-4 h-4 accent-purple-500"
+                className="w-4 h-4 accent-emerald-500"
               />
               {t('pivotsTab.volumeWeighted')}
             </label>
@@ -723,18 +723,18 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                   className={`p-4 rounded-xl border text-center ${
                     pivot.type === 'support' ? 'bg-green-900/30 border-green-700' :
                     pivot.type === 'resistance' ? 'bg-red-900/30 border-red-700' :
-                    'bg-blue-900/40 border-blue-500'
+                    'bg-green-900/40 border-green-500'
                   }`}
                 >
                   <p className={`text-sm mb-1 ${
                     pivot.type === 'support' ? 'text-green-300' :
                     pivot.type === 'resistance' ? 'text-red-300' :
-                    'text-blue-300'
+                    'text-green-300'
                   }`}>{pivot.name}</p>
                   <p className={`text-xl font-bold ${
                     pivot.type === 'support' ? 'text-green-400' :
                     pivot.type === 'resistance' ? 'text-red-400' :
-                    'text-blue-400'
+                    'text-green-400'
                   }`}>${pivot.value.toFixed(2)}</p>
                   <p className={`text-xs mt-1 ${isAbove ? 'text-green-400' : 'text-red-400'}`}>
                     {isAbove ? '+' : ''}{distance.toFixed(2)}%
@@ -876,14 +876,14 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Volume Profile & POC */}
       {volumeProfile && pocLevel && (
-        <div className="bg-gradient-to-r from-violet-900/30 to-purple-900/30 p-6 rounded-2xl border border-violet-600">
-          <h4 className="text-xl font-bold text-violet-400 mb-4">{t('pivotsTab.volumeProfile')}</h4>
+        <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 p-6 rounded-2xl border border-green-600">
+          <h4 className="text-xl font-bold text-green-400 mb-4">{t('pivotsTab.volumeProfile')}</h4>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* POC Card */}
-            <div className="bg-violet-900/40 p-6 rounded-xl border-2 border-violet-500 text-center">
-              <p className="text-sm text-violet-300 mb-2">{t('pivotsTab.pocLabel')}</p>
-              <p className="text-4xl font-bold text-violet-400">${pocLevel.priceLevel.toFixed(2)}</p>
+            <div className="bg-green-900/40 p-6 rounded-xl border-2 border-green-500 text-center">
+              <p className="text-sm text-green-300 mb-2">{t('pivotsTab.pocLabel')}</p>
+              <p className="text-4xl font-bold text-green-400">${pocLevel.priceLevel.toFixed(2)}</p>
               <p className="text-sm text-gray-400 mt-2">
                 {t('pivotsTab.pocDescription')}
               </p>
@@ -960,8 +960,8 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
             </div>
 
             {/* Current Position */}
-            <div className="bg-blue-900/40 p-4 rounded-xl border-2 border-blue-500">
-              <p className="text-sm text-blue-300 mb-2">{t('pivotsTab.currentPrice')}</p>
+            <div className="bg-green-900/40 p-4 rounded-xl border-2 border-green-500">
+              <p className="text-sm text-green-300 mb-2">{t('pivotsTab.currentPrice')}</p>
               <p className="text-3xl font-bold text-yellow-400">${currentPrice.toFixed(2)}</p>
               {(() => {
                 const pp = currentPivots.find(p => p.name === 'PP');

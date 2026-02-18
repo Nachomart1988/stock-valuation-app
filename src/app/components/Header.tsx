@@ -57,7 +57,7 @@ export default function Header() {
             ) : (
               <>
                 <Link href="/" className="text-gray-300 hover:text-white transition text-sm">{t('nav.home')}</Link>
-                <Link href="/analizar" className={`text-sm transition ${isAnalizar ? 'text-blue-400 font-semibold' : 'text-gray-300 hover:text-white'}`}>
+                <Link href="/analizar" className={`text-sm transition ${isAnalizar ? 'text-green-400 font-semibold' : 'text-gray-300 hover:text-white'}`}>
                   {t('common.analyze')}
                 </Link>
                 <Link href="/market-sentiment" className="text-gray-300 hover:text-white transition text-sm">{t('nav.market')}</Link>
@@ -80,7 +80,7 @@ export default function Header() {
                 </button>
               </SignInButton>
               <SignUpButton mode="modal">
-                <button className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition text-sm">
+                <button className="px-4 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition text-sm">
                   {t('nav.register')}
                 </button>
               </SignUpButton>
@@ -134,7 +134,7 @@ export default function Header() {
                   <button className="text-gray-300 hover:text-white transition text-left">{t('nav.login')}</button>
                 </SignInButton>
                 <SignUpButton mode="modal">
-                  <button className="w-full px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-center">
+                  <button className="w-full px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg font-semibold text-center">
                     {t('nav.register')}
                   </button>
                 </SignUpButton>

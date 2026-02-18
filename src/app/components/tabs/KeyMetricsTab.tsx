@@ -1524,7 +1524,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
         </div>
         <div className="flex items-center gap-4">
           {industry && (
-            <span className="px-4 py-2 bg-purple-600/30 text-purple-400 rounded-full text-sm border border-purple-500/50">
+            <span className="px-4 py-2 bg-emerald-600/30 text-emerald-400 rounded-full text-sm border border-emerald-500/50">
               {industry}
             </span>
           )}
@@ -1586,7 +1586,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
               </div>
             </div>
             <p className="text-gray-500 text-xs mt-3">
-              Comparing against: <span className="text-blue-400">{industry && INDUSTRY_BENCHMARKS[industry] ? industry : 'Default benchmarks'}</span>
+              Comparing against: <span className="text-green-400">{industry && INDUSTRY_BENCHMARKS[industry] ? industry : 'Default benchmarks'}</span>
             </p>
           </div>
         </div>
@@ -1596,11 +1596,11 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
           CompanyQuality Net - AI-Powered Quality Assessment
           ═══════════════════════════════════════════════════ */}
       {(keyMetrics || ratios) && (
-        <div className="bg-gradient-to-br from-indigo-950 via-purple-950 to-gray-900 p-8 rounded-3xl border-2 border-purple-500/50 shadow-2xl">
+        <div className="bg-gradient-to-br from-green-950 via-emerald-950 to-gray-900 p-8 rounded-3xl border-2 border-emerald-500/50 shadow-2xl">
           {qualityLoading && (
             <div className="flex items-center justify-center py-8 gap-3">
-              <div className="animate-spin rounded-full h-10 w-10 border-4 border-purple-500 border-t-transparent"></div>
-              <p className="text-purple-400 text-lg">Analizando calidad con IA...</p>
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-emerald-500 border-t-transparent"></div>
+              <p className="text-emerald-400 text-lg">Analizando calidad con IA...</p>
             </div>
           )}
           {qualityError && !qualityLoading && (
@@ -1618,10 +1618,10 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
             <>
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h4 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-3">
+                  <h4 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-green-400 bg-clip-text text-transparent flex items-center gap-3">
                     <span className="text-3xl">🧠</span> Company Score
                   </h4>
-                  <p className="text-purple-300 mt-1">Análisis neuronal de calidad empresarial</p>
+                  <p className="text-emerald-300 mt-1">Análisis neuronal de calidad empresarial</p>
                 </div>
                 <div className="text-right">
                   <div className={`text-7xl font-black ${
@@ -1630,7 +1630,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
                   }`}>
                     {companyQualityNet.overallScore.toFixed(0)}
                   </div>
-                  <div className="text-sm text-purple-400">/ 100 Quality Score</div>
+                  <div className="text-sm text-emerald-400">/ 100 Quality Score</div>
                 </div>
               </div>
 
@@ -1679,8 +1679,8 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
 
       {/* Financial Scores */}
       {scores && (
-        <div className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 p-6 rounded-xl border border-purple-600">
-          <h4 className="text-2xl font-bold text-purple-400 mb-6">Financial Health Scores</h4>
+        <div className="bg-gradient-to-r from-emerald-900/30 to-green-900/30 p-6 rounded-xl border border-emerald-600">
+          <h4 className="text-2xl font-bold text-emerald-400 mb-6">Financial Health Scores</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Altman Z-Score */}
             <div className="bg-gray-800/50 p-6 rounded-xl">
@@ -2012,10 +2012,10 @@ function MetricCard({
   const colorClasses = {
     gray: 'text-gray-100',
     green: 'text-green-400',
-    blue: 'text-blue-400',
+    blue: 'text-green-400',
     amber: 'text-amber-400',
-    cyan: 'text-cyan-400',
-    purple: 'text-purple-400',
+    cyan: 'text-emerald-400',
+    purple: 'text-emerald-400',
     teal: 'text-teal-400',
     emerald: 'text-emerald-400',
   };
@@ -2042,10 +2042,10 @@ function MetricCardWithBenchmark({
   const colorClasses = {
     gray: 'text-gray-100',
     green: 'text-green-400',
-    blue: 'text-blue-400',
+    blue: 'text-green-400',
     amber: 'text-amber-400',
-    cyan: 'text-cyan-400',
-    purple: 'text-purple-400',
+    cyan: 'text-emerald-400',
+    purple: 'text-emerald-400',
     teal: 'text-teal-400',
     emerald: 'text-emerald-400',
   };

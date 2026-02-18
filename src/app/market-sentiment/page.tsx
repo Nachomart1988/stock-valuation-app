@@ -209,7 +209,7 @@ export default function MarketSentimentPage() {
 
   const sentimentBg = (s: string) => {
     switch (s) {
-      case 'very_bullish': return 'from-emerald-950/90 to-cyan-950/70 border-emerald-500/60';
+      case 'very_bullish': return 'from-emerald-950/90 to-emerald-950/70 border-emerald-500/60';
       case 'bullish': return 'from-green-950/80 to-emerald-950/60 border-green-500/50';
       case 'neutral': return 'from-amber-950/70 to-yellow-950/50 border-amber-500/40';
       case 'bearish': return 'from-orange-950/70 to-red-950/50 border-orange-500/40';
@@ -229,8 +229,8 @@ export default function MarketSentimentPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-950 to-slate-950 flex items-center justify-center px-4">
         <div className="text-center">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-6 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xl sm:text-2xl font-light text-purple-400">{t('marketSentiment.analyzing')}</p>
+          <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-6 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xl sm:text-2xl font-light text-emerald-400">{t('marketSentiment.analyzing')}</p>
           <p className="text-gray-500 mt-2 text-sm">{t('marketSentiment.processingData')}</p>
         </div>
       </div>
@@ -244,7 +244,7 @@ export default function MarketSentimentPage() {
           <div className="text-5xl mb-4">⚠️</div>
           <h2 className="text-xl sm:text-2xl font-bold text-red-400 mb-4">{t('marketSentiment.error')}</h2>
           <p className="text-gray-400 mb-6 text-sm">{error}</p>
-          <button onClick={fetchMarketData} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold transition">
+          <button onClick={fetchMarketData} className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-semibold transition">
             {t('marketSentiment.retry')}
           </button>
         </div>
@@ -266,7 +266,7 @@ export default function MarketSentimentPage() {
               <Logo size="sm" />
               <div>
                 <div className="text-base sm:text-xl font-bold text-white">Market Pulse</div>
-                <div className="text-[9px] sm:text-[10px] text-purple-400 font-mono tracking-[2px] sm:tracking-[3px] uppercase">
+                <div className="text-[9px] sm:text-[10px] text-emerald-400 font-mono tracking-[2px] sm:tracking-[3px] uppercase">
                   NEURAL v{data.version}
                 </div>
               </div>
@@ -290,7 +290,7 @@ export default function MarketSentimentPage() {
               <button
                 onClick={fetchMarketData}
                 disabled={loading}
-                className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 disabled:opacity-50 px-3 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all active:scale-95"
+                className="bg-gradient-to-r from-emerald-600 to-emerald-600 hover:from-emerald-500 hover:to-emerald-500 disabled:opacity-50 px-3 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all active:scale-95"
               >
                 {loading ? '⏳' : `🔄 ${t('marketSentiment.update')}`}
               </button>
@@ -349,7 +349,7 @@ export default function MarketSentimentPage() {
 
         {/* ── BRIEFING ── */}
         <div className="bg-gray-900/70 border border-gray-700 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
-          <h3 className="text-base sm:text-lg font-bold text-purple-400 mb-3 sm:mb-4 flex items-center gap-2">
+          <h3 className="text-base sm:text-lg font-bold text-emerald-400 mb-3 sm:mb-4 flex items-center gap-2">
             🧠 {t('marketSentiment.neuralAnalysis')}
           </h3>
           <p className="text-sm sm:text-lg leading-relaxed text-gray-200">{data.briefing}</p>
@@ -357,8 +357,8 @@ export default function MarketSentimentPage() {
 
         {/* ── ACTIONABLE ADVICE ── */}
         {data.actionableAdvice && (
-          <div className="bg-gradient-to-br from-indigo-950/50 to-purple-950/30 border border-indigo-600/40 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
-            <h3 className="text-base sm:text-lg font-bold text-indigo-400 mb-3 sm:mb-4 flex items-center gap-2">
+          <div className="bg-gradient-to-br from-green-950/50 to-emerald-950/30 border border-green-600/40 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+            <h3 className="text-base sm:text-lg font-bold text-green-400 mb-3 sm:mb-4 flex items-center gap-2">
               🎯 {t('marketSentiment.actionableAdvice')}
             </h3>
             <p className="text-sm sm:text-lg leading-relaxed text-gray-100 font-medium">{data.actionableAdvice}</p>
@@ -452,7 +452,7 @@ export default function MarketSentimentPage() {
         {/* ── SIGNALS ── */}
         {data.signals.length > 0 && (
           <div className="bg-gray-900/60 border border-gray-700 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
-            <h3 className="text-base sm:text-lg font-bold text-cyan-400 mb-4 sm:mb-6 flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-bold text-emerald-400 mb-4 sm:mb-6 flex items-center gap-2">
               📡 {t('marketSentiment.signalsDetected')} ({data.signals.length})
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -632,7 +632,7 @@ export default function MarketSentimentPage() {
             <Link href="/" className="px-4 sm:px-6 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition text-xs sm:text-sm">
               ← {t('marketSentiment.backToHome')}
             </Link>
-            <Link href="/analizar" className="px-4 sm:px-6 py-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white rounded-lg transition text-xs sm:text-sm">
+            <Link href="/analizar" className="px-4 sm:px-6 py-2 bg-gradient-to-r from-emerald-600 to-emerald-600 hover:from-emerald-500 hover:to-emerald-500 text-white rounded-lg transition text-xs sm:text-sm">
               {t('marketSentiment.analyzeStock')} →
             </Link>
           </div>
