@@ -4,9 +4,9 @@
 # using Cox-Ross-Rubinstein binomial model with historical & implied volatility
 
 import numpy as np
+from scipy.special import gammaln
 from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass
-from math import comb, exp, sqrt, log
+from math import exp, sqrt, log
 from datetime import datetime, timedelta
 import traceback
 
@@ -34,6 +34,11 @@ class BinomialTreeEngine:
     - p = (exp((r - q) * ΔT) - d) / (u - d)  (risk-neutral up probability)
     - S(j) = S₀ * u^j * d^(N-j)  (terminal node price after j ups)
     - P(target) = Σ C(N,j) * p^j * (1-p)^(N-j) for all j where S(j) ≥ target
+
+    Probability calculation uses scipy.special.gammaln for log-factorial computation,
+    which is numerically stable for any number of steps. All terminal nodes are computed
+    simultaneously using numpy vectorized operations, and probabilities are normalized
+    to guarantee sum=1.0 before reporting.
     """
 
     def __init__(self):
@@ -99,7 +104,7 @@ class BinomialTreeEngine:
             print(f"[ProbabilityEngine] Volatility: hist={hist_vol}, implied={implied_vol}, "
                   f"using={vol_used} ({vol_source})")
 
-            # ── Build CRR Binomial Tree ──
+            # ── CRR Parameters ──
             T = days / 365.0  # Total time in years
             dt = T / steps    # Time per step
 
@@ -116,46 +121,62 @@ class BinomialTreeEngine:
                 p_up = max(0.01, min(0.99, p_up))
                 p_down = 1.0 - p_up
 
-            # ── Calculate Terminal Prices and Probability ──
-            probability = 0.0
-            price_distribution = []
-            expected_price = 0.0
+            # ── Vectorized Terminal Node Calculation ──
+            # j = number of up-moves at terminal level (0 ... steps)
+            j = np.arange(steps + 1, dtype=np.float64)
 
-            # Use log-space for large step counts to avoid overflow
-            log_p_up = log(p_up) if p_up > 0 else -100
-            log_p_down = log(p_down) if p_down > 0 else -100
+            # Terminal price for each node: S₀ · u^j · d^(N-j)
+            terminal_prices = current_price * (u ** j) * (d ** (steps - j))
 
-            for j in range(steps + 1):
-                # Terminal price after j ups and (steps-j) downs
-                terminal_price = current_price * (u ** j) * (d ** (steps - j))
+            # Log-binomial coefficient: log C(N, j) = logΓ(N+1) - logΓ(j+1) - logΓ(N-j+1)
+            # gammaln is numerically stable for all N and j
+            log_binom_coef = (
+                gammaln(steps + 1)
+                - gammaln(j + 1)
+                - gammaln(steps - j + 1)
+            )
 
-                # Binomial probability using log-space for numerical stability
-                log_prob = self._log_binom_prob(steps, j, log_p_up, log_p_down)
-                prob = exp(log_prob) if log_prob > -500 else 0.0
+            # Log-probability of each terminal node
+            log_p_up  = np.log(p_up)
+            log_p_down = np.log(p_down)
+            log_probs = log_binom_coef + j * log_p_up + (steps - j) * log_p_down
 
-                expected_price += terminal_price * prob
+            # Convert back to probability space
+            probs = np.exp(log_probs)
 
-                # Check if terminal price reaches target
-                if target_price >= current_price:
-                    # Bullish target: probability of going UP to target
-                    if terminal_price >= target_price:
-                        probability += prob
-                else:
-                    # Bearish target: probability of going DOWN to target
-                    if terminal_price <= target_price:
-                        probability += prob
+            # Normalize — guarantees Σ probs = 1.0 exactly (removes floating-point drift)
+            prob_sum_raw = float(probs.sum())
+            probs = probs / prob_sum_raw
 
-                price_distribution.append({
-                    "price": round(terminal_price, 2),
-                    "probability": round(prob * 100, 6),
-                    "ups": j,
-                    "downs": steps - j,
-                })
+            print(f"[ProbabilityEngine] Probability check: raw_sum={prob_sum_raw:.10f} → "
+                  f"normalized to 1.0 ({steps+1} terminal nodes)")
 
-            # ── Build Tree Preview (first 6 levels for visualization) ──
+            # ── Target Probability ──
+            if target_price >= current_price:
+                # Bullish: probability of price going UP to / above target
+                mask = terminal_prices >= target_price
+            else:
+                # Bearish: probability of price going DOWN to / below target
+                mask = terminal_prices <= target_price
+
+            probability    = float(np.sum(probs[mask]))
+            expected_price = float(np.dot(terminal_prices, probs))
+
+            # ── Price Distribution for Chart ──
+            price_distribution = [
+                {
+                    "price":       round(float(terminal_prices[jj]), 2),
+                    "probability": round(float(probs[jj]) * 100, 6),
+                    "ups":         int(jj),
+                    "downs":       int(steps - jj),
+                }
+                for jj in range(steps + 1)
+            ]
+
+            # ── Build Tree Preview (first 6 levels) with per-node probabilities ──
             preview_levels = min(6, steps)
             tree_preview = self._build_tree_preview(
-                current_price, u, d, preview_levels, target_price
+                current_price, u, d, p_up, p_down, preview_levels, target_price
             )
 
             # ── Aggregate price distribution for chart ──
@@ -164,29 +185,31 @@ class BinomialTreeEngine:
             )
 
             result = {
-                "probability": round(probability * 100, 2),
-                "upFactor": round(u, 6),
-                "downFactor": round(d, 6),
-                "upProbability": round(p_up * 100, 4),
-                "downProbability": round(p_down * 100, 4),
+                "probability":          round(probability * 100, 2),
+                "upFactor":             round(u, 6),
+                "downFactor":           round(d, 6),
+                "upProbability":        round(p_up * 100, 4),
+                "downProbability":      round(p_down * 100, 4),
                 "historicalVolatility": round(hist_vol * 100, 2) if hist_vol else None,
-                "impliedVolatility": round(implied_vol * 100, 2) if implied_vol else None,
-                "volatilityUsed": round(vol_used * 100, 2),
-                "volatilitySource": vol_source,
-                "expectedPrice": round(expected_price, 2),
-                "steps": steps,
-                "days": days,
-                "deltaT": round(T, 6),
-                "deltaTPerStep": round(dt, 6),
-                "priceDistribution": distribution_chart,
-                "treePreview": tree_preview,
-                "optionsChain": options_chain,
-                "currentPrice": current_price,
-                "targetPrice": target_price,
+                "impliedVolatility":    round(implied_vol * 100, 2) if implied_vol else None,
+                "volatilityUsed":       round(vol_used * 100, 2),
+                "volatilitySource":     vol_source,
+                "expectedPrice":        round(expected_price, 2),
+                "steps":                steps,
+                "days":                 days,
+                "deltaT":               round(T, 6),
+                "deltaTPerStep":        round(dt, 6),
+                "probSum":              round(float(np.sum(probs)) * 100, 4),  # sanity check (should be 100)
+                "priceDistribution":    distribution_chart,
+                "treePreview":          tree_preview,
+                "optionsChain":         options_chain,
+                "currentPrice":         current_price,
+                "targetPrice":          target_price,
             }
 
             print(f"[ProbabilityEngine] Result: probability={result['probability']}%, "
-                  f"expected={result['expectedPrice']}, u={result['upFactor']}, d={result['downFactor']}")
+                  f"expected={result['expectedPrice']}, u={result['upFactor']}, d={result['downFactor']}, "
+                  f"prob_sum={result['probSum']}%")
 
             return result
 
@@ -197,25 +220,6 @@ class BinomialTreeEngine:
                 "error": str(e),
                 "probability": None,
             }
-
-    def _log_binom_prob(self, n: int, k: int, log_p: float, log_q: float) -> float:
-        """Calculate log of binomial probability using Stirling's approximation for large n."""
-        if n <= 500:
-            # Direct calculation for moderate n
-            try:
-                log_comb = sum(log(n - i) - log(i + 1) for i in range(min(k, n - k)))
-            except ValueError:
-                return -1000
-            return log_comb + k * log_p + (n - k) * log_q
-        else:
-            # Stirling's for very large n
-            def log_fact(x):
-                if x <= 1:
-                    return 0
-                return x * log(x) - x + 0.5 * log(2 * 3.14159265 * x)
-
-            log_comb = log_fact(n) - log_fact(k) - log_fact(n - k)
-            return log_comb + k * log_p + (n - k) * log_q
 
     def _calculate_historical_volatility(
         self, ticker: str, fmp_api_key: Optional[str]
@@ -244,8 +248,8 @@ class BinomialTreeEngine:
             # Log returns
             log_returns = np.diff(np.log(closes))
 
-            # Annualized volatility
-            daily_vol = np.std(log_returns, ddof=1)
+            # Annualized volatility (ddof=1 for sample std dev)
+            daily_vol  = np.std(log_returns, ddof=1)
             annual_vol = daily_vol * sqrt(252)
 
             print(f"[ProbabilityEngine] Historical vol for {ticker}: "
@@ -317,14 +321,14 @@ class BinomialTreeEngine:
             options_summary = []
             for _, row in near_atm.iterrows():
                 options_summary.append({
-                    "strike": float(row['strike']),
-                    "lastPrice": float(row.get('lastPrice', 0)),
-                    "bid": float(row.get('bid', 0)),
-                    "ask": float(row.get('ask', 0)),
+                    "strike":           float(row['strike']),
+                    "lastPrice":        float(row.get('lastPrice', 0)),
+                    "bid":              float(row.get('bid', 0)),
+                    "ask":              float(row.get('ask', 0)),
                     "impliedVolatility": round(float(row.get('impliedVolatility', 0)) * 100, 2),
-                    "volume": int(row.get('volume', 0)) if not np.isnan(row.get('volume', 0)) else 0,
-                    "openInterest": int(row.get('openInterest', 0)) if not np.isnan(row.get('openInterest', 0)) else 0,
-                    "expiration": closest_exp,
+                    "volume":           int(row.get('volume', 0)) if not np.isnan(row.get('volume', 0)) else 0,
+                    "openInterest":     int(row.get('openInterest', 0)) if not np.isnan(row.get('openInterest', 0)) else 0,
+                    "expiration":       closest_exp,
                 })
 
             return iv if iv > 0 else None, options_summary if options_summary else None
@@ -335,21 +339,54 @@ class BinomialTreeEngine:
             return None, None
 
     def _build_tree_preview(
-        self, S: float, u: float, d: float, levels: int, target: float
+        self,
+        S: float,
+        u: float,
+        d: float,
+        p_up: float,
+        p_down: float,
+        levels: int,
+        target: float,
     ) -> List[List[Dict]]:
-        """Build first N levels of binomial tree for visualization."""
+        """
+        Build first N levels of binomial tree for visualization.
+
+        Each node includes:
+        - price: S₀ · u^j · d^(step-j)
+        - probability: C(step, j) · p_up^j · p_down^(step-j)  [% of paths at this step]
+        - reachesTarget: whether this node's price hits the target
+        """
         tree = []
+
         for step in range(levels + 1):
             level = []
+            j_arr = np.arange(step + 1, dtype=np.float64)
+
+            if step == 0:
+                node_probs = np.array([1.0])
+            else:
+                log_binom = (
+                    gammaln(step + 1)
+                    - gammaln(j_arr + 1)
+                    - gammaln(step - j_arr + 1)
+                )
+                log_probs = log_binom + j_arr * np.log(p_up) + (step - j_arr) * np.log(p_down)
+                node_probs = np.exp(log_probs)
+                node_probs = node_probs / node_probs.sum()  # normalize within step
+
             for j in range(step + 1):
                 price = S * (u ** j) * (d ** (step - j))
+                prob  = float(node_probs[j])
                 level.append({
-                    "price": round(price, 2),
+                    "price":        round(price, 2),
+                    "probability":  round(prob * 100, 4),  # % of paths at this step
                     "reachesTarget": price >= target if target >= S else price <= target,
-                    "step": step,
-                    "ups": j,
+                    "step":         step,
+                    "ups":          j,
                 })
+
             tree.append(level)
+
         return tree
 
     def _aggregate_distribution(
@@ -360,8 +397,8 @@ class BinomialTreeEngine:
         if not distribution:
             return []
 
-        prices = [d['price'] for d in distribution]
-        probs = [d['probability'] for d in distribution]
+        prices = [d['price']       for d in distribution]
+        probs  = [d['probability'] for d in distribution]  # already in %
 
         min_p = min(prices)
         max_p = max(prices)
@@ -369,27 +406,29 @@ class BinomialTreeEngine:
         if max_p <= min_p:
             return []
 
-        # Create buckets
         bucket_width = (max_p - min_p) / num_buckets
         buckets = []
 
         for i in range(num_buckets):
-            bucket_min = min_p + i * bucket_width
-            bucket_max = bucket_min + bucket_width
+            bucket_min    = min_p + i * bucket_width
+            bucket_max    = bucket_min + bucket_width
             bucket_center = (bucket_min + bucket_max) / 2
 
-            # Sum probabilities for prices in this bucket
             total_prob = sum(
                 p for price, p in zip(prices, probs)
                 if bucket_min <= price < bucket_max
             )
 
-            if total_prob > 0.001:  # Only include non-trivial buckets
+            if total_prob > 0.001:
                 buckets.append({
-                    "priceRange": f"${bucket_min:.0f}-${bucket_max:.0f}",
-                    "center": round(bucket_center, 2),
+                    "priceRange":  f"${bucket_min:.0f}-${bucket_max:.0f}",
+                    "center":      round(bucket_center, 2),
                     "probability": round(total_prob, 4),
-                    "aboveTarget": bucket_center >= target_price if target_price >= current_price else bucket_center <= target_price,
+                    "aboveTarget": (
+                        bucket_center >= target_price
+                        if target_price >= current_price
+                        else bucket_center <= target_price
+                    ),
                 })
 
         return buckets

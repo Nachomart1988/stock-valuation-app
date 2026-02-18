@@ -1190,6 +1190,7 @@ function AnalizarContent() {
       holdersData={sharedHoldersData}
       forecasts={sharedForecasts}
       news={sharedNews}
+      averageValuation={sharedAverageVal}
     />
   </Tab.Panel>
 </Tab.Panels>

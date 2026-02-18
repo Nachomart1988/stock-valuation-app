@@ -199,6 +199,7 @@ class ResumenRequest(BaseModel):
     forecasts: Optional[List[Dict[str, Any]]] = None  # List of analyst forecasts
     diarioStats: Optional[Dict[str, Any]] = None
     news: Optional[List[Dict[str, Any]]] = None  # News articles for sentiment analysis
+    averageValuation: Optional[float] = None  # Average of all frontend valuation methods
 
 
 @app.post("/resumen/predict")
@@ -243,6 +244,7 @@ async def resumen_predict(req: ResumenRequest):
             'forecasts': req.forecasts,
             'diarioStats': req.diarioStats,
             'news': req.news,
+            'averageValuation': req.averageValuation,
             'fmp_api_key': os.environ.get('FMP_API_KEY'),
         }
 

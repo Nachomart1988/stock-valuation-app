@@ -1400,8 +1400,10 @@ class NeuralResumenEngine:
             ticker, current_price, data.get('fmp_api_key')
         )
 
-        # Layer 5: Valuation
-        valuation_result = self._layer5_valuation(data.get('advanceValueNet'), current_price)
+        # Layer 5: Valuation (blends neural model with average of all frontend methods)
+        valuation_result = self._layer5_valuation(
+            data.get('advanceValueNet'), current_price, data.get('averageValuation')
+        )
 
         # Layer 6: Quality
         quality_result = self._layer6_quality(data.get('companyQualityNet'))
@@ -1857,6 +1859,11 @@ class NeuralResumenEngine:
             # Run spectral analysis
             analysis = self.spectral_analyzer.analyze(historical)
 
+            # Rolling-window FFT reconstruction (complex components + reconstructed curve)
+            rolling_data = self.spectral_analyzer.compute_rolling_reconstruction(
+                historical, window=256, num_freq=8, output_bars=60
+            )
+
             # Generate signals
             signals = []
 
@@ -1968,7 +1975,18 @@ class NeuralResumenEngine:
                 'bars_analyzed': analysis.bars_analyzed,
                 'dominant_periods': cycle_periods,
                 'dominant_powers': cycle_powers,
-                'trading_regime': analysis.trading_regime
+                'trading_regime': analysis.trading_regime,
+                # Rolling window FFT: complex components + reconstructed curve
+                'rolling_fft': rolling_data,
+                'dominant_cycles_detail': [
+                    {
+                        'period_days':      c.period_days,
+                        'amplitude':        round(c.amplitude, 4),
+                        'phase_degrees':    c.phase_degrees,
+                        'contribution_pct': c.contribution_pct,
+                    }
+                    for c in analysis.dominant_cycles
+                ],
             }
 
             result = LayerResult(
@@ -2002,23 +2020,71 @@ class NeuralResumenEngine:
             self.layer_results.append(result)
             return result
 
-    def _layer5_valuation(self, valuation_data: Dict, current_price: float) -> LayerResult:
-        """Layer 5: Valuation Ensemble"""
+    def _layer5_valuation(
+        self, valuation_data: Dict, current_price: float,
+        average_valuation: Optional[float] = None
+    ) -> LayerResult:
+        """Layer 5: Valuation Ensemble — blends AdvanceValueNet with avg of all methods."""
         analysis = self.valuation_analyzer.analyze(valuation_data, current_price)
+
+        neural_fair_value = analysis['ensemble_value']
+        has_avg = average_valuation and average_valuation > 0 and current_price > 0
+
+        if has_avg:
+            # Blend: 40% neural ensemble + 60% average of all frontend valuation methods
+            blended = 0.4 * neural_fair_value + 0.6 * average_valuation
+            upside_blended = (blended - current_price) / current_price
+            # Same scoring formula as ValuationAnalyzer: 50 + upside*100
+            score_blended = max(0, min(100, 50 + upside_blended * 100))
+            # Carry extra experts boost if applicable
+            if analysis.get('experts_used', 0) >= 5:
+                score_blended = min(100, score_blended + 5)
+
+            # Append a signal noting the blend
+            analysis['signals'].append(Signal(
+                source="Valuation",
+                signal_type=SignalType.NEUTRAL,
+                strength=0.6,
+                description=(
+                    f"Blended fair value: ${blended:.2f} "
+                    f"(neural ${neural_fair_value:.2f} + avg ${average_valuation:.2f})"
+                )
+            ))
+
+            fair_value_used  = blended
+            upside_used      = upside_blended * 100
+            score_used       = score_blended
+            confidence_used  = 0.90  # higher confidence with two independent sources
+            data_used_str    = (
+                f"Neural ensemble ({analysis.get('experts_used', 0)} models) "
+                f"+ {len([]) if not valuation_data else 'all'} frontend valuation avg"
+            )
+        else:
+            fair_value_used  = neural_fair_value
+            upside_used      = analysis['upside_pct']
+            score_used       = analysis['valuation_score']
+            confidence_used  = 0.85 if valuation_data else 0.0
+            data_used_str    = f"{analysis.get('experts_used', 0)} valuation models"
 
         result = LayerResult(
             layer_name="Valuation Ensemble",
             layer_number=5,
-            score=analysis['valuation_score'],
-            confidence=0.85 if valuation_data else 0.0,
+            score=score_used,
+            confidence=confidence_used,
             weight=0.20,
             signals=analysis['signals'],
             sub_scores={
-                'fair_value': analysis['ensemble_value'],
-                'upside_pct': analysis['upside_pct']
+                'fair_value':   fair_value_used,
+                'upside_pct':   upside_used,
+                'neural_value': neural_fair_value,
+                'avg_value':    average_valuation or neural_fair_value,
             },
-            reasoning=f"Fair value: ${analysis['ensemble_value']:.2f}. Upside: {analysis['upside_pct']:.1f}%. Agreement: {analysis['model_agreement']}",
-            data_used=[f"{analysis['experts_used']} valuation models"] if valuation_data else []
+            reasoning=(
+                f"Fair value: ${fair_value_used:.2f}. Upside: {upside_used:.1f}%. "
+                f"Agreement: {analysis['model_agreement']}. "
+                + (f"Blended with avg ${average_valuation:.2f}." if has_avg else "Neural only.")
+            ),
+            data_used=[data_used_str] if (valuation_data or has_avg) else []
         )
 
         self.layer_results.append(result)
@@ -2504,6 +2570,31 @@ class NeuralResumenEngine:
                 "Mejora operativa"
             ]
 
+        # Extract spectral cycle data for frontend display
+        spectral_layer = next(
+            (l for l in self.layer_results if 'Spectral' in l.layer_name), None
+        )
+        spectral_cycles_data = None
+        if spectral_layer and spectral_layer.sub_scores:
+            rolling_fft = spectral_layer.sub_scores.get('rolling_fft', {})
+            spectral_cycles_data = {
+                'phase':              next(
+                    (l.reasoning[:60] for l in self.layer_results if 'Spectral' in l.layer_name), ''
+                ),
+                'score':              spectral_layer.score,
+                'cycleStrength':      spectral_layer.sub_scores.get('cycle_strength'),
+                'phasePosition':      spectral_layer.sub_scores.get('phase_position'),
+                'atrPct':             spectral_layer.sub_scores.get('atr_pct'),
+                'rsi':                spectral_layer.sub_scores.get('rsi'),
+                'tradingRegime':      spectral_layer.sub_scores.get('trading_regime'),
+                'dominantCycles':     spectral_layer.sub_scores.get('dominant_cycles_detail', []),
+                'rollingCurve':       rolling_fft.get('rollingCurve', []),
+                'complexComponents':  rolling_fft.get('complexComponents', []),
+                'currentSignal':      rolling_fft.get('currentSignal', 'neutral'),
+                'windowSize':         rolling_fft.get('windowSize', 256),
+                'numFreqKept':        rolling_fft.get('numFreqKept', 8),
+            }
+
         return {
             "finalRecommendation": recommendation,
             "conviction": conviction,
@@ -2522,6 +2613,7 @@ class NeuralResumenEngine:
             "chainOfThought": chain_of_thought,
             "synthesisDetails": synthesis_details,
             "dataQuality": data_quality,
+            "spectralCycles": spectral_cycles_data,
             "signalSummary": {
                 "bullish": len(bullish_signals),
                 "bearish": len(bearish_signals),

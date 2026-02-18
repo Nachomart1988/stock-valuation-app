@@ -590,3 +590,152 @@ class SpectralCycleAnalyzer:
             signal_description=reason,
             trading_regime='unknown'
         )
+
+    # ───────────────────────────────────────────────────────────────────────
+    # ROLLING WINDOW FFT RECONSTRUCTION
+    # ───────────────────────────────────────────────────────────────────────
+
+    def compute_rolling_reconstruction(
+        self,
+        historical_data: List[Dict],
+        window: int = 256,
+        num_freq: int = 8,
+        output_bars: int = 60,
+    ) -> Dict[str, Any]:
+        """
+        Rolling-window FFT reconstruction.
+
+        For each bar t (t = window ... n), we:
+          1. Extract the preceding `window` bars: prices[t-window : t]
+          2. Detrend (linear) to isolate the cyclical component
+          3. Apply Hann window (reduces spectral leakage)
+          4. rfft → complex spectrum
+          5. Low-pass filter: keep DC + first `num_freq` frequency bins
+          6. irfft → reconstructed detrended signal (length=window)
+          7. Add back the linear trend for the last sample
+          8. reconstructed_t = recon[-1] + trend_at_last
+
+        The reconstructed curve is the "smooth FFT cycle envelope" for the price.
+
+        Returns:
+        - rollingCurve: [{date, price, reconstructed, aboveRecon}] last output_bars
+        - complexComponents: [{freq_index, period_days, magnitude, phase_rad,
+                               phase_deg, real, imag, contribution_pct}] for the
+                              most recent window's top num_freq frequencies
+        - currentSignal: 'bullish' | 'bearish' | 'neutral' based on last 5 bars
+        - windowSize, numFreqKept
+        """
+        try:
+            closes = np.array([float(h['close']) for h in historical_data], dtype=np.float64)
+            dates  = [h.get('date', '') for h in historical_data]
+            n = len(closes)
+
+            if n < window + 5:
+                return {'error': f'Need at least {window + 5} bars, got {n}'}
+
+            # ── Rolling reconstruction ──
+            # Only compute what we need: last output_bars + a small buffer
+            start_t = max(window, n - output_bars - 10)
+
+            reconstructed_values: List[Optional[float]] = []
+
+            for t in range(start_t, n):
+                w_prices = closes[t - window : t]
+
+                # Linear detrend
+                x = np.arange(window, dtype=np.float64)
+                coeffs = np.polyfit(x, w_prices, 1)   # [slope, intercept]
+                trend  = np.polyval(coeffs, x)
+                detrended = w_prices - trend
+
+                # Hann window
+                hann     = np.hanning(window)
+                windowed = detrended * hann
+
+                # FFT
+                fft_c = np.fft.rfft(windowed)
+
+                # Low-pass: zero out everything above num_freq (skip DC=0 too)
+                fft_filtered = np.zeros_like(fft_c)
+                fft_filtered[1 : num_freq + 1] = fft_c[1 : num_freq + 1]
+
+                # Reconstruct detrended signal
+                recon = np.fft.irfft(fft_filtered, n=window)
+
+                # Add trend back at last position
+                trend_at_last = float(np.polyval(coeffs, window - 1))
+                reconstructed_values.append(recon[-1] + trend_at_last)
+
+            # Build output list aligned with the price array
+            result_bars = []
+            for i, (rv) in enumerate(reconstructed_values):
+                t_idx = start_t + i
+                if t_idx >= n:
+                    break
+                if rv is not None:
+                    p = float(closes[t_idx])
+                    result_bars.append({
+                        'date':         dates[t_idx] if t_idx < len(dates) else '',
+                        'price':        round(p, 2),
+                        'reconstructed': round(rv, 2),
+                        'aboveRecon':   p > rv,
+                    })
+
+            # Keep only last output_bars
+            result_bars = result_bars[-output_bars:]
+
+            # ── Complex components from the most recent full window ──
+            w_prices = closes[-window:]
+            x        = np.arange(window, dtype=np.float64)
+            coeffs   = np.polyfit(x, w_prices, 1)
+            trend    = np.polyval(coeffs, x)
+            detrended = w_prices - trend
+
+            hann     = np.hanning(window)
+            windowed = detrended * hann
+
+            fft_c     = np.fft.rfft(windowed)
+            freqs     = np.fft.rfftfreq(window, d=1.0)
+            magnitudes = np.abs(fft_c)
+            total_power = float(np.sum(magnitudes[1:] ** 2))
+
+            complex_components = []
+            for i in range(1, num_freq + 1):
+                freq  = float(freqs[i])
+                period = round(1.0 / freq, 1) if freq > 0 else 0.0
+                c     = fft_c[i]
+                mag   = float(np.abs(c))
+                pwr   = mag ** 2
+                contribution_pct = round(pwr / total_power * 100, 2) if total_power > 0 else 0.0
+                complex_components.append({
+                    'freq_index':       i,
+                    'period_days':      period,
+                    'magnitude':        round(mag, 4),
+                    'phase_rad':        round(float(np.angle(c)), 4),
+                    'phase_deg':        round(float(np.degrees(np.angle(c))) % 360, 1),
+                    'real':             round(float(c.real), 4),
+                    'imag':             round(float(c.imag), 4),
+                    'contribution_pct': contribution_pct,
+                })
+
+            # ── Current signal: price vs reconstructed in last 5 bars ──
+            current_signal = 'neutral'
+            if len(result_bars) >= 5:
+                recent = result_bars[-5:]
+                above  = sum(1 for r in recent if r['aboveRecon'])
+                if above >= 4:
+                    current_signal = 'bullish'
+                elif above <= 1:
+                    current_signal = 'bearish'
+
+            return {
+                'rollingCurve':      result_bars,
+                'complexComponents': complex_components,
+                'currentSignal':     current_signal,
+                'windowSize':        window,
+                'numFreqKept':       num_freq,
+            }
+
+        except Exception as e:
+            traceback.print_exc()
+            return {'error': str(e)}
