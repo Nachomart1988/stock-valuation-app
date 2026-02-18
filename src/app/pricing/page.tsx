@@ -75,13 +75,13 @@ export default function PricingPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 text-white">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-6 py-16 pt-24">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16 pt-20 sm:pt-24">
         {/* Hero */}
-        <div className="text-center mb-16">
-          <h1 className="text-5xl md:text-6xl font-black mb-6 bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
+        <div className="text-center mb-10 sm:mb-16">
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black mb-6 bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
             Elige tu plan
           </h1>
-          <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+          <p className="text-base sm:text-xl text-gray-400 max-w-2xl mx-auto">
             Accede al poder de más de 20 modelos de valuación profesionales con inputs totalmente personalizables
           </p>
         </div>
@@ -112,13 +112,13 @@ export default function PricingPage() {
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-3 gap-8 mb-20">
+        <div className="grid md:grid-cols-3 gap-4 sm:gap-8 mb-12 sm:mb-20">
           {plans.map((plan) => (
             <div
               key={plan.name}
-              className={`relative bg-gray-900/80 backdrop-blur rounded-3xl p-8 border-2 transition-all hover:scale-[1.02] ${
+              className={`relative bg-gray-900/80 backdrop-blur rounded-3xl p-5 sm:p-8 border-2 transition-all hover:scale-[1.02] ${
                 plan.popular
-                  ? 'border-purple-500 shadow-2xl shadow-purple-500/20 scale-105 md:scale-105'
+                  ? 'border-purple-500 shadow-2xl shadow-purple-500/20 md:scale-105'
                   : 'border-gray-800 hover:border-gray-700'
               }`}
             >
@@ -129,8 +129,8 @@ export default function PricingPage() {
               )}
 
               <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-              <div className="mb-6">
-                <span className="text-5xl font-black">
+              <div className="mb-4 sm:mb-6">
+                <span className="text-3xl sm:text-5xl font-black">
                   ${isAnnual ? plan.annualPrice : plan.price}
                 </span>
                 <span className="text-gray-400 text-lg">
@@ -179,8 +179,8 @@ export default function PricingPage() {
         </div>
 
         {/* Features Comparison */}
-        <div className="mb-20">
-          <h2 className="text-3xl font-bold text-center mb-12">
+        <div className="mb-12 sm:mb-20">
+          <h2 className="text-xl sm:text-3xl font-bold text-center mb-8 sm:mb-12">
             Comparación de Features
           </h2>
           <div className="bg-gray-900/50 rounded-2xl border border-gray-800 overflow-hidden">
@@ -250,8 +250,8 @@ export default function PricingPage() {
         </div>
 
         {/* FAQ */}
-        <div className="mb-20">
-          <h2 className="text-3xl font-bold text-center mb-12">
+        <div className="mb-12 sm:mb-20">
+          <h2 className="text-xl sm:text-3xl font-bold text-center mb-8 sm:mb-12">
             Preguntas Frecuentes
           </h2>
           <div className="max-w-3xl mx-auto space-y-4">
@@ -285,8 +285,8 @@ export default function PricingPage() {
         </div>
 
         {/* CTA */}
-        <div className="text-center bg-gradient-to-r from-purple-900/30 to-cyan-900/30 rounded-3xl p-12 border border-purple-500/30">
-          <h2 className="text-3xl font-bold mb-4">
+        <div className="text-center bg-gradient-to-r from-purple-900/30 to-cyan-900/30 rounded-3xl p-6 sm:p-12 border border-purple-500/30">
+          <h2 className="text-xl sm:text-3xl font-bold mb-4">
             ¿Listo para empezar?
           </h2>
           <p className="text-gray-400 mb-8 max-w-xl mx-auto">

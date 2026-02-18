@@ -107,7 +107,7 @@ export default function Home() {
             <span className="text-sm text-blue-400">{t('hero.badge')}</span>
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-black mb-6 leading-tight">
+          <h1 className="text-3xl sm:text-5xl md:text-7xl font-black mb-6 leading-tight">
             {t('hero.title')}
             <br />
             <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
@@ -115,7 +115,7 @@ export default function Home() {
             </span>
           </h1>
 
-          <p className="text-xl text-gray-400 max-w-3xl mx-auto mb-12">
+          <p className="text-base sm:text-xl text-gray-400 max-w-3xl mx-auto mb-8 sm:mb-12">
             {t('hero.description')}
             <span className="text-blue-400 font-semibold"> {t('hero.descriptionHighlight')}</span> {t('hero.descriptionEnd')}
           </p>
@@ -143,7 +143,7 @@ export default function Home() {
           </p>
 
           {/* Stats - Focus on Valuation Models */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-16 max-w-4xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8 mt-10 sm:mt-16 max-w-4xl mx-auto">
             {[
               { number: '20+', label: t('stats.models') },
               { number: '100%', label: t('stats.editableInputs') },
@@ -186,7 +186,7 @@ export default function Home() {
       <section id="market" className="py-20 px-4 bg-gray-800/30">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold mb-4">{t('market.title')}</h2>
+            <h2 className="text-2xl sm:text-4xl font-bold mb-4">{t('market.title')}</h2>
             <p className="text-gray-400 max-w-2xl mx-auto mb-6">
               {t('market.description')}
             </p>
@@ -330,7 +330,7 @@ export default function Home() {
       <section id="features" className="py-20 px-4">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('features.title')}</h2>
+            <h2 className="text-2xl sm:text-4xl font-bold mb-4">{t('features.title')}</h2>
             <p className="text-gray-400 max-w-2xl mx-auto">
               {t('features.description')}
             </p>
@@ -398,7 +398,7 @@ export default function Home() {
       <section id="how-it-works" className="py-20 px-4 bg-gray-800/30">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('howItWorks.title')}</h2>
+            <h2 className="text-2xl sm:text-4xl font-bold mb-4">{t('howItWorks.title')}</h2>
             <p className="text-gray-400 max-w-2xl mx-auto">
               {t('howItWorks.description')}
             </p>
@@ -448,7 +448,7 @@ export default function Home() {
       <section className="py-20 px-4">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('modules.title')}</h2>
+            <h2 className="text-2xl sm:text-4xl font-bold mb-4">{t('modules.title')}</h2>
             <p className="text-gray-400 max-w-2xl mx-auto">
               {t('modules.description')}
             </p>
@@ -477,7 +477,7 @@ export default function Home() {
       <section id="pricing" className="py-20 px-4 bg-gray-800/30">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">{t('pricing.title')}</h2>
+            <h2 className="text-2xl sm:text-4xl font-bold mb-4">{t('pricing.title')}</h2>
             <p className="text-gray-400 max-w-2xl mx-auto">
               {t('pricing.description')}
             </p>
@@ -562,7 +562,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
-              <h2 className="text-4xl font-bold mb-6">{t('about.title')}</h2>
+              <h2 className="text-2xl sm:text-4xl font-bold mb-6">{t('about.title')}</h2>
               <p className="text-gray-400 mb-4">
                 {t('about.description1')}
               </p>
@@ -594,10 +594,10 @@ export default function Home() {
       {/* CTA Section */}
       <section className="py-20 px-4 bg-gray-800/30">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl font-bold mb-6">
+          <h2 className="text-2xl sm:text-4xl font-bold mb-6">
             {t('cta.title')}
           </h2>
-          <p className="text-xl text-gray-400 mb-8">
+          <p className="text-base sm:text-xl text-gray-400 mb-8">
             {t('cta.description')}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

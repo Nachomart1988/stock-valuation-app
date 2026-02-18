@@ -41,7 +41,7 @@ export default function LoginPage() {
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
           {/* Card */}
-          <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-8">
+          <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-5 sm:p-8">
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold mb-2">{t('auth.welcomeBack')}</h1>
               <p className="text-gray-400">{t('auth.signInToAccount')}</p>

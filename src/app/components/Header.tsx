@@ -134,7 +134,7 @@ export default function Header() {
                   <button className="text-gray-300 hover:text-white transition text-left">{t('nav.login')}</button>
                 </SignInButton>
                 <SignUpButton mode="modal">
-                  <button className="px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-center">
+                  <button className="w-full px-5 py-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg font-semibold text-center">
                     {t('nav.register')}
                   </button>
                 </SignUpButton>
