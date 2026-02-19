@@ -253,16 +253,27 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
           }
         }
 
-        // Handle positions summary (all quarters)
+        // Handle positions summary (all quarters) — inject year/quarter from query params
         const positionsData: PositionsSummary[] = [];
-        for (const res of positionsResponses) {
+        for (let i = 0; i < positionsResponses.length; i++) {
+          const res = positionsResponses[i];
+          const qInfo = quarters[i]; // matches the fetch order
           if (res.ok) {
             try {
               const data = await res.json();
+              let record: PositionsSummary | null = null;
               if (Array.isArray(data) && data.length > 0) {
-                positionsData.push(data[0]);
+                record = data[0];
               } else if (data && typeof data === 'object' && !Array.isArray(data) && data.symbol) {
-                positionsData.push(data);
+                record = data;
+              }
+              if (record) {
+                // Ensure year/quarter are set from query params if API doesn't return them
+                positionsData.push({
+                  ...record,
+                  year: record.year || qInfo.year,
+                  quarter: record.quarter || qInfo.quarter,
+                });
               }
             } catch {
               console.log('[HoldersTab] Positions summary parse error');

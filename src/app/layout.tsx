@@ -15,12 +15,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "StockAnalyzer Pro - Valuación de Acciones con IA",
-  description: "Plataforma profesional de análisis de acciones con 20+ modelos de valuación, Monte Carlo, análisis neural y más. Inputs totalmente personalizables.",
-  keywords: "stock analysis, valuation models, DCF, DDM, Graham, Monte Carlo, stock valuation, investment analysis",
+  title: "Prismo - Análisis de Acciones con IA Multimodelo",
+  description: "El primer multimodelo de valuación fully customizable. 20+ modelos de valuación, Monte Carlo, análisis neural y más. Inputs totalmente personalizables.",
+  keywords: "stock analysis, valuation models, DCF, DDM, Graham, Monte Carlo, stock valuation, investment analysis, Prismo",
   openGraph: {
-    title: "StockAnalyzer Pro",
-    description: "20+ modelos de valuación profesional con inputs personalizables",
+    title: "Prismo",
+    description: "El primer multimodelo de valuación fully customizable",
     type: "website",
   },
 };

@@ -8,6 +8,7 @@ interface KeyMetricsTabProps {
   ticker: string;
   industry?: string;
   onCompanyQualityNetChange?: (data: any) => void; // Callback for ResumenTab
+  ownerEarnings?: any[];
 }
 
 // Industry benchmarks data - extensive mapping
@@ -1118,7 +1119,7 @@ const DEFAULT_BENCHMARK: Record<string, { range: [number, number]; direction_bet
   "CapEx/Revenue": { range: [3, 8], direction_better: "lower" },
 };
 
-export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetChange }: KeyMetricsTabProps) {
+export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetChange, ownerEarnings }: KeyMetricsTabProps) {
   const { t } = useLanguage();
   const [keyMetrics, setKeyMetrics] = useState<any>(null);
   const [ratios, setRatios] = useState<any>(null);
@@ -1139,6 +1140,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
   } | null>(null);
   const [qualityLoading, setQualityLoading] = useState(false);
   const [qualityError, setQualityError] = useState<string | null>(null);
+  const [showOwnerEarnings, setShowOwnerEarnings] = useState(true);
 
   // Get benchmark for current industry - MERGE industry-specific with defaults
   // Industry benchmarks override defaults for specific metrics, but defaults cover ALL metrics
@@ -1994,6 +1996,66 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
             <MetricCard label="R&D/Revenue" value={formatValue(keyMetrics.researchAndDevelopementToRevenueTTM, 'percent')} />
             <MetricCard label="SBC/Revenue" value={formatValue(keyMetrics.stockBasedCompensationToRevenueTTM, 'percent')} />
           </div>
+        </div>
+      )}
+
+      {/* Owner Earnings (Buffett Method) */}
+      {ownerEarnings && ownerEarnings.length > 0 && (
+        <div>
+          <button
+            onClick={() => setShowOwnerEarnings(!showOwnerEarnings)}
+            className="flex items-center gap-3 text-xl font-bold text-emerald-400 mb-4 hover:text-emerald-300 transition"
+          >
+            <span>{showOwnerEarnings ? '▼' : '▶'}</span>
+            <span>Owner Earnings (Buffett) — {ownerEarnings.length} periods</span>
+          </button>
+          {showOwnerEarnings && (
+            <div className="overflow-x-auto">
+              <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
+                <thead className="bg-emerald-900/30">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-emerald-900/30 z-10 min-w-[240px]">
+                      Component
+                    </th>
+                    {ownerEarnings.slice(0, 10).map((row: any, i: number) => (
+                      <th key={i} className="px-6 py-4 text-center font-bold text-base min-w-[100px] text-gray-200">
+                        {row.date ? new Date(row.date).getFullYear() : `Period ${i + 1}`}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {([
+                    { key: 'averagePPE', label: 'Average PP&E' },
+                    { key: 'maintenanceCapex', label: 'Maintenance CapEx' },
+                    { key: 'ownersEarnings', label: 'Owner Earnings' },
+                    { key: 'growthCapex', label: 'Growth CapEx' },
+                  ] as { key: string; label: string }[]).map(({ key, label }) => (
+                    <tr key={key} className="hover:bg-gray-700/30 transition-colors">
+                      <td className="px-6 py-3 text-sm text-gray-300 font-medium sticky left-0 bg-gray-800 z-10">
+                        {label}
+                      </td>
+                      {ownerEarnings.slice(0, 10).map((row: any, i: number) => (
+                        <td key={i} className="px-6 py-3 text-center text-sm text-gray-200">
+                          {row[key] != null ? formatValue(row[key], 'currency') : 'N/A'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr className="hover:bg-emerald-900/20 transition-colors bg-emerald-900/10">
+                    <td className="px-6 py-3 text-sm text-emerald-300 font-bold sticky left-0 bg-emerald-900/10 z-10">
+                      Owner Earnings Per Share
+                    </td>
+                    {ownerEarnings.slice(0, 10).map((row: any, i: number) => (
+                      <td key={i} className="px-6 py-3 text-center text-sm text-emerald-300 font-bold">
+                        {row.ownersEarningsPerShare != null ? `$${Number(row.ownersEarningsPerShare).toFixed(2)}` : 'N/A'}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

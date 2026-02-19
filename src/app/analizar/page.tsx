@@ -1018,8 +1018,8 @@ function AnalizarContent() {
     t('analysis.categories.dcf'),
     t('analysis.categories.valuations'),
     t('analysis.categories.probability'),
-    t('analysis.categories.investorJournal'),
     t('analysis.categories.summary'),
+    t('analysis.categories.investorJournal'),
   ];
 
   return (
@@ -1114,7 +1114,7 @@ function AnalizarContent() {
     <FinancialStatementsGroup
       IncomeTab={<FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} secData={secData} growthData={incomeGrowth} asReportedData={incomeAsReported} financialGrowth={financialGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} />}
       BalanceTab={<FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} secData={secData} growthData={balanceGrowth} asReportedData={balanceAsReported} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} enterpriseValue={enterpriseValue} />}
-      CashFlowTab={<FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} secData={secData} cashFlowAsReported={cashFlowAsReported} growthData={cashFlowGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ownerEarnings={ownerEarnings} />}
+      CashFlowTab={<FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} secData={secData} cashFlowAsReported={cashFlowAsReported} growthData={cashFlowGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} />}
     />
   </Tab.Panel>
 
@@ -1134,7 +1134,7 @@ function AnalizarContent() {
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <GeneralInfoGroup
       AnalisisGeneralTab={<GeneralTab profile={profile} quote={quote} ticker={activeTicker} />}
-      KeyMetricsTab={<KeyMetricsTab ticker={activeTicker} industry={profile?.industry} onCompanyQualityNetChange={setSharedCompanyQualityNet} />}
+      KeyMetricsTab={<KeyMetricsTab ticker={activeTicker} industry={profile?.industry} onCompanyQualityNetChange={setSharedCompanyQualityNet} ownerEarnings={ownerEarnings} />}
       AnalistasTab={<AnalistasTab priceTarget={priceTarget} ticker={activeTicker} />}
       DuPontTab={<DuPontTab income={income} balance={balance} ticker={activeTicker} />}
       lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, GENERAL_INFO_ACCESS)(i))}
@@ -1268,18 +1268,9 @@ function AnalizarContent() {
     )}
   </Tab.Panel>
 
-  {/* 11. Diario Inversor */}
+  {/* 11. Resumen Maestro */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     {canAccessTab(userPlan, 10) ? (
-      <DiarioInversorTab />
-    ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[10]} currentPlan={userPlan} tabName="Diario Inversor" />
-    )}
-  </Tab.Panel>
-
-  {/* 12. Resumen Maestro */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
-    {canAccessTab(userPlan, 11) ? (
       <ResumenTab
         ticker={activeTicker}
         currentPrice={quote?.price || 0}
@@ -1297,7 +1288,16 @@ function AnalizarContent() {
         averageValuation={sharedAverageVal}
       />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[11]} currentPlan={userPlan} tabName="Resumen Maestro" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[10]} currentPlan={userPlan} tabName="Resumen Maestro" />
+    )}
+  </Tab.Panel>
+
+  {/* 12. Diario Inversor */}
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+    {canAccessTab(userPlan, 11) ? (
+      <DiarioInversorTab />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[11]} currentPlan={userPlan} tabName="Diario Inversor" />
     )}
   </Tab.Panel>
 </Tab.Panels>
@@ -1673,9 +1673,9 @@ function InicioTab({
             </div>
           </div>
           <div className="flex flex-wrap gap-2 sm:gap-3">
-            <span className="px-2 sm:px-4 py-1 sm:py-2 bg-green-600/30 text-green-400 rounded-full text-xs sm:text-sm">{profile?.sector || 'N/A'}</span>
-            <span className="px-2 sm:px-4 py-1 sm:py-2 bg-emerald-600/30 text-emerald-400 rounded-full text-xs sm:text-sm">{profile?.industry || 'N/A'}</span>
-            <span className="px-2 sm:px-4 py-1 sm:py-2 bg-green-600/30 text-green-400 rounded-full text-xs sm:text-sm">{profile?.exchangeShortName || 'N/A'}</span>
+            {profile?.sector && <span className="px-2 sm:px-4 py-1 sm:py-2 bg-green-600/30 text-green-400 rounded-full text-xs sm:text-sm">{profile.sector}</span>}
+            {profile?.industry && <span className="px-2 sm:px-4 py-1 sm:py-2 bg-emerald-600/30 text-emerald-400 rounded-full text-xs sm:text-sm">{profile.industry}</span>}
+            {profile?.exchangeShortName && <span className="px-2 sm:px-4 py-1 sm:py-2 bg-green-600/30 text-green-400 rounded-full text-xs sm:text-sm">{profile.exchangeShortName}</span>}
             {currencyInfo && (
               <span className="px-2 sm:px-4 py-1 sm:py-2 bg-amber-600/30 text-amber-400 rounded-full text-xs sm:text-sm" title={`Original: ${currencyInfo.original} → USD (rate: ${currencyInfo.rate.toFixed(4)})`}>
                 {currencyInfo.original} → USD

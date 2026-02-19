@@ -1,7 +1,7 @@
 // src/app/components/tabs/CalculosTab.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 type Projection = {
@@ -167,6 +167,7 @@ export default function CalculosTab({
   // Estados para inputs del usuario
   const [userWacc, setUserWacc] = useState<number | null>(null);
   const [exitMultiple, setExitMultiple] = useState<number>(12);
+  const exitMultipleUserEdited = useRef(false);
   const [projectedGrowthRate, setProjectedGrowthRate] = useState<number>(getAverageRevenueGrowth());
   const [yearsToProject, setYearsToProject] = useState<number>(5);
 
@@ -354,6 +355,11 @@ export default function CalculosTab({
     // TTM Multiple calculado correctamente
     const calculatedTTMMultiple = ttmEbitda > 0 ? currentEV / ttmEbitda : exitMultiple;
 
+    // Auto-initialize exit multiple from real EV/EBITDA on first load (if user hasn't edited it)
+    if (!exitMultipleUserEdited.current && ttmEbitda > 0 && calculatedTTMMultiple > 0 && calculatedTTMMultiple < 100) {
+      setExitMultiple(Math.round(calculatedTTMMultiple * 10) / 10);
+    }
+
     // ────────────────────────────────────────────────
     // Terminal Value
     // ────────────────────────────────────────────────
@@ -503,7 +509,7 @@ export default function CalculosTab({
                 min="1"
                 max="50"
                 value={exitMultiple}
-                onChange={(e) => setExitMultiple(parseFloat(e.target.value) || 12)}
+                onChange={(e) => { exitMultipleUserEdited.current = true; setExitMultiple(parseFloat(e.target.value) || 12); }}
                 className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
               />
               <span className="text-gray-400">x</span>

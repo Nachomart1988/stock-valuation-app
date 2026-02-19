@@ -430,55 +430,97 @@ export default function ProbabilityTab({
             </div>
           </div>
 
-          {/* Price Distribution Chart */}
+          {/* Price Distribution Chart — smooth line */}
           {result.priceDistribution && result.priceDistribution.length > 0 && (
             <div className="bg-gray-900/60 rounded-xl p-6 border border-white/[0.06]">
               <h3 className="text-lg font-semibold text-emerald-400 mb-4">
                 {t('probabilityTab.priceDistribution')}
               </h3>
-              <div className="flex items-end gap-1 h-48">
-                {(() => {
-                  const maxProb = Math.max(...result.priceDistribution.map(b => b.probability));
-                  return result.priceDistribution.map((bucket, i) => {
-                  const heightPx = maxProb > 0 ? Math.max((bucket.probability / maxProb) * 192, 2) : 2;
-                  return (
-                    <div
-                      key={i}
-                      className="flex-1 flex flex-col items-center justify-end group relative"
-                      style={{ height: '192px' }}
-                    >
-                      <div
-                        className={`w-full rounded-t transition-all ${
-                          bucket.aboveTarget
-                            ? 'bg-green-500/70 hover:bg-green-400/80'
-                            : 'bg-red-500/50 hover:bg-red-400/60'
-                        }`}
-                        style={{ height: `${heightPx}px` }}
-                      />
-                      {/* Tooltip */}
-                      <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-800 border border-white/[0.08] rounded px-2 py-1 text-xs text-gray-200 whitespace-nowrap z-10">
-                        {bucket.priceRange}<br/>
-                        {bucket.probability.toFixed(2)}%
-                      </div>
-                    </div>
-                  );
-                  });
-                })()}
-              </div>
-              <div className="flex justify-between text-xs text-gray-500 mt-2">
-                <span>${result.priceDistribution[0]?.center.toFixed(0)}</span>
-                <span className="text-emerald-400">
-                  {t('probabilityTab.target')}: ${result.targetPrice.toFixed(2)}
-                </span>
-                <span>${result.priceDistribution[result.priceDistribution.length - 1]?.center.toFixed(0)}</span>
-              </div>
-              <div className="flex gap-4 mt-2 text-xs">
+              {(() => {
+                const dist = result.priceDistribution;
+                const W = 600, H = 180, padX = 10, padY = 10;
+                const maxProb = Math.max(...dist.map(b => b.probability));
+                const pts = dist.map((b, i) => ({
+                  x: padX + (i / (dist.length - 1)) * (W - padX * 2),
+                  y: H - padY - (maxProb > 0 ? (b.probability / maxProb) * (H - padY * 2) : 0),
+                  above: b.aboveTarget,
+                  center: b.center,
+                  prob: b.probability,
+                }));
+
+                // Build smooth path using cubic bezier
+                const smooth = (points: typeof pts) => {
+                  if (points.length < 2) return '';
+                  let d = `M ${points[0].x} ${points[0].y}`;
+                  for (let i = 1; i < points.length; i++) {
+                    const p0 = points[i - 1], p1 = points[i];
+                    const cpx = (p0.x + p1.x) / 2;
+                    d += ` C ${cpx} ${p0.y} ${cpx} ${p1.y} ${p1.x} ${p1.y}`;
+                  }
+                  return d;
+                };
+
+                const targetX = padX + ((result.targetPrice - dist[0].center) / (dist[dist.length - 1].center - dist[0].center)) * (W - padX * 2);
+                const clampedTargetX = Math.max(padX, Math.min(W - padX, targetX));
+
+                const pathStr = smooth(pts);
+                const areaBelow = `${pathStr} L ${pts[pts.length - 1].x} ${H - padY} L ${pts[0].x} ${H - padY} Z`;
+
+                return (
+                  <div className="relative w-full overflow-x-auto">
+                    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 200 }}>
+                      <defs>
+                        <linearGradient id="probGradGreen" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.5"/>
+                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.05"/>
+                        </linearGradient>
+                        <linearGradient id="probGradRed" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#ef4444" stopOpacity="0.35"/>
+                          <stop offset="100%" stopColor="#ef4444" stopOpacity="0.03"/>
+                        </linearGradient>
+                        <clipPath id="clipBelow">
+                          <rect x="0" y="0" width={clampedTargetX} height={H}/>
+                        </clipPath>
+                        <clipPath id="clipAbove">
+                          <rect x={clampedTargetX} y="0" width={W} height={H}/>
+                        </clipPath>
+                      </defs>
+                      {/* Area fill - below target (red) */}
+                      <path d={areaBelow} fill="url(#probGradRed)" clipPath="url(#clipBelow)"/>
+                      {/* Area fill - above target (green) */}
+                      <path d={areaBelow} fill="url(#probGradGreen)" clipPath="url(#clipAbove)"/>
+                      {/* Smooth line - below target */}
+                      <path d={pathStr} fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" clipPath="url(#clipBelow)" opacity="0.8"/>
+                      {/* Smooth line - above target */}
+                      <path d={pathStr} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" clipPath="url(#clipAbove)" opacity="0.9"/>
+                      {/* Target price vertical line */}
+                      <line x1={clampedTargetX} y1={padY} x2={clampedTargetX} y2={H - padY} stroke="#34d399" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.8"/>
+                      <text x={clampedTargetX + 4} y={padY + 10} fill="#34d399" fontSize="9" fontFamily="monospace">
+                        ${result.targetPrice.toFixed(0)}
+                      </text>
+                      {/* X-axis labels */}
+                      <text x={padX} y={H} fill="#6b7280" fontSize="9" fontFamily="monospace">
+                        ${dist[0].center.toFixed(0)}
+                      </text>
+                      <text x={W - padX} y={H} fill="#6b7280" fontSize="9" textAnchor="end" fontFamily="monospace">
+                        ${dist[dist.length - 1].center.toFixed(0)}
+                      </text>
+                      {/* Data points */}
+                      {pts.map((p, i) => (
+                        <circle key={i} cx={p.x} cy={p.y} r="2.5"
+                          fill={p.above ? '#10b981' : '#ef4444'} opacity="0.7"/>
+                      ))}
+                    </svg>
+                  </div>
+                );
+              })()}
+              <div className="flex gap-4 mt-3 text-xs">
                 <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 bg-green-500/70 rounded"></span>
+                  <span className="w-3 h-1.5 bg-green-500/70 rounded inline-block"></span>
                   {t('probabilityTab.aboveTarget')}
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="w-3 h-3 bg-red-500/50 rounded"></span>
+                  <span className="w-3 h-1.5 bg-red-500/50 rounded inline-block"></span>
                   {t('probabilityTab.belowTarget')}
                 </span>
               </div>
