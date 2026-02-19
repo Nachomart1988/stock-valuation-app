@@ -437,13 +437,15 @@ export default function ProbabilityTab({
                 {t('probabilityTab.priceDistribution')}
               </h3>
               <div className="flex items-end gap-1 h-48">
-                {result.priceDistribution.map((bucket, i) => {
+                {(() => {
                   const maxProb = Math.max(...result.priceDistribution.map(b => b.probability));
-                  const height = maxProb > 0 ? (bucket.probability / maxProb) * 100 : 0;
+                  return result.priceDistribution.map((bucket, i) => {
+                  const heightPx = maxProb > 0 ? Math.max((bucket.probability / maxProb) * 192, 2) : 2;
                   return (
                     <div
                       key={i}
                       className="flex-1 flex flex-col items-center justify-end group relative"
+                      style={{ height: '192px' }}
                     >
                       <div
                         className={`w-full rounded-t transition-all ${
@@ -451,7 +453,7 @@ export default function ProbabilityTab({
                             ? 'bg-green-500/70 hover:bg-green-400/80'
                             : 'bg-red-500/50 hover:bg-red-400/60'
                         }`}
-                        style={{ height: `${Math.max(height, 1)}%` }}
+                        style={{ height: `${heightPx}px` }}
                       />
                       {/* Tooltip */}
                       <div className="absolute bottom-full mb-2 hidden group-hover:block bg-gray-800 border border-white/[0.08] rounded px-2 py-1 text-xs text-gray-200 whitespace-nowrap z-10">
@@ -460,7 +462,8 @@ export default function ProbabilityTab({
                       </div>
                     </div>
                   );
-                })}
+                  });
+                })()}
               </div>
               <div className="flex justify-between text-xs text-gray-500 mt-2">
                 <span>${result.priceDistribution[0]?.center.toFixed(0)}</span>

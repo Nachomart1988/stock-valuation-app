@@ -511,6 +511,7 @@ class NeuralReasoningMarketSentimentEngine:
         hist_sectors = data.get('historicalSectorPerformance', [])
         vix_quote = data.get('vixQuote')
         yf_data = data.get('yfinanceData', {})
+        index_breadth = data.get('indexBreadth') or {}
 
         signals: List[MarketSignal] = []
         full_reasoning: List[str] = [f"**NEURAL ENGINE v{self.version} — ANALYSIS INITIATED**"]
@@ -525,8 +526,13 @@ class NeuralReasoningMarketSentimentEngine:
         full_reasoning.extend(news_reasoning)
 
         # LAYER 2 — MARKET BREADTH (Gainers vs Losers + A/D Line + New Highs/Lows)
-        movers_score, movers_signals, breadth_ratio, sector_rotation, top_gainers, top_losers = self._layer2_breadth(gainers, losers, yf_data)
+        movers_score, movers_signals, breadth_ratio, sector_rotation, top_gainers, top_losers = self._layer2_breadth(gainers, losers, yf_data, index_breadth)
         signals.extend(movers_signals)
+
+        # Real advancing/declining counts from SP500 index breadth (or fall back to gainers/losers)
+        sp500_b = index_breadth.get('sp500') or {}
+        real_advancing = sp500_b.get('advancing', len(gainers)) if sp500_b.get('total', 0) > 100 else len(gainers)
+        real_declining = sp500_b.get('declining', len(losers)) if sp500_b.get('total', 0) > 100 else len(losers)
         ad_info = ""
         nhl_info = ""
         if yf_data.get('ad_line'):
@@ -609,8 +615,8 @@ class NeuralReasoningMarketSentimentEngine:
             "moversAnalysis": {
                 "breadthRatio": round(breadth_ratio, 3),
                 "breadthLabel": self._breadth_label(breadth_ratio),
-                "gainersCount": len(gainers),
-                "losersCount": len(losers),
+                "gainersCount": real_advancing,
+                "losersCount": real_declining,
                 "topGainers": top_gainers,
                 "topLosers": top_losers,
                 "sectorRotation": sector_rotation,
@@ -635,22 +641,33 @@ class NeuralReasoningMarketSentimentEngine:
             "reasoningChain": full_reasoning,
             "briefing": self._generate_briefing(
                 composite, news_score, movers_score, breadth_ratio,
-                sector_rotation, rec, len(gainers), len(losers),
+                sector_rotation, rec, real_advancing, real_declining,
                 hot_sectors, cold_sectors, action, vix_value, fg_score, fg_label
             ),
         }
 
     # ====================== LAYER IMPLEMENTATIONS ======================
 
-    def _layer2_breadth(self, gainers, losers, yf_data: Dict[str, Any] = None):
+    def _layer2_breadth(self, gainers, losers, yf_data: Dict[str, Any] = None, index_breadth: Dict[str, Any] = None):
         """Layer 2: Market breadth — Zweig Breadth Thrust + A/D Line + New Highs/Lows."""
         signals = []
         yf_data = yf_data or {}
-        total = len(gainers) + len(losers)
-        if total == 0:
-            return 50.0, [], 0.5, {"hot": [], "cold": []}, [], []
+        index_breadth = index_breadth or {}
 
-        breadth_ratio = len(gainers) / total
+        # Use real SP500 constituent breadth when available (>100 stocks counted)
+        sp500_b = index_breadth.get('sp500') or {}
+        if sp500_b.get('total', 0) > 100:
+            advancing = sp500_b['advancing']
+            declining = sp500_b['declining']
+            total_real = sp500_b['total']
+            breadth_ratio = advancing / total_real if total_real > 0 else 0.5
+            print(f"[NeuralMSE] SP500 real breadth: {advancing}↑ {declining}↓ of {total_real} ({breadth_ratio:.1%})")
+        else:
+            total = len(gainers) + len(losers)
+            if total == 0:
+                return 50.0, [], 0.5, {"hot": [], "cold": []}, [], []
+            breadth_ratio = len(gainers) / total
+
         avg_gainer = np.mean([g.get('changesPercentage', 0) or 0 for g in gainers]) if gainers else 0
         avg_loser = np.mean([abs(l.get('changesPercentage', 0) or 0) for l in losers]) if losers else 0
 

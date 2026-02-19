@@ -334,6 +334,7 @@ class MarketSentimentRequest(BaseModel):
     forexQuotes: Optional[List[Dict[str, Any]]] = None
     historicalSectorPerformance: Optional[List[Dict[str, Any]]] = None
     vixQuote: Optional[Dict[str, Any]] = None
+    indexBreadth: Optional[Dict[str, Any]] = None
 
 
 @app.post("/market-sentiment/analyze")
@@ -367,6 +368,7 @@ async def analyze_market_sentiment(req: MarketSentimentRequest):
             'forexQuotes': req.forexQuotes or [],
             'historicalSectorPerformance': req.historicalSectorPerformance or [],
             'vixQuote': req.vixQuote,
+            'indexBreadth': req.indexBreadth,
         }
 
         result = market_sentiment_engine.analyze(data)

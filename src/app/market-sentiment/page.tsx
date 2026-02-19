@@ -130,23 +130,55 @@ export default function MarketSentimentPage() {
       const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
       if (!apiKey) throw new Error('API key not found');
 
-      const [newsRes, gainersRes, losersRes, sectorsRes, industriesRes, forexRes] = await Promise.all([
-        fetch(`https://financialmodelingprep.com/stable/news/general-latest?page=0&limit=30&apikey=${apiKey}`),
-        fetch(`https://financialmodelingprep.com/stable/biggest-gainers?apikey=${apiKey}`),
-        fetch(`https://financialmodelingprep.com/stable/biggest-losers?apikey=${apiKey}`),
-        fetch(`https://financialmodelingprep.com/stable/sector-performance-snapshot?apikey=${apiKey}`).catch(() => null),
-        fetch(`https://financialmodelingprep.com/stable/industry-performance-snapshot?apikey=${apiKey}`).catch(() => null),
-        fetch(`https://financialmodelingprep.com/stable/fx?apikey=${apiKey}`).catch(() => null),
+      const FMP = 'https://financialmodelingprep.com/stable';
+
+      const [newsRes, gainersRes, losersRes, sectorsRes, industriesRes, forexRes, sp500ConsRes, dowConsRes] = await Promise.all([
+        fetch(`${FMP}/news/general-latest?page=0&limit=30&apikey=${apiKey}`),
+        fetch(`${FMP}/biggest-gainers?apikey=${apiKey}`),
+        fetch(`${FMP}/biggest-losers?apikey=${apiKey}`),
+        fetch(`${FMP}/sector-performance-snapshot?apikey=${apiKey}`).catch(() => null),
+        fetch(`${FMP}/industry-performance-snapshot?apikey=${apiKey}`).catch(() => null),
+        fetch(`${FMP}/fx?apikey=${apiKey}`).catch(() => null),
+        fetch(`${FMP}/sp500-constituent?apikey=${apiKey}`).catch(() => null),
+        fetch(`${FMP}/dowjones-constituent?apikey=${apiKey}`).catch(() => null),
       ]);
 
-      const [newsData, gainersData, losersData, sectorsData, industriesData, forexData] = await Promise.all([
+      const [newsData, gainersData, losersData, sectorsData, industriesData, forexData, sp500Cons, dowCons] = await Promise.all([
         newsRes.ok ? newsRes.json() : [],
         gainersRes.ok ? gainersRes.json() : [],
         losersRes.ok ? losersRes.json() : [],
         sectorsRes?.ok ? sectorsRes.json() : [],
         industriesRes?.ok ? industriesRes.json() : [],
         forexRes?.ok ? forexRes.json() : [],
+        sp500ConsRes?.ok ? sp500ConsRes.json() : [],
+        dowConsRes?.ok ? dowConsRes.json() : [],
       ]);
+
+      // Helper: fetch batch-quote-short for a list of constituent symbols → compute breadth counts
+      const computeBreadth = async (constituents: any[]) => {
+        if (!Array.isArray(constituents) || constituents.length === 0) return null;
+        const symbols: string[] = constituents.map((c: any) => c.symbol).filter(Boolean);
+        const batchSize = 500;
+        const batchResults = await Promise.all(
+          Array.from({ length: Math.ceil(symbols.length / batchSize) }, (_, i) => {
+            const batch = symbols.slice(i * batchSize, (i + 1) * batchSize).join(',');
+            return fetch(`${FMP}/batch-quote-short?symbols=${batch}&apikey=${apiKey}`)
+              .then(r => r.ok ? r.json() : [])
+              .catch(() => []);
+          })
+        );
+        const allQuotes: any[] = (batchResults as any[][]).flat();
+        const advancing = allQuotes.filter(q => (q.changesPercentage ?? 0) > 0).length;
+        const declining = allQuotes.filter(q => (q.changesPercentage ?? 0) < 0).length;
+        return { advancing, declining, unchanged: allQuotes.length - advancing - declining, total: allQuotes.length };
+      };
+
+      const [sp500Breadth, dowBreadth] = await Promise.all([
+        computeBreadth(sp500Cons),
+        computeBreadth(dowCons),
+      ]);
+
+      const indexBreadth = { sp500: sp500Breadth, dow: dowBreadth };
 
       try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/market-sentiment/analyze`, {
@@ -159,6 +191,7 @@ export default function MarketSentimentPage() {
             sectorPerformance: sectorsData || [],
             industryPerformance: industriesData || [],
             forexQuotes: forexData || [],
+            indexBreadth,
           }),
         });
         if (!res.ok) throw new Error('Backend error: ' + res.status);

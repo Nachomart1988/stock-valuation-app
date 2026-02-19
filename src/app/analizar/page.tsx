@@ -583,55 +583,79 @@ function AnalizarContent() {
         console.log('[AnalizarContent] Owner Earnings records:', ownerEarningsData?.length || 0);
 
         // ===== Currency Conversion =====
+        // Profile/quote currency — used for market prices (quote, priceTarget, profile)
         const profileCurrency = (profileData[0]?.currency || 'USD').toUpperCase();
-        let fxRate = 1;
+        // Statement-level currency — may differ from profile (e.g. ADRs report in home currency)
+        const statementCurrency = (
+          incomeData[0]?.reportedCurrency ||
+          incomeData[0]?.currency ||
+          profileCurrency
+        ).toUpperCase();
+
+        let profileFxRate = 1;
+        let stmtFxRate = 1;
+
         if (profileCurrency !== 'USD') {
-          console.log(`[Currency] Stock currency is ${profileCurrency}, fetching exchange rate...`);
-          fxRate = await fetchExchangeRate(profileCurrency, apiKey);
-          setCurrencyInfo({ original: profileCurrency, rate: fxRate });
+          console.log(`[Currency] Profile currency: ${profileCurrency}, fetching rate...`);
+          profileFxRate = await fetchExchangeRate(profileCurrency, apiKey);
+        }
+        if (statementCurrency !== 'USD') {
+          if (statementCurrency === profileCurrency) {
+            stmtFxRate = profileFxRate;
+          } else {
+            console.log(`[Currency] Statement currency: ${statementCurrency} (differs from profile ${profileCurrency}), fetching rate...`);
+            stmtFxRate = await fetchExchangeRate(statementCurrency, apiKey);
+          }
+        }
+
+        if (statementCurrency !== 'USD' || profileCurrency !== 'USD') {
+          const displayCurrency = statementCurrency !== 'USD' ? statementCurrency : profileCurrency;
+          const displayRate = statementCurrency !== 'USD' ? stmtFxRate : profileFxRate;
+          setCurrencyInfo({ original: displayCurrency, rate: displayRate });
         } else {
           setCurrencyInfo(null);
         }
-        const cx = (obj: any) => convertObjectToUSD(obj, fxRate);
-        const cxArr = (arr: any[]) => convertArrayToUSD(arr, fxRate);
+
+        // cx: for market price data (quote, profile, priceTarget)
+        const cx = (obj: any) => convertObjectToUSD(obj, profileFxRate);
+        // cxArr: for financial statement arrays (income, balance, cashFlow, etc.)
+        const cxArr = (arr: any[]) => convertArrayToUSD(arr, stmtFxRate);
+        // cxStmt: for single statement objects
+        const cxStmt = (obj: any) => convertObjectToUSD(obj, stmtFxRate);
 
         setData({
+          // Market price data — use profile/trading currency
           quote: cx(quoteData[0] || {}),
           profile: cx(profileData[0] || {}),
+          priceTarget: cx(priceTargetData[0] || {}),
+          dcfStandard: cx(dcfStandardData[0] || dcfStandardData),
+          dcfCustom: cx(dcfCustomData[0] || dcfCustomData),
+          // Financial statements — use reportedCurrency (may differ for ADRs)
           income: cxArr(incomeData || []),
           balance: cxArr(balanceData || []),
           cashFlow: cxArr(cashFlowData || []),
-          priceTarget: cx(priceTargetData[0] || {}),
           estimates: cxArr(estimatesData || []),
-          dcfStandard: cx(dcfStandardData[0] || dcfStandardData),
-          dcfCustom: cx(dcfCustomData[0] || dcfCustomData),
-          // TTM data
-          incomeTTM: cx(incomeTTMData[0] || null),
-          balanceTTM: cx(balanceTTMData[0] || null),
-          cashFlowTTM: cx(cashFlowTTMData[0] || null),
-          // SEC supplemental data (processed)
-          secData: secSupplementalData,
-          // Raw SEC reports (complete data from financial-reports-json)
-          secReportsRaw: secReportsRaw,
-          // As-reported cash flow for dividends
+          incomeTTM: cxStmt(incomeTTMData[0] || null),
+          balanceTTM: cxStmt(balanceTTMData[0] || null),
+          cashFlowTTM: cxStmt(cashFlowTTMData[0] || null),
           cashFlowAsReported: cxArr(cashFlowAsReportedData || []),
-          // Dividend history per share
           dividends: cxArr(dividendsData || []),
-          // As-reported statements (additional detail)
           incomeAsReported: cxArr(incomeAsReportedData || []),
           balanceAsReported: cxArr(balanceAsReportedData || []),
-          // Growth data (YoY changes - mostly ratios, but convert anyway for safety)
+          keyMetrics: cxArr(keyMetricsData || []),
+          keyMetricsTTM: cxStmt(keyMetricsTTMData[0] || null),
+          enterpriseValue: cxArr(enterpriseValueData || []),
+          ownerEarnings: cxArr(ownerEarningsData || []),
+          // Growth data (mostly ratios — no conversion needed)
           incomeGrowth: incomeGrowthData || [],
           balanceGrowth: balanceGrowthData || [],
           cashFlowGrowth: cashFlowGrowthData || [],
           financialGrowth: financialGrowthData || [],
-          // Additional financial metrics
-          keyMetrics: cxArr(keyMetricsData || []),
-          keyMetricsTTM: cx(keyMetricsTTMData[0] || null),
           ratios: ratiosData || [],
           ratiosTTM: ratiosTTMData[0] || null,
-          enterpriseValue: cxArr(enterpriseValueData || []),
-          ownerEarnings: cxArr(ownerEarningsData || []),
+          // SEC data (raw, not converted)
+          secData: secSupplementalData,
+          secReportsRaw: secReportsRaw,
         });
       } catch (err) {
         setError((err as Error).message || 'Error al cargar datos');
