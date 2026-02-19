@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { PLAN_METADATA, type PlanTier } from '@/lib/plans';
+import PlanBadge from '@/app/components/PlanBadge';
 
 interface UserRow {
   id: string;
@@ -11,13 +12,6 @@ interface UserRow {
   createdAt: string;
   imageUrl: string;
 }
-
-const PLAN_COLORS: Record<PlanTier, string> = {
-  free:  'bg-gray-700 text-gray-300',
-  pro:   'bg-emerald-800 text-emerald-300',
-  elite: 'bg-violet-800 text-violet-300',
-  gold:  'bg-yellow-800 text-yellow-300',
-};
 
 export default function AdminPage() {
   const [adminKey, setAdminKey] = useState('');
@@ -204,9 +198,7 @@ export default function AdminPage() {
                     <td className="px-5 py-3 text-gray-300">{u.email}</td>
                     <td className="px-5 py-3 text-gray-400">{u.createdAt}</td>
                     <td className="px-5 py-3">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${PLAN_COLORS[u.plan] ?? PLAN_COLORS.free}`}>
-                        {PLAN_METADATA[u.plan]?.name ?? u.plan}
-                      </span>
+                      <PlanBadge plan={u.plan} size="sm" />
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">

@@ -48,6 +48,7 @@ import DCFGroup from '@/app/components/groups/DCFGroup';
 
 // Plan access control
 import LockedTab from '@/app/components/LockedTab';
+import PlanBadge from '@/app/components/PlanBadge';
 import {
   type PlanTier,
   TAB_MIN_PLAN,
@@ -1031,16 +1032,9 @@ function AnalizarContent() {
               <h1 className="text-xl sm:text-3xl md:text-5xl font-extrabold text-green-400">
                 {t('analysis.resultsFor')} {activeTicker}
               </h1>
-              {/* Plan badge — always visible for debugging & UX */}
+              {/* Plan badge */}
               {isSignedIn && (
-                <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${
-                  userPlan === 'gold'  ? 'bg-yellow-800 text-yellow-300' :
-                  userPlan === 'elite' ? 'bg-violet-800 text-violet-300' :
-                  userPlan === 'pro'   ? 'bg-emerald-800 text-emerald-300' :
-                                         'bg-gray-700 text-gray-400'
-                }`}>
-                  {userPlan}
-                </span>
+                <PlanBadge plan={userPlan} size="sm" className="shrink-0 self-center" />
               )}
             </div>
             <h2 className="text-base sm:text-xl md:text-3xl font-bold text-gray-300 truncate">
