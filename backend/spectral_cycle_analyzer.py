@@ -601,30 +601,36 @@ class SpectralCycleAnalyzer:
         window: int = 256,
         num_freq: int = 8,
         output_bars: int = 60,
+        threshold_pct: float = 0.002,   # 0.2% anti-whipsaw threshold
     ) -> Dict[str, Any]:
         """
-        Rolling-window FFT reconstruction.
+        Rolling-window FFT low-pass filter reconstruction.
 
-        For each bar t (t = window ... n), we:
-          1. Extract the preceding `window` bars: prices[t-window : t]
-          2. Detrend (linear) to isolate the cyclical component
-          3. Apply Hann window (reduces spectral leakage)
-          4. rfft → complex spectrum
-          5. Low-pass filter: keep DC + first `num_freq` frequency bins
-          6. irfft → reconstructed detrended signal (length=window)
-          7. Add back the linear trend for the last sample
-          8. reconstructed_t = recon[-1] + trend_at_last
+        Exactly matches the reference spec:
+          1. prices[i-window+1 : i+1]  — window ending at bar i (inclusive)
+          2. scipy.signal.detrend(prices, type='linear')  — remove linear trend
+          3. trend = prices - detrended  — recover trend for last-bar add-back
+          4. np.hanning(window) * detrended  — Hann window (spectral leakage)
+          5. scipy.fft.rfft(windowed)  → fft_complex (complex vector, length=window/2+1)
+          6. fft_filtered[:num_freq] = fft_complex[:num_freq]  — low-pass (keep DC+K freqs)
+          7. scipy.fft.irfft(fft_filtered)  → reconstructed detrended signal
+          8. fft_signal[i] = reconstructed[-1] + trend[-1]  — add trend back
 
-        The reconstructed curve is the "smooth FFT cycle envelope" for the price.
+        Position signal:
+          position = 1 (long) if Close > fft_signal * (1 + threshold_pct)
+          position = 0 (flat) otherwise
 
         Returns:
-        - rollingCurve: [{date, price, reconstructed, aboveRecon}] last output_bars
-        - complexComponents: [{freq_index, period_days, magnitude, phase_rad,
-                               phase_deg, real, imag, contribution_pct}] for the
-                              most recent window's top num_freq frequencies
-        - currentSignal: 'bullish' | 'bearish' | 'neutral' based on last 5 bars
-        - windowSize, numFreqKept
+          rollingCurve:       [{date, price, reconstructed, aboveRecon, position}]
+          complexComponents:  [{freq_index, period_days, magnitude, phase_rad,
+                                phase_deg, real, imag, contribution_pct}]
+          currentSignal:      'bullish' | 'bearish' | 'neutral'
+          cycleStrength:      dominant power / total power (0-1)
+          windowSize, numFreqKept, thresholdPct
         """
+        from scipy.fft import rfft as scipy_rfft, irfft as scipy_irfft
+        from scipy.signal import detrend as scipy_detrend
+
         try:
             closes = np.array([float(h['close']) for h in historical_data], dtype=np.float64)
             dates  = [h.get('date', '') for h in historical_data]
@@ -633,92 +639,58 @@ class SpectralCycleAnalyzer:
             if n < window + 5:
                 return {'error': f'Need at least {window + 5} bars, got {n}'}
 
-            # ── Rolling reconstruction ──
-            # Only compute what we need: last output_bars + a small buffer
-            start_t = max(window, n - output_bars - 10)
+            # ── Rolling reconstruction (compute only last output_bars + buffer) ──
+            start_i = max(window - 1, n - output_bars - 15)
+            fft_signal_vals: List[Optional[float]] = []
 
-            reconstructed_values: List[Optional[float]] = []
+            for i in range(start_i, n):
+                # Extract window: bars [i-window+1 ... i] (inclusive, length=window)
+                prices = closes[i - window + 1 : i + 1]
 
-            for t in range(start_t, n):
-                w_prices = closes[t - window : t]
+                # 1. Detrend — scipy removes linear trend in-place equivalent
+                detrended = scipy_detrend(prices, type='linear')
 
-                # Linear detrend
-                x = np.arange(window, dtype=np.float64)
-                coeffs = np.polyfit(x, w_prices, 1)   # [slope, intercept]
-                trend  = np.polyval(coeffs, x)
-                detrended = w_prices - trend
+                # 2. Recover trend so we can add it back at the last bar
+                trend = prices - detrended           # linear trend component
+                last_trend = float(trend[-1])
 
-                # Hann window
+                # 3. Hann window to reduce spectral leakage
                 hann     = np.hanning(window)
                 windowed = detrended * hann
 
-                # FFT
-                fft_c = np.fft.rfft(windowed)
+                # 4. FFT → complex vector (length = window//2 + 1)
+                fft_complex = scipy_rfft(windowed)   # ← complex numbers
 
-                # Low-pass: zero out everything above num_freq (skip DC=0 too)
-                fft_filtered = np.zeros_like(fft_c)
-                fft_filtered[1 : num_freq + 1] = fft_c[1 : num_freq + 1]
+                # 5. Low-pass filter: keep first num_freq coefficients (incl. DC=0)
+                fft_filtered = np.zeros_like(fft_complex, dtype=complex)
+                fft_filtered[:num_freq] = fft_complex[:num_freq]
 
-                # Reconstruct detrended signal
-                recon = np.fft.irfft(fft_filtered, n=window)
+                # 6. Inverse FFT → reconstructed detrended signal
+                reconstructed_detrended = scipy_irfft(fft_filtered)
 
-                # Add trend back at last position
-                trend_at_last = float(np.polyval(coeffs, window - 1))
-                reconstructed_values.append(recon[-1] + trend_at_last)
+                # 7. Add trend back (last bar value)
+                fft_signal_vals.append(reconstructed_detrended[-1] + last_trend)
 
-            # Build output list aligned with the price array
+            # ── Build output list ──
+            THRESH = threshold_pct
             result_bars = []
-            for i, (rv) in enumerate(reconstructed_values):
-                t_idx = start_t + i
-                if t_idx >= n:
-                    break
-                if rv is not None:
-                    p = float(closes[t_idx])
-                    result_bars.append({
-                        'date':         dates[t_idx] if t_idx < len(dates) else '',
-                        'price':        round(p, 2),
-                        'reconstructed': round(rv, 2),
-                        'aboveRecon':   p > rv,
-                    })
-
-            # Keep only last output_bars
-            result_bars = result_bars[-output_bars:]
-
-            # ── Complex components from the most recent full window ──
-            w_prices = closes[-window:]
-            x        = np.arange(window, dtype=np.float64)
-            coeffs   = np.polyfit(x, w_prices, 1)
-            trend    = np.polyval(coeffs, x)
-            detrended = w_prices - trend
-
-            hann     = np.hanning(window)
-            windowed = detrended * hann
-
-            fft_c     = np.fft.rfft(windowed)
-            freqs     = np.fft.rfftfreq(window, d=1.0)
-            magnitudes = np.abs(fft_c)
-            total_power = float(np.sum(magnitudes[1:] ** 2))
-
-            complex_components = []
-            for i in range(1, num_freq + 1):
-                freq  = float(freqs[i])
-                period = round(1.0 / freq, 1) if freq > 0 else 0.0
-                c     = fft_c[i]
-                mag   = float(np.abs(c))
-                pwr   = mag ** 2
-                contribution_pct = round(pwr / total_power * 100, 2) if total_power > 0 else 0.0
-                complex_components.append({
-                    'freq_index':       i,
-                    'period_days':      period,
-                    'magnitude':        round(mag, 4),
-                    'phase_rad':        round(float(np.angle(c)), 4),
-                    'phase_deg':        round(float(np.degrees(np.angle(c))) % 360, 1),
-                    'real':             round(float(c.real), 4),
-                    'imag':             round(float(c.imag), 4),
-                    'contribution_pct': contribution_pct,
+            for idx, rv in enumerate(fft_signal_vals):
+                t_idx = start_i + idx
+                if t_idx >= n or rv is None:
+                    continue
+                p = float(closes[t_idx])
+                position = 1 if p > rv * (1.0 + THRESH) else 0
+                result_bars.append({
+                    'date':          dates[t_idx] if t_idx < len(dates) else '',
+                    'price':         round(p, 2),
+                    'reconstructed': round(float(rv), 2),
+                    'aboveRecon':    p > rv,
+                    'position':      position,
                 })
 
-            # ── Current signal: price vs reconstructed in last 5 bars ──
+            result_bars = result_bars[-output_bars:]
+
+            # ── Current signal from last 5 bars ──
             current_signal = 'neutral'
             if len(result_bars) >= 5:
                 recent = result_bars[-5:]
@@ -728,14 +700,61 @@ class SpectralCycleAnalyzer:
                 elif above <= 1:
                     current_signal = 'bearish'
 
+            # Also check most recent position signal
+            if result_bars:
+                last_pos = result_bars[-1]['position']
+                if last_pos == 1:
+                    current_signal = 'bullish'
+                else:
+                    current_signal = 'bearish'
+
+            # ── Complex components from the most recent full window ──
+            prices_last = closes[-(window):]
+            detrended_last = scipy_detrend(prices_last, type='linear')
+            hann_last      = np.hanning(window)
+            windowed_last  = detrended_last * hann_last
+
+            fft_last  = scipy_rfft(windowed_last)
+            freqs     = np.fft.rfftfreq(window, d=1.0)  # frequency bins
+            mags      = np.abs(fft_last)
+
+            # Total power (skip DC for contribution calculation)
+            total_power = float(np.sum(mags[1:] ** 2))
+
+            # Power in kept frequencies (1 to num_freq-1, skip DC)
+            kept_power = float(np.sum(mags[1:num_freq] ** 2))
+            cycle_strength = round(kept_power / total_power, 4) if total_power > 0 else 0.0
+
+            complex_components = []
+            for i in range(num_freq):   # indices 0..num_freq-1 as in the filter
+                freq  = float(freqs[i])
+                period = round(1.0 / freq, 1) if freq > 0 else 0.0   # DC: period = ∞
+                c     = fft_last[i]
+                mag   = float(np.abs(c))
+                pwr   = mag ** 2
+                contrib = round(pwr / total_power * 100, 2) if (total_power > 0 and i > 0) else 0.0
+                complex_components.append({
+                    'freq_index':       i,
+                    'period_days':      period,
+                    'magnitude':        round(mag, 4),
+                    'phase_rad':        round(float(np.angle(c)), 4),
+                    'phase_deg':        round(float(np.degrees(np.angle(c))) % 360, 1),
+                    'real':             round(float(c.real), 4),
+                    'imag':             round(float(c.imag), 4),
+                    'contribution_pct': contrib,
+                })
+
             return {
                 'rollingCurve':      result_bars,
                 'complexComponents': complex_components,
                 'currentSignal':     current_signal,
+                'cycleStrength':     cycle_strength,
                 'windowSize':        window,
                 'numFreqKept':       num_freq,
+                'thresholdPct':      threshold_pct,
             }
 
         except Exception as e:
             traceback.print_exc()
+            print(f"[FFT Rolling] Error: {e}")
             return {'error': str(e)}

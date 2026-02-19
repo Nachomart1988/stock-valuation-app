@@ -382,6 +382,78 @@ async def analyze_market_sentiment(req: MarketSentimentRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ════════════════════════════════════════════════════════════════════
+# FFT Cycle Signal — Dedicated endpoint (fast, no full resumen analysis)
+# ════════════════════════════════════════════════════════════════════
+
+class FFTSignalRequest(BaseModel):
+    """Request body for FFT rolling-window cycle signal"""
+    ticker: str
+    window: int = 256          # rolling window in bars (power of 2 preferred)
+    numFreq: int = 8           # low-pass: keep first K frequencies
+    outputBars: int = 60       # how many bars to return in rollingCurve
+    thresholdPct: float = 0.002  # anti-whipsaw threshold (0.2%)
+
+
+@app.post("/fft-signal")
+async def fft_signal(req: FFTSignalRequest):
+    """
+    Compute FFT rolling-window low-pass filter signal for a stock.
+
+    For each bar in the last `outputBars` period:
+      1. Takes `window` bars of closing prices
+      2. Detrends (linear), applies Hann window
+      3. rfft → complex vector
+      4. Low-pass: keeps first `numFreq` complex coefficients
+      5. irfft → reconstructed smooth curve
+      6. Signal: price > fft_curve*(1+threshold) → long, else flat
+
+    Returns rollingCurve + complexComponents for the most recent window.
+    """
+    try:
+        from spectral_cycle_analyzer import SpectralCycleAnalyzer, HistoricalDataFetcher
+
+        fmp_api_key = os.environ.get('FMP_API_KEY')
+        if not fmp_api_key:
+            raise HTTPException(status_code=400, detail="FMP_API_KEY not configured on server")
+
+        fetcher = HistoricalDataFetcher(fmp_api_key)
+        historical = fetcher.fetch(req.ticker, max_bars=req.window + req.outputBars + 50)
+
+        if not historical or len(historical) < req.window + 5:
+            bars = len(historical) if historical else 0
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient data for {req.ticker}: got {bars} bars, need {req.window + 5}"
+            )
+
+        analyzer = SpectralCycleAnalyzer()
+        result = analyzer.compute_rolling_reconstruction(
+            historical_data=historical,
+            window=req.window,
+            num_freq=req.numFreq,
+            output_bars=req.outputBars,
+            threshold_pct=req.thresholdPct,
+        )
+
+        if result.get('error'):
+            raise HTTPException(status_code=500, detail=result['error'])
+
+        return {
+            "ticker":        req.ticker,
+            "window":        req.window,
+            "numFreq":       req.numFreq,
+            **result
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     import os

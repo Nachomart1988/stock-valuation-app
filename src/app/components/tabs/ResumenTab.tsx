@@ -26,19 +26,20 @@ interface DataQuality {
 }
 
 interface SpectralCycleData {
-  phase: string;
-  score: number;
-  cycleStrength: number;
-  phasePosition: number;
-  atrPct: number;
-  rsi: number;
-  tradingRegime: string;
-  dominantCycles: { period_days: number; amplitude: number; phase_degrees: number; contribution_pct: number }[];
-  rollingCurve: { date: string; price: number; reconstructed: number; aboveRecon: boolean }[];
-  complexComponents: { freq_index: number; period_days: number; magnitude: number; phase_rad: number; phase_deg: number; real: number; imag: number; contribution_pct: number }[];
-  currentSignal: 'bullish' | 'bearish' | 'neutral';
-  windowSize: number;
-  numFreqKept: number;
+  phase?: string;
+  score?: number;
+  cycleStrength?: number;
+  phasePosition?: number;
+  atrPct?: number;
+  rsi?: number;
+  tradingRegime?: string;
+  dominantCycles?: { period_days: number; amplitude: number; phase_degrees: number; contribution_pct: number }[];
+  rollingCurve?: { date: string; price: number; reconstructed: number; aboveRecon: boolean; position?: number }[];
+  complexComponents?: { freq_index: number; period_days: number; magnitude: number; phase_rad: number; phase_deg: number; real: number; imag: number; contribution_pct: number }[];
+  currentSignal?: 'bullish' | 'bearish' | 'neutral';
+  windowSize?: number;
+  numFreqKept?: number;
+  thresholdPct?: number;
 }
 
 interface ResumenData {
@@ -103,6 +104,10 @@ export default function ResumenTab({
   const [error, setError] = useState<string | null>(null);
   const [showChainOfThought, setShowChainOfThought] = useState(false);
   const [showSynthesis, setShowSynthesis] = useState(false);
+
+  // FFT signal — fetched independently from /fft-signal endpoint
+  const [fftData, setFftData] = useState<SpectralCycleData | null>(null);
+  const [fftLoading, setFftLoading] = useState(false);
 
   useEffect(() => {
     const generarResumen = async () => {
@@ -171,6 +176,30 @@ export default function ResumenTab({
 
     generarResumen();
   }, [ticker, currentPrice, advanceValueNet, companyQualityNet, keyMetricsSummary, sustainableGrowthRate, wacc, dcfValuation, monteCarlo, pivotAnalysis, holdersData, forecasts, diarioStats, news]);
+
+  // Fetch FFT spectral data independently so it works even without full resumen
+  useEffect(() => {
+    if (!ticker) return;
+    const fetchFFT = async () => {
+      setFftLoading(true);
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/fft-signal`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker, window: 256, numFreq: 8, outputBars: 60, thresholdPct: 0.002 }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setFftData(data);
+        }
+      } catch (e) {
+        console.warn('[FFT] Could not fetch spectral data:', e);
+      } finally {
+        setFftLoading(false);
+      }
+    };
+    fetchFFT();
+  }, [ticker]);
 
   if (loading) {
     return (
@@ -586,192 +615,220 @@ export default function ResumenTab({
         </div>
       )}
 
-      {/* FFT Spectral Cycles Section */}
-      {spectralCycles && (
-        <div className="bg-gray-900/80 rounded-3xl border border-white/[0.06]/50 overflow-hidden">
-          <div className="px-6 py-4 bg-gradient-to-r from-violet-950/40 to-indigo-950/30 border-b border-white/[0.06]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">〜</span>
-                <span className="text-lg font-semibold text-gray-100">Ciclos Espectrales FFT (Rolling Window)</span>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  spectralCycles.currentSignal === 'bullish'
-                    ? 'bg-emerald-500/20 text-emerald-400'
-                    : spectralCycles.currentSignal === 'bearish'
-                    ? 'bg-red-500/20 text-red-400'
-                    : 'bg-yellow-500/20 text-yellow-400'
-                }`}>
-                  {spectralCycles.currentSignal === 'bullish' ? '▲ Alcista' : spectralCycles.currentSignal === 'bearish' ? '▼ Bajista' : '— Neutral'}
-                </span>
-              </div>
-              <div className="flex items-center gap-4 text-xs text-gray-500">
-                <span>Ventana: {spectralCycles.windowSize}b</span>
-                <span>Frec. mantenidas: {spectralCycles.numFreqKept}</span>
-                <span>Régimen: <span className={`font-medium ${
-                  spectralCycles.tradingRegime === 'cycling' ? 'text-violet-400'
-                  : spectralCycles.tradingRegime === 'trending' ? 'text-blue-400'
-                  : 'text-gray-400'
-                }`}>{spectralCycles.tradingRegime}</span></span>
-              </div>
+      {/* FFT Spectral Cycles Section — uses independent /fft-signal fetch OR resumen spectralCycles */}
+      {(() => {
+        const activeSpectral: SpectralCycleData | null | undefined = fftData ?? spectralCycles;
+        if (!activeSpectral && fftLoading) {
+          return (
+            <div className="bg-gray-900/80 rounded-3xl border border-white/[0.06]/50 p-6 flex items-center gap-3 text-gray-500">
+              <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm">Calculando ciclos espectrales FFT...</span>
             </div>
-          </div>
-
-          <div className="p-6 space-y-6">
-            {/* KPIs */}
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-              <div className="bg-gray-800/60 rounded-xl p-3 text-center">
-                <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">FFT Score</p>
-                <p className={`text-xl font-bold ${
-                  spectralCycles.score >= 60 ? 'text-emerald-400' : spectralCycles.score >= 40 ? 'text-yellow-400' : 'text-red-400'
-                }`}>{spectralCycles.score?.toFixed(0)}</p>
-              </div>
-              <div className="bg-gray-800/60 rounded-xl p-3 text-center">
-                <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Fuerza Ciclo</p>
-                <p className="text-xl font-bold text-violet-400">{spectralCycles.cycleStrength?.toFixed(1)}%</p>
-              </div>
-              <div className="bg-gray-800/60 rounded-xl p-3 text-center">
-                <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Posición Fase</p>
-                <p className="text-xl font-bold text-indigo-400">{spectralCycles.phasePosition?.toFixed(1)}%</p>
-              </div>
-              <div className="bg-gray-800/60 rounded-xl p-3 text-center">
-                <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">RSI Detrend</p>
-                <p className={`text-xl font-bold ${
-                  (spectralCycles.rsi || 50) < 30 ? 'text-emerald-400' : (spectralCycles.rsi || 50) > 70 ? 'text-red-400' : 'text-gray-300'
-                }`}>{spectralCycles.rsi?.toFixed(0)}</p>
-              </div>
-              <div className="bg-gray-800/60 rounded-xl p-3 text-center">
-                <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">ATR %</p>
-                <p className={`text-xl font-bold ${
-                  (spectralCycles.atrPct || 0) > 3 ? 'text-red-400' : 'text-gray-300'
-                }`}>{spectralCycles.atrPct?.toFixed(2)}%</p>
+          );
+        }
+        if (!activeSpectral) return null;
+        return (
+          <div className="bg-gray-900/80 rounded-3xl border border-white/[0.06]/50 overflow-hidden">
+            <div className="px-6 py-4 bg-gradient-to-r from-violet-950/40 to-indigo-950/30 border-b border-white/[0.06]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">〜</span>
+                  <span className="text-lg font-semibold text-gray-100">Ciclos Espectrales FFT (Rolling Window)</span>
+                  {activeSpectral.currentSignal && (
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      activeSpectral.currentSignal === 'bullish'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : activeSpectral.currentSignal === 'bearish'
+                        ? 'bg-red-500/20 text-red-400'
+                        : 'bg-yellow-500/20 text-yellow-400'
+                    }`}>
+                      {activeSpectral.currentSignal === 'bullish' ? '▲ Alcista' : activeSpectral.currentSignal === 'bearish' ? '▼ Bajista' : '— Neutral'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-4 text-xs text-gray-500">
+                  {activeSpectral.windowSize && <span>Ventana: {activeSpectral.windowSize}b</span>}
+                  {activeSpectral.numFreqKept && <span>Frec. mantenidas: {activeSpectral.numFreqKept}</span>}
+                  {activeSpectral.tradingRegime && (
+                    <span>Régimen: <span className={`font-medium ${
+                      activeSpectral.tradingRegime === 'cycling' ? 'text-violet-400'
+                      : activeSpectral.tradingRegime === 'trending' ? 'text-blue-400'
+                      : 'text-gray-400'
+                    }`}>{activeSpectral.tradingRegime}</span></span>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Complex Components Table */}
-            {spectralCycles.complexComponents && spectralCycles.complexComponents.length > 0 && (
-              <div>
-                <h5 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                  Componentes Complejos FFT — Top {spectralCycles.numFreqKept} Frecuencias
-                </h5>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-gray-500 border-b border-gray-800">
-                        <th className="text-left py-2 pr-4">Período (días)</th>
-                        <th className="text-right pr-4">Magnitud |A|</th>
-                        <th className="text-right pr-4">Real (cos)</th>
-                        <th className="text-right pr-4">Imag (sin)</th>
-                        <th className="text-right pr-4">Fase (°)</th>
-                        <th className="text-right">Contribución</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {spectralCycles.complexComponents.map((c, i) => (
-                        <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                          <td className="py-2 pr-4 font-mono text-violet-300">{c.period_days}d</td>
-                          <td className="text-right pr-4 font-mono text-gray-300">{c.magnitude.toFixed(3)}</td>
-                          <td className="text-right pr-4 font-mono">
-                            <span className={c.real >= 0 ? 'text-emerald-400' : 'text-red-400'}>{c.real.toFixed(3)}</span>
-                          </td>
-                          <td className="text-right pr-4 font-mono">
-                            <span className={c.imag >= 0 ? 'text-emerald-400' : 'text-red-400'}>{c.imag.toFixed(3)}</span>
-                          </td>
-                          <td className="text-right pr-4 font-mono text-indigo-300">{c.phase_deg.toFixed(1)}°</td>
-                          <td className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <div className="w-16 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full"
-                                  style={{ width: `${Math.min(100, c.contribution_pct * 3)}%` }}
-                                />
-                              </div>
-                              <span className="text-violet-400">{c.contribution_pct.toFixed(1)}%</span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="text-[10px] text-gray-600 mt-2">
-                  Número complejo A = Real + i·Imag → |A| = magnitud (amplitud del ciclo), φ = arg(A) = fase (posición en el ciclo).
-                  La curva reconstruida irfft(filtrada) = señal suave de ciclos.
-                </p>
-              </div>
-            )}
-
-            {/* Rolling Curve mini-chart */}
-            {spectralCycles.rollingCurve && spectralCycles.rollingCurve.length > 0 && (
-              <div>
-                <h5 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                  Precio vs Curva FFT Reconstruida (últimas {spectralCycles.rollingCurve.length} barras)
-                </h5>
-                <div className="bg-gray-950/60 rounded-xl p-3 overflow-x-auto">
-                  {(() => {
-                    const curve = spectralCycles.rollingCurve;
-                    const allVals = curve.flatMap(b => [b.price, b.reconstructed]);
-                    const minV = Math.min(...allVals);
-                    const maxV = Math.max(...allVals);
-                    const range = maxV - minV || 1;
-                    const W = 600, H = 100;
-                    const toX = (i: number) => (i / (curve.length - 1)) * W;
-                    const toY = (v: number) => H - ((v - minV) / range) * H;
-
-                    const pricePath = curve.map((b, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(b.price).toFixed(1)}`).join(' ');
-                    const reconPath = curve.map((b, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(b.reconstructed).toFixed(1)}`).join(' ');
-
-                    const lastBar = curve[curve.length - 1];
-                    const signalColor = lastBar?.aboveRecon ? '#10b981' : '#f87171';
-
-                    return (
-                      <svg viewBox={`0 0 ${W} ${H + 20}`} className="w-full" style={{ height: 120 }}>
-                        {/* Grid lines */}
-                        {[0.25, 0.5, 0.75].map(pct => (
-                          <line key={pct} x1="0" y1={H * pct} x2={W} y2={H * pct} stroke="#374151" strokeWidth="0.5" strokeDasharray="4,4" />
-                        ))}
-                        {/* Price path (solid) */}
-                        <path d={pricePath} fill="none" stroke={signalColor} strokeWidth="1.5" />
-                        {/* Reconstructed path (dashed violet) */}
-                        <path d={reconPath} fill="none" stroke="#8b5cf6" strokeWidth="1.5" strokeDasharray="4,2" />
-                        {/* Legend */}
-                        <line x1="10" y1={H + 14} x2="30" y2={H + 14} stroke={signalColor} strokeWidth="1.5" />
-                        <text x="33" y={H + 18} fill="#9ca3af" fontSize="9">Precio</text>
-                        <line x1="80" y1={H + 14} x2="100" y2={H + 14} stroke="#8b5cf6" strokeWidth="1.5" strokeDasharray="4,2" />
-                        <text x="103" y={H + 18} fill="#9ca3af" fontSize="9">FFT Reconstruida</text>
-                        {/* Price labels */}
-                        <text x="2" y="10" fill="#6b7280" fontSize="8">${maxV.toFixed(0)}</text>
-                        <text x="2" y={H - 2} fill="#6b7280" fontSize="8">${minV.toFixed(0)}</text>
-                      </svg>
-                    );
-                  })()}
-                </div>
-                <p className="text-[10px] text-gray-600 mt-1 text-center">
-                  Señal actual: precio {spectralCycles.rollingCurve[spectralCycles.rollingCurve.length - 1]?.aboveRecon ? 'POR ENCIMA' : 'POR DEBAJO'} de la curva FFT
-                  {spectralCycles.rollingCurve[spectralCycles.rollingCurve.length - 1]?.aboveRecon ? ' → alcista' : ' → bajista'}
-                </p>
-              </div>
-            )}
-
-            {/* Dominant Cycles summary */}
-            {spectralCycles.dominantCycles && spectralCycles.dominantCycles.length > 0 && (
-              <div>
-                <h5 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Ciclos Dominantes Detectados</h5>
-                <div className="flex flex-wrap gap-2">
-                  {spectralCycles.dominantCycles.map((c, i) => (
-                    <div key={i} className="bg-violet-900/20 border border-violet-800/40 rounded-lg px-3 py-2 text-xs">
-                      <span className="text-violet-300 font-mono font-bold">{c.period_days}d</span>
-                      <span className="text-gray-500 mx-1">·</span>
-                      <span className="text-gray-400">{c.contribution_pct.toFixed(1)}%</span>
-                      <span className="text-gray-500 mx-1">·</span>
-                      <span className="text-indigo-400">{c.phase_degrees.toFixed(0)}°</span>
+            <div className="p-6 space-y-6">
+              {/* KPIs — only show if available (full resumen analysis provides them) */}
+              {(activeSpectral.score != null || activeSpectral.cycleStrength != null || activeSpectral.phasePosition != null || activeSpectral.rsi != null || activeSpectral.atrPct != null) && (
+                <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+                  {activeSpectral.score != null && (
+                    <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">FFT Score</p>
+                      <p className={`text-xl font-bold ${
+                        activeSpectral.score >= 60 ? 'text-emerald-400' : activeSpectral.score >= 40 ? 'text-yellow-400' : 'text-red-400'
+                      }`}>{activeSpectral.score.toFixed(0)}</p>
                     </div>
-                  ))}
+                  )}
+                  {activeSpectral.cycleStrength != null && (
+                    <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Fuerza Ciclo</p>
+                      <p className="text-xl font-bold text-violet-400">{activeSpectral.cycleStrength.toFixed(1)}%</p>
+                    </div>
+                  )}
+                  {activeSpectral.phasePosition != null && (
+                    <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Posición Fase</p>
+                      <p className="text-xl font-bold text-indigo-400">{activeSpectral.phasePosition.toFixed(1)}%</p>
+                    </div>
+                  )}
+                  {activeSpectral.rsi != null && (
+                    <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">RSI Detrend</p>
+                      <p className={`text-xl font-bold ${
+                        activeSpectral.rsi < 30 ? 'text-emerald-400' : activeSpectral.rsi > 70 ? 'text-red-400' : 'text-gray-300'
+                      }`}>{activeSpectral.rsi.toFixed(0)}</p>
+                    </div>
+                  )}
+                  {activeSpectral.atrPct != null && (
+                    <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">ATR %</p>
+                      <p className={`text-xl font-bold ${
+                        activeSpectral.atrPct > 3 ? 'text-red-400' : 'text-gray-300'
+                      }`}>{activeSpectral.atrPct.toFixed(2)}%</p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Complex Components Table */}
+              {activeSpectral.complexComponents && activeSpectral.complexComponents.length > 0 && (
+                <div>
+                  <h5 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    Componentes Complejos FFT — Top {activeSpectral.numFreqKept ?? activeSpectral.complexComponents.length} Frecuencias
+                  </h5>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-500 border-b border-gray-800">
+                          <th className="text-left py-2 pr-4">Período (días)</th>
+                          <th className="text-right pr-4">Magnitud |A|</th>
+                          <th className="text-right pr-4">Real (cos)</th>
+                          <th className="text-right pr-4">Imag (sin)</th>
+                          <th className="text-right pr-4">Fase (°)</th>
+                          <th className="text-right">Contribución</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeSpectral.complexComponents.map((c, i) => (
+                          <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                            <td className="py-2 pr-4 font-mono text-violet-300">{c.period_days}d</td>
+                            <td className="text-right pr-4 font-mono text-gray-300">{c.magnitude.toFixed(3)}</td>
+                            <td className="text-right pr-4 font-mono">
+                              <span className={c.real >= 0 ? 'text-emerald-400' : 'text-red-400'}>{c.real.toFixed(3)}</span>
+                            </td>
+                            <td className="text-right pr-4 font-mono">
+                              <span className={c.imag >= 0 ? 'text-emerald-400' : 'text-red-400'}>{c.imag.toFixed(3)}</span>
+                            </td>
+                            <td className="text-right pr-4 font-mono text-indigo-300">{c.phase_deg.toFixed(1)}°</td>
+                            <td className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <div className="w-16 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full"
+                                    style={{ width: `${Math.min(100, c.contribution_pct * 3)}%` }}
+                                  />
+                                </div>
+                                <span className="text-violet-400">{c.contribution_pct.toFixed(1)}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-[10px] text-gray-600 mt-2">
+                    Número complejo A = Real + i·Imag → |A| = magnitud (amplitud del ciclo), φ = arg(A) = fase (posición en el ciclo).
+                    La curva reconstruida irfft(filtrada) = señal suave de ciclos.
+                  </p>
+                </div>
+              )}
+
+              {/* Rolling Curve mini-chart */}
+              {activeSpectral.rollingCurve && activeSpectral.rollingCurve.length > 0 && (
+                <div>
+                  <h5 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    Precio vs Curva FFT Reconstruida (últimas {activeSpectral.rollingCurve.length} barras)
+                  </h5>
+                  <div className="bg-gray-950/60 rounded-xl p-3 overflow-x-auto">
+                    {(() => {
+                      const curve = activeSpectral.rollingCurve!;
+                      const allVals = curve.flatMap(b => [b.price, b.reconstructed]);
+                      const minV = Math.min(...allVals);
+                      const maxV = Math.max(...allVals);
+                      const range = maxV - minV || 1;
+                      const W = 600, H = 100;
+                      const toX = (i: number) => (i / (curve.length - 1)) * W;
+                      const toY = (v: number) => H - ((v - minV) / range) * H;
+
+                      const pricePath = curve.map((b, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(b.price).toFixed(1)}`).join(' ');
+                      const reconPath = curve.map((b, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(b.reconstructed).toFixed(1)}`).join(' ');
+
+                      const lastBar = curve[curve.length - 1];
+                      const signalColor = lastBar?.aboveRecon ? '#10b981' : '#f87171';
+
+                      return (
+                        <svg viewBox={`0 0 ${W} ${H + 20}`} className="w-full" style={{ height: 120 }}>
+                          {/* Grid lines */}
+                          {[0.25, 0.5, 0.75].map(pct => (
+                            <line key={pct} x1="0" y1={H * pct} x2={W} y2={H * pct} stroke="#374151" strokeWidth="0.5" strokeDasharray="4,4" />
+                          ))}
+                          {/* Price path (solid) */}
+                          <path d={pricePath} fill="none" stroke={signalColor} strokeWidth="1.5" />
+                          {/* Reconstructed path (dashed violet) */}
+                          <path d={reconPath} fill="none" stroke="#8b5cf6" strokeWidth="1.5" strokeDasharray="4,2" />
+                          {/* Legend */}
+                          <line x1="10" y1={H + 14} x2="30" y2={H + 14} stroke={signalColor} strokeWidth="1.5" />
+                          <text x="33" y={H + 18} fill="#9ca3af" fontSize="9">Precio</text>
+                          <line x1="80" y1={H + 14} x2="100" y2={H + 14} stroke="#8b5cf6" strokeWidth="1.5" strokeDasharray="4,2" />
+                          <text x="103" y={H + 18} fill="#9ca3af" fontSize="9">FFT Reconstruida</text>
+                          {/* Price labels */}
+                          <text x="2" y="10" fill="#6b7280" fontSize="8">${maxV.toFixed(0)}</text>
+                          <text x="2" y={H - 2} fill="#6b7280" fontSize="8">${minV.toFixed(0)}</text>
+                        </svg>
+                      );
+                    })()}
+                  </div>
+                  <p className="text-[10px] text-gray-600 mt-1 text-center">
+                    Señal actual: precio {activeSpectral.rollingCurve[activeSpectral.rollingCurve.length - 1]?.aboveRecon ? 'POR ENCIMA' : 'POR DEBAJO'} de la curva FFT
+                    {activeSpectral.rollingCurve[activeSpectral.rollingCurve.length - 1]?.aboveRecon ? ' → alcista' : ' → bajista'}
+                  </p>
+                </div>
+              )}
+
+              {/* Dominant Cycles summary */}
+              {activeSpectral.dominantCycles && activeSpectral.dominantCycles.length > 0 && (
+                <div>
+                  <h5 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Ciclos Dominantes Detectados</h5>
+                  <div className="flex flex-wrap gap-2">
+                    {activeSpectral.dominantCycles.map((c, i) => (
+                      <div key={i} className="bg-violet-900/20 border border-violet-800/40 rounded-lg px-3 py-2 text-xs">
+                        <span className="text-violet-300 font-mono font-bold">{c.period_days}d</span>
+                        <span className="text-gray-500 mx-1">·</span>
+                        <span className="text-gray-400">{c.contribution_pct.toFixed(1)}%</span>
+                        <span className="text-gray-500 mx-1">·</span>
+                        <span className="text-indigo-400">{c.phase_degrees.toFixed(0)}°</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Footer */}
       <div className="text-center text-xs text-gray-600 pt-4 border-t border-gray-800">
