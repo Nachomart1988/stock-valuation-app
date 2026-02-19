@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { clerkClient } from '@clerk/nextjs/server';
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET_KEY;
+const ADMIN_SECRET = process.env.ADMIN_SECRET_KEY?.trim();
 
 export async function POST(req: NextRequest) {
   // Verify admin secret
-  const authHeader = req.headers.get('x-admin-key');
+  const authHeader = req.headers.get('x-admin-key')?.trim();
   if (!ADMIN_SECRET || authHeader !== ADMIN_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
