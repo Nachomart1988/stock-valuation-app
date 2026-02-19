@@ -157,7 +157,11 @@ export default function MarketSentimentPage() {
       // Helper: fetch batch-quote-short for a list of constituent symbols → compute breadth counts
       const computeBreadth = async (constituents: any[]) => {
         if (!Array.isArray(constituents) || constituents.length === 0) return null;
-        const symbols: string[] = constituents.map((c: any) => c.symbol).filter(Boolean);
+        // FMP may return Symbol (capital) or symbol (lowercase)
+        const symbols: string[] = constituents
+          .map((c: any) => c.symbol || c.Symbol)
+          .filter(Boolean);
+        if (symbols.length === 0) return null;
         const batchSize = 500;
         const batchResults = await Promise.all(
           Array.from({ length: Math.ceil(symbols.length / batchSize) }, (_, i) => {
@@ -168,9 +172,16 @@ export default function MarketSentimentPage() {
           })
         );
         const allQuotes: any[] = (batchResults as any[][]).flat();
-        const advancing = allQuotes.filter(q => (q.changesPercentage ?? 0) > 0).length;
-        const declining = allQuotes.filter(q => (q.changesPercentage ?? 0) < 0).length;
-        return { advancing, declining, unchanged: allQuotes.length - advancing - declining, total: allQuotes.length };
+        // Use changesPercentage or change; treat null/undefined as unknown (not 0)
+        const withData = allQuotes.filter(q => {
+          const pct = q.changesPercentage ?? q.change;
+          return pct !== null && pct !== undefined && !isNaN(Number(pct));
+        });
+        const advancing = withData.filter(q => Number(q.changesPercentage ?? q.change) > 0).length;
+        const declining = withData.filter(q => Number(q.changesPercentage ?? q.change) < 0).length;
+        // If less than 10% of stocks show any movement, data is likely stale/pre-market
+        if (withData.length < symbols.length * 0.1) return null;
+        return { advancing, declining, unchanged: withData.length - advancing - declining, total: withData.length };
       };
 
       const [sp500Breadth, dowBreadth] = await Promise.all([

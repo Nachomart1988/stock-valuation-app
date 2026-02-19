@@ -529,10 +529,14 @@ class NeuralReasoningMarketSentimentEngine:
         movers_score, movers_signals, breadth_ratio, sector_rotation, top_gainers, top_losers = self._layer2_breadth(gainers, losers, yf_data, index_breadth)
         signals.extend(movers_signals)
 
-        # Real advancing/declining counts from SP500 index breadth (or fall back to gainers/losers)
+        # Real advancing/declining counts from SP500 index breadth (same sanity check as _layer2_breadth)
         sp500_b = index_breadth.get('sp500') or {}
-        real_advancing = sp500_b.get('advancing', len(gainers)) if sp500_b.get('total', 0) > 100 else len(gainers)
-        real_declining = sp500_b.get('declining', len(losers)) if sp500_b.get('total', 0) > 100 else len(losers)
+        _total_real = sp500_b.get('total', 0)
+        _adv = sp500_b.get('advancing', 0)
+        _dec = sp500_b.get('declining', 0)
+        _use_real = _total_real > 100 and (_adv + _dec) >= _total_real * 0.20
+        real_advancing = _adv if _use_real else len(gainers)
+        real_declining = _dec if _use_real else len(losers)
         ad_info = ""
         nhl_info = ""
         if yf_data.get('ad_line'):
@@ -656,13 +660,20 @@ class NeuralReasoningMarketSentimentEngine:
 
         # Use real SP500 constituent breadth when available (>100 stocks counted)
         sp500_b = index_breadth.get('sp500') or {}
-        if sp500_b.get('total', 0) > 100:
-            advancing = sp500_b['advancing']
-            declining = sp500_b['declining']
-            total_real = sp500_b['total']
-            breadth_ratio = advancing / total_real if total_real > 0 else 0.5
+        total_real = sp500_b.get('total', 0)
+        advancing = sp500_b.get('advancing', 0)
+        declining = sp500_b.get('declining', 0)
+        # Sanity check: at least 20% of stocks must have non-zero change (avoids pre-market/stale data)
+        use_real_breadth = (
+            total_real > 100 and
+            (advancing + declining) >= total_real * 0.20
+        )
+        if use_real_breadth:
+            breadth_ratio = advancing / total_real
             print(f"[NeuralMSE] SP500 real breadth: {advancing}↑ {declining}↓ of {total_real} ({breadth_ratio:.1%})")
         else:
+            if total_real > 0:
+                print(f"[NeuralMSE] SP500 breadth data stale or pre-market ({advancing+declining}/{total_real} with movement), falling back to gainers/losers")
             total = len(gainers) + len(losers)
             if total == 0:
                 return 50.0, [], 0.5, {"hot": [], "cold": []}, [], []

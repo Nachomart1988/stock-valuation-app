@@ -145,7 +145,7 @@ function convertArrayToUSD(arr: any[], rate: number): any[] {
 async function fetchExchangeRate(fromCurrency: string, apiKey: string): Promise<number> {
   if (!fromCurrency || fromCurrency === 'USD') return 1;
   try {
-    // FMP forex endpoint: get rate for converting fromCurrency to USD
+    // FMP stable/fx returns: { ticker: "EURUSD", bid, ask, open, ... } — no "price" field
     const res = await fetch(
       `https://financialmodelingprep.com/stable/fx?apikey=${apiKey}`,
       { cache: 'no-store' }
@@ -155,24 +155,33 @@ async function fetchExchangeRate(fromCurrency: string, apiKey: string): Promise<
       return 1;
     }
     const fxData = await res.json();
-    // Look for the pair, e.g. EUR/USD
+    // Helper to extract rate from FMP fx object (bid > ask > open > price)
+    const extractRate = (p: any): number | null => {
+      const v = p?.bid ?? p?.ask ?? p?.open ?? p?.price ?? p?.last;
+      return typeof v === 'number' && v > 0 ? v : null;
+    };
+    // Look for direct pair, e.g. EURUSD or EUR/USD
     const pair = fxData.find?.((p: any) =>
-      p.ticker === `${fromCurrency}/USD` || p.ticker === `${fromCurrency}USD`
+      p.ticker === `${fromCurrency}USD` || p.ticker === `${fromCurrency}/USD` ||
+      p.name === `${fromCurrency}/USD`
     );
-    if (pair?.price) {
-      console.log(`[Currency] ${fromCurrency}/USD rate: ${pair.price}`);
-      return pair.price;
+    const directRate = extractRate(pair);
+    if (directRate) {
+      console.log(`[Currency] ${fromCurrency}/USD rate: ${directRate}`);
+      return directRate;
     }
     // Try inverse pair USD/XXX
     const inversePair = fxData.find?.((p: any) =>
-      p.ticker === `USD/${fromCurrency}` || p.ticker === `USD${fromCurrency}`
+      p.ticker === `USD${fromCurrency}` || p.ticker === `USD/${fromCurrency}` ||
+      p.name === `USD/${fromCurrency}`
     );
-    if (inversePair?.price) {
-      const rate = 1 / inversePair.price;
-      console.log(`[Currency] ${fromCurrency}/USD rate (inverse): ${rate}`);
+    const inverseRate = extractRate(inversePair);
+    if (inverseRate) {
+      const rate = 1 / inverseRate;
+      console.log(`[Currency] ${fromCurrency}/USD rate (inverse of USD${fromCurrency}): ${rate}`);
       return rate;
     }
-    console.warn(`[Currency] Could not find FX pair for ${fromCurrency}/USD`);
+    console.warn(`[Currency] Could not find FX pair for ${fromCurrency}/USD in ${fxData?.length ?? 0} records`);
     return 1;
   } catch (err) {
     console.error('[Currency] Error fetching exchange rate:', err);
