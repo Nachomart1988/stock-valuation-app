@@ -412,6 +412,21 @@ function AnalizarContent() {
     }
   }, [searchParams, initialLoad]);
 
+  // Handle ?tab= query param to jump to a specific tab on load
+  useEffect(() => {
+    const urlTab = searchParams.get('tab');
+    if (!urlTab) return;
+    const tabMap: Record<string, number> = {
+      diario: 10,       // Investor Journal
+      summary: 11,      // Resumen Maestro
+      valuaciones: 8,   // Valuaciones
+      inicio: 0,
+    };
+    const idx = tabMap[urlTab.toLowerCase()];
+    if (idx !== undefined) setSelectedTabIndex(idx);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Función para analizar un ticker (llamada desde InputsTab)
   const handleAnalizar = (newTicker: string) => {
     const upperTicker = newTicker.toUpperCase().trim();
