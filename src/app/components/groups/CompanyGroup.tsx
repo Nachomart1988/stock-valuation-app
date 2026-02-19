@@ -2,12 +2,17 @@
 'use client';
 
 import { Tab } from '@headlessui/react';
+import { LockedSubTab } from '@/app/components/LockedTab';
+import type { PlanTier } from '@/lib/plans';
 
 interface CompanyGroupProps {
   CompetidoresTab: React.ReactNode;
   IndustryTab: React.ReactNode;
   SegmentationTab: React.ReactNode;
   HoldersTab: React.ReactNode;
+  lockedSubtabs?: number[];
+  requiredPlan?: PlanTier;
+  currentPlan?: PlanTier;
 }
 
 export default function CompanyGroup({
@@ -15,6 +20,9 @@ export default function CompanyGroup({
   IndustryTab,
   SegmentationTab,
   HoldersTab,
+  lockedSubtabs = [],
+  requiredPlan = 'pro',
+  currentPlan = 'free',
 }: CompanyGroupProps) {
   const subtabs = ['Competidores', 'Industry', 'Segmentation', 'Holders'];
 
@@ -24,7 +32,7 @@ export default function CompanyGroup({
 
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg">
-          {subtabs.map((tab) => (
+          {subtabs.map((tab, i) => (
             <Tab
               key={tab}
               className={({ selected }) =>
@@ -35,16 +43,22 @@ export default function CompanyGroup({
                 }`
               }
             >
-              {tab}
+              {tab}{lockedSubtabs.includes(i) ? ' 🔒' : ''}
             </Tab>
           ))}
         </Tab.List>
 
         <Tab.Panels className="mt-4">
           <Tab.Panel unmount={false}>{CompetidoresTab}</Tab.Panel>
-          <Tab.Panel unmount={false}>{IndustryTab}</Tab.Panel>
-          <Tab.Panel unmount={false}>{SegmentationTab}</Tab.Panel>
-          <Tab.Panel unmount={false}>{HoldersTab}</Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(1) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : IndustryTab}
+          </Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(2) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : SegmentationTab}
+          </Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(3) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : HoldersTab}
+          </Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
     </div>

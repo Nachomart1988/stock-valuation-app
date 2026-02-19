@@ -3,6 +3,8 @@
 
 import { Tab } from '@headlessui/react';
 import { useMemo, useEffect } from 'react';
+import { LockedSubTab } from '@/app/components/LockedTab';
+import type { PlanTier } from '@/lib/plans';
 
 interface DCFGroupProps {
   CalculosTab: React.ReactNode;
@@ -14,6 +16,9 @@ interface DCFGroupProps {
   income?: any[];
   balance?: any[];
   cashFlow?: any[];
+  lockedSubtabs?: number[];
+  requiredPlan?: PlanTier;
+  currentPlan?: PlanTier;
 }
 
 export default function DCFGroup({
@@ -23,6 +28,9 @@ export default function DCFGroup({
   dcfCustom,
   quote,
   valorIntrinseco,
+  lockedSubtabs = [],
+  requiredPlan = 'pro',
+  currentPlan = 'free',
 }: DCFGroupProps) {
   const subtabs = ['Cálculos', 'DCF Models'];
 
@@ -69,6 +77,9 @@ export default function DCFGroup({
     if (!intrinsic || !currentPrice) return null;
     return ((intrinsic - currentPrice) / currentPrice) * 100;
   };
+
+  // Start at first unlocked sub-tab
+  const defaultIndex = lockedSubtabs.includes(0) ? 1 : 0;
 
   return (
     <div className="space-y-4">
@@ -128,9 +139,9 @@ export default function DCFGroup({
         </div>
       </div>
 
-      <Tab.Group>
+      <Tab.Group defaultIndex={defaultIndex}>
         <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg">
-          {subtabs.map((tab) => (
+          {subtabs.map((tab, i) => (
             <Tab
               key={tab}
               className={({ selected }) =>
@@ -141,13 +152,15 @@ export default function DCFGroup({
                 }`
               }
             >
-              {tab}
+              {tab}{lockedSubtabs.includes(i) ? ' 🔒' : ''}
             </Tab>
           ))}
         </Tab.List>
 
         <Tab.Panels className="mt-4">
-          <Tab.Panel unmount={false}>{CalculosTab}</Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(0) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : CalculosTab}
+          </Tab.Panel>
           <Tab.Panel unmount={false}>{DCFTab}</Tab.Panel>
         </Tab.Panels>
       </Tab.Group>

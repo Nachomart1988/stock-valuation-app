@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useSignIn } from '@clerk/nextjs';
 import Logo from '../components/Logo';
-import { useLanguage } from '@/i18n/LanguageContext';
 
 export default function LoginPage() {
-  const { t } = useLanguage();
+  const { signIn, isLoaded, setActive } = useSignIn();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,108 +16,110 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLoaded) return;
     setLoading(true);
     setError('');
 
-    // TODO: Implement actual authentication with Supabase or NextAuth
-    // For now, show a message that auth is coming soon
-    setTimeout(() => {
+    try {
+      const result = await signIn.create({ identifier: email, password });
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId });
+        router.push('/analizar');
+      } else {
+        setError('Verificación adicional requerida. Revisa tu email.');
+      }
+    } catch (err: any) {
+      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || 'Error al iniciar sesión';
+      setError(msg);
+    } finally {
       setLoading(false);
-      setError(t('auth.authComingSoon'));
-    }, 1000);
+    }
+  };
+
+  const handleOAuth = async (provider: 'oauth_google' | 'oauth_github') => {
+    if (!isLoaded) return;
+    try {
+      await signIn.authenticateWithRedirect({
+        strategy: provider,
+        redirectUrl: '/sso-callback',
+        redirectUrlComplete: '/analizar',
+      });
+    } catch (err: any) {
+      setError('Error al conectar con proveedor externo');
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 text-white flex flex-col">
-      {/* Header */}
       <header className="border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Logo size="md" />
-          <Link href="/" className="text-gray-400 hover:text-white transition">
-            {t('auth.backToHome')}
-          </Link>
+          <Link href="/" className="text-gray-400 hover:text-white transition">← Inicio</Link>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
-          {/* Card */}
           <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-2xl p-5 sm:p-8">
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold mb-2">{t('auth.welcomeBack')}</h1>
-              <p className="text-gray-400">{t('auth.signInToAccount')}</p>
+              <h1 className="text-3xl font-bold mb-2">Bienvenido de vuelta</h1>
+              <p className="text-gray-400">Ingresa a tu cuenta para continuar</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && (
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-yellow-400 text-sm">
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
                   {error}
                 </div>
               )}
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                  {t('auth.email')}
-                </label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
                 <input
                   type="email"
-                  id="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-white/[0.06] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder={t('auth.emailPlaceholder')}
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-white/[0.06] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="tu@email.com"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-                  {t('auth.password')}
-                </label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Contraseña</label>
                 <input
                   type="password"
-                  id="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 bg-gray-800/50 border border-white/[0.06] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder={t('auth.passwordPlaceholder')}
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-white/[0.06] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="••••••••"
                 />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 rounded border-white/[0.08] bg-gray-800 text-emerald-500 focus:ring-emerald-500" />
-                  <span className="text-sm text-gray-400">{t('auth.rememberMe')}</span>
-                </label>
-                <Link href="/forgot-password" className="text-sm text-emerald-400 hover:text-emerald-300">
-                  {t('auth.forgotPassword')}
-                </Link>
               </div>
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-green-600 via-green-500 to-emerald-400 hover:from-emerald-400 hover:via-emerald-400 hover:to-pink-400 text-white font-bold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={loading || !isLoaded}
+                className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl transition disabled:opacity-50"
               >
-                {loading ? t('auth.signingIn') : t('auth.signIn')}
+                {loading ? 'Ingresando...' : 'Ingresar'}
               </button>
             </form>
 
-            {/* Divider */}
-            <div className="relative my-8">
+            <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/[0.06]"></div>
+                <div className="w-full border-t border-white/[0.06]" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-gray-900/50 text-gray-500">{t('auth.continueWith')}</span>
+                <span className="px-4 bg-gray-900/50 text-gray-500">O continúa con</span>
               </div>
             </div>
 
-            {/* Social Login */}
             <div className="grid grid-cols-2 gap-4">
-              <button className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 border border-white/[0.06] rounded-xl transition">
+              <button
+                onClick={() => handleOAuth('oauth_google')}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 border border-white/[0.06] rounded-xl transition"
+              >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                   <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -124,7 +128,10 @@ export default function LoginPage() {
                 </svg>
                 Google
               </button>
-              <button className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 border border-white/[0.06] rounded-xl transition">
+              <button
+                onClick={() => handleOAuth('oauth_github')}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 border border-white/[0.06] rounded-xl transition"
+              >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                 </svg>
@@ -132,19 +139,17 @@ export default function LoginPage() {
               </button>
             </div>
 
-            {/* Register Link */}
             <p className="text-center mt-8 text-gray-400">
-              {t('auth.noAccount')}{' '}
+              ¿No tienes cuenta?{' '}
               <Link href="/register" className="text-emerald-400 hover:text-emerald-300 font-medium">
-                {t('auth.registerFree')}
+                Crear cuenta gratis
               </Link>
             </p>
           </div>
 
-          {/* Quick access */}
           <div className="mt-6 text-center">
             <Link href="/analizar" className="text-gray-500 hover:text-gray-300 text-sm">
-              {t('auth.tryWithoutRegister')} →
+              Explorar sin registrarse (plan Free) →
             </Link>
           </div>
         </div>

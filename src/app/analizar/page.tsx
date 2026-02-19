@@ -46,6 +46,19 @@ import CompanyGroup from '@/app/components/groups/CompanyGroup';
 import InputsGroup from '@/app/components/groups/InputsGroup';
 import DCFGroup from '@/app/components/groups/DCFGroup';
 
+// Plan access control
+import LockedTab from '@/app/components/LockedTab';
+import {
+  type PlanTier,
+  TAB_MIN_PLAN,
+  GENERAL_INFO_ACCESS,
+  COMPANY_ACCESS,
+  INPUTS_ACCESS,
+  DCF_ACCESS,
+  canAccessTab,
+  canAccessSubTab,
+} from '@/lib/plans';
+
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 // ===== Currency Conversion to USD =====
@@ -155,9 +168,9 @@ async function fetchExchangeRate(fromCurrency: string, apiKey: string): Promise<
       return 1;
     }
     const fxData = await res.json();
-    // Helper to extract rate from FMP fx object (bid > ask > open > price)
+    // Helper to extract rate from FMP fx object — close is the settled daily price
     const extractRate = (p: any): number | null => {
-      const v = p?.bid ?? p?.ask ?? p?.open ?? p?.price ?? p?.last;
+      const v = p?.close ?? p?.bid ?? p?.ask ?? p?.open ?? p?.price ?? p?.last;
       return typeof v === 'number' && v > 0 ? v : null;
     };
     // Look for direct pair, e.g. EURUSD or EUR/USD
@@ -384,6 +397,13 @@ function AnalizarContent() {
   const searchParams = useSearchParams();
   const { t } = useLanguage();
   const { user, isSignedIn } = useUser();
+
+  // Force-refresh user data on mount so publicMetadata is never stale after a plan change
+  useEffect(() => {
+    user?.reload();
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const userPlan = ((user?.publicMetadata?.plan as PlanTier) || 'free');
   const [ticker, setTicker] = useState('');
   const [activeTicker, setActiveTicker] = useState(''); // El ticker activo para el cual se cargaron los datos
   const [data, setData] = useState<any>(null);
@@ -1007,9 +1027,22 @@ function AnalizarContent() {
       <div className="max-w-[1600px] mx-auto px-3 sm:px-5 md:px-8 pt-20 sm:pt-24 pb-8">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-5 sm:mb-8 md:mb-12">
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-3xl md:text-5xl font-extrabold text-green-400 mb-1 sm:mb-2">
-              {t('analysis.resultsFor')} {activeTicker}
-            </h1>
+            <div className="flex items-center gap-3 mb-1 sm:mb-2">
+              <h1 className="text-xl sm:text-3xl md:text-5xl font-extrabold text-green-400">
+                {t('analysis.resultsFor')} {activeTicker}
+              </h1>
+              {/* Plan badge — always visible for debugging & UX */}
+              {isSignedIn && (
+                <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${
+                  userPlan === 'gold'  ? 'bg-yellow-800 text-yellow-300' :
+                  userPlan === 'elite' ? 'bg-violet-800 text-violet-300' :
+                  userPlan === 'pro'   ? 'bg-emerald-800 text-emerald-300' :
+                                         'bg-gray-700 text-gray-400'
+                }`}>
+                  {userPlan}
+                </span>
+              )}
+            </div>
             <h2 className="text-base sm:text-xl md:text-3xl font-bold text-gray-300 truncate">
               {profile.companyName || t('analysis.company')}
             </h2>
@@ -1093,10 +1126,14 @@ function AnalizarContent() {
 
   {/* 3. Forecasts (Forecasts + Revenue Forecast) */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
-    <ForecastsGroup
-      ForecastsTab={<ForecastsTab ticker={ticker} />}
-      RevenueForecastTab={<RevenueForecastTab income={income} />}
-    />
+    {canAccessTab(userPlan, 2) ? (
+      <ForecastsGroup
+        ForecastsTab={<ForecastsTab ticker={ticker} />}
+        RevenueForecastTab={<RevenueForecastTab income={income} />}
+      />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[2]} currentPlan={userPlan} tabName="Forecasts" />
+    )}
   </Tab.Panel>
 
   {/* 4. Info General (Analisis General, Key Metrics, Analistas, DuPont) */}
@@ -1106,6 +1143,9 @@ function AnalizarContent() {
       KeyMetricsTab={<KeyMetricsTab ticker={activeTicker} industry={profile?.industry} onCompanyQualityNetChange={setSharedCompanyQualityNet} />}
       AnalistasTab={<AnalistasTab priceTarget={priceTarget} ticker={activeTicker} />}
       DuPontTab={<DuPontTab income={income} balance={balance} ticker={activeTicker} />}
+      lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, GENERAL_INFO_ACCESS)(i))}
+      requiredPlan="pro"
+      currentPlan={userPlan}
     />
   </Tab.Panel>
 
@@ -1116,12 +1156,19 @@ function AnalizarContent() {
       IndustryTab={<IndustryTab ticker={activeTicker} />}
       SegmentationTab={<SegmentationTab ticker={activeTicker} />}
       HoldersTab={<HoldersTab ticker={activeTicker} />}
+      lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, COMPANY_ACCESS)(i))}
+      requiredPlan="pro"
+      currentPlan={userPlan}
     />
   </Tab.Panel>
 
   {/* 6. Noticias */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
-    <NoticiasTab ticker={activeTicker} />
+    {canAccessTab(userPlan, 5) ? (
+      <NoticiasTab ticker={activeTicker} />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[5]} currentPlan={userPlan} tabName="Noticias" />
+    )}
   </Tab.Panel>
 
   {/* 7. Inputs (Sustainable Growth, Beta, CAGR, Pivots, WACC) */}
@@ -1152,6 +1199,9 @@ function AnalizarContent() {
           onWACCChange={setSharedWACC}
         />
       }
+      lockedSubtabs={[0,1,2,3,4].filter(i => !canAccessSubTab(userPlan, INPUTS_ACCESS)(i))}
+      requiredPlan="pro"
+      currentPlan={userPlan}
     />
   </Tab.Panel>
 
@@ -1179,6 +1229,9 @@ function AnalizarContent() {
       income={income}
       balance={balance}
       cashFlow={cashFlow}
+      lockedSubtabs={[0,1].filter(i => !canAccessSubTab(userPlan, DCF_ACCESS)(i))}
+      requiredPlan="pro"
+      currentPlan={userPlan}
     />
   </Tab.Panel>
 
@@ -1207,39 +1260,51 @@ function AnalizarContent() {
 
   {/* 10. Probability */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
-    <ProbabilityTab
-      ticker={activeTicker}
-      quote={quote}
-      dcfCustom={dcfCustom}
-      sharedAverageVal={sharedAverageVal}
-      profile={profile}
-      dividends={dividends}
-    />
+    {canAccessTab(userPlan, 9) ? (
+      <ProbabilityTab
+        ticker={activeTicker}
+        quote={quote}
+        dcfCustom={dcfCustom}
+        sharedAverageVal={sharedAverageVal}
+        profile={profile}
+        dividends={dividends}
+      />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[9]} currentPlan={userPlan} tabName="Probability" />
+    )}
   </Tab.Panel>
 
   {/* 11. Diario Inversor */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
-    <DiarioInversorTab />
+    {canAccessTab(userPlan, 10) ? (
+      <DiarioInversorTab />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[10]} currentPlan={userPlan} tabName="Diario Inversor" />
+    )}
   </Tab.Panel>
 
-  {/* 11. Resumen Maestro */}
+  {/* 12. Resumen Maestro */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
-    <ResumenTab
-      ticker={activeTicker}
-      currentPrice={quote?.price || 0}
-      advanceValueNet={sharedAdvanceValueNet}
-      companyQualityNet={sharedCompanyQualityNet}
-      keyMetricsSummary={sharedKeyMetricsSummary}
-      sustainableGrowthRate={sharedSGR}
-      wacc={sharedWACC}
-      dcfValuation={sharedValorIntrinseco}
-      monteCarlo={sharedMonteCarlo}
-      pivotAnalysis={convertedPivotAnalysis}
-      holdersData={sharedHoldersData}
-      forecasts={sharedForecasts}
-      news={sharedNews}
-      averageValuation={sharedAverageVal}
-    />
+    {canAccessTab(userPlan, 11) ? (
+      <ResumenTab
+        ticker={activeTicker}
+        currentPrice={quote?.price || 0}
+        advanceValueNet={sharedAdvanceValueNet}
+        companyQualityNet={sharedCompanyQualityNet}
+        keyMetricsSummary={sharedKeyMetricsSummary}
+        sustainableGrowthRate={sharedSGR}
+        wacc={sharedWACC}
+        dcfValuation={sharedValorIntrinseco}
+        monteCarlo={sharedMonteCarlo}
+        pivotAnalysis={convertedPivotAnalysis}
+        holdersData={sharedHoldersData}
+        forecasts={sharedForecasts}
+        news={sharedNews}
+        averageValuation={sharedAverageVal}
+      />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[11]} currentPlan={userPlan} tabName="Resumen Maestro" />
+    )}
   </Tab.Panel>
 </Tab.Panels>
 

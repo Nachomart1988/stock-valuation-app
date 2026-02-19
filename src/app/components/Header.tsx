@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 import { useLanguage } from '@/i18n/LanguageContext';
 import LanguageSelector from './LanguageSelector';
 import Logo from './Logo';
-import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
+import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -70,22 +70,23 @@ export default function Header() {
 
           {/* Clock + Auth + Language */}
           <div className="hidden md:flex items-center gap-4">
-            {/* Discrete Clock */}
             <span className="text-xs text-gray-500 font-mono tabular-nums">{currentTime}</span>
 
             <LanguageSelector />
 
             <SignedOut>
-              <SignInButton mode="modal">
-                <button className="px-4 py-2 text-gray-300 hover:text-white transition text-sm">
-                  {t('nav.login')}
-                </button>
-              </SignInButton>
-              <SignUpButton mode="modal">
-                <button className="px-4 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition text-sm">
-                  {t('nav.register')}
-                </button>
-              </SignUpButton>
+              <Link
+                href="/login"
+                className="px-4 py-2 text-gray-300 hover:text-white transition text-sm"
+              >
+                {t('nav.login')}
+              </Link>
+              <Link
+                href="/register"
+                className="px-4 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition text-sm"
+              >
+                {t('nav.register')}
+              </Link>
             </SignedOut>
             <SignedIn>
               <UserButton afterSignOutUrl="/" />
@@ -134,14 +135,15 @@ export default function Header() {
               <hr className="border-gray-800" />
               <LanguageSelector />
               <SignedOut>
-                <SignInButton mode="modal">
-                  <button className="text-gray-300 hover:text-white transition text-left">{t('nav.login')}</button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button className="w-full px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg font-semibold text-center">
-                    {t('nav.register')}
-                  </button>
-                </SignUpButton>
+                <Link href="/login" className="text-gray-300 hover:text-white transition text-left">
+                  {t('nav.login')}
+                </Link>
+                <Link
+                  href="/register"
+                  className="w-full px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg font-semibold text-center block"
+                >
+                  {t('nav.register')}
+                </Link>
               </SignedOut>
               <SignedIn>
                 <UserButton afterSignOutUrl="/" />

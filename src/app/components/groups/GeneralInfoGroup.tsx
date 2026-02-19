@@ -2,12 +2,17 @@
 'use client';
 
 import { Tab } from '@headlessui/react';
+import { LockedSubTab } from '@/app/components/LockedTab';
+import type { PlanTier } from '@/lib/plans';
 
 interface GeneralInfoGroupProps {
   AnalisisGeneralTab: React.ReactNode;
   KeyMetricsTab: React.ReactNode;
   AnalistasTab: React.ReactNode;
   DuPontTab: React.ReactNode;
+  lockedSubtabs?: number[];
+  requiredPlan?: PlanTier;
+  currentPlan?: PlanTier;
 }
 
 export default function GeneralInfoGroup({
@@ -15,6 +20,9 @@ export default function GeneralInfoGroup({
   KeyMetricsTab,
   AnalistasTab,
   DuPontTab,
+  lockedSubtabs = [],
+  requiredPlan = 'pro',
+  currentPlan = 'free',
 }: GeneralInfoGroupProps) {
   const subtabs = ['Análisis General', 'Key Metrics', 'Analistas', 'DuPont Analysis'];
 
@@ -24,7 +32,7 @@ export default function GeneralInfoGroup({
 
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg">
-          {subtabs.map((tab) => (
+          {subtabs.map((tab, i) => (
             <Tab
               key={tab}
               className={({ selected }) =>
@@ -35,16 +43,22 @@ export default function GeneralInfoGroup({
                 }`
               }
             >
-              {tab}
+              {tab}{lockedSubtabs.includes(i) ? ' 🔒' : ''}
             </Tab>
           ))}
         </Tab.List>
 
         <Tab.Panels className="mt-4">
           <Tab.Panel unmount={false}>{AnalisisGeneralTab}</Tab.Panel>
-          <Tab.Panel unmount={false}>{KeyMetricsTab}</Tab.Panel>
-          <Tab.Panel unmount={false}>{AnalistasTab}</Tab.Panel>
-          <Tab.Panel unmount={false}>{DuPontTab}</Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(1) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : KeyMetricsTab}
+          </Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(2) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : AnalistasTab}
+          </Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(3) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : DuPontTab}
+          </Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
     </div>

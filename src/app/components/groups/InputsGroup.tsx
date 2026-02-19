@@ -2,6 +2,8 @@
 'use client';
 
 import { Tab } from '@headlessui/react';
+import { LockedSubTab } from '@/app/components/LockedTab';
+import type { PlanTier } from '@/lib/plans';
 
 interface InputsGroupProps {
   SustainableGrowthTab: React.ReactNode;
@@ -9,6 +11,9 @@ interface InputsGroupProps {
   CAGRTab: React.ReactNode;
   PivotsTab: React.ReactNode;
   WACCTab: React.ReactNode;
+  lockedSubtabs?: number[];
+  requiredPlan?: PlanTier;
+  currentPlan?: PlanTier;
 }
 
 export default function InputsGroup({
@@ -17,6 +22,9 @@ export default function InputsGroup({
   CAGRTab,
   PivotsTab,
   WACCTab,
+  lockedSubtabs = [],
+  requiredPlan = 'pro',
+  currentPlan = 'free',
 }: InputsGroupProps) {
   const subtabs = ['Sustainable Growth', 'Beta', 'CAGR', 'Pivots', 'WACC'];
 
@@ -26,7 +34,7 @@ export default function InputsGroup({
 
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg">
-          {subtabs.map((tab) => (
+          {subtabs.map((tab, i) => (
             <Tab
               key={tab}
               className={({ selected }) =>
@@ -39,7 +47,7 @@ export default function InputsGroup({
                 }`
               }
             >
-              {tab}
+              {tab}{lockedSubtabs.includes(i) ? ' 🔒' : ''}
             </Tab>
           ))}
         </Tab.List>
@@ -47,9 +55,15 @@ export default function InputsGroup({
         <Tab.Panels className="mt-4">
           <Tab.Panel unmount={false}>{SustainableGrowthTab}</Tab.Panel>
           <Tab.Panel unmount={false}>{BetaTab}</Tab.Panel>
-          <Tab.Panel unmount={false}>{CAGRTab}</Tab.Panel>
-          <Tab.Panel unmount={false}>{PivotsTab}</Tab.Panel>
-          <Tab.Panel unmount={false}>{WACCTab}</Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(2) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : CAGRTab}
+          </Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(3) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : PivotsTab}
+          </Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(4) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : WACCTab}
+          </Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
     </div>
