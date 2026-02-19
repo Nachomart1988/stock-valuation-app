@@ -61,6 +61,8 @@ export default function Header() {
                   {t('common.analyze')}
                 </Link>
                 <Link href="/market-sentiment" className="text-gray-300 hover:text-white transition text-sm">{t('nav.market')}</Link>
+                <Link href="/#screener" className="text-gray-300 hover:text-white transition text-sm">Screener</Link>
+                <Link href="/analizar?tab=diario" className="text-gray-300 hover:text-white transition text-sm">Diario</Link>
                 <Link href="/pricing" className="text-gray-300 hover:text-white transition text-sm">{t('nav.pricing')}</Link>
               </>
             )}
@@ -124,6 +126,8 @@ export default function Header() {
                   <Link href="/" className="text-gray-300 hover:text-white transition">{t('nav.home')}</Link>
                   <Link href="/analizar" className="text-gray-300 hover:text-white transition">{t('common.analyze')}</Link>
                   <Link href="/market-sentiment" className="text-gray-300 hover:text-white transition">{t('nav.market')}</Link>
+                  <Link href="/#screener" className="text-gray-300 hover:text-white transition">Screener</Link>
+                  <Link href="/analizar?tab=diario" className="text-gray-300 hover:text-white transition">Diario</Link>
                   <Link href="/pricing" className="text-gray-300 hover:text-white transition">{t('nav.pricing')}</Link>
                 </>
               )}

@@ -102,6 +102,8 @@ function ModelCard({
   onInputChange?: (key: string, value: number) => void;
 }) {
   const [showInputs, setShowInputs] = useState(false);
+  // Local string state for each input to handle decimal typing without value being reset
+  const [localInputs, setLocalInputs] = useState<Record<string, string>>({});
   const isValidValue = value !== null && value > 0 && isFinite(value);
 
   return (
@@ -172,8 +174,14 @@ function ModelCard({
                 step={input.step || 0.01}
                 min={input.min}
                 max={input.max}
-                value={input.value}
-                onChange={(e) => onInputChange(input.key, parseFloat(e.target.value) || 0)}
+                value={input.key in localInputs ? localInputs[input.key] : String(input.value)}
+                onChange={(e) => setLocalInputs(prev => ({ ...prev, [input.key]: e.target.value }))}
+                onBlur={(e) => {
+                  const val = parseFloat(e.target.value);
+                  if (!isNaN(val)) onInputChange(input.key, val);
+                  setLocalInputs(prev => { const n = { ...prev }; delete n[input.key]; return n; });
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                 className="w-20 px-2 py-1 text-xs bg-gray-800 border border-white/[0.08] rounded text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
               />
             </div>

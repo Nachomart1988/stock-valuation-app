@@ -177,28 +177,110 @@ export default function ResumenTab({
     generarResumen();
   }, [ticker, currentPrice, advanceValueNet, companyQualityNet, keyMetricsSummary, sustainableGrowthRate, wacc, dcfValuation, monteCarlo, pivotAnalysis, holdersData, forecasts, diarioStats, news]);
 
-  // Fetch FFT spectral data independently so it works even without full resumen
+  // Client-side DFT for a single window — returns fftSignal at last bar and complex components
+  const computeWindowDFT = (prices: number[], numFreq: number) => {
+    const N = prices.length;
+    const slope = (prices[N - 1] - prices[0]) / (N - 1);
+    const detrended = prices.map((p, i) => p - (prices[0] + slope * i));
+    const trendLast = prices[0] + slope * (N - 1);
+    const windowed = detrended.map((v, i) => v * 0.5 * (1 - Math.cos((2 * Math.PI * i) / (N - 1))));
+    const re: number[] = new Array(numFreq + 1).fill(0);
+    const im: number[] = new Array(numFreq + 1).fill(0);
+    for (let k = 0; k <= numFreq; k++) {
+      for (let n = 0; n < N; n++) {
+        const ang = (2 * Math.PI * k * n) / N;
+        re[k] += windowed[n] * Math.cos(ang);
+        im[k] -= windowed[n] * Math.sin(ang);
+      }
+    }
+    let reconLast = re[0] / N;
+    for (let k = 1; k <= numFreq; k++) {
+      const ang = (2 * Math.PI * k * (N - 1)) / N;
+      reconLast += (2 * (re[k] * Math.cos(ang) - im[k] * Math.sin(ang))) / N;
+    }
+    const fftSignal = reconLast + trendLast;
+    const totalMag = re.slice(1).reduce((s, r, i) => s + Math.sqrt(r * r + (im[i + 1] ?? 0) ** 2), 0) || 1;
+    const complexComps = re.slice(1, numFreq + 1).map((r, idx) => {
+      const k = idx + 1;
+      const img = im[k] ?? 0;
+      const magnitude = Math.sqrt(r * r + img * img);
+      const phaseRad = Math.atan2(-img, r);
+      return {
+        freq_index: k,
+        period_days: Math.round(N / k),
+        magnitude: magnitude / N,
+        phase_rad: phaseRad,
+        phase_deg: ((phaseRad * 180) / Math.PI + 360) % 360,
+        real: r / N,
+        imag: img / N,
+        contribution_pct: (magnitude / totalMag) * 100,
+      };
+    });
+    return { fftSignal, complexComps };
+  };
+
+  // Fetch FFT: tries backend first, falls back to client-side DFT using FMP historical prices
   useEffect(() => {
     if (!ticker) return;
     const fetchFFT = async () => {
       setFftLoading(true);
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/fft-signal`, {
+        // 1) Try backend /fft-signal
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+        const backendRes = await fetch(`${backendUrl}/fft-signal`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ticker, window: 256, numFreq: 8, outputBars: 60, thresholdPct: 0.002 }),
-        });
-        if (res.ok) {
-          const data = await res.json();
+        }).catch(() => null);
+        if (backendRes?.ok) {
+          const data = await backendRes.json();
           setFftData(data);
+          return;
         }
+        // 2) Fallback: compute DFT client-side via FMP prices
+        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
+        if (!apiKey) return;
+        const today = new Date();
+        const twoYearsAgo = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate());
+        const fmpRes = await fetch(
+          `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${ticker}&from=${twoYearsAgo.toISOString().split('T')[0]}&to=${today.toISOString().split('T')[0]}&apikey=${apiKey}`
+        );
+        if (!fmpRes.ok) return;
+        const fmpData = await fmpRes.json();
+        if (!Array.isArray(fmpData) || fmpData.length < 300) return;
+        const sorted = [...fmpData].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const allCloses: number[] = sorted.map((d: any) => Number(d.close ?? d.price));
+        const WINDOW = 256, NUM_FREQ = 8, OUTPUT_BARS = 60, THRESH = 0.002;
+        if (allCloses.length < WINDOW + OUTPUT_BARS) return;
+        const rollingCurve: NonNullable<SpectralCycleData['rollingCurve']> = [];
+        let lastComplexComps: NonNullable<SpectralCycleData['complexComponents']> = [];
+        const startIdx = allCloses.length - OUTPUT_BARS;
+        for (let i = startIdx; i < allCloses.length; i++) {
+          if (i < WINDOW) continue;
+          const windowPrices = allCloses.slice(i - WINDOW, i);
+          const { fftSignal, complexComps } = computeWindowDFT(windowPrices, NUM_FREQ);
+          const close = allCloses[i];
+          const aboveRecon = close > fftSignal * (1 + THRESH);
+          rollingCurve.push({
+            date: sorted[i]?.date ?? String(i),
+            price: close,
+            reconstructed: fftSignal,
+            aboveRecon,
+            position: aboveRecon ? 1 : 0,
+          });
+          if (i === allCloses.length - 1) lastComplexComps = complexComps;
+        }
+        const lastBar = rollingCurve[rollingCurve.length - 1];
+        const sig: 'bullish' | 'bearish' | 'neutral' = !lastBar ? 'neutral' : lastBar.aboveRecon ? 'bullish' : 'bearish';
+        setFftData({ rollingCurve, complexComponents: lastComplexComps, currentSignal: sig, windowSize: WINDOW, numFreqKept: NUM_FREQ, thresholdPct: THRESH });
       } catch (e) {
-        console.warn('[FFT] Could not fetch spectral data:', e);
+        console.warn('[FFT] Error:', e);
       } finally {
         setFftLoading(false);
       }
     };
     fetchFFT();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker]);
 
   if (loading) {

@@ -215,16 +215,16 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
     return result.slice(0, periodsToReturn);
   }, [priceData, timeframe, lookbackPeriods]);
 
-  // Build pivot base bar from the lookback window (aggregate of all closed periods)
-  // This ensures changing lookbackPeriods actually recalculates pivot levels
+  // Build pivot base bar from the PREVIOUS completed period only (standard pivot point methodology)
+  // Pivot PP = (H + L + C) / 3 uses the single prior period's OHLC — NOT the aggregate of all periods
   const pivotBaseBar = useMemo(() => {
     if (aggregatedData.length < 2) return null;
-    const lookback = aggregatedData.slice(1); // exclude today
+    const prev = aggregatedData[1]; // index 0 = current in-progress period, index 1 = last completed
     return {
-      high: Math.max(...lookback.map(d => d.high)),
-      low: Math.min(...lookback.map(d => d.low)),
-      close: lookback[0].close, // most recent closed period
-      open: lookback[lookback.length - 1].open,
+      high: prev.high,
+      low: prev.low,
+      close: prev.close,
+      open: prev.open,
     };
   }, [aggregatedData]);
 
@@ -648,7 +648,13 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
               min="20"
               max="756"
               value={lookbackInput}
-              onChange={(e) => setLookbackInput(e.target.value)}
+              onChange={(e) => {
+                setLookbackInput(e.target.value);
+                const parsed = parseInt(e.target.value);
+                if (!isNaN(parsed) && parsed >= 20 && parsed <= 756) {
+                  setLookbackPeriods(parsed);
+                }
+              }}
               onBlur={() => {
                 const parsed = parseInt(lookbackInput);
                 if (isNaN(parsed) || parsed < 20) {

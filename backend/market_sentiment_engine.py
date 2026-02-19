@@ -335,16 +335,21 @@ class NeuralReasoningMarketSentimentEngine:
                 print(f"[NeuralMSE v6] yfinance {sym} error: {e}")
 
         # ── Market Breadth Indicators ─────────────────────────────────────
-        # ^ADD = NYSE Advance-Decline Line (cumulative breadth)
-        # ^NAHL = NYSE New Highs - New Lows Index
-        breadth_targets = {
-            '^ADD': 'ad_line',    # NYSE Advance-Decline cumulative line
-            '^NAHL': 'nhl_index', # NYSE New Highs - New Lows
-        }
-        for sym, key in breadth_targets.items():
+        # Try multiple symbol variants — Yahoo Finance changes these periodically
+        breadth_targets = [
+            ('^NYAD',  'ad_line'),    # NYSE Advance-Decline Issues (most reliable)
+            ('^ADD',   'ad_line'),    # NYSE A/D cumulative line (alternate)
+            ('^ADVN',  'ad_line'),    # NYSE Advancing Issues
+            ('^NAHL',  'nhl_index'),  # NYSE New Highs - New Lows
+            ('^NYSHL', 'nhl_index'),  # NYSE New Highs-Lows (alternate)
+        ]
+        fetched_keys: set = set()
+        for sym, key in breadth_targets:
+            if key in fetched_keys:
+                continue
             try:
-                ticker = yf.Ticker(sym)
-                hist = ticker.history(period='3mo', interval='1d', auto_adjust=True)
+                t = yf.Ticker(sym)
+                hist = t.history(period='3mo', interval='1d', auto_adjust=True)
                 if hist.empty or len(hist) < 5:
                     continue
                 closes = hist['Close']
@@ -352,7 +357,7 @@ class NeuralReasoningMarketSentimentEngine:
                 prev = float(closes.iloc[-2]) if len(closes) > 1 else current
                 ma10 = float(closes.tail(10).mean()) if len(closes) >= 10 else None
                 ma20 = float(closes.tail(20).mean()) if len(closes) >= 20 else None
-                change_1d = current - prev  # A/D line uses absolute change, not %
+                change_1d = current - prev
                 result[key] = {
                     'value': round(current, 0),
                     'change_1d': round(change_1d, 0),
@@ -360,6 +365,7 @@ class NeuralReasoningMarketSentimentEngine:
                     'ma20': round(ma20, 0) if ma20 else None,
                     'trend': 'up' if ma10 and current > ma10 else 'down' if ma10 else 'neutral',
                 }
+                fetched_keys.add(key)
                 print(f"[NeuralMSE v6] Breadth {sym}: {current:.0f} (1d: {change_1d:+.0f})")
             except Exception as e:
                 print(f"[NeuralMSE v6] Breadth {sym} error: {e}")
@@ -669,7 +675,21 @@ class NeuralReasoningMarketSentimentEngine:
                 f"Neutral breadth: {breadth_ratio:.0%} advancing", emoji="⚖️"))
 
         # ── A/D Line: NYSE Advance-Decline cumulative trend ───────────────
+        # If yfinance failed to get ^NYAD/^ADD, synthesize from FMP gainers/losers
         ad_data = yf_data.get('ad_line')
+        if not ad_data and len(gainers) + len(losers) > 10:
+            net = len(gainers) - len(losers)
+            total_mover = len(gainers) + len(losers)
+            synth_trend = 'up' if net > 0 else 'down' if net < 0 else 'neutral'
+            ad_data = {
+                'value': round(net / total_mover * 1000, 0),
+                'change_1d': net,
+                'ma10': None,
+                'ma20': None,
+                'trend': synth_trend,
+                'synthetic': True,
+            }
+            print(f"[NeuralMSE v6] A/D synthetic: {net:+d} net movers ({len(gainers)}G/{len(losers)}L)")
         if ad_data:
             ad_trend = ad_data.get('trend', 'neutral')
             ad_change = ad_data.get('change_1d', 0)
