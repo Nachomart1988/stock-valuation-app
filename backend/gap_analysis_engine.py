@@ -15,23 +15,27 @@ except ImportError:
 
 
 def fetch_historical_ohlcv(ticker: str, days: int, api_key: str) -> List[Dict]:
-    """Fetch daily OHLCV from FMP stable API."""
+    """Fetch daily OHLCV from FMP stable API (historical-price-eod/full)."""
     if not REQUESTS_AVAILABLE:
         return []
     try:
-        # Add buffer to account for weekends/holidays
-        limit = max(days + 60, 300)
+        # Use the same working endpoint as HistoricalDataFetcher in spectral_cycle_analyzer
         url = (
-            f"https://financialmodelingprep.com/stable/historical-price-full"
-            f"?symbol={ticker}&limit={limit}&apikey={api_key}"
+            f"https://financialmodelingprep.com/stable/historical-price-eod/full"
+            f"?symbol={ticker}&apikey={api_key}"
         )
-        resp = requests.get(url, timeout=15)
+        print(f"[GapEngine] Fetching historical data for {ticker}...")
+        resp = requests.get(url, timeout=20)
         if not resp.ok:
             print(f"[GapEngine] FMP error {resp.status_code} for {ticker}")
             return []
         data = resp.json()
         hist = data.get('historical', []) if isinstance(data, dict) else data
-        # Sort ascending (oldest first)
+        if not hist:
+            print(f"[GapEngine] No historical data returned for {ticker}")
+            return []
+        print(f"[GapEngine] Got {len(hist)} raw bars for {ticker}")
+        # FMP returns newest first — sort ascending (oldest first)
         hist = sorted(hist, key=lambda x: x.get('date', ''))
         return hist
     except Exception as e:
