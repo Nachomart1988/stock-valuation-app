@@ -503,6 +503,31 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       };
     });
 
+    // When volumeWeighted is enabled, overlay the top historical volume-weighted S/R levels
+    if (volumeWeighted && historicalPivots.length > 0) {
+      historicalPivots.slice(0, 8).forEach((pivot, i) => {
+        const opacity = 0.3 + (pivot.strength / 5) * 0.5; // stronger = more opaque
+        annotations[`vol${i}`] = {
+          type: 'line',
+          yMin: pivot.price,
+          yMax: pivot.price,
+          borderColor: pivot.type === 'support'
+            ? `rgba(52, 211, 153, ${opacity})`
+            : `rgba(251, 113, 133, ${opacity})`,
+          borderWidth: pivot.strength >= 4 ? 2 : 1,
+          borderDash: [3, 3],
+          label: {
+            display: pivot.strength >= 3,
+            content: `Vol S/R: $${pivot.price.toFixed(2)} (${pivot.count}x)`,
+            position: 'end',
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            color: pivot.type === 'support' ? '#34d399' : '#fb7185',
+            font: { size: 9 },
+          },
+        };
+      });
+    }
+
     // Add current price line
     annotations['currentPrice'] = {
       type: 'line',
@@ -535,7 +560,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       ],
       annotations,
     };
-  }, [aggregatedData, currentPivots, currentPrice]);
+  }, [aggregatedData, currentPivots, currentPrice, volumeWeighted, historicalPivots]);
 
   // Volume Profile Data
   const volumeProfile = useMemo(() => {

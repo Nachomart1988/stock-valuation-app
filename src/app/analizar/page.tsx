@@ -1112,9 +1112,9 @@ function AnalizarContent() {
   {/* 2. Financial Statements (Income, Balance, CashFlow) */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <FinancialStatementsGroup
-      IncomeTab={<FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} secData={secData} growthData={incomeGrowth} asReportedData={incomeAsReported} financialGrowth={financialGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} />}
-      BalanceTab={<FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} secData={secData} growthData={balanceGrowth} asReportedData={balanceAsReported} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} enterpriseValue={enterpriseValue} />}
-      CashFlowTab={<FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} secData={secData} cashFlowAsReported={cashFlowAsReported} growthData={cashFlowGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} />}
+      IncomeTab={<FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} secData={secData} growthData={incomeGrowth?.length > 0 ? incomeGrowth : financialGrowth} asReportedData={incomeAsReported} financialGrowth={financialGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} currencyInfo={currencyInfo} />}
+      BalanceTab={<FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} secData={secData} growthData={balanceGrowth?.length > 0 ? balanceGrowth : financialGrowth} asReportedData={balanceAsReported} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} enterpriseValue={enterpriseValue} currencyInfo={currencyInfo} />}
+      CashFlowTab={<FinancialStatementTab title="Cash Flow Statement" data={cashFlow} type="cashFlow" ttmData={cashFlowTTM} secData={secData} cashFlowAsReported={cashFlowAsReported} growthData={cashFlowGrowth?.length > 0 ? cashFlowGrowth : financialGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} currencyInfo={currencyInfo} />}
     />
   </Tab.Panel>
 
@@ -2066,7 +2066,7 @@ function formatSECValue(value: number): string {
   return `$${value.toLocaleString()}`;
 }
 
-function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAsReported, growthData, asReportedData, financialGrowth, secReportsRaw, keyMetrics, keyMetricsTTM, ratios, ratiosTTM, enterpriseValue, ownerEarnings }: {
+function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAsReported, growthData, asReportedData, financialGrowth, secReportsRaw, keyMetrics, keyMetricsTTM, ratios, ratiosTTM, enterpriseValue, ownerEarnings, currencyInfo }: {
   title: string;
   data: any[];
   type: 'income' | 'balance' | 'cashFlow';
@@ -2083,6 +2083,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
   ratiosTTM?: any;
   enterpriseValue?: any[];
   ownerEarnings?: any[];
+  currencyInfo?: { original: string; rate: number } | null;
 }) {
   const [showSecDetails, setShowSecDetails] = useState(false);
   const [showKeyMetrics, setShowKeyMetrics] = useState(false);
@@ -2438,7 +2439,19 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
 
   return (
     <div className="space-y-8">
-      <h3 className="text-4xl font-bold text-gray-100 mb-8">{title}</h3>
+      <div className="flex flex-wrap items-center gap-4 mb-8">
+        <h3 className="text-4xl font-bold text-gray-100">{title}</h3>
+        {currencyInfo && currencyInfo.original !== 'USD' && (
+          <span className="px-3 py-1 bg-amber-600/20 text-amber-400 border border-amber-500/40 rounded-full text-sm" title={`Valores convertidos de ${currencyInfo.original} a USD (tasa: ${currencyInfo.rate.toFixed(4)})`}>
+            {currencyInfo.original} → USD
+          </span>
+        )}
+        {(!currencyInfo || currencyInfo.original === 'USD') && (
+          <span className="px-3 py-1 bg-gray-700/40 text-gray-500 border border-gray-600/30 rounded-full text-xs">
+            Valores en USD
+          </span>
+        )}
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
           <thead className="bg-gray-800">

@@ -194,22 +194,28 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
         const positionsResponses = await Promise.all(positionsPromises);
 
         // Handle institutional holders
+        let instCount = 0;
         if (instRes.ok) {
           try {
             const data = await instRes.json();
-            console.log('[HoldersTab] Institutional holders:', data?.length || 0);
-            setInstitutionalHolders(Array.isArray(data) ? data.slice(0, 25) : []);
+            const arr = Array.isArray(data) ? data.slice(0, 25) : [];
+            instCount = arr.length;
+            console.log('[HoldersTab] Institutional holders:', instCount);
+            setInstitutionalHolders(arr);
           } catch {
             console.log('[HoldersTab] Institutional holders parse error');
           }
         }
 
         // Handle mutual fund holders
+        let fundCount = 0;
         if (fundRes.ok) {
           try {
             const data = await fundRes.json();
-            console.log('[HoldersTab] Mutual fund holders:', data?.length || 0);
-            setMutualFundHolders(Array.isArray(data) ? data.slice(0, 25) : []);
+            const arr = Array.isArray(data) ? data.slice(0, 25) : [];
+            fundCount = arr.length;
+            console.log('[HoldersTab] Mutual fund holders:', fundCount);
+            setMutualFundHolders(arr);
           } catch {
             console.log('[HoldersTab] Mutual fund holders parse error');
           }
@@ -288,16 +294,23 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
         }
 
         // Handle institutional analytics
+        let analyticsCount = 0;
         if (analyticsRes.ok) {
           try {
             const data = await analyticsRes.json();
             console.log('[HoldersTab] Institutional analytics:', data?.length || 0);
-            if (Array.isArray(data)) {
+            if (Array.isArray(data) && data.length > 0) {
               setInstitutionalAnalytics(data.slice(0, 25));
+              analyticsCount = data.length;
             }
           } catch {
             console.log('[HoldersTab] Analytics parse error');
           }
+        }
+
+        // Auto-switch: if institutional and mutual fund data are both empty, show analytics
+        if (analyticsCount > 0 && instCount === 0 && fundCount === 0) {
+          setActiveView('analytics');
         }
 
       } catch (err: any) {
@@ -663,26 +676,30 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
         >
           {t('holdersTab.summary')}
         </button>
-        <button
-          onClick={() => setActiveView('institutional')}
-          className={`px-4 py-2 rounded-t-xl font-semibold transition-all whitespace-nowrap ${
-            activeView === 'institutional'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
-          }`}
-        >
-          {t('holdersTab.institutional')} ({institutionalHolders.length})
-        </button>
-        <button
-          onClick={() => setActiveView('mutualfunds')}
-          className={`px-4 py-2 rounded-t-xl font-semibold transition-all whitespace-nowrap ${
-            activeView === 'mutualfunds'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
-          }`}
-        >
-          {t('holdersTab.mutualFunds')} ({mutualFundHolders.length})
-        </button>
+        {institutionalHolders.length > 0 && (
+          <button
+            onClick={() => setActiveView('institutional')}
+            className={`px-4 py-2 rounded-t-xl font-semibold transition-all whitespace-nowrap ${
+              activeView === 'institutional'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+            }`}
+          >
+            {t('holdersTab.institutional')} ({institutionalHolders.length})
+          </button>
+        )}
+        {mutualFundHolders.length > 0 && (
+          <button
+            onClick={() => setActiveView('mutualfunds')}
+            className={`px-4 py-2 rounded-t-xl font-semibold transition-all whitespace-nowrap ${
+              activeView === 'mutualfunds'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+            }`}
+          >
+            {t('holdersTab.mutualFunds')} ({mutualFundHolders.length})
+          </button>
+        )}
         {institutionalAnalytics.length > 0 && (
           <button
             onClick={() => setActiveView('analytics')}

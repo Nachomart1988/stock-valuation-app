@@ -412,7 +412,21 @@
     "positive": "Positiva",
     "negative": "Negativa",
     "neutral": "Neutral",
-    "engineUnavailable": "El motor neural no está disponible. Inicia el backend para análisis completo."
+    "engineUnavailable": "El motor neural no está disponible. Inicia el backend para análisis completo.",
+    "neuralLayers": "Capas Neurales del Análisis",
+    "advancing": "avanzando",
+    "footerText": "Análisis en tiempo real · Auto-refresh cada 5 min",
+    "scoreLabels": {
+      "news": "NLP Noticias",
+      "movers": "Amplitud",
+      "sectors": "Sectores",
+      "industries": "Industrias",
+      "indices": "Índices",
+      "vix": "VIX Score",
+      "forex": "Forex",
+      "fearGreed": "Miedo/Codicia",
+      "composite": "Compuesto"
+    }
   },
   "tabs": {
     "inicio": "Inicio",

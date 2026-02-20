@@ -668,7 +668,7 @@ export default function ResumenTab({
         <div className="relative text-center">
           <div className="text-7xl mb-4">{getRecommendationEmoji()}</div>
           <p className="text-5xl md:text-6xl font-black text-white mb-2">{finalRecommendation}</p>
-          <div className="flex items-center justify-center gap-6 mt-4">
+          <div className="flex items-center justify-center gap-6 mt-4 flex-wrap">
             <div className="text-center">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Convicción</p>
               <p className="text-3xl font-bold text-white">{conviction}%</p>
@@ -678,6 +678,27 @@ export default function ResumenTab({
               <p className="text-xs text-gray-400 uppercase tracking-wider">Confianza Motor</p>
               <p className="text-3xl font-bold text-emerald-400">{synthesisDetails?.confidence?.toFixed(0) || '--'}%</p>
             </div>
+            {(fftData || fftLoading) && (
+              <>
+                <div className="w-px h-12 bg-gray-600"></div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider">Ciclo FFT</p>
+                  {fftLoading ? (
+                    <div className="w-5 h-5 mx-auto border-2 border-violet-500 border-t-transparent rounded-full animate-spin mt-2" />
+                  ) : (
+                    <p className={`text-2xl font-bold ${
+                      fftData?.currentSignal === 'bullish' ? 'text-emerald-400'
+                      : fftData?.currentSignal === 'bearish' ? 'text-red-400'
+                      : 'text-yellow-400'
+                    }`}>
+                      {fftData?.currentSignal === 'bullish' ? '▲ Alcista'
+                        : fftData?.currentSignal === 'bearish' ? '▼ Bajista'
+                        : '— Neutral'}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -848,6 +869,61 @@ export default function ResumenTab({
               <span>🎯</span> PLAN DE ACCIÓN
             </p>
             <p className="text-xl font-medium text-white leading-relaxed">{actionableAdvice}</p>
+          </div>
+        )}
+
+        {/* FFT Timing Integration — integrated into final conclusion */}
+        {(fftData || fftLoading) && (
+          <div className="mt-6 bg-violet-950/20 border border-violet-800/30 p-5 rounded-2xl">
+            <p className="uppercase text-violet-400 text-xs tracking-[3px] mb-3 flex items-center gap-2">
+              <span>〜</span> TIMING ESPECTRAL (FFT)
+            </p>
+            {fftLoading ? (
+              <div className="flex items-center gap-3 text-gray-500 text-sm">
+                <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                <span>Calculando ciclos espectrales...</span>
+              </div>
+            ) : fftData ? (
+              <>
+                <div className="flex items-center gap-4 flex-wrap mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full ${
+                      fftData.currentSignal === 'bullish' ? 'bg-emerald-400'
+                      : fftData.currentSignal === 'bearish' ? 'bg-red-400'
+                      : 'bg-yellow-400'
+                    }`} />
+                    <span className={`font-semibold text-sm ${
+                      fftData.currentSignal === 'bullish' ? 'text-emerald-400'
+                      : fftData.currentSignal === 'bearish' ? 'text-red-400'
+                      : 'text-yellow-400'
+                    }`}>
+                      Señal: {fftData.currentSignal === 'bullish' ? 'Alcista'
+                        : fftData.currentSignal === 'bearish' ? 'Bajista'
+                        : 'Neutral'}
+                    </span>
+                  </div>
+                  {fftData.complexComponents && fftData.complexComponents.length > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>Ciclos dominantes:</span>
+                      {fftData.complexComponents.slice(0, 3).map((c, i) => (
+                        <span key={i} className="bg-violet-900/30 border border-violet-800/30 rounded px-2 py-0.5">
+                          <span className="text-violet-300 font-mono">{c.period_days}d</span>
+                          <span className="text-gray-600 mx-1">·</span>
+                          <span className="text-gray-400">{c.contribution_pct.toFixed(1)}%</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  {fftData.currentSignal === 'bullish'
+                    ? 'El precio se encuentra por encima de la curva espectral reconstruida, confirmando momentum alcista en los ciclos detectados. El timing es favorable para posiciones largas.'
+                    : fftData.currentSignal === 'bearish'
+                    ? 'El precio se encuentra por debajo de la curva espectral reconstruida, indicando presión vendedora en los ciclos dominantes. Se recomienda cautela en el timing de entrada.'
+                    : 'El precio se sitúa en zona neutral respecto a los ciclos espectrales, sin señal de timing definida. Esperar confirmación de ruptura.'}
+                </p>
+              </>
+            ) : null}
           </div>
         )}
       </div>

@@ -579,6 +579,7 @@ export default function ValuacionesTab({
   } | null>(null);
   const [advanceValueNetLoading, setAdvanceValueNetLoading] = useState(false);
   const [advanceValueNetError, setAdvanceValueNetError] = useState<string | null>(null);
+  const [includePrismoValue, setIncludePrismoValue] = useState(false);
 
   // ────────────────────────────────────────────────
   // Fetch P/E de competidores para EPS*Benchmark
@@ -1521,9 +1522,13 @@ export default function ValuacionesTab({
 
   // Calcular promedio solo de métodos habilitados con valores válidos
   const enabledMethods = methods.filter(m => m.enabled && m.value !== null && m.value > 0 && isFinite(m.value));
-  const averageVal = enabledMethods.length > 0
-    ? enabledMethods.reduce((sum, m) => sum + (m.value || 0), 0) / enabledMethods.length
-    : null;
+  const averageVal = (() => {
+    const vals = enabledMethods.map(m => m.value || 0);
+    if (includePrismoValue && advanceValueNet?.fair_value && advanceValueNet.fair_value > 0) {
+      vals.push(advanceValueNet.fair_value);
+    }
+    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  })();
 
   // Notificar al padre cuando cambie el averageVal
   useEffect(() => {
@@ -1657,11 +1662,14 @@ export default function ValuacionesTab({
 
   // Categorize methods for better organization
   const ddmMethods = methods.filter(m => m.name.includes('DDM') || m.name.includes('Gordon') || m.name.includes('H-Model'));
-  const dcfMethods = methods.filter(m => m.name.includes('FCF') || m.name.includes('DCF'));
+  const dcfMethods = methods.filter(m => (m.name.includes('FCF') || m.name.includes('DCF')) && !m.name.includes('Stochastic'));
   const relativeMethods = methods.filter(m => m.name.includes('EPS') || m.name.includes('P/E') || m.name.includes('Analyst'));
+  const grahamMethods = methods.filter(m =>
+    m.name.includes('Graham') || m.name.includes('Owner Earnings') || m.name.includes('Buffett') || m.name.includes('Net-Net')
+  );
   const advancedMethods = methods.filter(m =>
     m.name.includes('RIM') || m.name.includes('DSGE') || m.name.includes('HJM') ||
-    m.name.includes('Merton') || m.name.includes('Stochastic')
+    m.name.includes('Merton') || m.name.includes('Stochastic') || m.name.includes('Monte Carlo')
   );
 
   // Get null reasons for models - More detailed explanations
@@ -2371,6 +2379,31 @@ export default function ValuacionesTab({
           </div>
         )}
 
+        {/* Graham & Fundamental Models Section */}
+        {grahamMethods.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-amber-300 mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-amber-300 rounded-full"></span>
+              Graham & Fundamental Models
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {grahamMethods.map((method, i) => (
+                <ModelCard
+                  key={`graham-${i}`}
+                  name={method.name}
+                  value={method.value}
+                  enabled={method.enabled}
+                  description={method.description}
+                  onToggle={() => toggleMethod(methods.indexOf(method))}
+                  nullReason={getNullReason(method.name)}
+                  inputs={getModelInputs(method.name)}
+                  onInputChange={handleModelInputChange}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Advanced/Quant Models Section */}
         {advancedMethods.length > 0 && (
           <div>
@@ -2396,12 +2429,23 @@ export default function ValuacionesTab({
           </div>
         )}
 
-        {/* AdvanceValue Net - Neural Ensemble Section */}
+        {/* PrismoValue - Neural Ensemble Section */}
         {(advanceValueNet || advanceValueNetLoading) && (
           <div>
-            <h4 className="text-sm font-semibold text-emerald-400 mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
-              🧠 AdvanceValue Net - Neural Ensemble
+            <h4 className="text-sm font-semibold text-emerald-400 mb-3 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+                🧠 PrismoValue — Neural Ensemble
+              </span>
+              <label className="flex items-center gap-2 text-xs font-normal text-gray-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includePrismoValue}
+                  onChange={e => setIncludePrismoValue(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-emerald-500"
+                />
+                Incluir en promedio
+              </label>
             </h4>
             <div className="bg-gradient-to-br bg-gray-950 via-gray-800 to-emerald-900/30 p-5 rounded-2xl border-2 border-emerald-500/40 shadow-lg">
               {advanceValueNetLoading && !advanceValueNet && (

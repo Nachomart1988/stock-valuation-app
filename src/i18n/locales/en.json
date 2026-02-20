@@ -412,7 +412,21 @@
     "positive": "Positive",
     "negative": "Negative",
     "neutral": "Neutral",
-    "engineUnavailable": "The neural engine is not available. Start the backend for full analysis."
+    "engineUnavailable": "The neural engine is not available. Start the backend for full analysis.",
+    "neuralLayers": "Neural Analysis Layers",
+    "advancing": "advancing",
+    "footerText": "Real-time analysis · Auto-refresh every 5 min",
+    "scoreLabels": {
+      "news": "News NLP",
+      "movers": "Breadth",
+      "sectors": "Sectors",
+      "industries": "Industries",
+      "indices": "Indices",
+      "vix": "VIX Score",
+      "forex": "Forex",
+      "fearGreed": "Fear/Greed",
+      "composite": "Composite"
+    }
   },
   "tabs": {
     "inicio": "Home",

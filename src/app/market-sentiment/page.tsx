@@ -76,7 +76,7 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
 
 function FearGreedGauge({ score, label }: { score: number; label: string }) {
   const getColor = (s: number) => {
-    if (s >= 75) return '#ef4444';   // Extreme Greed = red (danger)
+    if (s >= 75) return '#ef4444';   // Extreme Greed = red
     if (s >= 60) return '#f97316';   // Greed = orange
     if (s >= 45) return '#eab308';   // Neutral = yellow
     if (s >= 30) return '#3b82f6';   // Fear = blue
@@ -85,17 +85,21 @@ function FearGreedGauge({ score, label }: { score: number; label: string }) {
   const color = getColor(score);
   const rotation = (score / 100) * 180 - 90; // -90° to +90°
 
+  // Arc points for score thresholds (center=80,80, r=70, angle=180*(1-score/100))
+  // score 30 → (39, 23), 45 → (69, 11), 60 → (102, 13), 75 → (130, 31)
+
   return (
     <div className="flex flex-col items-center">
       <div className="relative w-32 h-16 sm:w-40 sm:h-20">
-        {/* Semicircle background */}
         <svg viewBox="0 0 160 80" className="w-full h-full">
+          {/* Background track */}
           <path d="M 10 80 A 70 70 0 0 1 150 80" fill="none" stroke="#374151" strokeWidth="12" strokeLinecap="round" />
-          {/* Color zones */}
-          <path d="M 10 80 A 70 70 0 0 1 44 24" fill="none" stroke="#8b5cf6" strokeWidth="12" strokeLinecap="round" opacity="0.4" />
-          <path d="M 44 24 A 70 70 0 0 1 80 10" fill="none" stroke="#3b82f6" strokeWidth="12" strokeLinecap="round" opacity="0.4" />
-          <path d="M 80 10 A 70 70 0 0 1 116 24" fill="none" stroke="#eab308" strokeWidth="12" strokeLinecap="round" opacity="0.4" />
-          <path d="M 116 24 A 70 70 0 0 1 150 80" fill="none" stroke="#f97316" strokeWidth="12" strokeLinecap="round" opacity="0.4" />
+          {/* 5 color zones matching getColor thresholds */}
+          <path d="M 10 80 A 70 70 0 0 1 39 23"   fill="none" stroke="#8b5cf6" strokeWidth="12" strokeLinecap="round" opacity="0.45" />
+          <path d="M 39 23 A 70 70 0 0 1 69 11"   fill="none" stroke="#3b82f6" strokeWidth="12" strokeLinecap="round" opacity="0.45" />
+          <path d="M 69 11 A 70 70 0 0 1 102 13"  fill="none" stroke="#eab308" strokeWidth="12" strokeLinecap="round" opacity="0.45" />
+          <path d="M 102 13 A 70 70 0 0 1 130 31" fill="none" stroke="#f97316" strokeWidth="12" strokeLinecap="round" opacity="0.45" />
+          <path d="M 130 31 A 70 70 0 0 1 150 80" fill="none" stroke="#ef4444" strokeWidth="12" strokeLinecap="round" opacity="0.45" />
           {/* Needle */}
           <line
             x1="80" y1="80" x2="80" y2="18"
@@ -251,6 +255,18 @@ export default function MarketSentimentPage() {
     return () => { if (interval) clearInterval(interval); };
   }, [fetchMarketData, autoRefresh]);
 
+  const scoreLabels: Record<string, string> = {
+    news: t('marketSentiment.scoreLabels.news'),
+    movers: t('marketSentiment.scoreLabels.movers'),
+    sectors: t('marketSentiment.scoreLabels.sectors'),
+    industries: t('marketSentiment.scoreLabels.industries'),
+    indices: t('marketSentiment.scoreLabels.indices'),
+    vix: t('marketSentiment.scoreLabels.vix'),
+    forex: t('marketSentiment.scoreLabels.forex'),
+    fearGreed: t('marketSentiment.scoreLabels.fearGreed'),
+    composite: t('marketSentiment.scoreLabels.composite'),
+  };
+
   const sentimentBg = (s: string) => {
     switch (s) {
       case 'very_bullish': return 'from-emerald-950/90 to-emerald-950/70 border-emerald-500/60';
@@ -263,11 +279,6 @@ export default function MarketSentimentPage() {
   };
 
   const scoreColor = (s: number) => s >= 65 ? 'text-emerald-400' : s >= 52 ? 'text-green-400' : s >= 45 ? 'text-yellow-400' : s >= 35 ? 'text-orange-400' : 'text-red-400';
-
-  const SCORE_LABELS: Record<string, string> = {
-    news: 'News NLP', movers: 'Breadth', sectors: 'Sectors', industries: 'Industries',
-    indices: 'Indices', vix: 'VIX Score', forex: 'Forex', fearGreed: 'Fear/Greed', composite: 'Composite',
-  };
 
   if (loading && !data) {
     return (
@@ -417,7 +428,7 @@ export default function MarketSentimentPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {Object.entries(data.scores).map(([key, value]) => (
               <div key={key} className="bg-gray-800/60 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center border border-white/[0.06]/50">
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{SCORE_LABELS[key] || key}</div>
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{scoreLabels[key] || key}</div>
                 <div className={`text-2xl sm:text-3xl font-bold ${scoreColor(value)}`}>{value.toFixed(0)}</div>
                 <div className="h-1 bg-gray-700 rounded-full mt-2 overflow-hidden">
                   <div className={`h-full rounded-full ${value >= 60 ? 'bg-green-500' : value >= 45 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${value}%` }} />
@@ -536,7 +547,7 @@ export default function MarketSentimentPage() {
               </div>
               <div className="flex justify-between mt-2 text-xs">
                 <span className="text-green-400">{t('marketSentiment.gainers')}: {data.moversAnalysis.gainersCount}</span>
-                <span className="text-gray-300 font-bold">{(data.moversAnalysis.breadthRatio * 100).toFixed(0)}% advancing</span>
+                <span className="text-gray-300 font-bold">{(data.moversAnalysis.breadthRatio * 100).toFixed(0)}% {t('marketSentiment.advancing')}</span>
                 <span className="text-red-400">{t('marketSentiment.losers')}: {data.moversAnalysis.losersCount}</span>
               </div>
             </div>
@@ -670,7 +681,7 @@ export default function MarketSentimentPage() {
         {/* ── FOOTER ── */}
         <div className="text-center pt-6 border-t border-gray-800">
           <p className="text-gray-500 text-xs mb-4">
-            Neural Market Pulse v{data.version} · Real-time analysis · Auto-refresh every 5min
+            Neural Market Pulse v{data.version} · {t('marketSentiment.footerText')}
           </p>
           <div className="flex justify-center gap-3 sm:gap-4 flex-wrap">
             <Link href="/" className="px-4 sm:px-6 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition text-xs sm:text-sm">
