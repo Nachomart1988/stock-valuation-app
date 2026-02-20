@@ -1660,16 +1660,29 @@ export default function ValuacionesTab({
     </div>
   );
 
-  // Categorize methods for better organization
-  const ddmMethods = methods.filter(m => m.name.includes('DDM') || m.name.includes('Gordon') || m.name.includes('H-Model'));
-  const dcfMethods = methods.filter(m => (m.name.includes('FCF') || m.name.includes('DCF')) && !m.name.includes('Stochastic'));
-  const relativeMethods = methods.filter(m => m.name.includes('EPS') || m.name.includes('P/E') || m.name.includes('Analyst'));
-  const grahamMethods = methods.filter(m =>
-    m.name.includes('Graham') || m.name.includes('Owner Earnings') || m.name.includes('Buffett') || m.name.includes('Net-Net')
+  // ── Section 1: DDM — Dividend Discount Models ──
+  const ddmMethods = methods.filter(m =>
+    m.name.includes('DDM') || m.name.includes('Gordon') || m.name === 'H Model' || m.name.includes('H-Model')
   );
+
+  // ── Section 2: FCF — Free Cash Flow models (FCF / FCFF / FCFE) ──
+  const fcfMethods = methods.filter(m => m.name.includes('FCF'));
+
+  // ── Section 3: DCF — Discounted Cash Flow models (DCF, Monte Carlo, Stochastic) ──
+  const dcfOnlyMethods = methods.filter(m => m.name.includes('DCF') && !m.name.includes('FCF'));
+
+  // ── Section 4: Relative — Graham + EPS/P/E benchmarks ──
+  const grahamRelativeMethods = methods.filter(m =>
+    m.name.includes('Graham') || m.name.includes('Net-Net') ||
+    m.name.includes('EPS') || m.name.includes('P/E') || m.name.includes('Analyst') ||
+    m.name === 'Mean Target'
+  );
+
+  // ── Section 5: Advanced quant models ──
   const advancedMethods = methods.filter(m =>
-    m.name.includes('RIM') || m.name.includes('DSGE') || m.name.includes('HJM') ||
-    m.name.includes('Merton') || m.name.includes('Stochastic') || m.name.includes('Monte Carlo')
+    m.name.includes('RIM') || m.name.includes('DSGE') || m.name.includes('Bayesian') ||
+    m.name.includes('HJM') || m.name.includes('Merton') ||
+    m.name.includes('Owner Earnings') || m.name.includes('Buffett')
   );
 
   // Get null reasons for models - More detailed explanations
@@ -1682,7 +1695,7 @@ export default function ValuacionesTab({
     const hasAnalystTargets = priceTarget?.targetHigh > 0;
 
     // DDM Models - require dividends
-    if (methodName.includes('DDM') || methodName.includes('Gordon') || methodName.includes('H-Model')) {
+    if (methodName.includes('DDM') || methodName.includes('Gordon') || methodName.includes('H-Model') || methodName === 'H Model') {
       if (!hasDividends) return 'No paga dividendos';
     }
 
@@ -2329,15 +2342,40 @@ export default function ValuacionesTab({
           </div>
         )}
 
-        {/* DCF/FCF Models Section */}
-        {dcfMethods.length > 0 && (
+        {/* Section 2: FCF Models */}
+        {fcfMethods.length > 0 && (
           <div>
-            <h4 className="text-sm font-semibold text-green-400 mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-              Discounted Cash Flow Models (DCF/FCF)
+            <h4 className="text-sm font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
+              Free Cash Flow Models (FCF / FCFF / FCFE)
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {dcfMethods.map((method, i) => (
+              {fcfMethods.map((method: ValuationMethod, i: number) => (
+                <ModelCard
+                  key={`fcf-${i}`}
+                  name={method.name}
+                  value={method.value}
+                  enabled={method.enabled}
+                  description={method.description}
+                  onToggle={() => toggleMethod(methods.indexOf(method))}
+                  nullReason={getNullReason(method.name)}
+                  inputs={getModelInputs(method.name)}
+                  onInputChange={handleModelInputChange}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Section 3: DCF Models */}
+        {dcfOnlyMethods.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-blue-400 mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+              Discounted Cash Flow Models (DCF)
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {dcfOnlyMethods.map((method: ValuationMethod, i: number) => (
                 <ModelCard
                   key={`dcf-${i}`}
                   name={method.name}
@@ -2354,42 +2392,17 @@ export default function ValuacionesTab({
           </div>
         )}
 
-        {/* Relative Valuation Section */}
-        {relativeMethods.length > 0 && (
+        {/* Section 4: Relative Valuations (Graham + EPS/P/E) */}
+        {grahamRelativeMethods.length > 0 && (
           <div>
             <h4 className="text-sm font-semibold text-amber-400 mb-3 flex items-center gap-2">
               <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
-              Relative Valuation
+              Relative Valuations (Graham & Benchmarks)
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {relativeMethods.map((method, i) => (
+              {grahamRelativeMethods.map((method: ValuationMethod, i: number) => (
                 <ModelCard
                   key={`rel-${i}`}
-                  name={method.name}
-                  value={method.value}
-                  enabled={method.enabled}
-                  description={method.description}
-                  onToggle={() => toggleMethod(methods.indexOf(method))}
-                  nullReason={getNullReason(method.name)}
-                  inputs={getModelInputs(method.name)}
-                  onInputChange={handleModelInputChange}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Graham & Fundamental Models Section */}
-        {grahamMethods.length > 0 && (
-          <div>
-            <h4 className="text-sm font-semibold text-amber-300 mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 bg-amber-300 rounded-full"></span>
-              Graham & Fundamental Models
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {grahamMethods.map((method, i) => (
-                <ModelCard
-                  key={`graham-${i}`}
                   name={method.name}
                   value={method.value}
                   enabled={method.enabled}

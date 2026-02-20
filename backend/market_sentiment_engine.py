@@ -495,7 +495,7 @@ class NeuralReasoningMarketSentimentEngine:
 
     # ====================== 8 ANALYSIS LAYERS ======================
 
-    def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze(self, data: Dict[str, Any], language: str = 'en') -> Dict[str, Any]:
         start = datetime.now()
 
         # Self-sufficient data fill
@@ -646,7 +646,8 @@ class NeuralReasoningMarketSentimentEngine:
             "briefing": self._generate_briefing(
                 composite, news_score, movers_score, breadth_ratio,
                 sector_rotation, rec, real_advancing, real_declining,
-                hot_sectors, cold_sectors, action, vix_value, fg_score, fg_label
+                hot_sectors, cold_sectors, action, vix_value, fg_score, fg_label,
+                language=language
             ),
         }
 
@@ -1377,41 +1378,64 @@ class NeuralReasoningMarketSentimentEngine:
 
     def _generate_briefing(self, composite, news_score, movers_score, breadth,
                            sector_rotation, recommendation, gainers_count, losers_count,
-                           hot_sectors, cold_sectors, action, vix_val, fg_score, fg_label) -> str:
+                           hot_sectors, cold_sectors, action, vix_val, fg_score, fg_label,
+                           language: str = 'en') -> str:
         parts = []
-        if composite >= 75:
-            parts.append(f"🚀 Market in **strong bullish mode** (neural score: {composite:.0f}/100).")
-        elif composite >= 58:
-            parts.append(f"📈 **Positive market** with solid participation (score: {composite:.0f}/100).")
-        elif composite >= 47:
-            parts.append(f"⚖️ **Mixed signals** — market lacks clear direction (score: {composite:.0f}/100).")
-        elif composite >= 35:
-            parts.append(f"📉 **Market under pressure** — defensive posture recommended (score: {composite:.0f}/100).")
-        else:
-            parts.append(f"🔻 **Dominant selling pressure** — extreme caution (score: {composite:.0f}/100).")
+        es = (language == 'es')
 
-        parts.append(f"Breadth: {breadth:.0%} advancing ({gainers_count} gainers vs {losers_count} losers).")
+        if composite >= 75:
+            parts.append(f"🚀 {'Mercado en **modo alcista fuerte**' if es else 'Market in **strong bullish mode**'} ({'puntuación neural' if es else 'neural score'}: {composite:.0f}/100).")
+        elif composite >= 58:
+            parts.append(f"📈 **{'Mercado positivo' if es else 'Positive market'}** {'con amplia participación' if es else 'with solid participation'} ({'puntuación' if es else 'score'}: {composite:.0f}/100).")
+        elif composite >= 47:
+            parts.append(f"⚖️ **{'Señales mixtas' if es else 'Mixed signals'}** — {'el mercado carece de dirección clara' if es else 'market lacks clear direction'} ({'puntuación' if es else 'score'}: {composite:.0f}/100).")
+        elif composite >= 35:
+            parts.append(f"📉 **{'Mercado bajo presión' if es else 'Market under pressure'}** — {'postura defensiva recomendada' if es else 'defensive posture recommended'} ({'puntuación' if es else 'score'}: {composite:.0f}/100).")
+        else:
+            parts.append(f"🔻 **{'Presión vendedora dominante' if es else 'Dominant selling pressure'}** — {'extrema cautela' if es else 'extreme caution'} ({'puntuación' if es else 'score'}: {composite:.0f}/100).")
+
+        if es:
+            parts.append(f"Amplitud: {breadth:.0%} avanzando ({gainers_count} ganadores vs {losers_count} perdedores).")
+        else:
+            parts.append(f"Breadth: {breadth:.0%} advancing ({gainers_count} gainers vs {losers_count} losers).")
 
         if vix_val:
             vix_regime = self._vix_regime_label(vix_val)
-            parts.append(f"VIX at {vix_val:.1f} ({vix_regime}).")
+            if es:
+                vix_labels_es = {
+                    'Extreme Complacency': 'Complacencia Extrema', 'Low Volatility': 'Baja Volatilidad',
+                    'Normal': 'Normal', 'Elevated': 'Elevada', 'High Fear': 'Alto Miedo',
+                    'Fear Spike': 'Pico de Miedo', 'Extreme Dislocation': 'Dislocación Extrema',
+                }
+                vix_regime_str = vix_labels_es.get(vix_regime, vix_regime)
+                parts.append(f"VIX en {vix_val:.1f} ({vix_regime_str}).")
+            else:
+                parts.append(f"VIX at {vix_val:.1f} ({vix_regime}).")
 
-        parts.append(f"Fear & Greed Index: **{fg_score:.0f}/100** ({fg_label}).")
+        if es:
+            fg_labels_es = {
+                'Extreme Greed': 'Codicia Extrema', 'Greed': 'Codicia', 'Neutral': 'Neutral',
+                'Fear': 'Miedo', 'Extreme Fear': 'Miedo Extremo',
+            }
+            fg_label_str = fg_labels_es.get(fg_label, fg_label)
+            parts.append(f"Índice Miedo & Codicia: **{fg_score:.0f}/100** ({fg_label_str}).")
+        else:
+            parts.append(f"Fear & Greed Index: **{fg_score:.0f}/100** ({fg_label}).")
 
         if news_score >= 65:
-            parts.append("News flow predominantly positive.")
+            parts.append("Flujo de noticias predominantemente positivo." if es else "News flow predominantly positive.")
         elif news_score <= 35:
-            parts.append("News flow reflects caution or negativity.")
+            parts.append("Flujo de noticias refleja cautela o negatividad." if es else "News flow reflects caution or negativity.")
 
         hot = sector_rotation.get('hot', [])
         cold = sector_rotation.get('cold', [])
         if hot:
-            parts.append(f"Hot sectors: {', '.join([s['sector'] for s in hot[:2]])}.")
+            parts.append(f"{'Sectores calientes' if es else 'Hot sectors'}: {', '.join([s['sector'] for s in hot[:2]])}.")
         if cold:
-            parts.append(f"Cold sectors: {', '.join([s['sector'] for s in cold[:2]])}.")
+            parts.append(f"{'Sectores fríos' if es else 'Cold sectors'}: {', '.join([s['sector'] for s in cold[:2]])}.")
 
         if action:
-            parts.append(f"**Action:** {action}")
+            parts.append(f"**{'Acción' if es else 'Action'}:** {action}")
 
         return " ".join(parts)
 

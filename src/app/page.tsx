@@ -108,7 +108,7 @@ export default function Home() {
           </div>
 
           <h1 className="text-3xl sm:text-5xl md:text-7xl font-black mb-6 leading-tight">
-            <span className="bg-gradient-to-r from-emerald-200 via-green-300 via-teal-400 to-emerald-500 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(52,211,153,0.4)]">
+            <span className="bg-gradient-to-b from-white to-gray-300 bg-clip-text text-transparent">
               PRISMO
             </span>
           </h1>
@@ -522,6 +522,79 @@ export default function Home() {
               {t('pricing.viewFullComparison')}
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Valuation Models Section */}
+      <section id="models" className="py-20 px-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl sm:text-4xl font-bold mb-4">{t('landing.valuationModelsIncluded')}</h2>
+            <p className="text-gray-400 max-w-2xl mx-auto">
+              {t('landing.valuationModelsDesc') || '20+ modelos profesionales, completamente editables, organizados por metodología'}
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {[
+              {
+                category: 'DDM',
+                color: 'from-blue-500/20 to-blue-600/5',
+                border: 'border-blue-800/40',
+                label: 'text-blue-400',
+                models: ['DDM 2-Stage', 'DDM 3-Stage', 'H-Model'],
+              },
+              {
+                category: 'FCF',
+                color: 'from-emerald-500/20 to-emerald-600/5',
+                border: 'border-emerald-800/40',
+                label: 'text-emerald-400',
+                models: ['2-Stage FCF', '3-Stage FCF', '2-Stage FCFF', '3-Stage FCFF', '2-Stage FCFE', '3-Stage FCFE'],
+              },
+              {
+                category: 'DCF',
+                color: 'from-violet-500/20 to-violet-600/5',
+                border: 'border-violet-800/40',
+                label: 'text-violet-400',
+                models: ['DCF Multi-Etapa', 'Monte Carlo DCF', 'Stochastic DCF'],
+              },
+              {
+                category: 'Graham',
+                color: 'from-amber-500/20 to-amber-600/5',
+                border: 'border-amber-800/40',
+                label: 'text-amber-400',
+                models: ['Graham Method', 'Graham Number', 'Graham Net-Net'],
+              },
+              {
+                category: 'Avanzados',
+                color: 'from-rose-500/20 to-rose-600/5',
+                border: 'border-rose-800/40',
+                label: 'text-rose-400',
+                models: ['RIM Ohlson', 'Bayesian NK DSGE', 'HJM', 'PrismoValue Neural', 'EPS × Benchmark'],
+              },
+            ].map((group) => (
+              <div key={group.category} className={`bg-gradient-to-br ${group.color} border ${group.border} rounded-2xl p-5`}>
+                <div className={`text-xs font-bold uppercase tracking-widest ${group.label} mb-3`}>{group.category}</div>
+                <ul className="space-y-1.5">
+                  {group.models.map((m) => (
+                    <li key={m} className="flex items-center gap-2 text-sm text-gray-300">
+                      <span className={`w-1 h-1 rounded-full ${group.label.replace('text-', 'bg-')}`} />
+                      {m}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-center mt-8">
+            <Link href="/analizar" className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 transition">
+              {t('hero.analyzeButton')}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </Link>
           </div>

@@ -300,11 +300,18 @@ class BinomialTreeEngine:
             if calls.empty:
                 return None, None
 
-            # Get current price for ATM detection
+            # Get current price for ATM detection — multiple fallbacks for after-hours
             info = stock.info
-            current_price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
+            current_price = (
+                info.get('currentPrice') or
+                info.get('regularMarketPrice') or
+                info.get('previousClose') or
+                info.get('regularMarketPreviousClose') or
+                0
+            )
 
             if current_price <= 0:
+                print(f"[ProbabilityEngine] No price available for {ticker} (after hours?), skipping IV")
                 return None, None
 
             # Find ATM option (closest strike to current price)

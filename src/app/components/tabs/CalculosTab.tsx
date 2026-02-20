@@ -30,6 +30,7 @@ interface CalculosTabProps {
   dcfCustom?: any; // Para obtener WACC del Advance DCF
   estimates?: any[]; // Para obtener revenue forecast
   calculatedWacc?: number; // WACC calculado en WACCTab
+  keyMetricsTTM?: any; // TTM Key Metrics — used for EV/EBITDA exit multiple
   onValorIntrinsecoChange?: (value: number | null) => void; // Callback to pass Valor Intrínseco to parent
 }
 
@@ -43,6 +44,7 @@ export default function CalculosTab({
   dcfCustom,
   estimates,
   calculatedWacc,
+  keyMetricsTTM,
   onValorIntrinsecoChange,
 }: CalculosTabProps) {
   const { t } = useLanguage();
@@ -166,7 +168,12 @@ export default function CalculosTab({
 
   // Estados para inputs del usuario
   const [userWacc, setUserWacc] = useState<number | null>(null);
-  const [exitMultiple, setExitMultiple] = useState<number>(12);
+  const [exitMultiple, setExitMultiple] = useState<number>(() => {
+    const fromKeyMetrics = keyMetricsTTM?.evToEbitda;
+    return fromKeyMetrics && fromKeyMetrics > 1 && fromKeyMetrics < 100
+      ? Math.round(fromKeyMetrics * 10) / 10
+      : 12;
+  });
   const exitMultipleUserEdited = useRef(false);
   const [projectedGrowthRate, setProjectedGrowthRate] = useState<number>(getAverageRevenueGrowth());
   const [yearsToProject, setYearsToProject] = useState<number>(5);
@@ -355,9 +362,14 @@ export default function CalculosTab({
     // TTM Multiple calculado correctamente
     const calculatedTTMMultiple = ttmEbitda > 0 ? currentEV / ttmEbitda : exitMultiple;
 
-    // Auto-initialize exit multiple from real EV/EBITDA on first load (if user hasn't edited it)
-    if (!exitMultipleUserEdited.current && ttmEbitda > 0 && calculatedTTMMultiple > 0 && calculatedTTMMultiple < 100) {
-      setExitMultiple(Math.round(calculatedTTMMultiple * 10) / 10);
+    // Auto-initialize exit multiple: prefer keyMetricsTTM.evToEbitda (same value as Key Metrics tab)
+    if (!exitMultipleUserEdited.current) {
+      const kmEvEbitda = keyMetricsTTM?.evToEbitda;
+      if (kmEvEbitda && kmEvEbitda > 1 && kmEvEbitda < 100) {
+        setExitMultiple(Math.round(kmEvEbitda * 10) / 10);
+      } else if (ttmEbitda > 0 && calculatedTTMMultiple > 0 && calculatedTTMMultiple < 100) {
+        setExitMultiple(Math.round(calculatedTTMMultiple * 10) / 10);
+      }
     }
 
     // ────────────────────────────────────────────────

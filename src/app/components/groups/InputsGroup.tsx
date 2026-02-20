@@ -11,6 +11,7 @@ interface InputsGroupProps {
   CAGRTab: React.ReactNode;
   PivotsTab: React.ReactNode;
   WACCTab: React.ReactNode;
+  GapsTab?: React.ReactNode;
   lockedSubtabs?: number[];
   requiredPlan?: PlanTier;
   currentPlan?: PlanTier;
@@ -22,11 +23,12 @@ export default function InputsGroup({
   CAGRTab,
   PivotsTab,
   WACCTab,
+  GapsTab,
   lockedSubtabs = [],
   requiredPlan = 'pro',
   currentPlan = 'free',
 }: InputsGroupProps) {
-  const subtabs = ['Sustainable Growth', 'Beta', 'CAGR', 'Pivots', 'WACC'];
+  const subtabs = ['Sustainable Growth', 'Beta', 'CAGR', 'Pivots', 'WACC', 'Gaps'];
 
   return (
     <div className="space-y-4">
@@ -63,6 +65,9 @@ export default function InputsGroup({
           </Tab.Panel>
           <Tab.Panel unmount={false}>
             {lockedSubtabs.includes(4) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : WACCTab}
+          </Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {GapsTab}
           </Tab.Panel>
         </Tab.Panels>
       </Tab.Group>

@@ -125,7 +125,51 @@ export default function MarketSentimentPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [backendStatus, setBackendStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
   const [showReasoning, setShowReasoning] = useState(false);
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
+
+  // Translate finite-set backend labels to Spanish
+  const tl = (text: string | undefined): string => {
+    if (!text || locale !== 'es') return text || '';
+    const map: Record<string, string> = {
+      // Fear & Greed labels
+      'Extreme Greed': 'Codicia Extrema', 'Greed': 'Codicia',
+      'Neutral': 'Neutral', 'Fear': 'Miedo', 'Extreme Fear': 'Miedo Extremo',
+      // VIX Regime labels
+      'Extreme Complacency': 'Complacencia Extrema', 'Low Volatility': 'Baja Volatilidad',
+      'Normal': 'Normal', 'Elevated': 'Elevada', 'High Fear': 'Alto Miedo',
+      'Fear Spike': 'Pico de Miedo', 'Extreme Dislocation': 'Dislocación Extrema',
+      'Unknown': 'Desconocido',
+      // Breadth labels
+      'Extreme Breadth': 'Amplitud Extrema', 'Positive': 'Positivo',
+      'Negative': 'Negativo', 'Extreme Weakness': 'Debilidad Extrema',
+      // Recommendation titles
+      'BULL MARKET — FULL RISK ON': 'MERCADO ALCISTA — MÁXIMO RIESGO',
+      'BULLISH — SOLID MOMENTUM': 'ALCISTA — MOMENTUM SÓLIDO',
+      'NEUTRAL — MIXED SIGNALS': 'NEUTRAL — SEÑALES MIXTAS',
+      'BEARISH — SELLING PRESSURE': 'BAJISTA — PRESIÓN VENDEDORA',
+      'RISK OFF — DEFENSIVE MODE': 'RIESGO OFF — MODO DEFENSIVO',
+      'EXTREME FEAR — POSSIBLE CAPITULATION': 'MIEDO EXTREMO — POSIBLE CAPITULACIÓN',
+      // Actionable advice
+      'AGGRESSIVE BUY: Add to winners, focus on hot sectors & momentum plays. Tight 2% stops.':
+        'COMPRA AGRESIVA: Añadir a ganadores, enfocarse en sectores calientes y momentum. Stops al 2%.',
+      'GO LONG: Rotate into strength. Sector leaders and breakouts. Monitor VIX for regime shift.':
+        'IR LARGO: Rotar hacia fortaleza. Líderes sectoriales y rupturas. Vigilar cambio de régimen en VIX.',
+      'SELECTIVE: Quality over quantity. 30-40% cash buffer. Wait for volume confirmation.':
+        'SELECTIVO: Calidad sobre cantidad. Buffer 30-40% efectivo. Esperar confirmación de volumen.',
+      'REDUCE: Trim longs 30-50%. Sector rotation to defensives. Hedge with inverse ETFs.':
+        'REDUCIR: Recortar largos 30-50%. Rotar a defensivos. Cobertura con ETFs inversos.',
+      'SELL: Move 60%+ to cash/bonds. Wait for VIX<25 and breadth>55% before re-entering.':
+        'VENDER: Mover 60%+ a efectivo/bonos. Esperar VIX<25 y amplitud>55% antes de volver.',
+      'SURVIVE FIRST: 80%+ cash. Watch for VIX spike + reversal as capitulation signal → aggressive re-entry.':
+        'SUPERVIVENCIA: 80%+ efectivo. Vigilar pico de VIX + reversión como señal de capitulación → reentrada agresiva.',
+    };
+    if (map[text]) return map[text];
+    // Partial match for texts with dynamic suffix (e.g. recommendation descriptions with VIX regime appended)
+    for (const [en, es] of Object.entries(map)) {
+      if (text.startsWith(en)) return es + text.slice(en.length);
+    }
+    return text;
+  };
 
   const fetchMarketData = useCallback(async () => {
     try {
@@ -205,6 +249,7 @@ export default function MarketSentimentPage() {
             losers: losersData || [],
             sectorPerformance: sectorsData || [],
             industryPerformance: industriesData || [],
+            language: locale,
             forexQuotes: forexData || [],
             indexBreadth,
           }),
@@ -364,10 +409,10 @@ export default function MarketSentimentPage() {
             <div className="text-center">
               <div className="text-5xl sm:text-7xl mb-3">{data.sentimentEmoji}</div>
               <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-2 tracking-tight leading-tight">
-                {data.recommendation}
+                {tl(data.recommendation)}
               </h1>
               <p className="text-sm sm:text-lg text-gray-300 max-w-xl mx-auto leading-relaxed">
-                {data.recommendationDescription}
+                {tl(data.recommendationDescription)}
               </p>
             </div>
 
@@ -387,7 +432,7 @@ export default function MarketSentimentPage() {
                   <div className={`text-4xl sm:text-5xl font-black ${data.vixValue < 20 ? 'text-green-400' : data.vixValue < 30 ? 'text-yellow-400' : 'text-red-400'}`}>
                     {data.vixValue.toFixed(1)}
                   </div>
-                  <div className="text-[10px] text-gray-400 mt-1">{data.macroAnalysis?.vixRegime || ''}</div>
+                  <div className="text-[10px] text-gray-400 mt-1">{tl(data.macroAnalysis?.vixRegime || '')}</div>
                 </div>
               )}
 
@@ -395,7 +440,7 @@ export default function MarketSentimentPage() {
               {data.fearGreedScore != null && (
                 <div className="bg-black/40 backdrop-blur-xl rounded-2xl px-4 py-4 border border-white/10">
                   <div className="text-xs text-gray-400 mb-1 uppercase tracking-wider text-center">Fear & Greed</div>
-                  <FearGreedGauge score={data.fearGreedScore} label={data.fearGreedLabel || ''} />
+                  <FearGreedGauge score={data.fearGreedScore} label={tl(data.fearGreedLabel || '')} />
                 </div>
               )}
             </div>
@@ -407,7 +452,7 @@ export default function MarketSentimentPage() {
           <h3 className="text-base sm:text-lg font-bold text-emerald-400 mb-3 sm:mb-4 flex items-center gap-2">
             🧠 {t('marketSentiment.neuralAnalysis')}
           </h3>
-          <p className="text-sm sm:text-lg leading-relaxed text-gray-200">{data.briefing}</p>
+          <p className="text-sm sm:text-lg leading-relaxed text-gray-200">{tl(data.briefing)}</p>
         </div>
 
         {/* ── ACTIONABLE ADVICE ── */}
@@ -416,7 +461,7 @@ export default function MarketSentimentPage() {
             <h3 className="text-base sm:text-lg font-bold text-green-400 mb-3 sm:mb-4 flex items-center gap-2">
               🎯 {t('marketSentiment.actionableAdvice')}
             </h3>
-            <p className="text-sm sm:text-lg leading-relaxed text-gray-100 font-medium">{data.actionableAdvice}</p>
+            <p className="text-sm sm:text-lg leading-relaxed text-gray-100 font-medium">{tl(data.actionableAdvice)}</p>
           </div>
         )}
 
@@ -552,7 +597,7 @@ export default function MarketSentimentPage() {
               </div>
             </div>
             <div className="text-center px-4 sm:px-6 shrink-0">
-              <div className="text-xl sm:text-2xl font-bold text-white">{data.moversAnalysis.breadthLabel}</div>
+              <div className="text-xl sm:text-2xl font-bold text-white">{tl(data.moversAnalysis.breadthLabel)}</div>
               <div className="text-[10px] text-gray-500">{t('marketSentiment.breadth')}</div>
             </div>
           </div>

@@ -430,25 +430,46 @@ export default function ProbabilityTab({
             </div>
           </div>
 
-          {/* Price Distribution Chart — smooth line */}
+          {/* Price Distribution Chart */}
           {result.priceDistribution && result.priceDistribution.length > 0 && (
             <div className="bg-gray-900/60 rounded-xl p-6 border border-white/[0.06]">
-              <h3 className="text-lg font-semibold text-emerald-400 mb-4">
-                {t('probabilityTab.priceDistribution')}
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-emerald-400">
+                  {t('probabilityTab.priceDistribution')}
+                </h3>
+                <div className="flex items-center gap-4 text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-8 h-0.5 bg-green-500 inline-block rounded"></span>
+                    {t('probabilityTab.aboveTarget')} ({result.probability.toFixed(1)}%)
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-8 h-0.5 bg-red-500 inline-block rounded"></span>
+                    {t('probabilityTab.belowTarget')} ({(100 - result.probability).toFixed(1)}%)
+                  </span>
+                </div>
+              </div>
               {(() => {
                 const dist = result.priceDistribution;
-                const W = 600, H = 180, padX = 10, padY = 10;
-                const maxProb = Math.max(...dist.map(b => b.probability));
-                const pts = dist.map((b, i) => ({
-                  x: padX + (i / (dist.length - 1)) * (W - padX * 2),
-                  y: H - padY - (maxProb > 0 ? (b.probability / maxProb) * (H - padY * 2) : 0),
+                const W = 600, H = 200, padL = 40, padR = 12, padTop = 20, padBot = 28;
+                const chartW = W - padL - padR;
+                const chartH = H - padTop - padBot;
+                const minPrice = dist[0].center;
+                const maxPrice = dist[dist.length - 1].center;
+                const priceRange = maxPrice - minPrice || 1;
+                const maxProb = Math.max(...dist.map((b: any) => b.probability));
+
+                const toX = (price: number) => padL + ((price - minPrice) / priceRange) * chartW;
+                const toY = (prob: number) => padTop + chartH - (maxProb > 0 ? (prob / maxProb) * chartH : 0);
+
+                const pts = dist.map((b: any) => ({
+                  x: toX(b.center),
+                  y: toY(b.probability),
                   above: b.aboveTarget,
                   center: b.center,
                   prob: b.probability,
                 }));
 
-                // Build smooth path using cubic bezier
+                // Smooth bezier path
                 const smooth = (points: typeof pts) => {
                   if (points.length < 2) return '';
                   let d = `M ${points[0].x} ${points[0].y}`;
@@ -460,70 +481,93 @@ export default function ProbabilityTab({
                   return d;
                 };
 
-                const targetX = padX + ((result.targetPrice - dist[0].center) / (dist[dist.length - 1].center - dist[0].center)) * (W - padX * 2);
-                const clampedTargetX = Math.max(padX, Math.min(W - padX, targetX));
-
                 const pathStr = smooth(pts);
-                const areaBelow = `${pathStr} L ${pts[pts.length - 1].x} ${H - padY} L ${pts[0].x} ${H - padY} Z`;
+                const areaPath = `${pathStr} L ${pts[pts.length - 1].x} ${padTop + chartH} L ${pts[0].x} ${padTop + chartH} Z`;
+
+                // X positions for key prices
+                const targetX = Math.max(padL, Math.min(padL + chartW, toX(result.targetPrice)));
+                const currentX = Math.max(padL, Math.min(padL + chartW, toX(result.currentPrice)));
+
+                // Y-axis grid labels (25%, 50%, 75%, 100% of max)
+                const yLabels = [0.25, 0.5, 0.75, 1.0].map(pct => ({
+                  y: padTop + chartH - pct * chartH,
+                  label: `${(maxProb * pct).toFixed(2)}%`,
+                }));
+
+                // X-axis labels: min, 25%, 50%, 75%, max
+                const xLabels = [0, 0.25, 0.5, 0.75, 1].map(pct => ({
+                  x: padL + pct * chartW,
+                  label: `$${(minPrice + pct * priceRange).toFixed(0)}`,
+                }));
 
                 return (
                   <div className="relative w-full overflow-x-auto">
-                    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 200 }}>
+                    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 220 }}>
                       <defs>
-                        <linearGradient id="probGradGreen" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.5"/>
-                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.05"/>
+                        <linearGradient id="probGradGreen2" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.45"/>
+                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.03"/>
                         </linearGradient>
-                        <linearGradient id="probGradRed" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id="probGradRed2" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#ef4444" stopOpacity="0.35"/>
                           <stop offset="100%" stopColor="#ef4444" stopOpacity="0.03"/>
                         </linearGradient>
-                        <clipPath id="clipBelow">
-                          <rect x="0" y="0" width={clampedTargetX} height={H}/>
+                        <clipPath id="clipBelowT">
+                          <rect x={padL} y={padTop} width={Math.max(0, targetX - padL)} height={chartH}/>
                         </clipPath>
-                        <clipPath id="clipAbove">
-                          <rect x={clampedTargetX} y="0" width={W} height={H}/>
+                        <clipPath id="clipAboveT">
+                          <rect x={targetX} y={padTop} width={Math.max(0, padL + chartW - targetX)} height={chartH}/>
                         </clipPath>
                       </defs>
-                      {/* Area fill - below target (red) */}
-                      <path d={areaBelow} fill="url(#probGradRed)" clipPath="url(#clipBelow)"/>
-                      {/* Area fill - above target (green) */}
-                      <path d={areaBelow} fill="url(#probGradGreen)" clipPath="url(#clipAbove)"/>
-                      {/* Smooth line - below target */}
-                      <path d={pathStr} fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" clipPath="url(#clipBelow)" opacity="0.8"/>
-                      {/* Smooth line - above target */}
-                      <path d={pathStr} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" clipPath="url(#clipAbove)" opacity="0.9"/>
-                      {/* Target price vertical line */}
-                      <line x1={clampedTargetX} y1={padY} x2={clampedTargetX} y2={H - padY} stroke="#34d399" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.8"/>
-                      <text x={clampedTargetX + 4} y={padY + 10} fill="#34d399" fontSize="9" fontFamily="monospace">
-                        ${result.targetPrice.toFixed(0)}
-                      </text>
-                      {/* X-axis labels */}
-                      <text x={padX} y={H} fill="#6b7280" fontSize="9" fontFamily="monospace">
-                        ${dist[0].center.toFixed(0)}
-                      </text>
-                      <text x={W - padX} y={H} fill="#6b7280" fontSize="9" textAnchor="end" fontFamily="monospace">
-                        ${dist[dist.length - 1].center.toFixed(0)}
-                      </text>
-                      {/* Data points */}
-                      {pts.map((p, i) => (
-                        <circle key={i} cx={p.x} cy={p.y} r="2.5"
-                          fill={p.above ? '#10b981' : '#ef4444'} opacity="0.7"/>
+
+                      {/* Y-axis grid lines */}
+                      {yLabels.map((gl, i) => (
+                        <g key={i}>
+                          <line x1={padL} y1={gl.y} x2={padL + chartW} y2={gl.y} stroke="#374151" strokeWidth="0.5" strokeDasharray="3,3"/>
+                          <text x={padL - 3} y={gl.y + 3} fill="#6b7280" fontSize="7" textAnchor="end" fontFamily="monospace">{gl.label}</text>
+                        </g>
                       ))}
+
+                      {/* Area fills */}
+                      <path d={areaPath} fill="url(#probGradRed2)" clipPath="url(#clipBelowT)"/>
+                      <path d={areaPath} fill="url(#probGradGreen2)" clipPath="url(#clipAboveT)"/>
+
+                      {/* Lines */}
+                      <path d={pathStr} fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" clipPath="url(#clipBelowT)" opacity="0.85"/>
+                      <path d={pathStr} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" clipPath="url(#clipAboveT)" opacity="0.9"/>
+
+                      {/* Current price marker */}
+                      <line x1={currentX} y1={padTop} x2={currentX} y2={padTop + chartH} stroke="#facc15" strokeWidth="1.5" strokeDasharray="3,3" opacity="0.7"/>
+                      <text x={currentX} y={padTop - 4} fill="#facc15" fontSize="8" textAnchor="middle" fontFamily="monospace">
+                        ${result.currentPrice.toFixed(0)} ▼
+                      </text>
+
+                      {/* Target price marker */}
+                      <line x1={targetX} y1={padTop} x2={targetX} y2={padTop + chartH} stroke="#34d399" strokeWidth="1.5" strokeDasharray="4,3" opacity="0.9"/>
+                      <text x={targetX} y={padTop - 4} fill="#34d399" fontSize="8" textAnchor="middle" fontFamily="monospace">
+                        ${result.targetPrice.toFixed(0)} 🎯
+                      </text>
+
+                      {/* Probability label at target */}
+                      <rect x={targetX + 3} y={padTop + chartH / 2 - 8} width={52} height={14} rx="3" fill="#065f46" opacity="0.85"/>
+                      <text x={targetX + 7} y={padTop + chartH / 2 + 3} fill="#34d399" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                        {result.probability.toFixed(1)}%
+                      </text>
+
+                      {/* X-axis labels */}
+                      {xLabels.map((xl, i) => (
+                        <text key={i} x={xl.x} y={H - 6} fill="#6b7280" fontSize="8" textAnchor="middle" fontFamily="monospace">{xl.label}</text>
+                      ))}
+
+                      {/* X-axis line */}
+                      <line x1={padL} y1={padTop + chartH} x2={padL + chartW} y2={padTop + chartH} stroke="#374151" strokeWidth="0.8"/>
                     </svg>
                   </div>
                 );
               })()}
-              <div className="flex gap-4 mt-3 text-xs">
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-1.5 bg-green-500/70 rounded inline-block"></span>
-                  {t('probabilityTab.aboveTarget')}
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-1.5 bg-red-500/50 rounded inline-block"></span>
-                  {t('probabilityTab.belowTarget')}
-                </span>
-              </div>
+              <p className="text-xs text-gray-600 mt-1 text-center">
+                Distribución de precios terminales · {result.steps} pasos · σ={result.volatilityUsed.toFixed(1)}% ({result.volatilitySource})
+              </p>
             </div>
           )}
 

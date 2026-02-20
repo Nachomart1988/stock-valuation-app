@@ -13,6 +13,7 @@ from quality_model import quality_predictor
 from neural_resumen_engine import neural_engine
 from market_sentiment_engine import market_sentiment_engine
 from probability_engine import probability_engine
+from gap_analysis_engine import analyze_gaps
 
 app = FastAPI(
     title="Stock Analysis AI API",
@@ -335,6 +336,7 @@ class MarketSentimentRequest(BaseModel):
     historicalSectorPerformance: Optional[List[Dict[str, Any]]] = None
     vixQuote: Optional[Dict[str, Any]] = None
     indexBreadth: Optional[Dict[str, Any]] = None
+    language: Optional[str] = 'en'
 
 
 @app.post("/market-sentiment/analyze")
@@ -371,7 +373,7 @@ async def analyze_market_sentiment(req: MarketSentimentRequest):
             'indexBreadth': req.indexBreadth,
         }
 
-        result = market_sentiment_engine.analyze(data)
+        result = market_sentiment_engine.analyze(data, language=req.language or 'en')
 
         print(f"[MarketSentiment] Result: {result['overallSentiment']} (score: {result['compositeScore']})")
 
@@ -395,6 +397,36 @@ class FFTSignalRequest(BaseModel):
     numFreq: int = 8           # low-pass: keep first K frequencies
     outputBars: int = 60       # how many bars to return in rollingCurve
     thresholdPct: float = 0.002  # anti-whipsaw threshold (0.2%)
+
+
+# ════════════════════════════════════════════════════════════════════
+# Gap Analysis
+# ════════════════════════════════════════════════════════════════════
+
+class GapAnalysisRequest(BaseModel):
+    ticker: str
+    days: int = 600
+    gapThresholdPct: float = 2.0
+    direction: str = 'both'   # 'up', 'down', 'both'
+
+
+@app.post("/gaps/analyze")
+async def gaps_analyze(req: GapAnalysisRequest):
+    """Analyze historical price gaps and compute behavioral statistics."""
+    try:
+        api_key = os.environ.get('FMP_API_KEY', '')
+        result = analyze_gaps(
+            ticker=req.ticker,
+            days=req.days,
+            gap_threshold_pct=req.gapThresholdPct,
+            direction=req.direction,
+            fmp_api_key=api_key,
+        )
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/fft-signal")

@@ -36,6 +36,7 @@ import HoldersTab from '@/app/components/tabs/HoldersTab';
 import DuPontTab from '@/app/components/tabs/DuPontTab';
 import DiarioInversorTab from '@/app/components/tabs/DiarioInversorTab';
 import PivotsTab from '@/app/components/tabs/PivotsTab';
+import GapsTab from '@/app/components/tabs/GapsTab';
 import ResumenTab from '@/app/components/tabs/ResumenTab';
 
 // Group components for reorganized layout
@@ -75,25 +76,36 @@ const MONETARY_FIELDS = new Set([
   'sellingAndMarketingExpenses', 'generalAndAdministrativeExpenses',
   'researchAndDevelopmentExpenses', 'depreciationAndAmortization',
   'weightedAverageShsOut', 'weightedAverageShsOutDil',
-  'epsdiluted', 'operatingIncomeRatio',
+  'epsdiluted', 'epsDiluted',
+  // Income Statement (additional)
+  'ebit', 'sellingGeneralAndAdministrativeExpenses', 'totalOtherIncomeExpensesNet',
   // Balance Sheet
   'totalAssets', 'totalLiabilities', 'totalEquity', 'totalStockholdersEquity',
   'cashAndCashEquivalents', 'cashAndShortTermInvestments', 'shortTermInvestments',
   'netReceivables', 'inventory', 'totalCurrentAssets', 'totalCurrentLiabilities',
   'propertyPlantEquipmentNet', 'goodwill', 'intangibleAssets', 'longTermDebt',
+  'goodwillAndIntangibleAssets', 'totalNonCurrentAssets', 'totalNonCurrentLiabilities',
   'shortTermDebt', 'totalDebt', 'netDebt', 'otherAssets', 'otherLiabilities',
   'retainedEarnings', 'commonStock', 'totalInvestments', 'capitalLeaseObligations',
   'accumulatedOtherComprehensiveIncomeLoss', 'othertotalStockholdersEquity',
   'taxPayables', 'deferredRevenue', 'otherCurrentAssets', 'otherCurrentLiabilities',
+  'deferredRevenueNonCurrent', 'deferredTaxLiabilitiesNonCurrent',
   'otherNonCurrentAssets', 'otherNonCurrentLiabilities', 'longTermInvestments',
   'taxAssets', 'preferredStock', 'minorityInterest',
+  'totalLiabilitiesAndStockholdersEquity', 'accountPayables',
   // Cash Flow
   'operatingCashFlow', 'freeCashFlow', 'capitalExpenditure',
   'netCashUsedForInvestingActivites', 'netCashUsedProvidedByFinancingActivities',
-  'netCashProvidedByOperatingActivities', 'netChangeInCash',
+  'netCashProvidedByOperatingActivities', 'netCashProvidedByInvestingActivities',
+  'netCashProvidedByFinancingActivities', 'netChangeInCash',
   'dividendsPaid', 'commonStockRepurchased', 'commonStockIssued',
   'debtRepayment', 'purchasesOfInvestments', 'salesMaturitiesOfInvestments',
   'acquisitionsNet', 'changeInWorkingCapital',
+  'deferredIncomeTax', 'stockBasedCompensation', 'accountsReceivables',
+  'accountsPayables', 'otherWorkingCapital', 'otherNonCashItems',
+  'investmentsInPropertyPlantAndEquipment', 'otherInvestingActivites',
+  'otherFinancingActivites', 'effectOfForexChangesOnCash',
+  'cashAtEndOfPeriod', 'cashAtBeginningOfPeriod', 'capexPerShare',
   // Key Metrics
   'revenuePerShare', 'netIncomePerShare', 'operatingCashFlowPerShare',
   'freeCashFlowPerShare', 'cashPerShare', 'bookValuePerShare',
@@ -1193,6 +1205,7 @@ function AnalizarContent() {
           onWACCChange={setSharedWACC}
         />
       }
+      GapsTab={<GapsTab ticker={activeTicker} />}
       lockedSubtabs={[0,1,2,3,4].filter(i => !canAccessSubTab(userPlan, INPUTS_ACCESS)(i))}
       requiredPlan="pro"
       currentPlan={userPlan}
@@ -1212,6 +1225,7 @@ function AnalizarContent() {
           cashFlow={cashFlow}
           dcfCustom={dcfCustom}
           estimates={estimates}
+          keyMetricsTTM={keyMetricsTTM}
           onValorIntrinsecoChange={setSharedValorIntrinseco}
         />
       }
@@ -2437,6 +2451,53 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
     return `$${value.toFixed(0)}`;
   };
 
+  // ── Inline YoY Growth computation from raw data ──
+  const inlineYoYMetrics: {key: string; label: string}[] =
+    type === 'income' ? [
+      { key: 'revenue', label: 'Revenue' },
+      { key: 'grossProfit', label: 'Gross Profit' },
+      { key: 'operatingIncome', label: 'Operating Income' },
+      { key: 'ebitda', label: 'EBITDA' },
+      { key: 'netIncome', label: 'Net Income' },
+      { key: 'eps', label: 'EPS' },
+      { key: 'researchAndDevelopmentExpenses', label: 'R&D Expenses' },
+      { key: 'sellingGeneralAndAdministrativeExpenses', label: 'SG&A' },
+    ] : type === 'balance' ? [
+      { key: 'totalAssets', label: 'Total Assets' },
+      { key: 'totalLiabilities', label: 'Total Liabilities' },
+      { key: 'totalStockholdersEquity', label: 'Total Equity' },
+      { key: 'cashAndCashEquivalents', label: 'Cash & Equivalents' },
+      { key: 'totalDebt', label: 'Total Debt' },
+      { key: 'netReceivables', label: 'Receivables' },
+      { key: 'inventory', label: 'Inventory' },
+    ] : [
+      { key: 'netCashProvidedByOperatingActivities', label: 'Operating Cash Flow' },
+      { key: 'capitalExpenditure', label: 'CapEx' },
+      { key: 'freeCashFlow', label: 'Free Cash Flow' },
+      { key: 'dividendsPaid', label: 'Dividends Paid' },
+    ];
+
+  const yoyYears = sortedData.slice(0, 9);
+
+  const computeYoY = (key: string, idx: number): number | null => {
+    if (idx >= yoyYears.length - 1) return null;
+    const curr = getValueWithFallback(yoyYears[idx], key);
+    const prev = getValueWithFallback(yoyYears[idx + 1], key);
+    if (curr == null || prev == null || prev === 0 || !isFinite(Number(prev))) return null;
+    return (Number(curr) - Number(prev)) / Math.abs(Number(prev));
+  };
+
+  const formatYoY = (v: number | null): string => {
+    if (v == null || !isFinite(v)) return '—';
+    const pct = v * 100;
+    return pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
+  };
+
+  const yoyColor = (v: number | null): string => {
+    if (v == null || !isFinite(v)) return 'text-gray-400';
+    return v >= 0 ? 'text-green-400' : 'text-red-400';
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center gap-4 mb-8">
@@ -2502,8 +2563,8 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
         <p className="text-emerald-400 text-sm">* Datos adicionales de SEC 10-K filings</p>
       </div>
 
-      {/* Growth Rates Section */}
-      {growthData && growthData.length > 0 && (
+      {/* Year-over-Year Growth Rates — Computed Inline */}
+      {yoyYears.length > 1 && (
         <div className="mt-10">
           <h4 className="text-3xl font-bold text-green-400 mb-6">📈 Year-over-Year Growth Rates</h4>
           <div className="overflow-x-auto">
@@ -2513,7 +2574,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
                   <th className="px-8 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-green-900/30 z-10 min-w-[280px]">
                     Growth Metric
                   </th>
-                  {growthData.slice(0, 8).map((row: any, i: number) => (
+                  {yoyYears.map((row, i) => (
                     <th key={i} className="px-6 py-4 text-center font-bold text-base min-w-[120px] text-gray-200">
                       {row.date ? new Date(row.date).getFullYear() : `Period ${i + 1}`}
                     </th>
@@ -2521,45 +2582,30 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700">
-                {type === 'income' && (
-                  <>
-                    <GrowthRow data={growthData} metricKey="revenueGrowth" label="Revenue Growth" />
-                    <GrowthRow data={growthData} metricKey="grossProfitGrowth" label="Gross Profit Growth" />
-                    <GrowthRow data={growthData} metricKey="operatingIncomeGrowth" label="Operating Income Growth" />
-                    <GrowthRow data={growthData} metricKey="ebitgrowth" label="EBIT Growth" />
-                    <GrowthRow data={growthData} metricKey="netIncomeGrowth" label="Net Income Growth" />
-                    <GrowthRow data={growthData} metricKey="epsgrowth" label="EPS Growth" />
-                    <GrowthRow data={growthData} metricKey="epsdilutedGrowth" label="EPS Diluted Growth" />
-                    <GrowthRow data={growthData} metricKey="rdexpenseGrowth" label="R&D Growth" />
-                    <GrowthRow data={growthData} metricKey="sgaexpensesGrowth" label="SG&A Growth" />
-                  </>
-                )}
-                {type === 'balance' && (
-                  <>
-                    <GrowthRow data={growthData} metricKey="totalAssetsGrowth" label="Total Assets Growth" />
-                    <GrowthRow data={growthData} metricKey="totalLiabilitiesGrowth" label="Total Liabilities Growth" />
-                    <GrowthRow data={growthData} metricKey="totalStockholdersEquityGrowth" label="Total Equity Growth" />
-                    <GrowthRow data={growthData} metricKey="cashAndCashEquivalentsGrowth" label="Cash Growth" />
-                    <GrowthRow data={growthData} metricKey="totalDebtGrowth" label="Total Debt Growth" />
-                    <GrowthRow data={growthData} metricKey="netDebtGrowth" label="Net Debt Growth" />
-                    <GrowthRow data={growthData} metricKey="inventoryGrowth" label="Inventory Growth" />
-                    <GrowthRow data={growthData} metricKey="receivablesGrowth" label="Receivables Growth" />
-                  </>
-                )}
-                {type === 'cashFlow' && (
-                  <>
-                    <GrowthRow data={growthData} metricKey="operatingCashFlowGrowth" label="Operating CF Growth" />
-                    <GrowthRow data={growthData} metricKey="capitalExpenditureGrowth" label="CapEx Growth" />
-                    <GrowthRow data={growthData} metricKey="freeCashFlowGrowth" label="Free Cash Flow Growth" />
-                    <GrowthRow data={growthData} metricKey="dividendsPaidGrowth" label="Dividends Growth" />
-                    <GrowthRow data={growthData} metricKey="netCashUsedForInvestingActivitesGrowth" label="Investing CF Growth" />
-                    <GrowthRow data={growthData} metricKey="netCashUsedProvidedByFinancingActivitiesGrowth" label="Financing CF Growth" />
-                  </>
-                )}
+                {inlineYoYMetrics
+                  .filter(m => yoyYears.some(row => {
+                    const v = getValueWithFallback(row, m.key);
+                    return v != null && v !== 0;
+                  }))
+                  .map(m => (
+                    <tr key={m.key} className="hover:bg-gray-700/50 transition">
+                      <td className="px-8 py-3 font-medium text-base sticky left-0 z-10 border-r border-white/[0.06] bg-gray-900 text-gray-200">
+                        {m.label} Growth
+                      </td>
+                      {yoyYears.map((_, i) => {
+                        const growth = computeYoY(m.key, i);
+                        return (
+                          <td key={i} className={`px-6 py-3 text-center text-base font-semibold ${yoyColor(growth)}`}>
+                            {i < yoyYears.length - 1 ? formatYoY(growth) : '—'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
-          <p className="text-sm text-gray-500 mt-4">Growth rates shown as year-over-year percentage change.</p>
+          <p className="text-sm text-gray-500 mt-4">YoY% = (año actual − año anterior) / |año anterior|. Calculado desde datos financieros reportados.</p>
         </div>
       )}
 
