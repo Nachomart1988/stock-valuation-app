@@ -79,7 +79,8 @@ export default function GapsTab({ ticker }: GapsTabProps) {
     setError(null);
     setResult(null);
     try {
-      const res = await fetch('http://localhost:8000/gaps/analyze', {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${backendUrl}/gaps/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

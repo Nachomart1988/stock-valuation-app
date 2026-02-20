@@ -754,7 +754,7 @@ export default function SustainableGrowthTab({
       {/* ═══════════════════════════════════════════════════════════════
           HISTORICAL CAGR
           ═══════════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-r bg-gray-950 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
+      <div className="bg-gradient-to-r from-gray-950 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
         <h4 className="text-2xl font-bold text-emerald-400 mb-4">{t('sgrTab.historicalGrowth')}</h4>
         <p className="text-gray-400 mb-4">
           {t('sgrTab.historicalGrowthDesc')}

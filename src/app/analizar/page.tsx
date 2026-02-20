@@ -1263,6 +1263,7 @@ function AnalizarContent() {
       keyMetricsTTM={keyMetricsTTM}
       ownerEarnings={ownerEarnings}
       cagrStats={sharedCagrStats}
+      dcfFromCalculos={sharedValorIntrinseco}
     />
   </Tab.Panel>
 

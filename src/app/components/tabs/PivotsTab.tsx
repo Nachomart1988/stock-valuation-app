@@ -835,7 +835,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Historical Support/Resistance Levels */}
       {showHistoricalLevels && historicalPivots.length > 0 && (
-        <div className="bg-gradient-to-r bg-gray-950 to-teal-900/30 p-6 rounded-2xl border border-emerald-600">
+        <div className="bg-gradient-to-r from-gray-950 to-teal-900/30 p-6 rounded-2xl border border-emerald-600">
           <h4 className="text-xl font-bold text-emerald-400 mb-4">
             {t('pivotsTab.historicalLevels')}
           </h4>

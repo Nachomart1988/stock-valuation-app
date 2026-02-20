@@ -276,7 +276,7 @@ export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
           <p className="text-sm text-gray-400 mt-1">{t('cagrTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r bg-gray-950 to-sky-900/40 px-4 py-2 rounded-xl border border-green-600">
+          <div className="text-right bg-gradient-to-r from-gray-950 to-sky-900/40 px-4 py-2 rounded-xl border border-green-600">
             <p className="text-xs text-green-400">{t('cagrTab.daysOfData')}</p>
             <p className="text-xl font-bold text-green-400">{historicalPrices.length.toLocaleString()}</p>
           </div>

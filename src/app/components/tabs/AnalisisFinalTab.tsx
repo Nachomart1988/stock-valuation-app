@@ -230,19 +230,19 @@ export default function AnalisisFinalTab({
 
       {/* Resumen de análisis - Larger cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br bg-gray-950 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
+        <div className="bg-gradient-to-br from-gray-950 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
           <p className="text-lg text-green-300 mb-2">{t('analisisFinalTab.currentPrice')}</p>
           <p className="text-4xl font-black text-green-400">
             {currentPrice ? `$${currentPrice.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gradient-to-br bg-gray-950 to-emerald-800/20 p-6 rounded-2xl border border-emerald-600/50 text-center">
+        <div className="bg-gradient-to-br from-gray-950 to-emerald-800/20 p-6 rounded-2xl border border-emerald-600/50 text-center">
           <p className="text-lg text-emerald-300 mb-2">{t('analisisFinalTab.avgValuation')}</p>
           <p className="text-4xl font-black text-emerald-400">
             {sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A'}
           </p>
         </div>
-        <div className="bg-gradient-to-br bg-gray-950 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
+        <div className="bg-gradient-to-br from-gray-950 to-green-800/20 p-6 rounded-2xl border border-green-600/50 text-center">
           <p className="text-lg text-green-300 mb-2">{t('analisisFinalTab.suggestedBuyPrice')}</p>
           <p className="text-4xl font-black text-green-400">
             {precioEstimado ? `$${precioEstimado.toFixed(2)}` : 'N/A'}
@@ -251,7 +251,7 @@ export default function AnalisisFinalTab({
         </div>
         <div className={`p-6 rounded-2xl border text-center ${
           upside !== null && upside > 0
-            ? 'bg-gradient-to-br bg-gray-950 to-emerald-800/20 border-green-600/50'
+            ? 'bg-gradient-to-br from-gray-950 to-emerald-800/20 border-green-600/50'
             : 'bg-gradient-to-br from-red-900/40 to-red-950/40 border-red-600/50'
         }`}>
           <p className="text-lg text-gray-300 mb-2">{t('analisisFinalTab.upsideDownside')}</p>

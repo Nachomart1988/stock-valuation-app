@@ -222,6 +222,7 @@ interface Props {
   keyMetricsTTM?: any; // TTM Key Metrics from FMP (includes grahamNumber, grahamNetNet, etc.)
   ownerEarnings?: any[]; // Owner Earnings (Buffett method) from FMP
   cagrStats?: { avgCagr: number | null; minCagr: number | null; maxCagr: number | null } | null;
+  dcfFromCalculos?: number | null; // Intrinsic value from Calculo tab
 }
 
 export default function ValuacionesTab({
@@ -242,6 +243,7 @@ export default function ValuacionesTab({
   keyMetricsTTM,
   ownerEarnings,
   cagrStats,
+  dcfFromCalculos,
 }: Props) {
   const { t } = useLanguage();
   // ────────────────────────────────────────────────
@@ -1410,21 +1412,34 @@ export default function ValuacionesTab({
               : 'Monte Carlo simulation - requires DCF base',
           },
           // ────────────────────────────────────────────────
+          // DCF from Cálculos Tab
+          // ────────────────────────────────────────────────
+          {
+            name: 'DCF (Cálculos)',
+            value: dcfFromCalculos && dcfFromCalculos > 0 && isFinite(dcfFromCalculos) ? dcfFromCalculos : null,
+            enabled: true,
+            description: 'Valor intrínseco calculado en la pestaña Cálculos (DCF multi-etapa)',
+          },
+          // ────────────────────────────────────────────────
           // FMP Key Metrics Based Valuations
           // ────────────────────────────────────────────────
           {
             name: 'Graham Number (API)',
-            value: keyMetricsTTM?.grahamNumber && keyMetricsTTM.grahamNumber > 0 && isFinite(keyMetricsTTM.grahamNumber)
-              ? keyMetricsTTM.grahamNumber
-              : null,
+            value: (() => {
+              // FMP TTM endpoint may return grahamNumber or grahamNumberTTM
+              const v = keyMetricsTTM?.grahamNumber ?? keyMetricsTTM?.grahamNumberTTM;
+              return v && v > 0 && isFinite(v) ? v : null;
+            })(),
             enabled: true,
             description: 'Graham Number from FMP: sqrt(22.5 × EPS × BVPS)',
           },
           {
             name: 'Graham Net-Net (API)',
-            value: keyMetricsTTM?.grahamNetNet && keyMetricsTTM.grahamNetNet > 0 && isFinite(keyMetricsTTM.grahamNetNet)
-              ? keyMetricsTTM.grahamNetNet
-              : null,
+            value: (() => {
+              // FMP TTM endpoint may return grahamNetNet or grahamNetNetTTM
+              const v = keyMetricsTTM?.grahamNetNet ?? keyMetricsTTM?.grahamNetNetTTM;
+              return v && isFinite(v) ? v : null; // Net-Net can be negative (valid signal)
+            })(),
             enabled: true,
             description: 'Net-Net Working Capital: (Current Assets - Total Liabilities) / Shares',
           },
@@ -2460,7 +2475,7 @@ export default function ValuacionesTab({
                 Incluir en promedio
               </label>
             </h4>
-            <div className="bg-gradient-to-br bg-gray-950 via-gray-800 to-emerald-900/30 p-5 rounded-2xl border-2 border-emerald-500/40 shadow-lg">
+            <div className="bg-gradient-to-br from-gray-950 via-gray-800 to-emerald-900/30 p-5 rounded-2xl border-2 border-emerald-500/40 shadow-lg">
               {advanceValueNetLoading && !advanceValueNet && (
                 <div className="flex items-center justify-center py-6 gap-3">
                   <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-500 border-t-transparent"></div>

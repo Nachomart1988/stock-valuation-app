@@ -98,7 +98,27 @@ export default function ResumenTab({
   news,
   averageValuation,
 }: ResumenTabProps) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
+  const es = locale === 'es';
+
+  // Translate finite-set backend strings to Spanish
+  const tlRec = (r: string) => {
+    if (!es) return r;
+    return r
+      .replace('Strong Buy', 'Compra Fuerte')
+      .replace('Strong Sell', 'Venta Fuerte')
+      .replace(/\bBuy\b/, 'Comprar')
+      .replace(/\bSell\b/, 'Vender')
+      .replace(/\bHold\b/, 'Mantener');
+  };
+
+  const tlRisk = (r: string) => {
+    if (!es) return r;
+    const map: Record<string, string> = {
+      Low: 'Bajo', Moderate: 'Moderado', Elevated: 'Elevado', High: 'Alto',
+    };
+    return map[r] || r;
+  };
   const [resumen, setResumen] = useState<ResumenData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -667,7 +687,7 @@ export default function ResumenTab({
 
         <div className="relative text-center">
           <div className="text-7xl mb-4">{getRecommendationEmoji()}</div>
-          <p className="text-5xl md:text-6xl font-black text-white mb-2">{finalRecommendation}</p>
+          <p className="text-5xl md:text-6xl font-black text-white mb-2">{tlRec(finalRecommendation)}</p>
           <div className="flex items-center justify-center gap-6 mt-4 flex-wrap">
             <div className="text-center">
               <p className="text-xs text-gray-400 uppercase tracking-wider">Convicción</p>
@@ -734,7 +754,7 @@ export default function ResumenTab({
         <div className="bg-gray-900/80 rounded-3xl border border-white/[0.06]/50 overflow-hidden">
           <button
             onClick={() => setShowSynthesis(!showSynthesis)}
-            className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r bg-gray-950 to-emerald-900/30 hover:bg-gray-950 hover:to-emerald-900/50 transition-all"
+            className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r from-gray-950 to-emerald-900/30 hover:bg-gray-950 hover:to-emerald-900/50 transition-all"
           >
             <div className="flex items-center gap-3">
               <span className="text-2xl">⚡</span>
@@ -864,7 +884,7 @@ export default function ResumenTab({
         <p className="text-lg leading-relaxed text-gray-200">{summaryText}</p>
 
         {actionableAdvice && (
-          <div className="mt-8 bg-gradient-to-r bg-gray-950 via-emerald-900/40 to-emerald-900/40 p-6 rounded-2xl border border-emerald-500/30">
+          <div className="mt-8 bg-gradient-to-r from-gray-950 via-emerald-900/40 to-emerald-900/40 p-6 rounded-2xl border border-emerald-500/30">
             <p className="uppercase text-emerald-400 text-xs tracking-[3px] mb-2 flex items-center gap-2">
               <span>🎯</span> PLAN DE ACCIÓN
             </p>
@@ -978,7 +998,7 @@ export default function ResumenTab({
             }`}
           >
             <span className="text-sm font-medium">Nivel de Riesgo: </span>
-            <span className="font-bold">{riskLevel}</span>
+            <span className="font-bold">{tlRisk(riskLevel)}</span>
           </div>
         </div>
       )}

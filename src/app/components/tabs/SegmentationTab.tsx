@@ -370,7 +370,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
       </div>
 
       {/* Geographic Segmentation */}
-      <div className="bg-gradient-to-r bg-gray-950 to-teal-900/30 p-6 rounded-xl border border-green-600">
+      <div className="bg-gradient-to-r from-gray-950 to-teal-900/30 p-6 rounded-xl border border-green-600">
         <h4 className="text-2xl font-bold text-green-400 mb-6">{t('segmentationTab.geographicSegmentation')}</h4>
 
         {latestGeoData.length === 0 ? (

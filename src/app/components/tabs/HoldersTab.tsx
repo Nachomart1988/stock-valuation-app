@@ -565,7 +565,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
 
       {/* Quarterly Trend Chart */}
       {positionsHistory.length > 1 && (
-        <div className="bg-gradient-to-r bg-gray-950 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
+        <div className="bg-gradient-to-r from-gray-950 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
           <h4 className="text-xl font-bold text-emerald-400 mb-4">📊 Quarterly Ownership Trend</h4>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

@@ -300,7 +300,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
           <p className="text-sm text-gray-400 mt-1">{t('revenueForecastTab.subtitle')}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r bg-gray-950 to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+          <div className="text-right bg-gradient-to-r from-gray-950 to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
             <p className="text-xs text-emerald-400">{t('revenueForecastTab.yearsProjected')}</p>
             <p className="text-xl font-bold text-emerald-400">{forecastYears}</p>
           </div>
