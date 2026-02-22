@@ -482,7 +482,8 @@ function AnalizarContent() {
 
   // Función para analizar un ticker (llamada desde InputsTab)
   const handleAnalizar = (newTicker: string) => {
-    const upperTicker = newTicker.toUpperCase().trim();
+    // Strip anything that's not alphanumeric, dot or dash (e.g. TSLA] → TSLA, BRK.B → BRK.B)
+    const upperTicker = newTicker.toUpperCase().trim().replace(/[^A-Z0-9.\-]/g, '');
     if (!upperTicker) return;
     setActiveTicker(upperTicker);
     setTicker(upperTicker);
@@ -940,7 +941,7 @@ function AnalizarContent() {
               <input
                 type="text"
                 value={ticker}
-                onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                onChange={(e) => setTicker(e.target.value.toUpperCase().replace(/[^A-Z0-9.\-]/g, ''))}
                 onKeyDown={(e) => e.key === 'Enter' && handleAnalizar(ticker)}
                 placeholder="Ej: AAPL, MSFT, GOOGL"
                 className="flex-1 px-4 sm:px-6 py-3 sm:py-4 text-lg sm:text-2xl border-2 border-white/[0.08] rounded-xl bg-gray-900 text-gray-100 focus:border-green-500 focus:ring-green-500 placeholder-gray-500"
@@ -1751,7 +1752,7 @@ function InicioTab({
             <input
               type="text"
               value={inputTicker}
-              onChange={(e) => setInputTicker(e.target.value.toUpperCase())}
+              onChange={(e) => setInputTicker(e.target.value.toUpperCase().replace(/[^A-Z0-9.\-]/g, ''))}
               onKeyDown={(e) => e.key === 'Enter' && onAnalizar(inputTicker)}
               placeholder={t('analysis.searchTicker')}
               className="w-full sm:w-44 md:w-48 px-4 sm:px-5 py-3 sm:py-4 border border-white/[0.08] rounded-xl text-gray-100 text-base sm:text-xl bg-gray-900 focus:border-green-500 focus:ring-green-500 placeholder-gray-500"

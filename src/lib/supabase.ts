@@ -8,12 +8,16 @@ function getAnonKey(): string {
   return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 }
 
+function isValidUrl(url: string): boolean {
+  try { new URL(url); return true; } catch { return false; }
+}
+
 // Lazy singleton for client-side usage
 let _client: SupabaseClient | null = null;
 export function getSupabaseClient(): SupabaseClient | null {
   const url = getSupabaseUrl();
   const key = getAnonKey();
-  if (!url || !key) return null;
+  if (!url || !key || !isValidUrl(url)) return null;
   if (!_client) _client = createClient(url, key);
   return _client;
 }
@@ -22,7 +26,7 @@ export function getSupabaseClient(): SupabaseClient | null {
 export function createAdminClient(): SupabaseClient | null {
   const url = getSupabaseUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) return null;
+  if (!url || !serviceKey || !isValidUrl(url)) return null;
   return createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });

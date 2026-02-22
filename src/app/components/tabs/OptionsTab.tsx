@@ -228,7 +228,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     ))}
                   </div>
 
-                  {selectedExp && chain.calls[selectedExp] && (
+                  {selectedExp && chain?.calls?.[selectedExp] && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       {/* Calls */}
                       <div className="bg-gray-700/30 rounded-xl p-3">
@@ -247,7 +247,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                               </tr>
                             </thead>
                             <tbody>
-                              {chain.calls[selectedExp].map((c: any, i: number) => {
+                              {(chain.calls[selectedExp] ?? []).map((c: any, i: number) => {
                                 const itm = c.strike <= currentPrice;
                                 return (
                                   <tr key={i} className={`border-t border-gray-700/30 ${itm ? 'bg-green-900/10' : ''}`}>
@@ -283,7 +283,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                               </tr>
                             </thead>
                             <tbody>
-                              {chain.puts[selectedExp].map((p: any, i: number) => {
+                              {(chain?.puts?.[selectedExp] ?? []).map((p: any, i: number) => {
                                 const itm = p.strike >= currentPrice;
                                 return (
                                   <tr key={i} className={`border-t border-gray-700/30 ${itm ? 'bg-red-900/10' : ''}`}>
