@@ -340,11 +340,12 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
     return scaled >= 0 ? `+$${scaled.toFixed(2)}` : `-$${Math.abs(scaled).toFixed(2)}`;
   };
 
-  // Format scan table values (raw, per-contract amounts from backend)
+  // Format scan table values: backend returns per-share amounts → multiply by 100 for 1 contract
   const fmtScan = (v: number | string | null | undefined) => {
     if (v === null || v === undefined) return '—';
-    if (typeof v === 'string') return v;
-    return v >= 0 ? `+$${v.toFixed(0)}` : `-$${Math.abs(v).toFixed(0)}`;
+    if (typeof v === 'string') return v; // "unlimited"
+    const scaled = v * 100; // per contract (100 shares)
+    return scaled >= 0 ? `+$${scaled.toFixed(0)}` : `-$${Math.abs(scaled).toFixed(0)}`;
   };
 
   const scoreColor = (s: number) =>
@@ -773,6 +774,27 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                         <tbody>
                           {analysis.legs.map((leg: any, i: number) => {
                             const qty = leg.quantity * contracts;
+
+                            // Stock leg: show the share position, not an option premium
+                            if (leg.type === 'stock') {
+                              const stockCost = leg.strike * Math.abs(qty) * 100;
+                              return (
+                                <tr key={i} className="border-t border-gray-700/40 bg-blue-900/10">
+                                  <td className="py-2 font-bold text-blue-400">
+                                    ▲ LONG {Math.abs(qty) * 100} {es ? 'acciones' : 'shares'}
+                                  </td>
+                                  <td className="py-2 text-right text-blue-300 font-semibold">STOCK</td>
+                                  <td className="py-2 text-right text-white font-semibold">${leg.strike?.toFixed(2)}</td>
+                                  <td className="py-2 text-right text-gray-400 text-xs">—</td>
+                                  <td className="py-2 text-right text-blue-400">${leg.strike?.toFixed(2)}/sh</td>
+                                  <td className="py-2 text-right text-gray-500">—</td>
+                                  <td className="py-2 text-right font-semibold text-blue-400">
+                                    ~${stockCost.toFixed(0)} {es ? 'inversión' : 'invested'}
+                                  </td>
+                                </tr>
+                              );
+                            }
+
                             const totalCost = leg.premium * leg.quantity * contracts * 100;
                             return (
                               <tr key={i} className="border-t border-gray-700/40">

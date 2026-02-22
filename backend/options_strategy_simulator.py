@@ -421,11 +421,16 @@ class OptionsStrategySimulator:
             # Check for unlimited profit/loss (if value keeps growing at edges)
             edge_pnl_low = self._calculate_pnl_at_price(parsed_legs, 0.01, cost_basis)
             edge_pnl_high = self._calculate_pnl_at_price(parsed_legs, current_price * 10, cost_basis)
+            has_stock_leg = any(l.type == 'stock' for l in parsed_legs)
 
             if edge_pnl_high > max_profit * 1.5:
                 max_profit = float('inf')
-            if edge_pnl_low < max_loss * 1.5 and max_loss < 0:
+            # Stock can only go to zero → max loss is always finite; no -inf for stock strategies.
+            if not has_stock_leg and edge_pnl_low < max_loss * 1.5 and max_loss < 0:
                 max_loss = float('-inf')
+            elif has_stock_leg:
+                # Include near-zero price in the min-loss calculation
+                max_loss = min(max_loss, edge_pnl_low)
 
             # ── Breakeven Points ──
             breakevens = self._find_breakevens(parsed_legs, cost_basis, current_price)
@@ -449,6 +454,22 @@ class OptionsStrategySimulator:
             # ── Detailed Leg Info ──
             legs_detail = []
             for leg in parsed_legs:
+                if leg.type == 'stock':
+                    # Stock leg: no options-specific fields
+                    legs_detail.append({
+                        "type": "stock",
+                        "strike": leg.strike,   # entry price
+                        "expiration": leg.expiration,
+                        "premium": 0.0,         # no option premium
+                        "quantity": leg.quantity,
+                        "iv": 0.0,
+                        "bsPrice": 0.0,
+                        "greeks": {"delta": float(leg.quantity), "gamma": 0, "theta": 0, "vega": 0, "rho": 0},
+                        "daysToExpiry": 0,
+                        "intrinsicValue": 0.0,
+                        "timeValue": 0.0,
+                    })
+                    continue
                 T = self._years_to_expiry(leg.expiration)
                 leg_greeks = self.bs.greeks(
                     current_price, leg.strike, T, risk_free_rate,
@@ -549,19 +570,31 @@ class OptionsStrategySimulator:
         current_price: float,
     ) -> Dict[str, Any]:
         """Fast analytical metrics for a strategy combo (no Monte Carlo)."""
+        # cost = net option premium only (stock legs have premium=0)
         cost = sum(l.premium * l.quantity for l in legs_obj)
-        # 60 test prices from -30% to +30%
-        test_prices = np.linspace(current_price * 0.70, current_price * 1.30, 60)
+        has_stock = any(l.type == 'stock' for l in legs_obj)
+
+        # 80 test prices; for stock strategies extend range to near-zero to capture max loss
+        lo = current_price * (0.05 if has_stock else 0.70)
+        test_prices = np.linspace(lo, current_price * 1.50, 80)
         pnls = np.array([self._calculate_pnl_at_price(legs_obj, p, cost) for p in test_prices])
 
         max_p = float(np.max(pnls))
         max_l = float(np.min(pnls))
 
-        # Check unlimited edges
+        # Check for unlimited profit at high prices
         edge_hi = self._calculate_pnl_at_price(legs_obj, current_price * 3.0,  cost)
         edge_lo = self._calculate_pnl_at_price(legs_obj, current_price * 0.01, cost)
-        if edge_hi > max_p * 1.5:  max_p = float('inf')
-        if edge_lo < max_l * 1.5 and max_l < 0: max_l = float('-inf')
+
+        # Stock can only go to zero → max loss is always finite for stock strategies.
+        # For pure-option strategies we still detect unlimited loss (naked short call etc).
+        if edge_hi > max_p * 1.5:
+            max_p = float('inf')
+        if not has_stock and edge_lo < max_l * 1.5 and max_l < 0:
+            max_l = float('-inf')
+        elif has_stock:
+            # Ensure near-zero price is captured as worst case for stock strategies
+            max_l = min(max_l, edge_lo)
 
         # P(profit) approximation: fraction of test prices above breakeven
         pop = float(np.mean(pnls > 0))
@@ -661,19 +694,25 @@ class OptionsStrategySimulator:
                         ])
 
             elif sn == 'covered_call':
+                # Covered Call = own 100 shares at current price + sell OTM call.
+                # Stock leg: strike = entry price, premium = 0 (not an option premium;
+                # excludes stock purchase from cost_basis so it shows option income only).
                 for c in t_calls:
                     s = c['strike']
                     if s <= price * 1.0 or s > price * 1.25: continue
-                    add(f"Short ${s:.0f} Call ({(s/price-1)*100:+.1f}% OTM)", [
-                        OptionLeg('call', s, expiration, self._mid(c), -1, c['iv']),
+                    add(f"Short ${s:.0f} Call ({(s/price-1)*100:+.1f}% OTM) + Stock", [
+                        OptionLeg('stock', price, expiration, 0.0, +1, 0.0),
+                        OptionLeg('call',  s,     expiration, self._mid(c), -1, c['iv']),
                     ])
 
             elif sn == 'protective_put':
+                # Protective Put = own 100 shares + buy OTM put as insurance.
                 for p in t_puts:
                     s = p['strike']
                     if s >= price * 1.0 or s < price * 0.78: continue
-                    add(f"Long ${s:.0f} Put ({(s/price-1)*100:+.1f}% OTM)", [
-                        OptionLeg('put', s, expiration, self._mid(p), +1, p['iv']),
+                    add(f"Long ${s:.0f} Put ({(s/price-1)*100:+.1f}% OTM) + Stock", [
+                        OptionLeg('stock', price, expiration, 0.0, +1, 0.0),
+                        OptionLeg('put',   s,     expiration, self._mid(p), +1, p['iv']),
                     ])
 
             elif sn == 'straddle':
@@ -742,13 +781,15 @@ class OptionsStrategySimulator:
                             ])
 
             elif sn == 'collar':
+                # Collar = own 100 shares + sell OTM call + buy OTM put.
                 for sc in t_calls:
                     if sc['strike'] <= price: continue
                     for lp in t_puts:
                         if lp['strike'] >= price: continue
                         if (sc['strike'] - price) > price * 0.20: continue
                         if (price - lp['strike']) > price * 0.20: continue
-                        add(f"Short ${sc['strike']:.0f}C / Long ${lp['strike']:.0f}P", [
+                        add(f"Short ${sc['strike']:.0f}C / Long ${lp['strike']:.0f}P + Stock", [
+                            OptionLeg('stock', price, expiration, 0.0, +1, 0.0),
                             OptionLeg('call', sc['strike'], expiration, self._mid(sc), -1, sc['iv']),
                             OptionLeg('put',  lp['strike'], expiration, self._mid(lp), +1, lp['iv']),
                         ])
@@ -827,10 +868,18 @@ class OptionsStrategySimulator:
         sn = strategy_name.lower()
 
         if sn == 'covered_call':
-            return [leg('call', _c(0.05), -1)]
+            # Own 100 shares + sell OTM call
+            return [
+                OptionLeg('stock', current_price, expiration, 0.0, +1, 0.0),
+                leg('call', _c(0.05), -1),
+            ]
 
         if sn == 'protective_put':
-            return [leg('put', _p(-0.05), 1)]
+            # Own 100 shares + buy OTM put
+            return [
+                OptionLeg('stock', current_price, expiration, 0.0, +1, 0.0),
+                leg('put', _p(-0.05), 1),
+            ]
 
         if sn == 'bull_call_spread':
             return [leg('call', _c(0.0),  1),
@@ -860,8 +909,12 @@ class OptionsStrategySimulator:
                     leg('call', _c(0.05),   1)]
 
         if sn == 'collar':
-            return [leg('call', _c(0.10),  -1),
-                    leg('put',  _p(-0.05),  1)]
+            # Own 100 shares + sell OTM call + buy OTM put
+            return [
+                OptionLeg('stock', current_price, expiration, 0.0, +1, 0.0),
+                leg('call', _c(0.10),  -1),
+                leg('put',  _p(-0.05),  1),
+            ]
 
         return []
 
@@ -1420,22 +1473,25 @@ class OptionsStrategySimulator:
         Calculate total P/L at a given underlying price at expiration.
 
         For each leg:
-          - Call intrinsic = max(price - strike, 0)
-          - Put  intrinsic = max(strike - price, 0)
+          - Stock:  P/L = (exit_price - entry_price) * quantity
+                    where leg.strike = entry price, premium = 0 (not an option)
+          - Call:   intrinsic = max(price - strike, 0)
+          - Put:    intrinsic = max(strike - price, 0)
           - Leg P/L = (intrinsic - premium) * quantity
-            where quantity > 0 means long, quantity < 0 means short.
+            where quantity > 0 means long, quantity < 0 means short (write).
         """
         total_pnl = 0.0
         for leg in legs:
-            if leg.type == 'call':
+            if leg.type == 'stock':
+                # Long/short stock position: P&L per share = (exit - entry)
+                # leg.strike holds the entry/purchase price per share
+                leg_pnl = (price - leg.strike) * leg.quantity
+            elif leg.type == 'call':
                 intrinsic = max(price - leg.strike, 0.0)
-            else:
+                leg_pnl = (intrinsic - leg.premium) * leg.quantity
+            else:  # put
                 intrinsic = max(leg.strike - price, 0.0)
-
-            # quantity positive = buy (pay premium), negative = sell (receive premium)
-            # P/L = (intrinsic * |qty| - premium * |qty|) * sign(qty)
-            # Simplified: (intrinsic - premium) * quantity
-            leg_pnl = (intrinsic - leg.premium) * leg.quantity
+                leg_pnl = (intrinsic - leg.premium) * leg.quantity
             total_pnl += leg_pnl
 
         return total_pnl
@@ -1467,6 +1523,10 @@ class OptionsStrategySimulator:
         agg = Greeks(delta=0, gamma=0, theta=0, vega=0, rho=0)
 
         for leg in legs:
+            if leg.type == 'stock':
+                # Stock delta = 1 per share (per unit of quantity); gamma/theta/vega/rho = 0
+                agg.delta += float(leg.quantity)
+                continue
             T = self._years_to_expiry(leg.expiration)
             iv = leg.iv if leg.iv > 0 else 0.3
             g = self.bs.greeks(current_price, leg.strike, T, risk_free_rate, iv,
