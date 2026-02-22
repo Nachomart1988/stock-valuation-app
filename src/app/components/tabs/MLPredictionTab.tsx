@@ -15,7 +15,8 @@ interface Prediction {
   upperBand: number;
   lowerBand: number;
   confidence: number;
-  changePercent: number;
+  predictedChangePct: number;
+  changePercent?: number; // alias fallback
 }
 
 interface PredictionResult {
@@ -138,7 +139,9 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
           {/* Predictions Grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {result.predictions.map((pred) => {
-              const isUp = pred.changePercent >= 0;
+              const changePct = pred.predictedChangePct ?? pred.changePercent ?? 0;
+              const confidencePct = pred.confidence <= 1 ? pred.confidence * 100 : pred.confidence;
+              const isUp = changePct >= 0;
               return (
                 <div key={pred.horizon} className="bg-gray-700/50 rounded-xl p-4 border border-gray-600/50">
                   <div className="text-sm text-gray-400 mb-1">
@@ -148,7 +151,7 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
                     {fmtPrice(pred.predictedPrice)}
                   </div>
                   <div className={`text-sm ${isUp ? 'text-green-500' : 'text-red-500'}`}>
-                    {fmtPct(pred.changePercent)}
+                    {fmtPct(changePct)}
                   </div>
                   <div className="mt-2 text-xs text-gray-500">
                     {fmtPrice(pred.lowerBand)} — {fmtPrice(pred.upperBand)}
@@ -157,11 +160,11 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
                     <div className="h-1.5 bg-gray-600 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full ${isUp ? 'bg-green-500' : 'bg-red-500'}`}
-                        style={{ width: `${Math.min(100, pred.confidence)}%` }}
+                        style={{ width: `${Math.min(100, confidencePct).toFixed(0)}%` }}
                       />
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                      {es ? 'Confianza' : 'Confidence'}: {pred.confidence.toFixed(0)}%
+                      {es ? 'Confianza' : 'Confidence'}: {confidencePct.toFixed(0)}%
                     </div>
                   </div>
                 </div>
@@ -255,11 +258,11 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
 
           {/* Training Info */}
           <div className="text-xs text-gray-500 flex flex-wrap gap-4">
-            <span>Model: {result.trainingInfo.modelType}</span>
-            <span>Epochs: {result.trainingInfo.epochs}</span>
-            <span>Train Loss: {result.trainingInfo.trainLoss.toFixed(6)}</span>
-            <span>Val Loss: {result.trainingInfo.valLoss.toFixed(6)}</span>
-            <span>Data Points: {result.trainingInfo.dataPoints}</span>
+            <span>Model: {(result as any).modelType ?? result.trainingInfo?.modelType ?? 'LSTM'}</span>
+            <span>Epochs: {result.trainingInfo?.epochs ?? '—'}</span>
+            <span>Train Loss: {result.trainingInfo?.trainLoss?.toFixed(6) ?? '—'}</span>
+            <span>Val Loss: {result.trainingInfo?.valLoss?.toFixed(6) ?? '—'}</span>
+            <span>Data Points: {result.trainingInfo?.dataPoints ?? '—'}</span>
           </div>
         </>
       )}
