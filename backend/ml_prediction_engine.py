@@ -558,32 +558,33 @@ class MLPredictionEngine:
         if not self.api_key:
             raise ValueError("FMP_API_KEY is required for fetching historical data")
 
-        url = (
-            f"https://financialmodelingprep.com/stable/historical-price-eod/full"
-            f"?symbol={ticker}&apikey={self.api_key}"
-        )
+        from_date = (datetime.now() - timedelta(days=days + 30)).strftime('%Y-%m-%d')
+        to_date = datetime.now().strftime('%Y-%m-%d')
+
+        url = "https://financialmodelingprep.com/stable/historical-price-eod/full"
+        params = {
+            'symbol': ticker,
+            'from': from_date,
+            'to': to_date,
+            'apikey': self.api_key,
+        }
 
         for attempt in range(1, 4):
             try:
                 logger.info("[MLPredict] Fetching historical data for %s (attempt %d)...", ticker, attempt)
-                resp = self._session.get(url, timeout=20)
+                resp = self._session.get(url, params=params, timeout=20)
                 resp.raise_for_status()
                 raw = resp.json()
-                historical = raw.get('historical', [])
+
+                # FMP stable endpoint returns a plain list; v3 returns {"historical": [...]}
+                historical = raw.get('historical', []) if isinstance(raw, dict) else raw
 
                 if not historical:
                     logger.warning("[MLPredict] No historical data for %s", ticker)
                     return []
 
-                # Validate
-                sample = historical[0]
-                for key in ('close', 'high', 'low', 'open', 'volume'):
-                    if key not in sample:
-                        logger.error("[MLPredict] Missing key '%s' in data for %s", key, ticker)
-                        return []
-
-                # FMP returns newest first - reverse to oldest first
-                historical = list(reversed(historical))
+                # Sort oldest-first (FMP returns newest-first)
+                historical = sorted(historical, key=lambda x: x.get('date', ''))
 
                 # Trim to requested days
                 if len(historical) > days:

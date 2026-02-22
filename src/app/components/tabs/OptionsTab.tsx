@@ -97,8 +97,11 @@ function PayoffSVG({ diagram, contracts }: { diagram: { price: number; pnl: numb
   const pnls   = scaledDiagram.map(p => p.pnl);
   const minP = prices[0], maxP = prices[prices.length - 1];
   const rawMin = Math.min(...pnls), rawMax = Math.max(...pnls);
-  const absMax = Math.max(Math.abs(rawMin), Math.abs(rawMax), 1);
-  const yMin = -absMax * 1.1, yMax = absMax * 1.1;
+  // Asymmetric Y-axis: show actual P&L range, not symmetric ±absMax
+  const range = Math.max(rawMax - rawMin, 1);
+  const yPad = range * 0.08;
+  const yMax = rawMax + yPad;
+  const yMin = rawMin - yPad;
 
   const sx = (p: number) => PAD.l + ((p - minP) / (maxP - minP)) * iW;
   const sy = (v: number) => PAD.t + ((yMax - v) / (yMax - yMin)) * iH;
@@ -115,9 +118,13 @@ function PayoffSVG({ diagram, contracts }: { diagram: { price: number; pnl: numb
     .map(({ price, pnl }, i) => `${i === 0 ? 'M' : 'L'}${sx(price).toFixed(1)},${sy(pnl).toFixed(1)}`)
     .join(' ');
 
-  const ticks = [-absMax, -absMax / 2, 0, absMax / 2, absMax];
-  const fmt = (v: number) =>
-    Math.abs(v) >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(0)}`;
+  const tickStep = (yMax - yMin) / 4;
+  const ticks = Array.from({ length: 5 }, (_, i) => yMin + i * tickStep);
+  const fmt = (v: number) => {
+    const abs = Math.abs(v);
+    const sign = v < 0 ? '-' : v > 0 ? '+' : '';
+    return abs >= 1000 ? `${sign}$${(abs / 1000).toFixed(1)}k` : `${sign}$${abs.toFixed(0)}`;
+  };
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 180 }}>
@@ -696,14 +703,32 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                       )}
                     </h4>
 
+                    {/* Stock strategy note */}
+                    {analysis.legs?.some((l: any) => l.type === 'stock') && (
+                      <div className="text-xs text-blue-400/80 bg-blue-900/20 rounded px-3 py-1.5">
+                        ℹ️ {es
+                          ? `Los montos incluyen P&L de las ${contracts * 100} acciones subyacentes + prima de opciones.`
+                          : `Amounts include P&L of ${contracts * 100} underlying shares + options premium.`}
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <div className="text-xs text-gray-500 uppercase">{es ? 'Ganancia Máx.' : 'Max Profit'}</div>
                         <div className="text-lg font-semibold text-green-400">{fmtDollar(analysis.maxProfit)}</div>
+                        {contracts > 1 && typeof analysis.maxProfit === 'number' && (
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {analysis.maxProfit >= 0 ? '+' : ''}${(Math.abs(analysis.maxProfit) * 100).toFixed(0)}/{es ? 'contrato' : 'contract'}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <div className="text-xs text-gray-500 uppercase">{es ? 'Pérdida Máx.' : 'Max Loss'}</div>
                         <div className="text-lg font-semibold text-red-400">{fmtDollar(analysis.maxLoss)}</div>
+                        {contracts > 1 && typeof analysis.maxLoss === 'number' && (
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {analysis.maxLoss >= 0 ? '+' : '-'}${(Math.abs(analysis.maxLoss) * 100).toFixed(0)}/{es ? 'contrato' : 'contract'}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <div className="text-xs text-gray-500 uppercase">Breakeven{analysis.breakevens.length > 1 ? 's' : ''}</div>

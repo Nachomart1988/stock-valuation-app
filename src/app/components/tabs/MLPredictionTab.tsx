@@ -58,9 +58,11 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
+        let detail = body;
+        try { detail = JSON.parse(body)?.detail ?? body; } catch {}
         if (res.status === 503) throw new Error(es ? 'PyTorch no está instalado en el servidor. Contacta al administrador.' : 'PyTorch is not installed on the server. Contact administrator.');
-        if (res.status === 500) throw new Error(es ? `Error del servidor: ${body.slice(0, 200)}` : `Server error: ${body.slice(0, 200)}`);
-        throw new Error(`HTTP ${res.status}`);
+        if (res.status === 500) throw new Error(es ? `Error del servidor: ${detail.slice(0, 200)}` : `Server error: ${detail.slice(0, 200)}`);
+        throw new Error(`HTTP ${res.status}: ${detail.slice(0, 100)}`);
       }
       const data = await res.json();
       if (data.error) throw new Error(data.error);
