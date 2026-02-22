@@ -4,17 +4,18 @@
 // Tab indices (from analizar/page.tsx categories array):
 //  0 - Inicio
 //  1 - Financial Statements
-//  2 - Forecasts
-//  3 - Info General  (sub-tabs: AnalisisGeneral, KeyMetrics, Analistas, DuPont)
-//  4 - Company       (sub-tabs: Competidores, Industry, Segmentation, Holders)
+//  2 - Forecasts        (sub-tabs: Analyst, Revenue, ML Prediction)
+//  3 - Info General     (sub-tabs: AnalisisGeneral, KeyMetrics, Analistas, DuPont)
+//  4 - Company          (sub-tabs: Competidores, Industry, Segmentation, Holders)
 //  5 - News
-//  6 - Inputs        (sub-tabs: SGR, Beta, CAGR, WACC)
-//  7 - Intraday      (sub-tabs: Pivots, Gaps)
-//  8 - DCF           (sub-tabs: Calculos, DCF Models)
+//  6 - Inputs           (sub-tabs: SGR, Beta, CAGR, WACC)
+//  7 - Intraday         (sub-tabs: Pivots, Gaps)
+//  8 - DCF              (sub-tabs: Calculos, DCF Models)
 //  9 - Valuaciones
 // 10 - Probability
-// 11 - Resumen Maestro
-// 12 - Diario Inversor
+// 11 - Options          (sub-tabs: Chain, Strategy Simulator, Suggestions)
+// 12 - Resumen Maestro
+// 13 - Diario Inversor  (sub-tabs: Diario, Portfolio Optimization)
 
 export type PlanTier = 'free' | 'pro' | 'elite' | 'gold';
 
@@ -29,12 +30,13 @@ export const PLAN_METADATA: Record<PlanTier, { name: string; price: number; colo
 // Maps tab index → minimum plan required
 // Tabs NOT listed are accessible to all (free+)
 export const TAB_MIN_PLAN: Record<number, PlanTier> = {
-  2:  'pro',   // Forecasts
+  2:  'pro',   // Forecasts (incl. ML Prediction)
   5:  'pro',   // News
   7:  'pro',   // Intraday (Pivots + Gaps)
   10: 'pro',   // Probability
-  11: 'elite', // Resumen Maestro
-  12: 'elite', // Diario Inversor
+  11: 'pro',   // Options
+  12: 'elite', // Resumen Maestro
+  13: 'elite', // Diario Inversor + Portfolio Optimization
 };
 
 // ── Sub-tab access ───────────────────────────────────────────

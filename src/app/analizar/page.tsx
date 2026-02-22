@@ -38,6 +38,9 @@ import DiarioInversorTab from '@/app/components/tabs/DiarioInversorTab';
 import PivotsTab from '@/app/components/tabs/PivotsTab';
 import GapsTab from '@/app/components/tabs/GapsTab';
 import ResumenTab from '@/app/components/tabs/ResumenTab';
+import MLPredictionTab from '@/app/components/tabs/MLPredictionTab';
+import PortfolioOptimizerTab from '@/app/components/tabs/PortfolioOptimizerTab';
+import OptionsTab from '@/app/components/tabs/OptionsTab';
 
 // Group components for reorganized layout
 import FinancialStatementsGroup from '@/app/components/groups/FinancialStatementsGroup';
@@ -485,9 +488,11 @@ function AnalizarContent() {
     const urlTab = searchParams.get('tab');
     if (!urlTab) return;
     const tabMap: Record<string, number> = {
-      diario: 10,       // Investor Journal
-      summary: 11,      // Resumen Maestro
-      valuaciones: 8,   // Valuaciones
+      diario: 13,       // Investor Journal
+      summary: 12,      // Resumen Maestro
+      options: 11,      // Options
+      valuaciones: 9,   // Valuaciones
+      probability: 10,  // Probability
       inicio: 0,
     };
     const idx = tabMap[urlTab.toLowerCase()];
@@ -1057,6 +1062,7 @@ function AnalizarContent() {
     t('analysis.categories.dcf'),
     t('analysis.categories.valuations'),
     t('analysis.categories.probability'),
+    t('analysis.categories.options'),
     t('analysis.categories.summary'),
     t('analysis.categories.investorJournal'),
   ];
@@ -1163,6 +1169,7 @@ function AnalizarContent() {
       <ForecastsGroup
         ForecastsTab={<ForecastsTab ticker={ticker} />}
         RevenueForecastTab={<RevenueForecastTab income={income} />}
+        MLPredictionTab={<MLPredictionTab ticker={activeTicker} currentPrice={quote?.price || 0} />}
       />
     ) : (
       <LockedTab requiredPlan={TAB_MIN_PLAN[2]} currentPlan={userPlan} tabName="Forecasts" />
@@ -1320,9 +1327,18 @@ function AnalizarContent() {
     )}
   </Tab.Panel>
 
-  {/* 12. Resumen Maestro */}
+  {/* 12. Options */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     {canAccessTab(userPlan, 11) ? (
+      <OptionsTab ticker={activeTicker} currentPrice={quote?.price || 0} />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[11]} currentPlan={userPlan} tabName="Options" />
+    )}
+  </Tab.Panel>
+
+  {/* 13. Resumen Maestro */}
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+    {canAccessTab(userPlan, 12) ? (
       <ResumenTab
         ticker={activeTicker}
         currentPrice={quote?.price || 0}
@@ -1340,16 +1356,29 @@ function AnalizarContent() {
         averageValuation={sharedAverageVal}
       />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[11]} currentPlan={userPlan} tabName="Resumen Maestro" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[12]} currentPlan={userPlan} tabName="Resumen Maestro" />
     )}
   </Tab.Panel>
 
-  {/* 13. Diario Inversor */}
+  {/* 14. Diario Inversor + Portfolio Optimizer */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
-    {canAccessTab(userPlan, 12) ? (
-      <DiarioInversorTab />
+    {canAccessTab(userPlan, 13) ? (
+      <Tab.Group>
+        <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg mb-4">
+          <Tab className={({ selected }) => `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${selected ? 'bg-emerald-600 text-white shadow-lg' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>
+            {t('analysis.categories.investorJournal')}
+          </Tab>
+          <Tab className={({ selected }) => `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${selected ? 'bg-violet-600 text-white shadow-lg' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>
+            Portfolio Optimization
+          </Tab>
+        </Tab.List>
+        <Tab.Panels>
+          <Tab.Panel unmount={false}><DiarioInversorTab /></Tab.Panel>
+          <Tab.Panel unmount={false}><PortfolioOptimizerTab /></Tab.Panel>
+        </Tab.Panels>
+      </Tab.Group>
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[12]} currentPlan={userPlan} tabName="Diario Inversor" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[13]} currentPlan={userPlan} tabName="Diario Inversor" />
     )}
   </Tab.Panel>
 </Tab.Panels>

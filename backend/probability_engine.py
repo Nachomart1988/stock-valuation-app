@@ -61,6 +61,7 @@ class BinomialTreeEngine:
         self.max_steps = 500  # Maximum tree depth
         self.data_fetcher = None  # Injected from spectral_cycle_analyzer
         self._hist_vol_cache: Dict[str, float | None] = {}
+        self._hist_drift_cache: Dict[str, float] = {}
 
     def calculate(
         self,
@@ -217,6 +218,36 @@ class BinomialTreeEngine:
                 dividend_yield, vol_used, T,
             )
 
+            # ── Historical drift for real-world probabilities ──
+            hist_drift = self._hist_drift_cache.get(ticker, risk_free_rate)
+            # Clamp drift to reasonable range (-50% to +100%)
+            hist_drift = max(-0.50, min(1.00, hist_drift))
+
+            # ── Barrier / First-Passage probability ──
+            # "What is the probability the price EVER TOUCHES the target?"
+            barrier_prob_rn = self._barrier_probability(
+                current_price, target_price,
+                risk_free_rate - dividend_yield, vol_used, T,
+            )
+            barrier_prob_real = self._barrier_probability(
+                current_price, target_price,
+                hist_drift, vol_used, T,
+            )
+
+            # ── Real-world terminal probability ──
+            real_world_prob = self._real_world_terminal_probability(
+                current_price, target_price, hist_drift, vol_used, T,
+            )
+
+            logger.info(
+                "Probabilities for %s: CRR=%.1f%%, BS=%.1f%%, "
+                "Real-world terminal=%.1f%%, Barrier(RN)=%.1f%%, Barrier(RW)=%.1f%%, "
+                "hist_drift=%.2f%%",
+                ticker, probability * 100, bs_probability * 100,
+                real_world_prob * 100, barrier_prob_rn * 100, barrier_prob_real * 100,
+                hist_drift * 100,
+            )
+
             # ── Price Distribution for Chart ──
             price_distribution = [
                 {
@@ -281,6 +312,10 @@ class BinomialTreeEngine:
             result = {
                 "probability":          round(probability * 100, 2),
                 "bsProbability":        round(bs_probability * 100, 2),
+                "barrierProbability":   round(barrier_prob_real * 100, 2),
+                "barrierProbabilityRN": round(barrier_prob_rn * 100, 2),
+                "realWorldProbability": round(real_world_prob * 100, 2),
+                "historicalDrift":      round(hist_drift * 100, 2),
                 "upFactor":             round(u, 6),
                 "downFactor":           round(d, 6),
                 "upProbability":        round(p_up * 100, 4),
@@ -354,6 +389,83 @@ class BinomialTreeEngine:
             # Bearish target: probability price ends <= K
             return float(norm.cdf(-d2))
 
+    @staticmethod
+    def _barrier_probability(
+        S: float,
+        K: float,
+        mu: float,
+        sigma: float,
+        T: float,
+    ) -> float:
+        """
+        First-passage / barrier probability: P(max S_t >= K) for any t in [0, T]
+        (or P(min S_t <= K) if K < S).
+
+        This answers "what is the probability the price EVER TOUCHES the target
+        during the period?" — much higher than the terminal probability.
+
+        Uses the reflection principle for geometric Brownian motion:
+        P(max S_t >= K | S_0 = S) = N(d+) + exp(2*nu*alpha/sigma^2) * N(d-)
+
+        where:
+            alpha = ln(K/S)
+            nu = mu - sigma^2/2  (drift of log-price)
+            d+ = (-alpha + nu*T) / (sigma*sqrt(T))
+            d- = (-alpha - nu*T) / (sigma*sqrt(T))
+        """
+        if T <= 0 or sigma <= 0:
+            return 0.0
+
+        bullish = K >= S
+
+        if bullish:
+            alpha = log(K / S)
+        else:
+            # For bearish: P(min S_t <= K) = P(max(1/S_t) >= 1/K)
+            # Equivalent: flip and use -mu drift
+            alpha = log(S / K)
+            mu = -mu
+
+        nu = mu - 0.5 * sigma ** 2
+        sqrt_T = sigma * sqrt(T)
+
+        if sqrt_T < 1e-12:
+            return 1.0 if (bullish and S >= K) or (not bullish and S <= K) else 0.0
+
+        d_plus = (-alpha + nu * T) / sqrt_T
+        d_minus = (-alpha - nu * T) / sqrt_T
+
+        # Reflection principle formula
+        exponent = 2.0 * nu * alpha / (sigma ** 2)
+        exponent = max(-500.0, min(500.0, exponent))  # Prevent overflow
+
+        prob = float(norm.cdf(d_plus) + exp(exponent) * norm.cdf(d_minus))
+        return max(0.0, min(1.0, prob))
+
+    @staticmethod
+    def _real_world_terminal_probability(
+        S: float,
+        K: float,
+        mu: float,
+        sigma: float,
+        T: float,
+    ) -> float:
+        """
+        Real-world terminal probability using actual expected return (mu)
+        instead of risk-free rate. This is the probability the stock ENDS
+        above/below the target (not touches it).
+
+        P(S_T >= K) = N(d2_real)
+        where d2_real = [ln(S/K) + (mu - σ²/2)T] / (σ√T)
+        """
+        if T <= 0 or sigma <= 0:
+            return 0.0
+        d2 = (log(S / K) + (mu - 0.5 * sigma ** 2) * T) / (sigma * sqrt(T))
+        if K >= S:
+            return float(norm.cdf(d2))
+        else:
+            return float(norm.cdf(-d2))
+
     # ── Historical volatility with retry + cache ──────────────────────
 
     def _calculate_historical_volatility(
@@ -408,13 +520,18 @@ class BinomialTreeEngine:
             daily_vol  = np.std(log_returns, ddof=1)
             annual_vol = daily_vol * sqrt(252)
 
+            # Annualized drift (mean log return) — for real-world probability
+            daily_drift = np.mean(log_returns)
+            annual_drift = daily_drift * 252
+
             logger.info(
-                "Historical vol for %s: %.2f%% (%d days)",
-                ticker, annual_vol * 100, len(closes),
+                "Historical vol for %s: %.2f%%, drift: %.2f%% (%d days)",
+                ticker, annual_vol * 100, annual_drift * 100, len(closes),
             )
 
             # Store in cache
             self._hist_vol_cache[ticker] = float(annual_vol)
+            self._hist_drift_cache[ticker] = float(annual_drift)
             return float(annual_vol)
 
         except Exception as e:

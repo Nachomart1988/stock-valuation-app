@@ -14,6 +14,12 @@ from neural_resumen_engine import neural_engine
 from market_sentiment_engine import market_sentiment_engine
 from probability_engine import probability_engine
 from gap_analysis_engine import analyze_gaps
+from portfolio_optimizer import optimize_portfolio, PortfolioOptimizer
+from ml_prediction_engine import predict_price, MLPredictionEngine, TORCH_AVAILABLE
+from options_strategy_simulator import (
+    options_simulator, fetch_options_chain, analyze_options_strategy,
+    suggest_options_strategies, get_iv_surface,
+)
 
 app = FastAPI(
     title="Stock Analysis AI API",
@@ -483,6 +489,278 @@ async def fft_signal(req: FFTSignalRequest):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════════════════════════════════
+# Portfolio Optimizer — Markowitz + Monte Carlo + Risk Analytics
+# ════════════════════════════════════════════════════════════════════
+
+class PortfolioOptimizeRequest(BaseModel):
+    """Request body for portfolio optimization"""
+    tickers: List[str]
+    objective: str = 'max_sharpe'        # max_sharpe | min_variance | max_return | risk_parity
+    maxWeight: float = 0.40
+    minWeight: float = 0.0
+    periodDays: int = 756                 # ~3 years
+    targetReturn: Optional[float] = None
+    monteCarloSims: int = 5000
+    riskFreeRate: float = 0.042
+
+
+@app.post("/portfolio/optimize")
+async def portfolio_optimize(req: PortfolioOptimizeRequest):
+    """
+    Optimize a multi-asset portfolio using Markowitz mean-variance framework.
+
+    Objectives:
+    - max_sharpe: Maximize risk-adjusted returns (Sharpe ratio)
+    - min_variance: Minimize portfolio volatility
+    - max_return: Maximize expected return
+    - risk_parity: Equal risk contribution from each asset
+
+    Returns optimal weights, efficient frontier, Monte Carlo cloud,
+    risk metrics (VaR, CVaR, Sortino, Calmar), correlation matrix, and backtest.
+    """
+    try:
+        print(f"[PortfolioOpt] Optimizing {req.tickers} — objective={req.objective}")
+
+        engine = PortfolioOptimizer(
+            api_key=os.environ.get('FMP_API_KEY'),
+            risk_free_rate=req.riskFreeRate,
+        )
+
+        result = engine.optimize(
+            tickers=req.tickers,
+            objective=req.objective,
+            period_days=req.periodDays,
+            max_weight=req.maxWeight,
+            min_weight=req.minWeight,
+            target_return=req.targetReturn,
+            monte_carlo_sims=req.monteCarloSims,
+        )
+
+        print(f"[PortfolioOpt] Done — Sharpe={result['portfolioSharpe']}, "
+              f"Return={result['portfolioReturn']:.2%}, Vol={result['portfolioVolatility']:.2%}")
+
+        return result
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[PortfolioOpt] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════════════════════════════════
+# ML Price Prediction — LSTM with Monte Carlo Dropout
+# ════════════════════════════════════════════════════════════════════
+
+class MLPredictRequest(BaseModel):
+    """Request body for ML price prediction"""
+    ticker: str
+    horizons: Optional[List[int]] = None  # Trading days [5, 10, 20, 30]
+
+
+@app.post("/ml/predict")
+async def ml_predict(req: MLPredictRequest):
+    """
+    Generate ML-based stock price predictions using LSTM neural network.
+
+    Features:
+    - LSTM with configurable layers, hidden size, and dropout
+    - 29 technical indicator features (RSI, MACD, SMA, EMA, Bollinger Bands, ATR, etc.)
+    - Monte Carlo dropout for uncertainty estimation (confidence bands)
+    - Walk-forward validation with MAE, RMSE, MAPE, directional accuracy
+    - Permutation-based feature importance
+
+    Returns predictions for each horizon with confidence bands,
+    evaluation metrics, feature importance, and historical backtest.
+    """
+    if not TORCH_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="ML prediction unavailable: PyTorch not installed on server"
+        )
+
+    try:
+        print(f"[MLPredict] Predicting for {req.ticker}, horizons={req.horizons or [5,10,20,30]}")
+
+        result = predict_price(
+            ticker=req.ticker,
+            horizons=req.horizons,
+            api_key=os.environ.get('FMP_API_KEY'),
+        )
+
+        if result.get('error'):
+            print(f"[MLPredict] Error: {result['error']}")
+            raise HTTPException(status_code=500, detail=result['error'])
+
+        print(f"[MLPredict] Done for {req.ticker} in {result.get('elapsedSeconds', '?')}s "
+              f"— {len(result.get('predictions', []))} horizons predicted")
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[MLPredict] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════════════════════════════════
+# Options Strategy Simulator — Chain, Analyze, Suggest, IV Surface
+# ════════════════════════════════════════════════════════════════════
+
+class OptionsChainRequest(BaseModel):
+    """Request body for fetching options chain"""
+    ticker: str
+
+
+class OptionsAnalyzeRequest(BaseModel):
+    """Request body for analyzing an options strategy"""
+    ticker: str
+    legs: List[Dict[str, Any]]
+    currentPrice: float
+    riskFreeRate: float = 0.042
+    dividendYield: float = 0.0
+
+
+class OptionsSuggestRequest(BaseModel):
+    """Request body for strategy suggestions"""
+    ticker: str
+    outlook: str  # bullish, bearish, neutral, volatile
+    budget: Optional[float] = None
+
+
+class OptionsIVSurfaceRequest(BaseModel):
+    """Request body for IV surface data"""
+    ticker: str
+
+
+@app.post("/options/chain")
+async def options_chain(req: OptionsChainRequest):
+    """
+    Fetch full options chain from Yahoo Finance.
+
+    Returns all available expirations with calls and puts data including
+    strike, last price, bid, ask, volume, open interest, and implied volatility.
+    """
+    try:
+        print(f"[Options] Fetching chain for {req.ticker}")
+        result = fetch_options_chain(req.ticker)
+
+        if result.get('error'):
+            raise HTTPException(status_code=500, detail=result['error'])
+
+        exp_count = len(result.get('expirations', []))
+        print(f"[Options] Chain fetched: {exp_count} expirations for {req.ticker}")
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Options] Error fetching chain: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/options/analyze")
+async def options_analyze(req: OptionsAnalyzeRequest):
+    """
+    Analyze a multi-leg options strategy.
+
+    Computes payoff diagram (100 points), max profit/loss, breakeven points,
+    aggregate Greeks (Delta, Gamma, Theta, Vega, Rho), probability of profit
+    via Monte Carlo simulation, cost basis, and per-leg detail with BS pricing.
+    """
+    try:
+        print(f"[Options] Analyzing strategy for {req.ticker}: {len(req.legs)} legs")
+
+        result = analyze_options_strategy(
+            ticker=req.ticker,
+            legs=req.legs,
+            current_price=req.currentPrice,
+            risk_free_rate=req.riskFreeRate,
+            dividend_yield=req.dividendYield,
+        )
+
+        if result.get('error'):
+            raise HTTPException(status_code=500, detail=result['error'])
+
+        print(f"[Options] Analysis done — maxProfit={result.get('maxProfit')}, "
+              f"maxLoss={result.get('maxLoss')}, PoP={result.get('probabilityOfProfit')}")
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Options] Error analyzing strategy: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/options/suggest")
+async def options_suggest(req: OptionsSuggestRequest):
+    """
+    Suggest options strategies based on market outlook.
+
+    Accepts outlook: 'bullish', 'bearish', 'neutral', 'volatile'.
+    Returns 3-5 strategy suggestions with description, risk profile,
+    ideal IV environment, and rationale.
+    """
+    try:
+        print(f"[Options] Suggesting strategies for {req.ticker}, outlook={req.outlook}")
+
+        result = suggest_options_strategies(
+            ticker=req.ticker,
+            outlook=req.outlook,
+            budget=req.budget,
+        )
+
+        print(f"[Options] {len(result)} strategies suggested for {req.outlook} outlook")
+        return {"ticker": req.ticker, "outlook": req.outlook, "strategies": result}
+
+    except Exception as e:
+        print(f"[Options] Error suggesting strategies: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/options/iv-surface")
+async def options_iv_surface(req: OptionsIVSurfaceRequest):
+    """
+    Build IV surface data for 3D visualization.
+
+    Returns a grid of implied volatilities indexed by strike price
+    and expiration date, suitable for plotting as a 3D surface or heatmap.
+    Includes both call IV and put IV matrices.
+    """
+    try:
+        print(f"[Options] Building IV surface for {req.ticker}")
+        result = get_iv_surface(req.ticker)
+
+        if result.get('error'):
+            raise HTTPException(status_code=500, detail=result['error'])
+
+        strikes_count = len(result.get('strikes', []))
+        exp_count = len(result.get('expirations', []))
+        print(f"[Options] IV surface built: {strikes_count} strikes x {exp_count} expirations")
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Options] Error building IV surface: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

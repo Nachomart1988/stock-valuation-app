@@ -93,12 +93,23 @@ export default function ScreenerPage() {
       if (f.country) params.set('country', f.country);
       if (f.exchange) params.set('exchange', f.exchange);
 
-      // Try stable endpoint first, fallback to v3 if 401
+      // Try stable endpoint first, then multiple fallbacks
       let res = await fetch(`https://financialmodelingprep.com/stable/company-screener?${params.toString()}`);
-      if (res.status === 401 || res.status === 403) {
+      if (!res.ok) {
+        // Fallback 1: stable stock-screener
+        res = await fetch(`https://financialmodelingprep.com/stable/stock-screener?${params.toString()}`);
+      }
+      if (!res.ok) {
+        // Fallback 2: v3 stock-screener (legacy)
         res = await fetch(`https://financialmodelingprep.com/api/v3/stock-screener?${params.toString()}`);
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        const isAuthError = res.status === 401 || res.status === 403;
+        throw new Error(isAuthError
+          ? `Authentication error (HTTP ${res.status}). Check that NEXT_PUBLIC_FMP_API_KEY is valid.`
+          : `HTTP ${res.status}: ${body.slice(0, 200)}`);
+      }
       const data = await res.json();
       setScreenerResults(Array.isArray(data) ? data : []);
       setScreenerPage(page);
