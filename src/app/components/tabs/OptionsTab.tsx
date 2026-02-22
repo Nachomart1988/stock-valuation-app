@@ -261,7 +261,8 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      const list = Array.isArray(data) ? data : (data.suggestions ?? []);
+      // Backend returns {ticker, outlook, strategies: [...]}
+      const list = Array.isArray(data) ? data : (data.strategies ?? data.suggestions ?? []);
       setSuggestions(list);
     } catch (err: any) {
       setError(err.message);
