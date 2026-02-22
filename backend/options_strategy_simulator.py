@@ -499,6 +499,155 @@ class OptionsStrategySimulator:
             return {"error": str(e), "ticker": ticker}
 
     # ────────────────────────────────────────────────────────────
+    # Auto-Build Strategy Legs + Analyze by Name
+    # ────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _find_nearest_strike(strikes: list, target: float) -> float:
+        """Return the strike price closest to target."""
+        if not strikes:
+            return target
+        return min(strikes, key=lambda s: abs(s - target))
+
+    def _build_strategy_legs(
+        self,
+        strategy_name: str,
+        expiration: str,
+        calls: list,
+        puts: list,
+        current_price: float,
+    ) -> List[OptionLeg]:
+        """Auto-select strikes and build OptionLeg list for a named strategy."""
+        call_strikes = sorted([c['strike'] for c in calls]) if calls else []
+        put_strikes  = sorted([p['strike'] for p in puts])  if puts  else []
+
+        def _c(pct: float = 0.0) -> Tuple[float, float, float]:
+            """Nearest call strike at current_price*(1+pct) → (strike, premium, iv)"""
+            s = self._find_nearest_strike(call_strikes, current_price * (1 + pct))
+            for c in calls:
+                if c['strike'] == s:
+                    mid = (c.get('bid', 0) + c.get('ask', 0)) / 2
+                    return s, (mid or c.get('lastPrice', 0)), c.get('iv', 0.3)
+            return s, 0.0, 0.3
+
+        def _p(pct: float = 0.0) -> Tuple[float, float, float]:
+            """Nearest put strike at current_price*(1+pct) → (strike, premium, iv)"""
+            s = self._find_nearest_strike(put_strikes, current_price * (1 + pct))
+            for p in puts:
+                if p['strike'] == s:
+                    mid = (p.get('bid', 0) + p.get('ask', 0)) / 2
+                    return s, (mid or p.get('lastPrice', 0)), p.get('iv', 0.3)
+            return s, 0.0, 0.3
+
+        def leg(opt_type: str, info: Tuple, qty: int) -> OptionLeg:
+            s, prem, iv = info
+            return OptionLeg(type=opt_type, strike=s, expiration=expiration,
+                             premium=prem, quantity=qty, iv=iv)
+
+        sn = strategy_name.lower()
+
+        if sn == 'covered_call':
+            return [leg('call', _c(0.05), -1)]
+
+        if sn == 'protective_put':
+            return [leg('put', _p(-0.05), 1)]
+
+        if sn == 'bull_call_spread':
+            return [leg('call', _c(0.0),  1),
+                    leg('call', _c(0.05), -1)]
+
+        if sn == 'bear_put_spread':
+            return [leg('put', _p(0.0),   1),
+                    leg('put', _p(-0.05), -1)]
+
+        if sn == 'iron_condor':
+            return [leg('call', _c(0.05),  -1),
+                    leg('call', _c(0.10),   1),
+                    leg('put',  _p(-0.05), -1),
+                    leg('put',  _p(-0.10),  1)]
+
+        if sn == 'straddle':
+            return [leg('call', _c(0.0), 1),
+                    leg('put',  _p(0.0), 1)]
+
+        if sn == 'strangle':
+            return [leg('call', _c(0.05),  1),
+                    leg('put',  _p(-0.05), 1)]
+
+        if sn == 'butterfly':
+            return [leg('call', _c(-0.05),  1),
+                    leg('call', _c(0.0),   -2),
+                    leg('call', _c(0.05),   1)]
+
+        if sn == 'collar':
+            return [leg('call', _c(0.10),  -1),
+                    leg('put',  _p(-0.05),  1)]
+
+        return []
+
+    def auto_analyze_strategy(
+        self,
+        ticker: str,
+        strategy_name: str,
+        expiration: str,
+        current_price: float,
+        risk_free_rate: float = 0.042,
+        dividend_yield: float = 0.0,
+    ) -> Dict[str, Any]:
+        """
+        Fetch a single expiration from Yahoo Finance, auto-build legs for the
+        named strategy, and run the full analysis.  Much faster than fetching
+        the whole chain because only one HTTP request to Yahoo is needed.
+        """
+        if not YF_AVAILABLE:
+            return {"error": "yfinance not installed on server", "ticker": ticker}
+
+        try:
+            stock = yf.Ticker(ticker)
+            opt   = stock.option_chain(expiration)
+
+            def _rows(df: Any) -> list:
+                if df is None or len(df) == 0:
+                    return []
+                out = []
+                for _, row in df.iterrows():
+                    out.append({
+                        "strike":   float(row.get("strike", 0)),
+                        "bid":      float(row.get("bid", 0)),
+                        "ask":      float(row.get("ask", 0)),
+                        "lastPrice": float(row.get("lastPrice", 0)),
+                        "iv":       float(row.get("impliedVolatility", 0.3)),
+                    })
+                return out
+
+            calls = _rows(opt.calls)
+            puts  = _rows(opt.puts)
+
+            legs_obj = self._build_strategy_legs(
+                strategy_name, expiration, calls, puts, current_price
+            )
+
+            if not legs_obj:
+                return {"error": f"No legs built for strategy '{strategy_name}'. "
+                                 f"Check that options data exists for {ticker} on {expiration}.",
+                        "ticker": ticker}
+
+            legs_dicts = [asdict(leg) for leg in legs_obj]
+            result = self.analyze_strategy(
+                ticker, legs_dicts, current_price,
+                risk_free_rate, dividend_yield
+            )
+            # Add the strategy name to the result so the UI can display it
+            if isinstance(result, dict) and not result.get('error'):
+                result['name'] = strategy_name.replace('_', ' ').title()
+            return result
+
+        except Exception as e:
+            logger.error(f"[AutoAnalyze] {strategy_name} {ticker} {expiration}: {e}")
+            import traceback; traceback.print_exc()
+            return {"error": str(e), "ticker": ticker}
+
+    # ────────────────────────────────────────────────────────────
     # Suggest Strategies
     # ────────────────────────────────────────────────────────────
 
@@ -1210,6 +1359,15 @@ def analyze_options_strategy(ticker: str, legs: List[Dict], current_price: float
                              **kwargs) -> Dict[str, Any]:
     """Analyze a multi-leg options strategy."""
     return options_simulator.analyze_strategy(ticker, legs, current_price, **kwargs)
+
+
+def auto_analyze_options_strategy(
+    ticker: str, strategy_name: str, expiration: str, current_price: float, **kwargs
+) -> Dict[str, Any]:
+    """Auto-build legs from a strategy name and single expiration, then analyze."""
+    return options_simulator.auto_analyze_strategy(
+        ticker, strategy_name, expiration, current_price, **kwargs
+    )
 
 
 def suggest_options_strategies(ticker: str, outlook: str, **kwargs) -> List[Dict]:

@@ -18,7 +18,7 @@ from portfolio_optimizer import optimize_portfolio, PortfolioOptimizer
 from ml_prediction_engine import predict_price, MLPredictionEngine, TORCH_AVAILABLE
 from options_strategy_simulator import (
     options_simulator, fetch_options_chain, analyze_options_strategy,
-    suggest_options_strategies, get_iv_surface,
+    auto_analyze_options_strategy, suggest_options_strategies, get_iv_surface,
 )
 
 app = FastAPI(
@@ -624,12 +624,22 @@ class OptionsChainRequest(BaseModel):
 
 
 class OptionsAnalyzeRequest(BaseModel):
-    """Request body for analyzing an options strategy"""
+    """Request body for analyzing an options strategy.
+
+    Two modes:
+    - Auto-build: provide strategyName + expiration → backend fetches chain for
+      that ONE date and selects strikes automatically (faster, recommended)
+    - Manual: provide pre-built legs list
+    """
     ticker: str
-    legs: List[Dict[str, Any]]
     currentPrice: float
     riskFreeRate: float = 0.042
     dividendYield: float = 0.0
+    # Auto-build mode (frontend sends these)
+    strategyName: Optional[str] = None
+    expiration: Optional[str] = None
+    # Manual mode
+    legs: Optional[List[Dict[str, Any]]] = None
 
 
 class OptionsSuggestRequest(BaseModel):
@@ -677,20 +687,37 @@ async def options_analyze(req: OptionsAnalyzeRequest):
     """
     Analyze a multi-leg options strategy.
 
-    Computes payoff diagram (100 points), max profit/loss, breakeven points,
-    aggregate Greeks (Delta, Gamma, Theta, Vega, Rho), probability of profit
-    via Monte Carlo simulation, cost basis, and per-leg detail with BS pricing.
+    Two modes:
+    - Auto-build (preferred): pass strategyName + expiration. The backend fetches
+      only that one expiration from Yahoo Finance (~1-2s), auto-selects strikes
+      appropriate for the strategy, and returns the full analysis.
+    - Manual: pass a pre-built legs list.
     """
     try:
-        print(f"[Options] Analyzing strategy for {req.ticker}: {len(req.legs)} legs")
-
-        result = analyze_options_strategy(
-            ticker=req.ticker,
-            legs=req.legs,
-            current_price=req.currentPrice,
-            risk_free_rate=req.riskFreeRate,
-            dividend_yield=req.dividendYield,
-        )
+        if req.strategyName and req.expiration:
+            print(f"[Options] Auto-analyze '{req.strategyName}' for {req.ticker} exp={req.expiration}")
+            result = auto_analyze_options_strategy(
+                ticker=req.ticker,
+                strategy_name=req.strategyName,
+                expiration=req.expiration,
+                current_price=req.currentPrice,
+                risk_free_rate=req.riskFreeRate,
+                dividend_yield=req.dividendYield,
+            )
+        elif req.legs:
+            print(f"[Options] Manual analyze for {req.ticker}: {len(req.legs)} legs")
+            result = analyze_options_strategy(
+                ticker=req.ticker,
+                legs=req.legs,
+                current_price=req.currentPrice,
+                risk_free_rate=req.riskFreeRate,
+                dividend_yield=req.dividendYield,
+            )
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail="Provide either (strategyName + expiration) or legs."
+            )
 
         if result.get('error'):
             raise HTTPException(status_code=500, detail=result['error'])
