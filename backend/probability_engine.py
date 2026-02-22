@@ -4,6 +4,15 @@ from __future__ import annotations
 # CRR Binomial Tree Probability Engine
 # Calculates the probability of a stock reaching a target price
 # using Cox-Ross-Rubinstein binomial model with historical & implied volatility
+#
+# Scientific features:
+# - Sensitivity analysis (vol, rate, days perturbation)
+# - Bootstrap confidence intervals for probability estimate
+# - Greeks approximation (Delta, Gamma) from binomial tree
+# - IV skew analysis (OTM put IV - ATM IV)
+# - Multiple time horizon projections
+# - Expected move (1-sigma)
+# - Risk-reward ratio (vs 5th percentile worst case)
 
 import logging
 import traceback
@@ -230,6 +239,45 @@ class BinomialTreeEngine:
                 price_distribution, current_price, target_price, num_buckets=30
             )
 
+            # ── Expected Move ──
+            expected_move = self._expected_move(current_price, vol_used, days)
+
+            # ── Greeks Approximation ──
+            greeks = self._approximate_greeks(
+                current_price, target_price, risk_free_rate,
+                dividend_yield, vol_used, days, steps,
+            )
+
+            # ── Risk-Reward Ratio ──
+            risk_reward = self._risk_reward_ratio(
+                current_price, target_price, vol_used, days, steps,
+                risk_free_rate, dividend_yield,
+            )
+
+            # ── Sensitivity Analysis ──
+            sensitivity = self._sensitivity_analysis(
+                current_price, target_price, risk_free_rate,
+                dividend_yield, vol_used, days, steps,
+            )
+
+            # ── Multiple Time Horizons ──
+            time_horizons = self._multiple_time_horizons(
+                current_price, target_price, risk_free_rate,
+                dividend_yield, vol_used,
+            )
+
+            # ── Bootstrap Confidence Interval ──
+            bootstrap_ci = self._bootstrap_confidence_interval(
+                ticker, current_price, target_price, risk_free_rate,
+                dividend_yield, days, steps, fmp_api_key,
+                n_bootstrap=500, confidence=0.90,
+            )
+
+            # ── IV Skew Analysis ──
+            iv_skew = None
+            if use_implied_vol and YFINANCE_AVAILABLE:
+                iv_skew = self._compute_iv_skew(ticker, days)
+
             result = {
                 "probability":          round(probability * 100, 2),
                 "bsProbability":        round(bs_probability * 100, 2),
@@ -252,6 +300,14 @@ class BinomialTreeEngine:
                 "optionsChain":         options_chain,
                 "currentPrice":         current_price,
                 "targetPrice":          target_price,
+                # ── Scientific / ML additions ──
+                "expectedMove":         expected_move,
+                "greeks":               greeks,
+                "riskReward":           risk_reward,
+                "sensitivity":          sensitivity,
+                "timeHorizons":         time_horizons,
+                "bootstrapCI":          bootstrap_ci,
+                "ivSkew":               iv_skew,
             }
 
             logger.info(
@@ -454,6 +510,526 @@ class BinomialTreeEngine:
         except Exception as e:
             logger.error("Error fetching IV from Yahoo: %s", e, exc_info=True)
             return None, None
+
+    # ── IV Skew Analysis ──────────────────────────────────────────────
+
+    def _compute_iv_skew(
+        self, ticker: str, days: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Compute implied volatility skew from options chain.
+
+        IV skew = OTM put IV - ATM call IV.
+        A large positive skew indicates the market is pricing in more downside
+        risk (hedging demand), while a negative skew suggests bullish sentiment.
+
+        Also computes the 25-delta risk reversal approximation by comparing
+        OTM put IV (strike ~5% below spot) vs OTM call IV (strike ~5% above spot).
+        """
+        if not YFINANCE_AVAILABLE:
+            return None
+
+        try:
+            stock = yf.Ticker(ticker)
+            expirations = stock.options
+            if not expirations:
+                return None
+
+            target_date = datetime.now() + timedelta(days=days)
+            closest_exp = min(
+                expirations,
+                key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d") - target_date).days),
+            )
+
+            chain = stock.option_chain(closest_exp)
+            calls = chain.calls
+            puts = chain.puts
+
+            if calls.empty or puts.empty:
+                return None
+
+            info = stock.info
+            spot = (
+                info.get("currentPrice")
+                or info.get("regularMarketPrice")
+                or info.get("previousClose")
+                or 0
+            )
+            if spot <= 0:
+                return None
+
+            # ATM call IV (closest strike to spot)
+            calls_cp = calls.copy()
+            calls_cp["dist"] = abs(calls_cp["strike"] - spot)
+            atm_call = calls_cp.nsmallest(1, "dist").iloc[0]
+            atm_iv = float(atm_call.get("impliedVolatility", 0))
+
+            # OTM put: strike ~5% below spot
+            otm_put_strike = spot * 0.95
+            puts_cp = puts.copy()
+            puts_cp["dist"] = abs(puts_cp["strike"] - otm_put_strike)
+            otm_put = puts_cp.nsmallest(1, "dist").iloc[0]
+            otm_put_iv = float(otm_put.get("impliedVolatility", 0))
+
+            # OTM call: strike ~5% above spot
+            otm_call_strike = spot * 1.05
+            calls_cp2 = calls.copy()
+            calls_cp2["dist"] = abs(calls_cp2["strike"] - otm_call_strike)
+            otm_call = calls_cp2.nsmallest(1, "dist").iloc[0]
+            otm_call_iv = float(otm_call.get("impliedVolatility", 0))
+
+            skew = otm_put_iv - atm_iv  # positive = downside fear
+            risk_reversal = otm_call_iv - otm_put_iv  # negative = put premium
+
+            # Interpret the skew
+            if skew > 0.05:
+                interpretation = "High downside fear — market hedging aggressively"
+            elif skew > 0.02:
+                interpretation = "Moderate downside concern"
+            elif skew > -0.02:
+                interpretation = "Neutral skew — balanced sentiment"
+            elif skew > -0.05:
+                interpretation = "Moderate upside bias"
+            else:
+                interpretation = "Strong upside bias — unusual"
+
+            result = {
+                "atmIV": round(atm_iv * 100, 2),
+                "otmPutIV": round(otm_put_iv * 100, 2),
+                "otmCallIV": round(otm_call_iv * 100, 2),
+                "skew": round(skew * 100, 2),  # in percentage points
+                "riskReversal": round(risk_reversal * 100, 2),
+                "interpretation": interpretation,
+                "expiration": closest_exp,
+                "otmPutStrike": round(float(otm_put["strike"]), 2),
+                "otmCallStrike": round(float(otm_call["strike"]), 2),
+            }
+            logger.info("IV skew for %s: %s", ticker, result)
+            return result
+
+        except Exception as e:
+            logger.error("Error computing IV skew: %s", e)
+            return None
+
+    # ── Sensitivity Analysis ──────────────────────────────────────────
+
+    def _sensitivity_analysis(
+        self,
+        current_price: float,
+        target_price: float,
+        risk_free_rate: float,
+        dividend_yield: float,
+        vol: float,
+        days: int,
+        steps: int,
+    ) -> Dict[str, Any]:
+        """
+        Vary key inputs around their base values and observe how the
+        CRR probability changes.  Returns a dict of perturbation results.
+
+        Perturbations:
+        - Volatility:  ±5 percentage points (e.g. 30% -> 25%, 35%)
+        - Risk-free rate: ±1 percentage point
+        - Days to expiry: ±30 calendar days
+        """
+        base_prob = self._quick_crr_probability(
+            current_price, target_price, risk_free_rate, dividend_yield,
+            vol, days, steps,
+        )
+
+        results: Dict[str, Any] = {"baseProbability": round(base_prob * 100, 2)}
+
+        # Volatility perturbation
+        vol_shifts = [-0.05, -0.025, 0.025, 0.05]
+        vol_results = []
+        for dv in vol_shifts:
+            shifted_vol = max(0.01, vol + dv)
+            p = self._quick_crr_probability(
+                current_price, target_price, risk_free_rate, dividend_yield,
+                shifted_vol, days, steps,
+            )
+            vol_results.append({
+                "volShift": round(dv * 100, 1),
+                "volUsed": round(shifted_vol * 100, 2),
+                "probability": round(p * 100, 2),
+                "delta": round((p - base_prob) * 100, 2),
+            })
+        results["volatility"] = vol_results
+
+        # Rate perturbation
+        rate_shifts = [-0.01, -0.005, 0.005, 0.01]
+        rate_results = []
+        for dr in rate_shifts:
+            shifted_rate = max(0.0, risk_free_rate + dr)
+            p = self._quick_crr_probability(
+                current_price, target_price, shifted_rate, dividend_yield,
+                vol, days, steps,
+            )
+            rate_results.append({
+                "rateShift": round(dr * 100, 2),
+                "rateUsed": round(shifted_rate * 100, 2),
+                "probability": round(p * 100, 2),
+                "delta": round((p - base_prob) * 100, 2),
+            })
+        results["riskFreeRate"] = rate_results
+
+        # Days perturbation
+        day_shifts = [-30, -15, 15, 30]
+        days_results = []
+        for dd in day_shifts:
+            shifted_days = max(1, days + dd)
+            shifted_steps = max(10, min(shifted_days, self.max_steps))
+            p = self._quick_crr_probability(
+                current_price, target_price, risk_free_rate, dividend_yield,
+                vol, shifted_days, shifted_steps,
+            )
+            days_results.append({
+                "dayShift": dd,
+                "daysUsed": shifted_days,
+                "probability": round(p * 100, 2),
+                "delta": round((p - base_prob) * 100, 2),
+            })
+        results["daysToExpiry"] = days_results
+
+        return results
+
+    def _quick_crr_probability(
+        self,
+        S: float, K: float, r: float, q: float,
+        sigma: float, days: int, steps: int,
+    ) -> float:
+        """
+        Lightweight CRR probability calculation (no tree preview, no charts).
+        Used internally by sensitivity analysis and bootstrap.
+        """
+        T = days / 365.0
+        dt = T / steps
+        u = exp(sigma * sqrt(dt))
+        d = 1.0 / u
+        p_up = (exp((r - q) * dt) - d) / (u - d)
+        p_up = max(0.01, min(0.99, p_up))
+
+        j = np.arange(steps + 1, dtype=np.float64)
+        terminal = S * (u ** j) * (d ** (steps - j))
+
+        log_binom = gammaln(steps + 1) - gammaln(j + 1) - gammaln(steps - j + 1)
+        log_probs = log_binom + j * np.log(p_up) + (steps - j) * np.log(1.0 - p_up)
+        probs = np.exp(log_probs)
+        probs /= probs.sum()
+
+        if K >= S:
+            mask = terminal >= K
+        else:
+            mask = terminal <= K
+
+        return float(np.sum(probs[mask]))
+
+    # ── Bootstrap Confidence Interval ─────────────────────────────────
+
+    def _bootstrap_confidence_interval(
+        self,
+        ticker: str,
+        current_price: float,
+        target_price: float,
+        risk_free_rate: float,
+        dividend_yield: float,
+        days: int,
+        steps: int,
+        fmp_api_key: Optional[str],
+        n_bootstrap: int = 500,
+        confidence: float = 0.90,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Bootstrap the probability estimate by resampling historical returns.
+
+        For each bootstrap iteration:
+        1. Resample daily log-returns with replacement
+        2. Recalculate annualized volatility from the resampled series
+        3. Recompute the CRR probability with this new volatility
+
+        Returns the mean, median, and confidence interval of the probability.
+        """
+        try:
+            if not fmp_api_key:
+                import os
+                fmp_api_key = os.environ.get("FMP_API_KEY")
+            if not fmp_api_key:
+                return None
+
+            from spectral_cycle_analyzer import HistoricalDataFetcher
+
+            if not self.data_fetcher:
+                self.data_fetcher = HistoricalDataFetcher(fmp_api_key)
+
+            historical = self.data_fetcher.fetch(ticker, max_bars=300)
+            if not historical or len(historical) < 30:
+                return None
+
+            closes = np.array([float(h["close"]) for h in historical])
+            log_returns = np.diff(np.log(closes))
+            n_returns = len(log_returns)
+
+            rng = np.random.default_rng(seed=42)
+            bootstrap_probs = np.empty(n_bootstrap)
+
+            for i in range(n_bootstrap):
+                # Resample returns with replacement
+                resampled = rng.choice(log_returns, size=n_returns, replace=True)
+                resampled_vol = float(np.std(resampled, ddof=1) * sqrt(252))
+                resampled_vol = max(0.01, resampled_vol)  # floor
+
+                p = self._quick_crr_probability(
+                    current_price, target_price, risk_free_rate, dividend_yield,
+                    resampled_vol, days, steps,
+                )
+                bootstrap_probs[i] = p
+
+            alpha = (1.0 - confidence) / 2.0
+            lower = float(np.percentile(bootstrap_probs, alpha * 100))
+            upper = float(np.percentile(bootstrap_probs, (1.0 - alpha) * 100))
+            mean_p = float(np.mean(bootstrap_probs))
+            median_p = float(np.median(bootstrap_probs))
+            std_p = float(np.std(bootstrap_probs))
+
+            result = {
+                "mean": round(mean_p * 100, 2),
+                "median": round(median_p * 100, 2),
+                "std": round(std_p * 100, 2),
+                "lower": round(lower * 100, 2),
+                "upper": round(upper * 100, 2),
+                "confidence": confidence,
+                "nBootstrap": n_bootstrap,
+                "nReturns": n_returns,
+            }
+
+            logger.info(
+                "Bootstrap CI for %s: %.2f%% [%.2f%%, %.2f%%] (n=%d)",
+                ticker, mean_p * 100, lower * 100, upper * 100, n_bootstrap,
+            )
+            return result
+
+        except Exception as e:
+            logger.error("Error in bootstrap CI: %s", e)
+            return None
+
+    # ── Greeks Approximation (Delta, Gamma) ───────────────────────────
+
+    def _approximate_greeks(
+        self,
+        current_price: float,
+        target_price: float,
+        risk_free_rate: float,
+        dividend_yield: float,
+        vol: float,
+        days: int,
+        steps: int,
+    ) -> Dict[str, Any]:
+        """
+        Approximate Delta and Gamma of the probability with respect to
+        the underlying price, using finite-difference on the CRR model.
+
+        Delta = dP/dS ≈ [P(S+h) - P(S-h)] / (2h)
+        Gamma = d²P/dS² ≈ [P(S+h) - 2P(S) + P(S-h)] / h²
+
+        where h = 0.5% of the current price (central differences).
+
+        Interpretation:
+        - Delta > 0 means probability increases as price rises (bullish target)
+        - Gamma shows the convexity / acceleration of the probability change
+        """
+        h = current_price * 0.005  # 0.5% bump
+        if h < 0.01:
+            h = 0.01
+
+        p_center = self._quick_crr_probability(
+            current_price, target_price, risk_free_rate, dividend_yield,
+            vol, days, steps,
+        )
+        p_up = self._quick_crr_probability(
+            current_price + h, target_price, risk_free_rate, dividend_yield,
+            vol, days, steps,
+        )
+        p_down = self._quick_crr_probability(
+            current_price - h, target_price, risk_free_rate, dividend_yield,
+            vol, days, steps,
+        )
+
+        delta = (p_up - p_down) / (2.0 * h)         # per $1 change
+        gamma = (p_up - 2.0 * p_center + p_down) / (h * h)  # per $1² change
+
+        # Also express as probability change per 1% price move
+        one_pct = current_price * 0.01
+        delta_pct = delta * one_pct * 100  # pp change in probability per 1% price move
+
+        return {
+            "delta": round(delta, 6),
+            "gamma": round(gamma, 8),
+            "deltaPctInterpretation": round(delta_pct, 2),
+            "description": (
+                f"A $1 increase in price changes the probability by "
+                f"{delta * 100:+.4f} pp. A 1% price move ({one_pct:.2f}) "
+                f"changes it by {delta_pct:+.2f} pp."
+            ),
+            "bumpSize": round(h, 2),
+        }
+
+    # ── Multiple Time Horizons ────────────────────────────────────────
+
+    def _multiple_time_horizons(
+        self,
+        current_price: float,
+        target_price: float,
+        risk_free_rate: float,
+        dividend_yield: float,
+        vol: float,
+    ) -> List[Dict[str, Any]]:
+        """
+        Calculate probability for standard time horizons: 30d, 60d, 90d,
+        180d, 365d.  Uses both CRR and Black-Scholes for comparison.
+        """
+        horizons = [30, 60, 90, 180, 365]
+        results = []
+
+        for d in horizons:
+            s = max(10, min(d, self.max_steps))
+            crr_p = self._quick_crr_probability(
+                current_price, target_price, risk_free_rate, dividend_yield,
+                vol, d, s,
+            )
+            T = d / 365.0
+            bs_p = self._black_scholes_probability(
+                current_price, target_price, risk_free_rate,
+                dividend_yield, vol, T,
+            )
+            # Expected move for this horizon
+            expected_move = current_price * vol * sqrt(T)
+
+            results.append({
+                "days": d,
+                "crrProbability": round(crr_p * 100, 2),
+                "bsProbability": round(bs_p * 100, 2),
+                "expectedMove": round(expected_move, 2),
+                "expectedRange": {
+                    "low": round(current_price - expected_move, 2),
+                    "high": round(current_price + expected_move, 2),
+                },
+            })
+
+        return results
+
+    # ── Expected Move ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _expected_move(
+        current_price: float, vol: float, days: int,
+    ) -> Dict[str, Any]:
+        """
+        Calculate the expected 1-sigma and 2-sigma moves based on
+        annualized volatility.
+
+        1-sigma move = S * σ * √(T/252)   (trading days)
+        This represents the range within which the stock price is expected
+        to fall ~68% of the time (1σ) or ~95% of the time (2σ).
+        """
+        T_trading = days / 252.0
+        one_sigma = current_price * vol * sqrt(T_trading)
+        two_sigma = 2.0 * one_sigma
+
+        return {
+            "oneSigma": round(one_sigma, 2),
+            "twoSigma": round(two_sigma, 2),
+            "oneSigmaRange": {
+                "low": round(current_price - one_sigma, 2),
+                "high": round(current_price + one_sigma, 2),
+            },
+            "twoSigmaRange": {
+                "low": round(current_price - two_sigma, 2),
+                "high": round(current_price + two_sigma, 2),
+            },
+            "oneSigmaPct": round((one_sigma / current_price) * 100, 2),
+            "twoSigmaPct": round((two_sigma / current_price) * 100, 2),
+            "days": days,
+            "volUsed": round(vol * 100, 2),
+        }
+
+    # ── Risk-Reward Ratio ─────────────────────────────────────────────
+
+    def _risk_reward_ratio(
+        self,
+        current_price: float,
+        target_price: float,
+        vol: float,
+        days: int,
+        steps: int,
+        risk_free_rate: float,
+        dividend_yield: float,
+    ) -> Dict[str, Any]:
+        """
+        Calculate risk/reward ratio using the 5th percentile of the
+        terminal price distribution as the worst-case scenario.
+
+        Risk  = current_price - worst_case_5th_pct
+        Reward = |target_price - current_price|
+        Ratio  = Reward / Risk   (higher is better)
+        """
+        T = days / 365.0
+        dt = T / steps
+        u = exp(vol * sqrt(dt))
+        d = 1.0 / u
+        p_up = (exp((risk_free_rate - dividend_yield) * dt) - d) / (u - d)
+        p_up = max(0.01, min(0.99, p_up))
+
+        j = np.arange(steps + 1, dtype=np.float64)
+        terminal = current_price * (u ** j) * (d ** (steps - j))
+
+        log_binom = gammaln(steps + 1) - gammaln(j + 1) - gammaln(steps - j + 1)
+        log_probs = log_binom + j * np.log(p_up) + (steps - j) * np.log(1.0 - p_up)
+        probs = np.exp(log_probs)
+        probs /= probs.sum()
+
+        # Sort terminal prices and compute cumulative probabilities
+        sorted_idx = np.argsort(terminal)
+        sorted_prices = terminal[sorted_idx]
+        sorted_probs = probs[sorted_idx]
+        cum_probs = np.cumsum(sorted_probs)
+
+        # Percentiles via interpolation
+        pct_5  = float(np.interp(0.05, cum_probs, sorted_prices))
+        pct_25 = float(np.interp(0.25, cum_probs, sorted_prices))
+        pct_50 = float(np.interp(0.50, cum_probs, sorted_prices))
+        pct_75 = float(np.interp(0.75, cum_probs, sorted_prices))
+        pct_95 = float(np.interp(0.95, cum_probs, sorted_prices))
+
+        reward = abs(target_price - current_price)
+        risk   = max(0.01, current_price - pct_5)
+        ratio  = reward / risk
+
+        # Interpret the ratio
+        if ratio >= 3.0:
+            interpretation = "Excellent risk/reward"
+        elif ratio >= 2.0:
+            interpretation = "Good risk/reward"
+        elif ratio >= 1.0:
+            interpretation = "Acceptable risk/reward"
+        elif ratio >= 0.5:
+            interpretation = "Poor risk/reward — risk outweighs reward"
+        else:
+            interpretation = "Very poor risk/reward"
+
+        return {
+            "ratio": round(ratio, 2),
+            "reward": round(reward, 2),
+            "risk": round(risk, 2),
+            "interpretation": interpretation,
+            "worstCase5thPct": round(pct_5, 2),
+            "percentiles": {
+                "p5":  round(pct_5, 2),
+                "p25": round(pct_25, 2),
+                "p50": round(pct_50, 2),
+                "p75": round(pct_75, 2),
+                "p95": round(pct_95, 2),
+            },
+        }
 
     def _build_tree_preview(
         self,

@@ -172,29 +172,35 @@ function convertArrayToUSD(arr: any[], rate: number): any[] {
 async function fetchExchangeRate(fromCurrency: string, apiKey: string): Promise<number> {
   if (!fromCurrency || fromCurrency === 'USD') return 1;
 
-  const extractRate = (p: any): number | null => {
-    const v = p?.close ?? p?.bid ?? p?.ask ?? p?.open ?? p?.price ?? p?.last;
-    return typeof v === 'number' && v > 0 ? v : null;
-  };
+  const from = fromCurrency.toUpperCase();
 
-  // Strategy 1: Try specific pair endpoint (v3)
+  // Strategy 1: /stable/batch-forex-quotes (working endpoint, uses "symbol" field)
   try {
-    const directRes = await fetch(
-      `https://financialmodelingprep.com/api/v3/fx/${fromCurrency}USD?apikey=${apiKey}`,
+    const res = await fetch(
+      `https://financialmodelingprep.com/stable/batch-forex-quotes?apikey=${apiKey}`,
       { cache: 'no-store' }
     );
-    if (directRes.ok) {
-      const directData = await directRes.json();
-      const item = Array.isArray(directData) ? directData[0] : directData;
-      const rate = extractRate(item);
-      if (rate) {
-        console.log(`[Currency] ${fromCurrency}/USD rate (v3 direct): ${rate}`);
-        return rate;
+    if (res.ok) {
+      const fxData = await res.json();
+      if (Array.isArray(fxData) && fxData.length > 0) {
+        // Direct pair: e.g. JPYUSD → price is JPY→USD rate
+        const direct = fxData.find((p: any) => p.symbol === `${from}USD`);
+        if (direct?.price && direct.price > 0) {
+          console.log(`[Currency] ${from}/USD rate (batch direct): ${direct.price}`);
+          return direct.price;
+        }
+        // Inverse pair: e.g. USDJPY → rate = 1/price
+        const inverse = fxData.find((p: any) => p.symbol === `USD${from}`);
+        if (inverse?.price && inverse.price > 0) {
+          const rate = 1 / inverse.price;
+          console.log(`[Currency] ${from}/USD rate (batch inverse): ${rate}`);
+          return rate;
+        }
       }
     }
   } catch { /* fallback below */ }
 
-  // Strategy 2: Try stable/fx list
+  // Strategy 2: /stable/fx (may return data on some plans)
   try {
     const res = await fetch(
       `https://financialmodelingprep.com/stable/fx?apikey=${apiKey}`,
@@ -202,50 +208,36 @@ async function fetchExchangeRate(fromCurrency: string, apiKey: string): Promise<
     );
     if (res.ok) {
       const fxData = await res.json();
-      // Look for direct pair, e.g. EURUSD or EUR/USD
-      const pair = fxData.find?.((p: any) =>
-        p.ticker === `${fromCurrency}USD` || p.ticker === `${fromCurrency}/USD` ||
-        p.name === `${fromCurrency}/USD`
-      );
-      const directRate = extractRate(pair);
-      if (directRate) {
-        console.log(`[Currency] ${fromCurrency}/USD rate (stable): ${directRate}`);
-        return directRate;
-      }
-      // Try inverse pair USD/XXX
-      const inversePair = fxData.find?.((p: any) =>
-        p.ticker === `USD${fromCurrency}` || p.ticker === `USD/${fromCurrency}` ||
-        p.name === `USD/${fromCurrency}`
-      );
-      const inverseRate = extractRate(inversePair);
-      if (inverseRate) {
-        const rate = 1 / inverseRate;
-        console.log(`[Currency] ${fromCurrency}/USD rate (stable inverse): ${rate}`);
-        return rate;
+      if (Array.isArray(fxData) && fxData.length > 0) {
+        const pair = fxData.find?.((p: any) =>
+          p.symbol === `${from}USD` || p.ticker === `${from}USD` ||
+          p.ticker === `${from}/USD` || p.name === `${from}/USD`
+        );
+        const v = pair?.price ?? pair?.close ?? pair?.bid ?? pair?.ask;
+        if (typeof v === 'number' && v > 0) {
+          console.log(`[Currency] ${from}/USD rate (stable/fx): ${v}`);
+          return v;
+        }
       }
     }
   } catch { /* fallback below */ }
 
-  // Strategy 3: Try v3 full list
-  try {
-    const res = await fetch(
-      `https://financialmodelingprep.com/api/v3/fx?apikey=${apiKey}`,
-      { cache: 'no-store' }
-    );
-    if (res.ok) {
-      const fxData = await res.json();
-      const pair = fxData.find?.((p: any) =>
-        p.ticker === `${fromCurrency}USD` || p.ticker === `${fromCurrency}/USD`
-      );
-      const rate = extractRate(pair);
-      if (rate) {
-        console.log(`[Currency] ${fromCurrency}/USD rate (v3 list): ${rate}`);
-        return rate;
-      }
-    }
-  } catch { /* last resort */ }
+  // Strategy 3: Hardcoded major currency fallbacks (approximate, better than no conversion)
+  const FALLBACK_RATES: Record<string, number> = {
+    EUR: 1.08, GBP: 1.27, JPY: 0.0067, CHF: 1.13, CAD: 0.74, AUD: 0.65,
+    NZD: 0.61, SEK: 0.096, NOK: 0.094, DKK: 0.145, HKD: 0.128, SGD: 0.75,
+    CNY: 0.138, KRW: 0.00073, INR: 0.012, BRL: 0.17, MXN: 0.058, ZAR: 0.055,
+    TRY: 0.029, PLN: 0.25, CZK: 0.043, HUF: 0.0027, ILS: 0.28, TWD: 0.031,
+    THB: 0.029, MYR: 0.22, IDR: 0.000063, PHP: 0.018, CLP: 0.001,
+    COP: 0.00024, PEN: 0.27, ARS: 0.00094, SAR: 0.267, AED: 0.272,
+  };
+  const fallback = FALLBACK_RATES[from];
+  if (fallback) {
+    console.warn(`[Currency] Using approximate fallback rate for ${from}/USD: ${fallback}`);
+    return fallback;
+  }
 
-  console.warn(`[Currency] Could not find FX rate for ${fromCurrency}/USD after all strategies`);
+  console.warn(`[Currency] Could not find FX rate for ${from}/USD — no conversion applied`);
   return 1;
 }
 

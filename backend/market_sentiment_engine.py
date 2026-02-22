@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import numpy as np
 import os
 import requests
@@ -131,29 +132,103 @@ class AdvancedNewsSentimentAnalyzer:
         normalized = float(np.tanh(score / 5))
         return {'score': float(score), 'normalized': normalized}
 
+    def _compute_tfidf_weights(self, texts: List[str]) -> Dict[str, float]:
+        """
+        Compute TF-IDF inspired weights for all keywords across the article batch.
+        Words appearing in many articles get downweighted (high DF = low IDF).
+        Returns a dict mapping keyword -> IDF weight (0..1 scale, 1 = rare/important).
+        """
+        if not texts:
+            return {}
+        n_docs = len(texts)
+        all_keywords = set()
+        for cat in [self.strong_bullish, self.strong_bearish, self.moderate_bullish, self.moderate_bearish]:
+            all_keywords.update(cat.keys())
+
+        # Count document frequency for each keyword
+        doc_freq: Dict[str, int] = defaultdict(int)
+        for text in texts:
+            text_lower = text.lower()
+            for kw in all_keywords:
+                if kw in text_lower:
+                    doc_freq[kw] += 1
+
+        # Compute IDF: log(N / df), normalized to [0.3, 1.0] range
+        # Keywords in ALL docs get 0.3 weight; keywords in 1 doc get ~1.0
+        idf_weights: Dict[str, float] = {}
+        for kw in all_keywords:
+            df = doc_freq.get(kw, 0)
+            if df == 0:
+                idf_weights[kw] = 1.0
+            else:
+                raw_idf = math.log(n_docs / df) / math.log(max(n_docs, 2))
+                idf_weights[kw] = max(0.3, min(1.0, 0.3 + 0.7 * raw_idf))
+        return idf_weights
+
+    def analyze_text_with_tfidf(self, text: str, idf_weights: Dict[str, float]) -> Dict[str, Any]:
+        """Analyze a single text using TF-IDF weights to downweight common keywords."""
+        if not text:
+            return {'score': 0.0, 'normalized': 0.0}
+        text_lower = text.lower()
+        score = 0.0
+        words = text_lower.split()
+
+        for phrase, weight in self.strong_bullish.items():
+            if phrase in text_lower:
+                pos = text_lower.find(phrase)
+                prefix = text_lower[max(0, pos-30):pos]
+                neg_factor = -1 if any(neg in prefix for neg in self.negations) else 1
+                score += weight * neg_factor * idf_weights.get(phrase, 1.0)
+        for phrase, weight in self.strong_bearish.items():
+            if phrase in text_lower:
+                pos = text_lower.find(phrase)
+                prefix = text_lower[max(0, pos-30):pos]
+                neg_factor = -1 if any(neg in prefix for neg in self.negations) else 1
+                score -= weight * neg_factor * idf_weights.get(phrase, 1.0)
+        for word, weight in self.moderate_bullish.items():
+            if word in text_lower:
+                score += weight * idf_weights.get(word, 1.0)
+        for word, weight in self.moderate_bearish.items():
+            if word in text_lower:
+                score -= weight * idf_weights.get(word, 1.0)
+
+        for i, word in enumerate(words):
+            if word in self.intensifiers:
+                factor = self.intensifiers[word]
+                score = score * factor if score != 0 else score
+
+        normalized = float(np.tanh(score / 5))
+        return {'score': float(score), 'normalized': normalized}
+
     def analyze_news_batch(self, news_items: List[Dict]) -> Tuple[float, List[MarketSignal], List[str]]:
         if not news_items:
             return 50.0, [], ["No news data available."]
 
-        sentiments = []
-        positive_count, negative_count = 0, 0
-        strong_bull_headlines, strong_bear_headlines = [], []
-        reasoning = ["**LAYER 1 — NEWS NEURAL (NLP):**"]
-
+        # Pre-compute TF-IDF weights across the entire batch
+        batch_texts = []
         for item in news_items[:30]:
             title = item.get('title', '')
             text = item.get('text', '')[:500]
-            combined = f"{title} {text}"
-            analysis = self.analyze_text(combined)
+            batch_texts.append(f"{title} {text}")
+        idf_weights = self._compute_tfidf_weights(batch_texts)
+
+        sentiments = []
+        positive_count, negative_count = 0, 0
+        strong_bull_headlines, strong_bear_headlines = [], []
+        reasoning = ["**LAYER 1 — NEWS NEURAL (NLP + TF-IDF):**"]
+
+        for i, item in enumerate(news_items[:30]):
+            combined = batch_texts[i] if i < len(batch_texts) else f"{item.get('title', '')} {item.get('text', '')[:500]}"
+            analysis = self.analyze_text_with_tfidf(combined, idf_weights)
             sentiments.append(analysis['normalized'])
             if analysis['normalized'] > 0.3:
                 positive_count += 1
                 if analysis['normalized'] > 0.5:
-                    strong_bull_headlines.append(title[:80])
+                    strong_bull_headlines.append(item.get('title', '')[:80])
             elif analysis['normalized'] < -0.3:
                 negative_count += 1
                 if analysis['normalized'] < -0.5:
-                    strong_bear_headlines.append(title[:80])
+                    strong_bear_headlines.append(item.get('title', '')[:80])
 
         avg_sentiment = np.mean(sentiments) if sentiments else 0
         std_sentiment = np.std(sentiments) if len(sentiments) > 1 else 0
@@ -209,11 +284,21 @@ class NeuralReasoningMarketSentimentEngine:
         'Communication Services': ('mixed', 'Mixed: Growth tech (GOOGL/META) + defensive telecom (T/VZ)'),
     }
 
+    # Variable TTL by data type: volatile data refreshes faster
+    CACHE_TTL_MAP = {
+        'vix': 60,         # VIX changes rapidly
+        'indices': 60,     # Index quotes move fast
+        'sectors': 300,    # Sector perf: 5 min
+        'industries': 300, # Industry perf: 5 min
+        'forex': 600,      # Forex: 10 min (less volatile intraday)
+        'default': 300,    # Fallback
+    }
+
     def __init__(self):
         self.version = "6.0"
         self.news_analyzer = AdvancedNewsSentimentAnalyzer()
         self._cache: Dict[str, Any] = {}
-        self._cache_ttl = 300  # 5 min cache
+        self._cache_ttl = 300  # default 5 min cache (used by _fetch_stable/_fetch_v3)
         self._session = requests.Session()
 
     # ====================== FMP FETCH HELPERS ======================
@@ -221,16 +306,21 @@ class NeuralReasoningMarketSentimentEngine:
     def _get_api_key(self) -> Optional[str]:
         return os.environ.get('FMP_API_KEY')
 
-    def _fetch_stable(self, endpoint: str, params: str = '') -> Any:
-        """Fetch from /stable/ base path with caching."""
+    def _get_ttl(self, category: str = 'default') -> int:
+        """Get cache TTL in seconds for a given data category."""
+        return self.CACHE_TTL_MAP.get(category, self.CACHE_TTL_MAP['default'])
+
+    def _fetch_stable(self, endpoint: str, params: str = '', ttl_category: str = 'default') -> Any:
+        """Fetch from /stable/ base path with variable-TTL caching."""
         api_key = self._get_api_key()
         if not api_key:
             return None
         cache_key = f'mse_stable_{endpoint}_{params}'
         cached = self._cache.get(cache_key)
+        ttl = self._get_ttl(ttl_category)
         if cached:
             data, ts = cached
-            if datetime.now().timestamp() - ts < self._cache_ttl:
+            if datetime.now().timestamp() - ts < ttl:
                 return data
         try:
             sep = '&' if params else ''
@@ -246,16 +336,17 @@ class NeuralReasoningMarketSentimentEngine:
             logger.warning(f"Fetch error ({endpoint}): {e}")
         return None
 
-    def _fetch_v3(self, path: str, params: str = '') -> Any:
+    def _fetch_v3(self, path: str, params: str = '', ttl_category: str = 'default') -> Any:
         """Fetch from /api/v3/ base path (legacy endpoints like batch quote)."""
         api_key = self._get_api_key()
         if not api_key:
             return None
         cache_key = f'mse_v3_{path}_{params}'
         cached = self._cache.get(cache_key)
+        ttl = self._get_ttl(ttl_category)
         if cached:
             data, ts = cached
-            if datetime.now().timestamp() - ts < self._cache_ttl:
+            if datetime.now().timestamp() - ts < ttl:
                 return data
         try:
             sep = '&' if params else ''
@@ -295,6 +386,7 @@ class NeuralReasoningMarketSentimentEngine:
     def _fetch_yfinance_data(self) -> Dict[str, Any]:
         """
         Fetch index/ETF data via yfinance for technical analysis.
+        Uses yf.download() with multiple tickers at once for speed.
         Returns RSI, moving averages, and price context for SPY, QQQ, IWM, DIA, VIX, 10Y yield.
         """
         if not YF_AVAILABLE:
@@ -308,10 +400,35 @@ class NeuralReasoningMarketSentimentEngine:
             '^VIX': 'vix',   # Volatility Index
             '^TNX': 'tnx',   # 10-Year Treasury Yield
         }
+
+        # Batch download all tickers at once for speed
+        all_symbols = list(targets.keys())
+        try:
+            batch_data = yf.download(all_symbols, period='1y', interval='1d',
+                                     auto_adjust=True, group_by='ticker',
+                                     threads=True, progress=False)
+        except Exception as e:
+            logger.warning(f"[MSE v6] yfinance batch download failed: {e}, falling back to individual")
+            batch_data = None
+
         for sym, key in targets.items():
             try:
-                ticker = yf.Ticker(sym)
-                hist = ticker.history(period='1y', interval='1d', auto_adjust=True)
+                # Extract this ticker's data from the batch result
+                if batch_data is not None and not batch_data.empty:
+                    if len(all_symbols) > 1 and sym in batch_data.columns.get_level_values(0):
+                        hist = batch_data[sym].dropna(how='all')
+                    elif len(all_symbols) == 1:
+                        hist = batch_data.dropna(how='all')
+                    else:
+                        hist = None
+                else:
+                    hist = None
+
+                # Fallback to individual Ticker if batch didn't work for this symbol
+                if hist is None or hist.empty or len(hist) < 5:
+                    ticker = yf.Ticker(sym)
+                    hist = ticker.history(period='1y', interval='1d', auto_adjust=True)
+
                 if hist.empty or len(hist) < 5:
                     continue
                 closes = hist['Close']
@@ -401,28 +518,33 @@ class NeuralReasoningMarketSentimentEngine:
         def fetch_sectors():
             for offset in range(0, 4):
                 date_str = self._prev_trading_day(offset)
-                sectors = self._fetch_stable('sector-performance-snapshot', f'date={date_str}')
+                sectors = self._fetch_stable('sector-performance-snapshot', f'date={date_str}', ttl_category='sectors')
                 if sectors and isinstance(sectors, list) and len(sectors) > 0:
                     logger.info(f"[MSE] Got {len(sectors)} sectors for {date_str}")
+                    # Attach fetch timestamp for staleness detection
+                    for s in sectors:
+                        s['_fetch_date'] = date_str
                     return ('sectorPerformance', sectors)
             return None
 
         def fetch_industries():
             for offset in range(0, 4):
                 date_str = self._prev_trading_day(offset)
-                industries = self._fetch_stable('industry-performance-snapshot', f'date={date_str}')
+                industries = self._fetch_stable('industry-performance-snapshot', f'date={date_str}', ttl_category='industries')
                 if industries and isinstance(industries, list) and len(industries) > 0:
                     logger.info(f"[MSE] Got {len(industries)} industries for {date_str}")
+                    for ind in industries:
+                        ind['_fetch_date'] = date_str
                     return ('industryPerformance', industries)
             return None
 
         def fetch_indices():
             symbols_str = ','.join(self.MAJOR_INDICES)
-            quotes = self._fetch_v3(f'quote/{symbols_str}')
+            quotes = self._fetch_v3(f'quote/{symbols_str}', ttl_category='indices')
             if quotes and isinstance(quotes, list) and len(quotes) > 0:
                 logger.info(f"[MSE] Got {len(quotes)} index quotes")
                 return ('indexQuotes', quotes)
-            all_idx = self._fetch_stable('full-index-quotes')
+            all_idx = self._fetch_stable('full-index-quotes', ttl_category='indices')
             if all_idx and isinstance(all_idx, list):
                 wanted = set(self.MAJOR_INDICES + [self.VIX_SYMBOL])
                 filtered = [q for q in all_idx if q.get('symbol', '') in wanted]
@@ -432,18 +554,18 @@ class NeuralReasoningMarketSentimentEngine:
             return None
 
         def fetch_vix():
-            vix = self._fetch_v3(f'quote/{self.VIX_SYMBOL}')
+            vix = self._fetch_v3(f'quote/{self.VIX_SYMBOL}', ttl_category='vix')
             if vix and isinstance(vix, list) and len(vix) > 0:
                 logger.info(f"[MSE] Got VIX: {vix[0].get('price', 'N/A')}")
                 return ('vixQuote', vix[0])
             return None
 
         def fetch_forex():
-            forex = self._fetch_stable('fx')
+            forex = self._fetch_stable('fx', ttl_category='forex')
             if forex and isinstance(forex, list) and len(forex) > 0:
                 logger.info(f"[MSE] Got {len(forex)} forex pairs from /stable/fx")
                 return ('forexQuotes', forex)
-            forex2 = self._fetch_stable('batch-forex-quotes')
+            forex2 = self._fetch_stable('batch-forex-quotes', ttl_category='forex')
             if forex2 and isinstance(forex2, list) and len(forex2) > 0:
                 logger.info(f"[MSE] Got {len(forex2)} forex pairs from batch-forex-quotes")
                 return ('forexQuotes', forex2)
@@ -729,6 +851,17 @@ class NeuralReasoningMarketSentimentEngine:
         avg_gainer = np.mean([g.get('changesPercentage', 0) or 0 for g in gainers]) if gainers else 0
         avg_loser = np.mean([abs(l.get('changesPercentage', 0) or 0) for l in losers]) if losers else 0
 
+        # Volume-weighted breadth: if volume data available, weight up/down by volume
+        gainer_vols = [g.get('volume', 0) or 0 for g in gainers]
+        loser_vols = [l.get('volume', 0) or 0 for l in losers]
+        total_gainer_vol = sum(gainer_vols)
+        total_loser_vol = sum(loser_vols)
+        if total_gainer_vol + total_loser_vol > 0:
+            vol_breadth_ratio = total_gainer_vol / (total_gainer_vol + total_loser_vol)
+            # Blend: 60% volume-weighted, 40% count-based for robustness
+            breadth_ratio = 0.6 * vol_breadth_ratio + 0.4 * breadth_ratio
+            logger.info(f"[MSE] Volume-weighted breadth: vol_ratio={vol_breadth_ratio:.3f}, blended={breadth_ratio:.3f}")
+
         # Zweig-style: up volume / total volume proxy via breadth
         score = 50 + (breadth_ratio - 0.5) * 90
 
@@ -839,10 +972,35 @@ class NeuralReasoningMarketSentimentEngine:
 
         return max(5, min(95, score)), signals, breadth_ratio, sector_rotation, top_gainers, top_losers
 
+    def _data_staleness_factor(self, items: List[Dict]) -> float:
+        """
+        Check if data is stale (>1 day old). Returns a multiplier:
+        1.0 = fresh data, 0.85 = stale (>1 day old).
+        Uses '_fetch_date' metadata attached during fetch.
+        """
+        if not items:
+            return 1.0
+        sample = items[0]
+        fetch_date_str = sample.get('_fetch_date', '')
+        if not fetch_date_str:
+            return 1.0  # No metadata, assume fresh
+        try:
+            fetch_date = datetime.strptime(fetch_date_str, '%Y-%m-%d')
+            age_days = (datetime.now() - fetch_date).days
+            if age_days > 1:
+                logger.info(f"[MSE] Data staleness penalty: data is {age_days} days old (factor=0.85)")
+                return 0.85
+        except (ValueError, TypeError):
+            pass
+        return 1.0
+
     def _layer3_sectors(self, sectors):
         """Layer 3: Sector macro breadth and rotation."""
         if not sectors:
             return 50.0, [], 0.5, [], [], ["**LAYER 3 — SECTORS:** No data"]
+
+        # Staleness penalty: reduce confidence if sector data is >1 day old
+        staleness = self._data_staleness_factor(sectors)
 
         changes = [s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0 for s in sectors]
         up = [s for s, c in zip(sectors, changes) if c > 0]
@@ -853,6 +1011,9 @@ class NeuralReasoningMarketSentimentEngine:
         dispersion = max_change - min_change  # rotation strength
 
         score = 50 + (breadth - 0.5) * 80 + (avg_change * 12)
+        # Apply staleness penalty: stale data pulls score toward neutral (50)
+        if staleness < 1.0:
+            score = 50 + (score - 50) * staleness
         score = max(5, min(95, score))
 
         hot = sorted([s for s in sectors if (s.get('averageChange', 0) or s.get('changesPercentage', 0) or 0) > 0.3],
@@ -955,11 +1116,14 @@ class NeuralReasoningMarketSentimentEngine:
         """Layer 3b: Industry granular breadth."""
         if not industries:
             return 50.0, [], 0.5
+        staleness = self._data_staleness_factor(industries)
         changes = [i.get('averageChange', 0) or i.get('changesPercentage', 0) or 0 for i in industries]
         up = [c for c in changes if c > 0]
         breadth = len(up) / len(industries)
         avg_change = np.mean(changes)
         score = 50 + (breadth - 0.5) * 70 + (avg_change * 8)
+        if staleness < 1.0:
+            score = 50 + (score - 50) * staleness
         score = max(5, min(95, score))
 
         signals = []
@@ -1304,7 +1468,7 @@ class NeuralReasoningMarketSentimentEngine:
 
     def _layer8_fusion(self, news, movers, sectors, ind, idx, vix, fx, fg,
                        br, sb, vix_val):
-        """Layer 8: Neural fusion with divergence detection and cross-correlation."""
+        """Layer 8: Neural fusion with divergence detection, cross-correlation, and uncertainty estimation."""
         # Dynamic weights based on data quality
         w = {
             'news': 0.28,
@@ -1322,7 +1486,22 @@ class NeuralReasoningMarketSentimentEngine:
             ind * w['ind'] + idx * w['idx'] + vix * w['vix'] + fx * w['fx'] + fg * w['fg']
         ) / total_w
 
+        # === UNCERTAINTY ESTIMATION ===
+        # Compute std dev across layer scores; high disagreement = low confidence
+        layer_scores = [news, movers, sectors, ind, idx, vix, fx, fg]
+        score_std = float(np.std(layer_scores))
+        score_mean = float(np.mean(layer_scores))
+        # Confidence interval: std > 20 = high disagreement → pull toward neutral
+        confidence = max(0.3, 1.0 - (score_std - 10) / 40)  # 1.0 at std=10, 0.55 at std=28
+        confidence = min(1.0, confidence)
+
         reasoning = ["**LAYER 8 — NEURAL FUSION + CROSS-CORRELATION:**"]
+        reasoning.append(f"  Layer std={score_std:.1f} | confidence={confidence:.2f} | raw composite={composite:.1f}")
+
+        # Apply uncertainty: high disagreement pulls composite toward neutral 50
+        if score_std > 15:
+            composite = 50 + (composite - 50) * confidence
+            reasoning.append(f"  ⚠️ High inter-layer disagreement (σ={score_std:.1f}) → confidence-adjusted composite={composite:.1f}")
 
         # === DIVERGENCE PATTERNS ===
         # Pattern 1: News pumping but breadth poor
@@ -1330,21 +1509,40 @@ class NeuralReasoningMarketSentimentEngine:
             reasoning.append("⚠️ DIVERGENCE: Bullish news BUT narrow breadth → possible bull trap / momentum divergence")
             composite *= 0.91
         # Pattern 2: Bearish news but strong breadth
-        elif news < 35 and br > 0.60:
+        if news < 35 and br > 0.60:
             reasoning.append("💡 DIVERGENCE: Bearish headlines BUT market participation strong → oversold bounce likely")
             composite *= 1.09
         # Pattern 3: News+sectors bullish but indices weak
-        elif news > 62 and sectors > 57 and idx < 42:
+        if news > 62 and sectors > 57 and idx < 42:
             reasoning.append("⚠️ DIVERGENCE: News & sectors bullish BUT indices weak → rotation without leadership")
             composite *= 0.95
         # Pattern 4: VIX elevated despite bullish sentiment
-        elif vix_val and vix_val > 22 and composite > 60:
+        if vix_val and vix_val > 22 and composite > 60:
             reasoning.append("⚠️ DIVERGENCE: Bullish score BUT elevated VIX → hedging demand signals uncertainty")
             composite *= 0.93
         # Pattern 5: VIX falling + broad breadth = strong buy
-        elif vix_val and vix_val < 18 and br > 0.60 and sectors > 58:
+        if vix_val and vix_val < 18 and br > 0.60 and sectors > 58:
             reasoning.append("✅ ALIGNMENT: Low VIX + broad breadth + strong sectors → high-conviction bullish")
             composite *= 1.04
+        # Pattern 6: News bullish + VIX rising = Complacency risk
+        if news > 60 and vix_val and vix_val > 20 and vix > 55:
+            reasoning.append("⚠️ COMPLACENCY RISK: Bullish news BUT VIX rising → market may be underpricing risk")
+            composite *= 0.95
+        # Pattern 7: Sectors rotating to defensives + indices flat = Hidden distribution
+        if sb > 0.5 and sectors < 48 and 45 < idx < 55:
+            reasoning.append("⚠️ HIDDEN DISTRIBUTION: Defensive rotation with flat indices → institutional selling beneath the surface")
+            composite *= 0.93
+        # Pattern 8: Forex risk-off + breadth strong = divergence
+        if fx > 58 and br > 0.58:
+            reasoning.append("⚠️ DIVERGENCE: USD strengthening (risk-off) BUT breadth strong → mixed macro signals, watch for resolution")
+        # Pattern 9: All layers bearish alignment = high conviction sell
+        bearish_layers = sum(1 for s in [news, movers, sectors, idx, vix] if s < 40)
+        if bearish_layers >= 4 and composite < 35:
+            reasoning.append("🔴 MULTI-LAYER BEARISH ALIGNMENT: 4+ layers bearish → high-conviction risk-off")
+            composite *= 0.95
+        # Pattern 10: Fear & Greed extreme + VIX spike = capitulation signal
+        if fg < 20 and vix_val and vix_val > 30:
+            reasoning.append("💡 CAPITULATION SIGNAL: Extreme Fear + VIX spike → contrarian bottom watch (but confirm with breadth reversal)")
 
         # === CROSS-CORRELATION PATTERNS ===
         if composite > 70 and idx > 60 and fx < 48 and br > 0.60:
@@ -1363,7 +1561,7 @@ class NeuralReasoningMarketSentimentEngine:
             composite *= 1.06
 
         composite = max(3, min(97, composite))
-        reasoning.append(f"  Final composite: {composite:.1f}/100")
+        reasoning.append(f"  Final composite: {composite:.1f}/100 (confidence: {confidence:.0%}, σ={score_std:.1f})")
 
         return composite, reasoning
 

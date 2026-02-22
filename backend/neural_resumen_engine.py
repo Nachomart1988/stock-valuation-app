@@ -14,6 +14,7 @@ import re
 import os
 from collections import defaultdict
 import math
+from scipy.stats import linregress
 from spectral_cycle_analyzer import SpectralCycleAnalyzer, HistoricalDataFetcher
 
 logger = logging.getLogger(__name__)
@@ -1020,11 +1021,14 @@ class ValuationEnsemble:
 class QualityAnalyzer:
     """
     Deep analysis of company quality across multiple dimensions.
+    Now supports weighted scoring where moat gets higher weight for value stocks
+    and growth gets higher weight for growth stocks.
     """
 
-    def analyze(self, quality_data: Dict) -> Dict[str, Any]:
+    def analyze(self, quality_data: Dict, stock_style: str = 'blend') -> Dict[str, Any]:
         """
         Analyze company quality from CompanyQualityNet output.
+        stock_style: 'value', 'growth', or 'blend' — adjusts dimension weights.
         """
         if not quality_data:
             return {
@@ -1035,7 +1039,6 @@ class QualityAnalyzer:
             }
 
         signals = []
-        overall = quality_data.get('overallScore', 50)
 
         dimensions = {
             'profitability': quality_data.get('profitability', 50),
@@ -1044,6 +1047,30 @@ class QualityAnalyzer:
             'growth': quality_data.get('growth', 50),
             'moat': quality_data.get('moat', 50)
         }
+
+        # ── Weighted quality scoring based on stock style ──
+        if stock_style == 'value':
+            # Value stocks: moat and financial strength matter most
+            dim_weights = {
+                'profitability': 0.20, 'financialStrength': 0.25,
+                'efficiency': 0.15, 'growth': 0.10, 'moat': 0.30
+            }
+        elif stock_style == 'growth':
+            # Growth stocks: growth and profitability matter most
+            dim_weights = {
+                'profitability': 0.20, 'financialStrength': 0.10,
+                'efficiency': 0.15, 'growth': 0.35, 'moat': 0.20
+            }
+        else:
+            # Blend: equal weighting
+            dim_weights = {
+                'profitability': 0.20, 'financialStrength': 0.20,
+                'efficiency': 0.20, 'growth': 0.20, 'moat': 0.20
+            }
+
+        # Compute weighted overall score instead of using raw overallScore
+        overall = sum(dimensions[d] * dim_weights[d] for d in dimensions)
+        overall = max(0, min(100, overall))
 
         # Analyze each dimension
         dimension_analysis = {}
@@ -1315,6 +1342,43 @@ class ForecastAnalyzer:
                 description="Limited analyst coverage"
             ))
 
+        # ── Linear regression for temporal growth slopes ──
+        # If we have 3+ periods of revenue/EPS estimates, compute real trend slopes
+        rev_slope = None
+        eps_slope = None
+        if len(estimates) >= 3:
+            # Extract revenue averages across forecast periods
+            rev_values = [e.get('revenueAvg', 0) for e in estimates if e.get('revenueAvg', 0) > 0]
+            eps_values = [e.get('epsAvg', 0) for e in estimates if e.get('epsAvg')]
+
+            if len(rev_values) >= 3:
+                x = np.arange(len(rev_values))
+                slope, intercept, r_value, p_value, std_err = linregress(x, rev_values)
+                rev_slope = slope
+                # Normalize slope as % of first value
+                rev_slope_pct = (slope / rev_values[0]) * 100 if rev_values[0] != 0 else 0
+                if r_value ** 2 > 0.7 and rev_slope_pct > 5:
+                    score += 8
+                    signals.append(Signal(
+                        source="Forecasts",
+                        signal_type=SignalType.BULLISH,
+                        strength=min(0.8, r_value ** 2),
+                        description=f"Strong revenue growth trend (slope: +{rev_slope_pct:.1f}%/yr, R²={r_value**2:.2f})"
+                    ))
+                elif r_value ** 2 > 0.7 and rev_slope_pct < -5:
+                    score -= 8
+                    signals.append(Signal(
+                        source="Forecasts",
+                        signal_type=SignalType.BEARISH,
+                        strength=min(0.7, r_value ** 2),
+                        description=f"Revenue declining trend (slope: {rev_slope_pct:.1f}%/yr, R²={r_value**2:.2f})"
+                    ))
+
+            if len(eps_values) >= 3:
+                x = np.arange(len(eps_values))
+                slope_e, intercept_e, r_value_e, p_value_e, std_err_e = linregress(x, eps_values)
+                eps_slope = slope_e
+
         # Determine consensus view
         if score >= 65:
             consensus = 'bullish'
@@ -1327,12 +1391,18 @@ class ForecastAnalyzer:
         else:
             consensus = 'bearish'
 
-        return {
+        result = {
             'forecast_score': max(0, min(100, score)),
             'signals': signals,
             'consensus_view': consensus,
             'analyst_count': num_analysts
         }
+        if rev_slope is not None:
+            result['revenue_slope'] = float(rev_slope)
+        if eps_slope is not None:
+            result['eps_slope'] = float(eps_slope)
+
+        return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1360,11 +1430,18 @@ class NeuralResumenEngine:
     12. Final Recommendation Generation
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        base_weights: Optional[Dict[str, float]] = None,
+        recommendation_thresholds: Optional[Dict[str, float]] = None,
+        freshness_half_life_days: float = 30.0,
+        sigmoid_base_scale: float = 10.0,
+        monte_carlo_sims: int = 5000,
+    ):
         self.sentiment_analyzer = NewsSentimentAnalyzer()
         self.institutional_analyzer = InstitutionalFlowAnalyzer()
         self.technical_analyzer = TechnicalAnalysisEngine()
-        self.monte_carlo = MonteCarloSimulator()
+        self.monte_carlo = MonteCarloSimulator(n_simulations=monte_carlo_sims)
         self.valuation_analyzer = ValuationEnsemble()
         self.quality_analyzer = QualityAnalyzer()
         self.growth_analyzer = GrowthAnalyzer()
@@ -1375,6 +1452,60 @@ class NeuralResumenEngine:
         self.data_fetcher = None  # Initialized when API key is available
 
         self.layer_results: List[LayerResult] = []
+
+        # ── Configurable layer weights (default values, can be tuned) ──
+        self.base_weights: Dict[str, float] = base_weights or {
+            'ingestion':      0.05,
+            'news':           0.08,
+            'institutional':  0.10,
+            'sector':         0.07,
+            'technical':      0.06,
+            'spectral':       0.09,
+            'valuation':      0.20,
+            'quality':        0.18,
+            'growth':         0.12,
+            'forecasts':      0.07,
+            'monte_carlo':    0.05,
+            'correlation':    0.07,
+        }
+
+        # ── Configurable recommendation thresholds ──
+        self.rec_thresholds: Dict[str, float] = recommendation_thresholds or {
+            'strong_buy':  72,
+            'buy':         58,
+            'hold':        45,
+            'sell':        35,
+        }
+
+        # ── Freshness decay half-life (days) ──
+        self.freshness_half_life_days = freshness_half_life_days
+
+        # ── Sigmoid parameters ──
+        self.sigmoid_base_scale = sigmoid_base_scale
+
+    # ── Utility: Sigmoid with dynamic scale ──────────────────────────────────
+    def _sigmoid_transform(self, x: float, data_volatility: float = 1.0) -> float:
+        """
+        Sigmoid transform with dynamic scale that adapts to data volatility.
+        Higher volatility widens the sigmoid to prevent saturation.
+        Clips extreme input values to avoid overflow.
+        """
+        scale = self.sigmoid_base_scale * max(0.5, data_volatility)
+        # Clip to prevent np.exp overflow (exp(709) ~ float64 max)
+        z = np.clip(-x / scale, -500, 500)
+        return float(1.0 / (1.0 + np.exp(z)))
+
+    # ── Utility: Data freshness exponential decay ────────────────────────────
+    def _data_freshness_decay(self, age_days: float) -> float:
+        """
+        Exponential decay factor based on data age.
+        Returns a multiplier in (0, 1] where 1.0 = perfectly fresh.
+        Half-life is configurable via self.freshness_half_life_days.
+        """
+        if age_days <= 0:
+            return 1.0
+        decay_rate = math.log(2) / max(1.0, self.freshness_half_life_days)
+        return math.exp(-decay_rate * age_days)
 
     def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Main analysis pipeline."""
@@ -1417,8 +1548,18 @@ class NeuralResumenEngine:
             data.get('advanceValueNet'), current_price, data.get('averageValuation')
         )
 
+        # Infer stock style for weighted quality scoring
+        # Heuristic: if SGR > 15% -> growth, if P/E < 15 or dividend > 2% -> value
+        _sgr = data.get('sustainableGrowthRate', 0) or 0
+        _sgr_pct = _sgr * 100 if _sgr < 1 else _sgr
+        stock_style = 'blend'
+        if _sgr_pct > 15:
+            stock_style = 'growth'
+        elif data.get('advanceValueNet', {}).get('pe_ratio', 999) < 15:
+            stock_style = 'value'
+
         # Layer 6: Quality
-        quality_result = self._layer6_quality(data.get('companyQualityNet'))
+        quality_result = self._layer6_quality(data.get('companyQualityNet'), stock_style=stock_style)
 
         # Layer 7: Growth
         growth_result = self._layer7_growth(
@@ -1446,7 +1587,7 @@ class NeuralResumenEngine:
         return final_result
 
     def _layer1_ingest(self, data: Dict) -> LayerResult:
-        """Layer 1: Data Ingestion & Validation"""
+        """Layer 1: Data Ingestion & Validation with freshness decay"""
         signals = []
         data_sources = []
 
@@ -1484,14 +1625,43 @@ class NeuralResumenEngine:
                 description=f"Limited data ({len(data_sources)}/{len(checks)} sources)"
             ))
 
+        # ── Data freshness decay: penalize stale data if timestamps exist ──
+        freshness_factor = 1.0
+        data_timestamp = data.get('dataTimestamp') or data.get('timestamp')
+        if data_timestamp:
+            try:
+                from datetime import datetime
+                if isinstance(data_timestamp, str):
+                    dt = datetime.fromisoformat(data_timestamp.replace('Z', '+00:00'))
+                    age_days = (datetime.now(dt.tzinfo) - dt).total_seconds() / 86400
+                elif isinstance(data_timestamp, (int, float)):
+                    age_days = (datetime.now().timestamp() - data_timestamp) / 86400
+                else:
+                    age_days = 0
+                freshness_factor = self._data_freshness_decay(max(0, age_days))
+                if freshness_factor < 0.7:
+                    signals.append(Signal(
+                        source="Ingestion",
+                        signal_type=SignalType.CAUTIONARY,
+                        strength=0.5,
+                        description=f"Data freshness decay applied (age: {age_days:.0f}d, factor: {freshness_factor:.2f})"
+                    ))
+                    logger.info(f"Freshness decay: age={age_days:.1f}d, factor={freshness_factor:.3f}")
+            except Exception as e:
+                logger.debug(f"Could not parse data timestamp for freshness decay: {e}")
+
+        # Store freshness factor for downstream layers
+        self._freshness_factor = freshness_factor
+
         result = LayerResult(
             layer_name="Data Ingestion",
             layer_number=1,
-            score=completeness * 100,
+            score=completeness * 100 * freshness_factor,
             confidence=0.5 + completeness * 0.4,
-            weight=0.05,
+            weight=self.base_weights.get('ingestion', 0.05),
             signals=signals,
-            reasoning=f"Ingested {len(data_sources)} data sources: {', '.join(data_sources)}",
+            sub_scores={'freshness_factor': freshness_factor},
+            reasoning=f"Ingested {len(data_sources)} data sources (freshness: {freshness_factor:.2f}): {', '.join(data_sources)}",
             data_used=data_sources
         )
 
@@ -1506,7 +1676,7 @@ class NeuralResumenEngine:
                 layer_number=2,
                 score=50,
                 confidence=0.0,
-                weight=0.08,
+                weight=self.base_weights.get('news', 0.08),
                 reasoning="No news data available"
             )
             self.layer_results.append(result)
@@ -1553,7 +1723,7 @@ class NeuralResumenEngine:
             layer_number=2,
             score=max(0, min(100, score)),
             confidence=analysis['confidence'],
-            weight=0.08,
+            weight=self.base_weights.get('news', 0.08),
             signals=signals,
             sub_scores={
                 'sentiment': sentiment,
@@ -1575,7 +1745,7 @@ class NeuralResumenEngine:
             layer_number=3,
             score=analysis['institutional_score'],
             confidence=0.7 if holders_data else 0.0,
-            weight=0.10,
+            weight=self.base_weights.get('institutional', 0.10),
             signals=analysis['signals'],
             sub_scores={
                 'ownership_pct': analysis.get('ownership_pct', 0),
@@ -1601,7 +1771,7 @@ class NeuralResumenEngine:
                 layer_number=3,
                 score=50,
                 confidence=0.0,
-                weight=0.07,
+                weight=self.base_weights.get('sector', 0.07),
                 reasoning="No FMP API key — sector/industry data unavailable"
             )
             self.layer_results.append(result)
@@ -1619,7 +1789,7 @@ class NeuralResumenEngine:
                     layer_number=3,
                     score=50,
                     confidence=0.0,
-                    weight=0.07,
+                    weight=self.base_weights.get('sector', 0.07),
                     reasoning=f"Could not identify sector/industry for {ticker}"
                 )
                 self.layer_results.append(result)
@@ -1781,7 +1951,7 @@ class NeuralResumenEngine:
                 layer_number=3,
                 score=max(0, min(100, score)),
                 confidence=confidence,
-                weight=0.07,
+                weight=self.base_weights.get('sector', 0.07),
                 signals=signals,
                 sub_scores=sub_scores,
                 reasoning=". ".join(reasoning_parts),
@@ -1800,7 +1970,7 @@ class NeuralResumenEngine:
                 layer_number=3,
                 score=50,
                 confidence=0.0,
-                weight=0.07,
+                weight=self.base_weights.get('sector', 0.07),
                 reasoning=f"Sector/industry analysis error: {str(e)[:100]}"
             )
             self.layer_results.append(result)
@@ -1815,7 +1985,7 @@ class NeuralResumenEngine:
             layer_number=4,
             score=analysis['technical_score'],
             confidence=0.65 if pivot_data else 0.0,
-            weight=0.06,
+            weight=self.base_weights.get('technical', 0.06),
             signals=analysis['signals'],
             sub_scores={
                 'position_in_range': analysis['position_in_range'],
@@ -1843,7 +2013,7 @@ class NeuralResumenEngine:
                 layer_number=4,
                 score=50,
                 confidence=0.0,
-                weight=0.09,
+                weight=self.base_weights.get('spectral', 0.09),
                 reasoning="No FMP API key available for historical data fetch"
             )
             self.layer_results.append(result)
@@ -1860,7 +2030,7 @@ class NeuralResumenEngine:
                     layer_number=4,
                     score=50,
                     confidence=0.0,
-                    weight=0.09,
+                    weight=self.base_weights.get('spectral', 0.09),
                     reasoning=f"Insufficient historical data ({bars} bars, minimum 256 required)"
                 )
                 self.layer_results.append(result)
@@ -2006,7 +2176,7 @@ class NeuralResumenEngine:
                 layer_number=4,
                 score=analysis.spectral_score,
                 confidence=round(confidence, 2),
-                weight=0.09,
+                weight=self.base_weights.get('spectral', 0.09),
                 signals=signals,
                 sub_scores=sub_scores,
                 reasoning=analysis.signal_description,
@@ -2026,7 +2196,7 @@ class NeuralResumenEngine:
                 layer_number=4,
                 score=50,
                 confidence=0.0,
-                weight=0.09,
+                weight=self.base_weights.get('spectral', 0.09),
                 reasoning=f"Spectral analysis error: {str(e)[:100]}"
             )
             self.layer_results.append(result)
@@ -2083,7 +2253,7 @@ class NeuralResumenEngine:
             layer_number=5,
             score=score_used,
             confidence=confidence_used,
-            weight=0.20,
+            weight=self.base_weights.get('valuation', 0.20),
             signals=analysis['signals'],
             sub_scores={
                 'fair_value':   fair_value_used,
@@ -2102,16 +2272,16 @@ class NeuralResumenEngine:
         self.layer_results.append(result)
         return result
 
-    def _layer6_quality(self, quality_data: Dict) -> LayerResult:
-        """Layer 6: Quality Analysis"""
-        analysis = self.quality_analyzer.analyze(quality_data)
+    def _layer6_quality(self, quality_data: Dict, stock_style: str = 'blend') -> LayerResult:
+        """Layer 6: Quality Analysis with weighted dimension scoring"""
+        analysis = self.quality_analyzer.analyze(quality_data, stock_style=stock_style)
 
         result = LayerResult(
             layer_name="Quality Analysis",
             layer_number=6,
             score=analysis['quality_score'],
             confidence=0.8 if quality_data else 0.0,
-            weight=0.18,
+            weight=self.base_weights.get('quality', 0.18),
             signals=analysis['signals'],
             sub_scores=analysis.get('dimension_analysis', {}),
             reasoning=f"Quality tier: {analysis['quality_tier']}. Consistency: {analysis.get('consistency', 0):.2f}",
@@ -2129,7 +2299,7 @@ class NeuralResumenEngine:
                 layer_number=7,
                 score=50,
                 confidence=0.0,
-                weight=0.12,
+                weight=self.base_weights.get('growth', 0.12),
                 reasoning="Insufficient growth data"
             )
             self.layer_results.append(result)
@@ -2142,7 +2312,7 @@ class NeuralResumenEngine:
             layer_number=7,
             score=analysis['growth_score'],
             confidence=0.75,
-            weight=0.12,
+            weight=self.base_weights.get('growth', 0.12),
             signals=analysis['signals'],
             sub_scores={
                 'sgr': analysis['sgr_pct'],
@@ -2165,7 +2335,7 @@ class NeuralResumenEngine:
             layer_number=8,
             score=analysis['forecast_score'],
             confidence=0.6 if forecasts else 0.0,
-            weight=0.07,
+            weight=self.base_weights.get('forecasts', 0.07),
             signals=analysis['signals'],
             reasoning=f"Consensus: {analysis['consensus_view']}",
             data_used=[f"{analysis.get('analyst_count', 0)} analyst estimates"] if forecasts else []
@@ -2186,7 +2356,7 @@ class NeuralResumenEngine:
             layer_number=9,
             score=score,
             confidence=0.7,
-            weight=0.05,
+            weight=self.base_weights.get('monte_carlo', 0.05),
             signals=mc['signals'],
             sub_scores={
                 'prob_target': mc['probability_reaching_target'],
@@ -2347,7 +2517,7 @@ class NeuralResumenEngine:
             layer_number=10,
             score=max(0, min(100, score)),
             confidence=0.8,
-            weight=0.07,
+            weight=self.base_weights.get('correlation', 0.07),
             signals=signals,
             sub_scores=adjustments,
             reasoning=f"Found {len(signals)} cross-signal patterns",
@@ -2358,16 +2528,22 @@ class NeuralResumenEngine:
         return result
 
     def _layer11_synthesize(self) -> LayerResult:
-        """Layer 11: Dynamic Weight Synthesis"""
+        """
+        Layer 11: Dynamic Weight Synthesis
+        - Bayesian confidence update: if layer scores disagree strongly, reduce confidence
+        - Sensitivity analysis: measure how much final score changes when each layer shifts +10%
+        """
         total_score = 0
         total_weight = 0
         component_scores = {}
+        raw_scores = []
 
         for layer in self.layer_results:
             if layer.layer_number < 11:  # Don't include synthesis layer
                 weighted_score = layer.score * layer.weight * layer.confidence
                 total_score += weighted_score
                 total_weight += layer.weight * layer.confidence
+                raw_scores.append(layer.score)
 
                 component_scores[layer.layer_name] = {
                     'raw_score': layer.score,
@@ -2378,14 +2554,64 @@ class NeuralResumenEngine:
 
         final_score = total_score / total_weight if total_weight > 0 else 50
 
+        # ── Bayesian confidence update: penalize when signals disagree ──
+        # High variance among layer scores indicates model disagreement → lower confidence
+        if len(raw_scores) >= 3:
+            score_std = float(np.std(raw_scores))
+            score_range = float(np.max(raw_scores) - np.min(raw_scores))
+            # Dispersion penalty: if std > 20 or range > 50, confidence drops
+            dispersion_penalty = min(0.3, (score_std / 100) + (score_range / 200))
+            bayesian_confidence = max(0.3, min(0.95, total_weight) - dispersion_penalty)
+            logger.info(
+                f"Bayesian confidence: base={min(0.95, total_weight):.3f}, "
+                f"dispersion_penalty={dispersion_penalty:.3f} (std={score_std:.1f}, range={score_range:.1f}), "
+                f"final={bayesian_confidence:.3f}"
+            )
+        else:
+            bayesian_confidence = min(0.95, total_weight)
+            score_std = 0.0
+
+        # ── Sensitivity analysis: if each layer score shifts +10%, how much does final change? ──
+        sensitivity = {}
+        for layer in self.layer_results:
+            if layer.layer_number < 11 and layer.confidence > 0:
+                # Recompute final_score with this layer's score boosted by 10%
+                perturbed_total = 0
+                perturbed_weight = 0
+                for l2 in self.layer_results:
+                    if l2.layer_number < 11:
+                        s = l2.score * 1.10 if l2.layer_name == layer.layer_name else l2.score
+                        s = min(100, s)
+                        perturbed_total += s * l2.weight * l2.confidence
+                        perturbed_weight += l2.weight * l2.confidence
+                perturbed_score = perturbed_total / perturbed_weight if perturbed_weight > 0 else 50
+                delta = perturbed_score - final_score
+                sensitivity[layer.layer_name] = round(delta, 2)
+
+        # Apply freshness factor if available
+        freshness = getattr(self, '_freshness_factor', 1.0)
+        if freshness < 1.0:
+            final_score *= freshness
+            logger.info(f"Applied freshness decay {freshness:.3f} to synthesis score")
+
         result = LayerResult(
             layer_name="Dynamic Synthesis",
             layer_number=11,
             score=final_score,
-            confidence=min(0.95, total_weight),
+            confidence=bayesian_confidence,
             weight=1.0,
-            sub_scores={'components': component_scores},
-            reasoning=f"Synthesized {len(component_scores)} components. Total effective weight: {total_weight:.2f}",
+            sub_scores={
+                'components': component_scores,
+                'sensitivity': sensitivity,
+                'score_dispersion_std': round(score_std, 2),
+                'bayesian_confidence': round(bayesian_confidence, 3),
+            },
+            reasoning=(
+                f"Synthesized {len(component_scores)} components. "
+                f"Effective weight: {total_weight:.2f}. "
+                f"Score dispersion (std): {score_std:.1f}. "
+                f"Bayesian confidence: {bayesian_confidence:.2f}"
+            ),
             data_used=["All 10 analysis layers"]
         )
 
@@ -2406,22 +2632,23 @@ class NeuralResumenEngine:
         bearish_signals = [s for s in all_signals if s.signal_type == SignalType.BEARISH]
         cautionary_signals = [s for s in all_signals if s.signal_type == SignalType.CAUTIONARY]
 
-        # Determine recommendation
-        if final_score >= 72:
+        # Determine recommendation using configurable thresholds
+        t = self.rec_thresholds
+        if final_score >= t.get('strong_buy', 72):
             recommendation = "Strong Buy"
-            conviction = min(95, int(70 + (final_score - 72) * 2))
-        elif final_score >= 58:
+            conviction = min(95, int(70 + (final_score - t['strong_buy']) * 2))
+        elif final_score >= t.get('buy', 58):
             recommendation = "Buy"
-            conviction = min(85, int(55 + (final_score - 58) * 1.5))
-        elif final_score >= 45:
+            conviction = min(85, int(55 + (final_score - t['buy']) * 1.5))
+        elif final_score >= t.get('hold', 45):
             recommendation = "Hold"
             conviction = int(50 + (final_score - 50) * 0.5)
-        elif final_score >= 35:
+        elif final_score >= t.get('sell', 35):
             recommendation = "Sell"
-            conviction = int(60 + (45 - final_score) * 1.5)
+            conviction = int(60 + (t['hold'] - final_score) * 1.5)
         else:
             recommendation = "Strong Sell"
-            conviction = min(90, int(70 + (35 - final_score) * 2))
+            conviction = min(90, int(70 + (t['sell'] - final_score) * 2))
 
         # Get target price from valuation layer
         valuation_layer = next((l for l in self.layer_results if l.layer_name == "Valuation Ensemble"), None)
@@ -2441,19 +2668,28 @@ class NeuralResumenEngine:
             target_low = target_price * 0.90
             target_high = target_price * 1.10
 
-        # Risk level from quality analysis
+        # ── Monte Carlo integration in risk assessment ──
+        # Use mc_prob_positive to refine downside risk estimate
+        mc_downside_risk = 0.5  # default
+        if mc_layer and 'prob_positive' in mc_layer.sub_scores:
+            mc_prob_positive = mc_layer.sub_scores['prob_positive']
+            mc_downside_risk = 1.0 - mc_prob_positive  # Higher = more risky
+
+        # Risk level from quality analysis + Monte Carlo downside risk
         quality_layer = next((l for l in self.layer_results if l.layer_name == "Quality Analysis"), None)
-        if quality_layer:
-            if quality_layer.score >= 70:
-                risk_level = "Low"
-            elif quality_layer.score >= 50:
-                risk_level = "Moderate"
-            elif quality_layer.score >= 35:
-                risk_level = "Elevated"
-            else:
-                risk_level = "High"
-        else:
+        quality_risk_score = quality_layer.score if quality_layer else 50
+        # Blend quality-based risk with MC-based downside risk
+        # quality_risk_score high = low risk; mc_downside_risk high = high risk
+        combined_risk = quality_risk_score * 0.6 + (1.0 - mc_downside_risk) * 100 * 0.4
+
+        if combined_risk >= 70:
+            risk_level = "Low"
+        elif combined_risk >= 50:
             risk_level = "Moderate"
+        elif combined_risk >= 35:
+            risk_level = "Elevated"
+        else:
+            risk_level = "High"
 
         # Margin of safety
         if upside_pct > 40:
@@ -2607,6 +2843,11 @@ class NeuralResumenEngine:
                 'numFreqKept':        rolling_fft.get('numFreqKept', 8),
             }
 
+        # ── Sensitivity analysis from synthesis layer ──
+        sensitivity_data = {}
+        if synthesis.sub_scores and 'sensitivity' in synthesis.sub_scores:
+            sensitivity_data = synthesis.sub_scores['sensitivity']
+
         return {
             "finalRecommendation": recommendation,
             "conviction": conviction,
@@ -2631,6 +2872,13 @@ class NeuralResumenEngine:
                 "bearish": len(bearish_signals),
                 "cautionary": len(cautionary_signals),
                 "total": len(all_signals)
+            },
+            "sensitivityAnalysis": sensitivity_data,
+            "riskFactors": {
+                "mc_downside_risk": round(mc_downside_risk, 3),
+                "combined_risk_score": round(combined_risk, 1),
+                "bayesian_confidence": round(synthesis.confidence, 3),
+                "score_dispersion": synthesis.sub_scores.get('score_dispersion_std', 0),
             }
         }
 

@@ -9,6 +9,7 @@ import logging
 import time
 import numpy as np
 from scipy import signal as scipy_signal
+from scipy.signal import hilbert as scipy_hilbert
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -29,6 +30,7 @@ class CycleInfo:
     amplitude: float        # Relative amplitude (normalized)
     phase_degrees: float    # Current phase position (0-360)
     contribution_pct: float # % of total spectral power
+    is_significant: bool = True  # Whether peak passed bootstrap significance test
 
 
 @dataclass
@@ -46,6 +48,72 @@ class SpectralCycleResult:
     bars_analyzed: int
     signal_description: str         # Human-readable summary
     trading_regime: str             # 'trending', 'cycling', 'noisy'
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TECHNICAL INDICATORS (separated concern)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TechnicalIndicators:
+    """
+    Standalone helper for computing technical indicators (ATR, RSI, momentum).
+    Separated from the FFT analysis logic for clarity and reusability.
+    """
+
+    @staticmethod
+    def calculate_atr(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int = 14) -> float:
+        """Average True Range over the last `period` bars."""
+        if len(closes) < period + 1:
+            return 0.0
+
+        n = len(closes)
+        tr = np.empty(n - 1)
+        for i in range(1, n):
+            hl = highs[i] - lows[i]
+            hc = abs(highs[i] - closes[i - 1])
+            lc = abs(lows[i] - closes[i - 1])
+            tr[i - 1] = max(hl, hc, lc)
+
+        atr = np.mean(tr[-period:])
+        return float(atr)
+
+    @staticmethod
+    def calculate_rsi(data: np.ndarray, period: int = 14) -> float:
+        """Relative Strength Index with epsilon edge-case handling."""
+        if len(data) < period + 1:
+            return 50.0
+
+        deltas = np.diff(data)
+        gains = np.where(deltas > 0, deltas, 0)
+        losses = np.where(deltas < 0, -deltas, 0)
+
+        avg_gain = np.mean(gains[-period:])
+        avg_loss = np.mean(losses[-period:])
+
+        if avg_loss < 1e-12:
+            return 100.0 if avg_gain > 1e-12 else 50.0
+        if avg_gain < 1e-12:
+            return 0.0
+
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        return float(rsi)
+
+    @staticmethod
+    def calculate_momentum(prices: np.ndarray, short_period: int = 5, long_period: int = 20) -> bool:
+        """Return True if short-term SMA > long-term SMA (bullish momentum)."""
+        if len(prices) < long_period:
+            return False
+        sma_short = np.mean(prices[-short_period:])
+        sma_long = np.mean(prices[-long_period:])
+        return bool(sma_short > sma_long)
+
+    @staticmethod
+    def calculate_atr_normalized(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int = 14) -> float:
+        """ATR expressed as a percentage of recent average price."""
+        atr = TechnicalIndicators.calculate_atr(highs, lows, closes, period)
+        avg_price = np.mean(closes[-20:]) if len(closes) >= 20 else np.mean(closes)
+        return (atr / avg_price * 100) if avg_price > 0 else 0.0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -218,21 +286,51 @@ class SpectralCycleAnalyzer:
     1. Extract close prices from OHLCV data
     2. Detrend (remove linear trend to isolate cyclical component)
     3. Apply Hann window to reduce spectral leakage
-    4. Compute FFT → power spectrum
+    4. Compute FFT -> power spectrum
     5. Identify dominant cycles (10-200 day periods, top by amplitude)
+    5b. Bootstrap significance test on dominant peaks
     6. Reconstruct clean signal using only dominant frequencies
-    7. Detect current phase (trough/rising/peak/falling)
-    8. Calculate confirmation indicators (ATR, momentum, RSI)
-    9. Score 0-100 based on cycle position, strength, and confirmation
+    7. Detect current phase via Hilbert transform (instantaneous phase)
+    8. Calculate confirmation indicators (ATR, momentum, RSI) via TechnicalIndicators
+    9. Score 0-100 based on cycle position, strength, and confirmation (configurable weights)
     """
 
-    def __init__(self, window_size: int = 512):
+    def __init__(
+        self,
+        window_size: int = 512,
+        # Configurable scoring weights
+        phase_weight: float = 1.0,
+        momentum_weight: float = 1.0,
+        rsi_weight: float = 1.0,
+        volatility_weight: float = 1.0,
+        # Bootstrap significance parameters
+        bootstrap_iterations: int = 200,
+        bootstrap_alpha: float = 0.05,
+        # Adaptive frequency threshold for rolling reconstruction
+        adaptive_power_threshold: float = 0.80,
+    ):
         # Snap to nearest power-of-2 for faster FFT
         self.window_size = 2 ** int(np.log2(window_size)) if window_size > 0 else 512
         self.min_window = 256
         self.min_cycle_days = 10
         self.max_cycle_days = 200
         self.top_k_cycles = 5  # Number of dominant cycles to keep
+
+        # Configurable scoring weights (improvement #3)
+        self.phase_weight = phase_weight
+        self.momentum_weight = momentum_weight
+        self.rsi_weight = rsi_weight
+        self.volatility_weight = volatility_weight
+
+        # Bootstrap significance parameters (improvement #6)
+        self.bootstrap_iterations = bootstrap_iterations
+        self.bootstrap_alpha = bootstrap_alpha
+
+        # Adaptive frequency selection threshold (improvement #2)
+        self.adaptive_power_threshold = adaptive_power_threshold
+
+        # Technical indicators helper (improvement #5)
+        self.indicators = TechnicalIndicators()
 
     def analyze(self, historical_data: List[Dict]) -> SpectralCycleResult:
         """Main analysis pipeline"""
@@ -326,6 +424,11 @@ class SpectralCycleAnalyzer:
         peak_indices = sorted(peak_indices, key=lambda i: valid_amplitudes[i], reverse=True)
         peak_indices = peak_indices[:self.top_k_cycles]
 
+        # ── Step 5b: Bootstrap significance test ──
+        significance_map = self._bootstrap_significance_test(
+            windowed, freqs, valid_mask, peak_indices, valid_amplitudes
+        )
+
         dominant_cycles = []
         for idx in peak_indices:
             power_pct = (valid_amplitudes[idx] ** 2 / total_power * 100) if total_power > 0 else 0
@@ -334,13 +437,13 @@ class SpectralCycleAnalyzer:
                 period_days=round(valid_periods[idx], 1),
                 amplitude=float(valid_amplitudes[idx]),
                 phase_degrees=round(phase_deg, 1),
-                contribution_pct=round(power_pct, 1)
+                contribution_pct=round(power_pct, 1),
+                is_significant=significance_map.get(idx, False),
             ))
 
         # ── Step 6: Reconstruct signal ──
         fft_filtered = np.zeros_like(np.fft.rfft(windowed))
         full_freqs = np.fft.rfftfreq(len(windowed), d=1.0)
-        full_amplitudes = np.abs(np.fft.rfft(windowed))
 
         for cycle in dominant_cycles:
             target_freq = 1.0 / cycle.period_days
@@ -349,7 +452,7 @@ class SpectralCycleAnalyzer:
 
         reconstructed = np.fft.irfft(fft_filtered, n=len(windowed))
 
-        # ── Step 7: Detect phase ──
+        # ── Step 7: Detect phase via Hilbert transform ──
         current_phase, phase_position = self._detect_phase(reconstructed)
 
         # ── Step 8: Cycle strength ──
@@ -365,19 +468,10 @@ class SpectralCycleAnalyzer:
         else:
             trading_regime = 'noisy'
 
-        # ── Step 9: Confirmation indicators ──
-        # ATR (using full price data)
-        atr = self._calculate_atr(highs_w, lows_w, closes[-window_n:])
-        avg_price = np.mean(prices[-20:])
-        atr_normalized = (atr / avg_price * 100) if avg_price > 0 else 0
-
-        # Momentum: SMA5 vs SMA20
-        sma5 = np.mean(prices[-5:])
-        sma20 = np.mean(prices[-20:])
-        momentum_confirmation = sma5 > sma20
-
-        # RSI of detrended signal (14-period)
-        rsi_value = self._calculate_rsi(detrended, period=14)
+        # ── Step 9: Confirmation indicators (via TechnicalIndicators) ──
+        atr_normalized = self.indicators.calculate_atr_normalized(highs_w, lows_w, closes[-window_n:])
+        momentum_confirmation = self.indicators.calculate_momentum(prices)
+        rsi_value = self.indicators.calculate_rsi(detrended, period=14)
 
         # Reconstructed vs price trend
         recon_trend = reconstructed[-1] - reconstructed[-20] if len(reconstructed) >= 20 else 0
@@ -386,7 +480,7 @@ class SpectralCycleAnalyzer:
         if abs(price_trend) > 0.01:
             recon_vs_price = recon_trend / price_trend if abs(price_trend) > 0 else 1.0
 
-        # ── Step 10: Score ──
+        # ── Step 10: Score (with configurable weights) ──
         score = self._calculate_score(
             current_phase, phase_position, cycle_strength,
             momentum_confirmation, atr_normalized, rsi_value, trading_regime
@@ -415,27 +509,156 @@ class SpectralCycleAnalyzer:
         )
 
     # ───────────────────────────────────────────────────────────────────────
-    # PHASE DETECTION
+    # BOOTSTRAP SIGNIFICANCE TEST (improvement #6)
+    # ───────────────────────────────────────────────────────────────────────
+
+    def _bootstrap_significance_test(
+        self,
+        windowed: np.ndarray,
+        freqs_no_dc: np.ndarray,
+        valid_mask: np.ndarray,
+        peak_indices: List[int],
+        valid_amplitudes: np.ndarray,
+    ) -> Dict[int, bool]:
+        """
+        Bootstrap-based significance test for dominant FFT peaks.
+
+        Procedure:
+        1. Shuffle the time-domain signal N times (destroying temporal structure).
+        2. Compute FFT on each shuffled version.
+        3. For each detected peak, compare the real amplitude to the distribution
+           of amplitudes at the same frequency bin from shuffled data.
+        4. If the real amplitude exceeds the (1 - alpha) quantile of the null
+           distribution, the peak is considered statistically significant
+           (i.e., not attributable to noise).
+
+        Returns a dict mapping peak_index -> bool (True = significant).
+        """
+        if len(peak_indices) == 0:
+            return {}
+
+        n_iters = self.bootstrap_iterations
+        rng = np.random.default_rng(seed=42)
+
+        # We need to map valid_mask indices back to full FFT indices.
+        # valid_mask was applied to freqs[1:] (DC-skipped), so valid_mask
+        # indices correspond to positions within the DC-skipped amplitude array.
+        # We need the full-FFT indices (offset by +1 for DC).
+        valid_indices_in_full = np.where(valid_mask)[0]  # indices within DC-skipped array
+
+        # Collect null-distribution amplitudes for each peak
+        null_amplitudes: Dict[int, List[float]] = {idx: [] for idx in peak_indices}
+
+        for _ in range(n_iters):
+            shuffled = rng.permutation(windowed)
+            fft_shuffled = np.fft.rfft(shuffled)
+            # Amplitudes without DC
+            shuf_amps = np.abs(fft_shuffled[1:])
+            shuf_valid = shuf_amps[valid_mask]
+
+            for idx in peak_indices:
+                if idx < len(shuf_valid):
+                    null_amplitudes[idx].append(float(shuf_valid[idx]))
+
+        # Determine significance for each peak
+        significance: Dict[int, bool] = {}
+        quantile_threshold = 1.0 - self.bootstrap_alpha
+
+        for idx in peak_indices:
+            if not null_amplitudes[idx]:
+                significance[idx] = False
+                continue
+            null_dist = np.array(null_amplitudes[idx])
+            threshold = np.quantile(null_dist, quantile_threshold)
+            real_amp = float(valid_amplitudes[idx])
+            significance[idx] = bool(real_amp > threshold)
+
+        n_sig = sum(1 for v in significance.values() if v)
+        logger.info(
+            "Bootstrap significance: %d/%d peaks significant (alpha=%.2f, iters=%d)",
+            n_sig, len(peak_indices), self.bootstrap_alpha, n_iters
+        )
+        return significance
+
+    # ───────────────────────────────────────────────────────────────────────
+    # PHASE DETECTION via Hilbert Transform (improvement #1)
     # ───────────────────────────────────────────────────────────────────────
 
     def _detect_phase(self, reconstructed: np.ndarray) -> Tuple[str, float]:
-        """Detect current cycle phase from reconstructed signal"""
+        """
+        Detect current cycle phase from reconstructed signal using the
+        Hilbert transform for instantaneous phase estimation.
+
+        The Hilbert transform produces an analytic signal whose angle gives
+        the instantaneous phase at each time step. This is more precise than
+        simple slope-based heuristics because it directly measures where we
+        are in the oscillation cycle (0 to 2*pi).
+
+        Phase mapping (radians -> label):
+          - [-pi, -pi/2)  : trough    (position 0.0 - 0.25)
+          - [-pi/2, 0)    : rising    (position 0.25 - 0.5)
+          - [0, pi/2)     : peak      (position 0.5 - 0.75)
+          - [pi/2, pi)    : falling   (position 0.75 - 1.0)
+
+        Falls back to slope-based detection if the Hilbert transform
+        produces degenerate results (e.g., near-zero signal).
+        """
         if len(reconstructed) < 30:
             return 'unknown', 0.5
 
-        # Look at recent portion
+        try:
+            # Compute the analytic signal via the Hilbert transform
+            analytic_signal = scipy_hilbert(reconstructed)
+
+            # Instantaneous phase at the last sample
+            inst_phase = np.angle(analytic_signal[-1])  # range [-pi, pi]
+
+            # Check for degenerate case (near-zero amplitude)
+            inst_amplitude = np.abs(analytic_signal[-1])
+            signal_amplitude = np.max(np.abs(reconstructed))
+            if signal_amplitude < 1e-10 or inst_amplitude < signal_amplitude * 0.01:
+                return self._detect_phase_fallback(reconstructed)
+
+            # Map phase from [-pi, pi] to [0, 1] position
+            # -pi = trough (0.0), -pi/2 = rising midpoint (0.25),
+            # 0 = peak (0.5), pi/2 = falling midpoint (0.75), pi = trough again (1.0)
+            # Normalize: position = (inst_phase + pi) / (2*pi)
+            position = float((inst_phase + np.pi) / (2.0 * np.pi))
+            position = max(0.0, min(1.0, position))
+
+            # Classify phase based on position
+            if position < 0.125 or position >= 0.875:
+                phase = 'trough'
+            elif 0.125 <= position < 0.375:
+                phase = 'rising'
+            elif 0.375 <= position < 0.625:
+                phase = 'peak'
+            else:  # 0.625 <= position < 0.875
+                phase = 'falling'
+
+            return phase, position
+
+        except Exception as e:
+            logger.warning("Hilbert transform failed, using fallback: %s", e)
+            return self._detect_phase_fallback(reconstructed)
+
+    def _detect_phase_fallback(self, reconstructed: np.ndarray) -> Tuple[str, float]:
+        """
+        Original slope-based phase detection, used as fallback when Hilbert
+        transform produces degenerate results.
+        """
+        if len(reconstructed) < 30:
+            return 'unknown', 0.5
+
         recent = reconstructed[-60:] if len(reconstructed) >= 60 else reconstructed
 
-        # Current derivative (slope)
         slope_short = reconstructed[-1] - reconstructed[-5] if len(reconstructed) >= 5 else 0
         slope_medium = reconstructed[-1] - reconstructed[-15] if len(reconstructed) >= 15 else 0
 
-        # Normalize by amplitude
         amp = np.max(np.abs(recent)) if np.max(np.abs(recent)) > 0 else 1
         norm_slope_short = slope_short / amp
         norm_slope_medium = slope_medium / amp
 
-        # Current position relative to recent range
         recent_min = np.min(recent)
         recent_max = np.max(recent)
         recent_range = recent_max - recent_min
@@ -443,9 +666,8 @@ class SpectralCycleAnalyzer:
         if recent_range < 1e-10:
             return 'unknown', 0.5
 
-        position = (reconstructed[-1] - recent_min) / recent_range  # 0=min, 1=max
+        position = (reconstructed[-1] - recent_min) / recent_range
 
-        # Phase classification
         if position < 0.2 and norm_slope_short > 0:
             return 'trough', position
         elif position < 0.2 and norm_slope_short <= 0:
@@ -459,7 +681,6 @@ class SpectralCycleAnalyzer:
         elif norm_slope_short < -0.05:
             return 'falling', position
         else:
-            # Near zero slope — check medium term
             if norm_slope_medium > 0:
                 return 'rising', position
             elif norm_slope_medium < 0:
@@ -467,96 +688,63 @@ class SpectralCycleAnalyzer:
             return 'unknown', position
 
     # ───────────────────────────────────────────────────────────────────────
-    # TECHNICAL INDICATORS
-    # ───────────────────────────────────────────────────────────────────────
-
-    def _calculate_atr(self, highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int = 14) -> float:
-        """Average True Range"""
-        if len(closes) < period + 1:
-            return 0.0
-
-        n = len(closes)
-        tr = np.zeros(n - 1)
-        for i in range(1, n):
-            hl = highs[i] - lows[i]
-            hc = abs(highs[i] - closes[i - 1])
-            lc = abs(lows[i] - closes[i - 1])
-            tr[i - 1] = max(hl, hc, lc)
-
-        # Simple moving average of TR
-        atr = np.mean(tr[-period:])
-        return float(atr)
-
-    def _calculate_rsi(self, data: np.ndarray, period: int = 14) -> float:
-        """Relative Strength Index"""
-        if len(data) < period + 1:
-            return 50.0
-
-        deltas = np.diff(data)
-        gains = np.where(deltas > 0, deltas, 0)
-        losses = np.where(deltas < 0, -deltas, 0)
-
-        avg_gain = np.mean(gains[-period:])
-        avg_loss = np.mean(losses[-period:])
-
-        if avg_loss < 1e-12:
-            # No losses: if there are gains return 100, otherwise neutral
-            return 100.0 if avg_gain > 1e-12 else 50.0
-        if avg_gain < 1e-12:
-            return 0.0
-
-        rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
-        return float(rsi)
-
-    # ───────────────────────────────────────────────────────────────────────
-    # SCORING
+    # SCORING (with configurable weights — improvement #3)
     # ───────────────────────────────────────────────────────────────────────
 
     def _calculate_score(
         self, phase: str, phase_pos: float, strength: float,
         momentum: bool, atr_norm: float, rsi: float, regime: str
     ) -> float:
-        """Calculate composite score 0-100"""
+        """
+        Calculate composite score 0-100.
+
+        Each component is scaled by its corresponding weight parameter
+        (phase_weight, momentum_weight, rsi_weight, volatility_weight)
+        set during __init__. Defaults are 1.0 (original behavior).
+        """
         score = 50.0  # Neutral base
+
+        pw = self.phase_weight
+        mw = self.momentum_weight
+        rw = self.rsi_weight
+        vw = self.volatility_weight
 
         # ── Phase contribution (strongest factor) ──
         if phase == 'trough':
-            score += 25 * strength  # Max +25 at strong trough
+            score += 25 * strength * pw
         elif phase == 'rising':
-            score += 15 * strength
+            score += 15 * strength * pw
         elif phase == 'peak':
-            score -= 20 * strength
+            score -= 20 * strength * pw
         elif phase == 'falling':
-            score -= 12 * strength
+            score -= 12 * strength * pw
 
         # ── Momentum confirmation ──
         if momentum and phase in ('trough', 'rising'):
-            score += 12  # Confirmed uptrend
+            score += 12 * mw
         elif not momentum and phase in ('peak', 'falling'):
-            score -= 8  # Confirmed downtrend
+            score -= 8 * mw
         elif momentum and phase in ('peak', 'falling'):
-            score += 3  # Divergence — slight positive
+            score += 3 * mw
         elif not momentum and phase in ('trough', 'rising'):
-            score -= 5  # Divergence — waiting for confirmation
+            score -= 5 * mw
 
         # ── RSI contribution ──
         if rsi < 30:
-            score += 8  # Oversold
+            score += 8 * rw
         elif rsi > 70:
-            score -= 8  # Overbought
+            score -= 8 * rw
 
         # ── Volatility filter ──
         if atr_norm > 4.0:
-            score -= 12  # Very high volatility — reduce conviction
+            score -= 12 * vw
         elif atr_norm > 3.0:
-            score -= 6
+            score -= 6 * vw
         elif atr_norm < 1.0:
-            score += 3  # Low volatility — stable cycles
+            score += 3 * vw
 
         # ── Regime adjustment ──
         if regime == 'noisy':
-            # Pull toward neutral — low confidence
             score = 50 + (score - 50) * 0.5
 
         return max(0, min(100, score))
@@ -582,9 +770,10 @@ class SpectralCycleAnalyzer:
 
         # Dominant cycle
         if top_cycle:
+            sig_label = "" if top_cycle.is_significant else " [not statistically significant]"
             parts.append(
                 f"Dominant cycle: {top_cycle.period_days:.0f} days "
-                f"({top_cycle.contribution_pct:.0f}% of spectral power)"
+                f"({top_cycle.contribution_pct:.0f}% of spectral power){sig_label}"
             )
 
         # Phase
@@ -639,6 +828,37 @@ class SpectralCycleAnalyzer:
         )
 
     # ───────────────────────────────────────────────────────────────────────
+    # ADAPTIVE FREQUENCY SELECTION (improvement #2)
+    # ───────────────────────────────────────────────────────────────────────
+
+    def _adaptive_num_freq(self, fft_complex: np.ndarray, target_power_ratio: float = 0.80) -> int:
+        """
+        Determine how many frequency bins to keep so that they capture at
+        least `target_power_ratio` (default 80%) of total spectral power.
+
+        Instead of a fixed num_freq=8, this adapts to the actual spectrum:
+        - If the signal is dominated by a few low frequencies, fewer are kept.
+        - If power is spread across many frequencies, more are kept.
+
+        Minimum: 2 (DC + 1 harmonic). Maximum: len(fft_complex).
+        """
+        mags = np.abs(fft_complex)
+        total_power = np.sum(mags[1:] ** 2)  # skip DC for power calc
+
+        if total_power < 1e-15:
+            return min(8, len(fft_complex))
+
+        cumulative = 0.0
+        # Always include DC (index 0), so start counting from index 1
+        for i in range(1, len(mags)):
+            cumulative += mags[i] ** 2
+            if cumulative / total_power >= target_power_ratio:
+                # +1 because we include DC at index 0
+                return max(2, i + 1)
+
+        return len(fft_complex)
+
+    # ───────────────────────────────────────────────────────────────────────
     # ROLLING WINDOW FFT RECONSTRUCTION
     # ───────────────────────────────────────────────────────────────────────
 
@@ -649,19 +869,25 @@ class SpectralCycleAnalyzer:
         num_freq: int = 8,
         output_bars: int = 60,
         threshold_pct: float = 0.002,   # 0.2% anti-whipsaw threshold
+        adaptive_freq: bool = True,     # Use adaptive frequency selection
     ) -> Dict[str, Any]:
         """
         Rolling-window FFT low-pass filter reconstruction.
 
+        When adaptive_freq=True (default), the num_freq parameter is treated
+        as a fallback maximum. The actual number of frequencies kept per window
+        is determined adaptively to capture 80% of cumulative spectral power
+        (configurable via self.adaptive_power_threshold).
+
         Exactly matches the reference spec:
-          1. prices[i-window+1 : i+1]  — window ending at bar i (inclusive)
-          2. scipy.signal.detrend(prices, type='linear')  — remove linear trend
-          3. trend = prices - detrended  — recover trend for last-bar add-back
-          4. np.hanning(window) * detrended  — Hann window (spectral leakage)
+          1. prices[i-window+1 : i+1]  -- window ending at bar i (inclusive)
+          2. scipy.signal.detrend(prices, type='linear')  -- remove linear trend
+          3. trend = prices - detrended  -- recover trend for last-bar add-back
+          4. np.hanning(window) * detrended  -- Hann window (spectral leakage)
           5. scipy.fft.rfft(windowed)  -> fft_complex (complex vector, length=window/2+1)
-          6. fft_filtered[:num_freq] = fft_complex[:num_freq]  — low-pass (keep DC+K freqs)
+          6. fft_filtered[:K] = fft_complex[:K]  -- low-pass (adaptive or fixed K)
           7. scipy.fft.irfft(fft_filtered)  -> reconstructed detrended signal
-          8. fft_signal[i] = reconstructed[-1] + trend[-1]  — add trend back
+          8. fft_signal[i] = reconstructed[-1] + trend[-1]  -- add trend back
 
         Position signal:
           position = 1 (long) if Close > fft_signal * (1 + threshold_pct)
@@ -689,16 +915,17 @@ class SpectralCycleAnalyzer:
             # ── Rolling reconstruction (compute only last output_bars + buffer) ──
             start_i = max(window - 1, n - output_bars - 15)
             fft_signal_vals: List[Optional[float]] = []
+            actual_num_freq = num_freq  # track what was actually used (last window)
 
             for i in range(start_i, n):
                 # Extract window: bars [i-window+1 ... i] (inclusive, length=window)
                 prices = closes[i - window + 1 : i + 1]
 
-                # 1. Detrend — scipy removes linear trend in-place equivalent
+                # 1. Detrend
                 detrended = scipy_detrend(prices, type='linear')
 
                 # 2. Recover trend so we can add it back at the last bar
-                trend = prices - detrended           # linear trend component
+                trend = prices - detrended
                 last_trend = float(trend[-1])
 
                 # 3. Hann window to reduce spectral leakage
@@ -706,16 +933,26 @@ class SpectralCycleAnalyzer:
                 windowed = detrended * hann
 
                 # 4. FFT -> complex vector (length = window//2 + 1)
-                fft_complex = scipy_rfft(windowed)   # <- complex numbers
+                fft_complex = scipy_rfft(windowed)
 
-                # 5. Low-pass filter: keep first num_freq coefficients (incl. DC=0)
+                # 5. Determine number of frequencies to keep
+                if adaptive_freq:
+                    k = self._adaptive_num_freq(fft_complex, self.adaptive_power_threshold)
+                    # Cap at the user-specified num_freq as maximum
+                    k = min(k, num_freq) if num_freq > 0 else k
+                else:
+                    k = num_freq
+
+                actual_num_freq = k
+
+                # 6. Low-pass filter: keep first k coefficients (incl. DC=0)
                 fft_filtered = np.zeros_like(fft_complex, dtype=complex)
-                fft_filtered[:num_freq] = fft_complex[:num_freq]
+                fft_filtered[:k] = fft_complex[:k]
 
-                # 6. Inverse FFT -> reconstructed detrended signal
+                # 7. Inverse FFT -> reconstructed detrended signal
                 reconstructed_detrended = scipy_irfft(fft_filtered)
 
-                # 7. Add trend back (last bar value)
+                # 8. Add trend back (last bar value)
                 fft_signal_vals.append(reconstructed_detrended[-1] + last_trend)
 
             # ── Build output list ──
@@ -765,17 +1002,24 @@ class SpectralCycleAnalyzer:
             freqs     = np.fft.rfftfreq(window, d=1.0)  # frequency bins
             mags      = np.abs(fft_last)
 
+            # Determine actual num_freq for components output
+            if adaptive_freq:
+                final_num_freq = self._adaptive_num_freq(fft_last, self.adaptive_power_threshold)
+                final_num_freq = min(final_num_freq, num_freq) if num_freq > 0 else final_num_freq
+            else:
+                final_num_freq = num_freq
+
             # Total power (skip DC for contribution calculation)
             total_power = float(np.sum(mags[1:] ** 2))
 
-            # Power in kept frequencies (1 to num_freq-1, skip DC)
-            kept_power = float(np.sum(mags[1:num_freq] ** 2))
+            # Power in kept frequencies (1 to final_num_freq-1, skip DC)
+            kept_power = float(np.sum(mags[1:final_num_freq] ** 2))
             cycle_strength = round(kept_power / total_power, 4) if total_power > 0 else 0.0
 
             complex_components = []
-            for i in range(num_freq):   # indices 0..num_freq-1 as in the filter
+            for i in range(final_num_freq):
                 freq  = float(freqs[i])
-                period = round(1.0 / freq, 1) if freq > 0 else 0.0   # DC: period = inf
+                period = round(1.0 / freq, 1) if freq > 0 else 0.0
                 c     = fft_last[i]
                 mag   = float(np.abs(c))
                 pwr   = mag ** 2
@@ -797,7 +1041,7 @@ class SpectralCycleAnalyzer:
                 'currentSignal':     current_signal,
                 'cycleStrength':     cycle_strength,
                 'windowSize':        window,
-                'numFreqKept':       num_freq,
+                'numFreqKept':       final_num_freq,
                 'thresholdPct':      threshold_pct,
             }
 

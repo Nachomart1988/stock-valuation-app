@@ -170,7 +170,7 @@ export default function CalculosTab({
   const [userWacc, setUserWacc] = useState<number | null>(null);
   const [exitMultiple, setExitMultiple] = useState<number>(() => {
     const fromKeyMetrics = keyMetricsTTM?.evToEbitda;
-    return fromKeyMetrics && fromKeyMetrics > 1 && fromKeyMetrics < 100
+    return typeof fromKeyMetrics === 'number' && isFinite(fromKeyMetrics) && fromKeyMetrics !== 0
       ? Math.round(fromKeyMetrics * 10) / 10
       : 12;
   });
@@ -365,9 +365,9 @@ export default function CalculosTab({
     // Auto-initialize exit multiple: prefer keyMetricsTTM.evToEbitda (same value as Key Metrics tab)
     if (!exitMultipleUserEdited.current) {
       const kmEvEbitda = keyMetricsTTM?.evToEbitda;
-      if (kmEvEbitda && kmEvEbitda > 1 && kmEvEbitda < 100) {
+      if (typeof kmEvEbitda === 'number' && isFinite(kmEvEbitda) && kmEvEbitda !== 0) {
         setExitMultiple(Math.round(kmEvEbitda * 10) / 10);
-      } else if (ttmEbitda > 0 && calculatedTTMMultiple > 0 && calculatedTTMMultiple < 100) {
+      } else if (ttmEbitda > 0 && isFinite(calculatedTTMMultiple) && calculatedTTMMultiple !== 0) {
         setExitMultiple(Math.round(calculatedTTMMultiple * 10) / 10);
       }
     }

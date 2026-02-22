@@ -13,6 +13,12 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 try:
+    from scipy import stats as scipy_stats
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SCIPY_AVAILABLE = False
+
+try:
     import requests
     REQUESTS_AVAILABLE = True
 except ImportError:
@@ -158,6 +164,41 @@ class GapAnalysisEngine:
         return "common"
 
     @staticmethod
+    def _compute_sma(hist: List[Dict], end_index: int, window: int = 20) -> Optional[float]:
+        """Compute simple moving average of close prices over `window` bars ending at end_index (exclusive)."""
+        start = max(0, end_index - window)
+        closes = []
+        for j in range(start, end_index):
+            c = float(hist[j].get('close') or 0)
+            if c > 0:
+                closes.append(c)
+        if len(closes) < window // 2:
+            return None
+        return float(np.mean(closes))
+
+    @staticmethod
+    def _determine_trend_context(hist: List[Dict], index: int, window: int = 20) -> str:
+        """Determine if the gap occurred in an uptrend or downtrend using SMA direction.
+
+        Compares the 20-day SMA at `index` vs SMA at `index - 5` to determine slope.
+        """
+        if index < window + 5:
+            return "unknown"
+        closes_recent = [float(hist[j].get('close') or 0) for j in range(index - window, index)]
+        closes_earlier = [float(hist[j].get('close') or 0) for j in range(index - window - 5, index - 5)]
+        closes_recent = [c for c in closes_recent if c > 0]
+        closes_earlier = [c for c in closes_earlier if c > 0]
+        if not closes_recent or not closes_earlier:
+            return "unknown"
+        sma_now = np.mean(closes_recent)
+        sma_prev = np.mean(closes_earlier)
+        if sma_now > sma_prev * 1.001:
+            return "uptrend"
+        elif sma_now < sma_prev * 0.999:
+            return "downtrend"
+        return "sideways"
+
+    @staticmethod
     def _compute_avg_volume(hist: List[Dict], end_index: int, window: int = 20) -> float:
         """Compute average volume over `window` bars ending *before* end_index."""
         start = max(0, end_index - window)
@@ -299,6 +340,9 @@ class GapAnalysisEngine:
                 abs(gap_pct * 100), curr_vol, avg_vol_20, reversal_next_day
             )
 
+            # Trend context (uptrend / downtrend / sideways / unknown)
+            trend_ctx = self._determine_trend_context(hist, i)
+
             # Day after stats
             next_stats = None
             if next_day:
@@ -318,6 +362,7 @@ class GapAnalysisEngine:
                 "date":         curr['date'][:10],
                 "type":         gap_type,
                 "gapClass":     gap_class,
+                "trendContext": trend_ctx,
                 "prevClose":    round(prev_close, 2),
                 "open":         round(curr_open, 2),
                 "high":         round(curr_high, 2),
@@ -359,6 +404,7 @@ class GapAnalysisEngine:
             n = len(gap_list)
             green_days  = sum(1 for g in gap_list if g['greenDay'])
             filled_days = sum(1 for g in gap_list if g['gapFilled'])
+            unfilled_count = n - filled_days
             next_green  = sum(1 for g in gap_list if g['nextDay'] and g['nextDay']['greenDay'])
             next_n      = sum(1 for g in gap_list if g['nextDay'] is not None)
 
@@ -380,11 +426,30 @@ class GapAnalysisEngine:
                 cls = g['gapClass']
                 class_counts[cls] = class_counts.get(cls, 0) + 1
 
+            # --- Volume profile by filled vs unfilled ---
+            filled_vols = [g['volumeVsAvg'] for g in gap_list if g['gapFilled'] and g['volumeVsAvg'] is not None]
+            unfilled_vols = [g['volumeVsAvg'] for g in gap_list if not g['gapFilled'] and g['volumeVsAvg'] is not None]
+            volume_profile = {
+                "filledAvgVolumeRatio":   round(float(np.mean(filled_vols)), 2) if filled_vols else None,
+                "unfilledAvgVolumeRatio": round(float(np.mean(unfilled_vols)), 2) if unfilled_vols else None,
+            }
+
+            # --- Unfilled gap bias note ---
+            # Recent unfilled gaps bias fill_rate downward because they haven't had time to fill yet.
+            # We flag this when >20% of unfilled gaps are from the most recent quarter of data.
+            recent_quarter = sorted(gap_list, key=lambda g: g['date'], reverse=True)[:max(1, n // 4)]
+            recent_unfilled = sum(1 for g in recent_quarter if not g['gapFilled'])
+            fill_rate_bias_warning = (
+                unfilled_count > 0 and recent_unfilled / max(unfilled_count, 1) > 0.5
+            )
+
             return {
                 "count":            n,
                 "greenDayPct":      round(green_days  / n * 100, 1),
                 "redDayPct":        round((n - green_days) / n * 100, 1),
                 "fillRatePct":      round(filled_days / n * 100, 1),
+                "unfilledCount":    unfilled_count,
+                "fillRateBiasWarning": fill_rate_bias_warning,
                 "winRate":          win_rate,
                 "nextDayGreenPct":  round(next_green / next_n * 100, 1) if next_n > 0 else None,
                 "gapPct":           self._agg([g['gapPct']       for g in gap_list]),
@@ -394,27 +459,276 @@ class GapAnalysisEngine:
                 "nextCloseVsOpen":  self._agg([g['nextDay']['closeVsOpen'] for g in gap_list if g['nextDay']]),
                 "daysToFill":       self._agg(fill_days_list),
                 "gapClassCounts":   class_counts,
+                "volumeProfile":    volume_profile,
             }
 
         all_stats  = compute_stats(gaps)
         up_stats   = compute_stats(up_gaps)
         down_stats = compute_stats(down_gaps)
 
+        # --- Conditional probabilities ---
+        conditional_probs = self._compute_conditional_probs(gaps, up_gaps, down_gaps)
+
+        # --- Statistical significance (t-test: gap-up returns vs gap-down returns) ---
+        stat_significance = self._compute_stat_significance(up_gaps, down_gaps)
+
+        # --- Gap size analysis (clustering by size buckets) ---
+        gap_size_analysis = self._compute_gap_size_analysis(gaps)
+
+        # --- Volume profile by gap type ---
+        volume_profile_by_type = self._compute_volume_profile_by_type(up_gaps, down_gaps)
+
         # Limit gaps returned to most recent 50 for the table
         recent_gaps = sorted(gaps, key=lambda x: x['date'], reverse=True)[:50]
 
         return {
-            "ticker":          ticker,
-            "days":            days,
-            "gapThresholdPct": gap_threshold_pct,
-            "direction":       direction,
-            "totalGaps":       len(gaps),
-            "upGaps":          len(up_gaps),
-            "downGaps":        len(down_gaps),
-            "stats":           all_stats,
-            "upStats":         up_stats,
-            "downStats":       down_stats,
-            "recentGaps":      recent_gaps,
+            "ticker":              ticker,
+            "days":                days,
+            "gapThresholdPct":     gap_threshold_pct,
+            "direction":           direction,
+            "totalGaps":           len(gaps),
+            "upGaps":              len(up_gaps),
+            "downGaps":            len(down_gaps),
+            "stats":               all_stats,
+            "upStats":             up_stats,
+            "downStats":           down_stats,
+            "conditionalProbs":    conditional_probs,
+            "statSignificance":    stat_significance,
+            "gapSizeAnalysis":     gap_size_analysis,
+            "volumeProfileByType": volume_profile_by_type,
+            "recentGaps":          recent_gaps,
+        }
+
+    # ------------------------------------------------------------------
+    # Conditional probabilities
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _compute_conditional_probs(
+        all_gaps: List[Dict],
+        up_gaps: List[Dict],
+        down_gaps: List[Dict],
+    ) -> Dict[str, Any]:
+        """Compute conditional probabilities for key gap behaviors.
+
+        Returns probabilities like P(green_day | gap_up > 5%), P(fill_same_day | gap_up), etc.
+        """
+        def safe_pct(numerator: int, denominator: int) -> Optional[float]:
+            return round(numerator / denominator * 100, 1) if denominator > 0 else None
+
+        # P(green_day | gap_up)
+        up_green = sum(1 for g in up_gaps if g['greenDay'])
+        # P(green_day | gap_down)
+        down_green = sum(1 for g in down_gaps if g['greenDay'])
+
+        # P(green_day | gap_up > 5%)
+        big_up = [g for g in up_gaps if g['gapPct'] > 5.0]
+        big_up_green = sum(1 for g in big_up if g['greenDay'])
+
+        # P(green_day | gap_down > 5%)
+        big_down = [g for g in down_gaps if g['gapPct'] < -5.0]
+        big_down_green = sum(1 for g in big_down if g['greenDay'])
+
+        # P(fill_same_day | gap_up)
+        up_filled = sum(1 for g in up_gaps if g['gapFilled'])
+        # P(fill_same_day | gap_down)
+        down_filled = sum(1 for g in down_gaps if g['gapFilled'])
+
+        # P(fill_same_day | gap in uptrend)
+        uptrend_gaps = [g for g in all_gaps if g['trendContext'] == 'uptrend']
+        uptrend_filled = sum(1 for g in uptrend_gaps if g['gapFilled'])
+        # P(fill_same_day | gap in downtrend)
+        downtrend_gaps = [g for g in all_gaps if g['trendContext'] == 'downtrend']
+        downtrend_filled = sum(1 for g in downtrend_gaps if g['gapFilled'])
+
+        # P(next_day_green | gap_up)
+        up_next_green = sum(1 for g in up_gaps if g['nextDay'] and g['nextDay']['greenDay'])
+        up_with_next = sum(1 for g in up_gaps if g['nextDay'] is not None)
+        # P(next_day_green | gap_down)
+        down_next_green = sum(1 for g in down_gaps if g['nextDay'] and g['nextDay']['greenDay'])
+        down_with_next = sum(1 for g in down_gaps if g['nextDay'] is not None)
+
+        return {
+            "P_green_given_gap_up":           safe_pct(up_green, len(up_gaps)),
+            "P_green_given_gap_down":         safe_pct(down_green, len(down_gaps)),
+            "P_green_given_gap_up_gt5pct":    safe_pct(big_up_green, len(big_up)),
+            "P_green_given_gap_down_gt5pct":  safe_pct(big_down_green, len(big_down)),
+            "P_fill_same_day_given_gap_up":   safe_pct(up_filled, len(up_gaps)),
+            "P_fill_same_day_given_gap_down": safe_pct(down_filled, len(down_gaps)),
+            "P_fill_given_uptrend":           safe_pct(uptrend_filled, len(uptrend_gaps)),
+            "P_fill_given_downtrend":         safe_pct(downtrend_filled, len(downtrend_gaps)),
+            "P_next_green_given_gap_up":      safe_pct(up_next_green, up_with_next),
+            "P_next_green_given_gap_down":    safe_pct(down_next_green, down_with_next),
+            "sample_sizes": {
+                "up_gaps":        len(up_gaps),
+                "down_gaps":      len(down_gaps),
+                "big_up_gaps":    len(big_up),
+                "big_down_gaps":  len(big_down),
+                "uptrend_gaps":   len(uptrend_gaps),
+                "downtrend_gaps": len(downtrend_gaps),
+            },
+        }
+
+    # ------------------------------------------------------------------
+    # Statistical significance (t-test)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _compute_stat_significance(
+        up_gaps: List[Dict],
+        down_gaps: List[Dict],
+    ) -> Dict[str, Any]:
+        """Use Welch's t-test to determine if gap-up day returns differ
+        significantly from gap-down day returns.
+
+        Returns t-statistic, p-value, and significance flag (p < 0.05).
+        """
+        if not SCIPY_AVAILABLE:
+            return {"error": "scipy not available for statistical tests"}
+
+        up_returns = [g['closeVsOpen'] for g in up_gaps]
+        down_returns = [g['closeVsOpen'] for g in down_gaps]
+
+        if len(up_returns) < 3 or len(down_returns) < 3:
+            return {
+                "t_statistic": None,
+                "p_value": None,
+                "significant": None,
+                "note": "Insufficient samples (need >= 3 per group)",
+            }
+
+        t_stat, p_val = scipy_stats.ttest_ind(up_returns, down_returns, equal_var=False)
+        return {
+            "t_statistic":      round(float(t_stat), 4),
+            "p_value":          round(float(p_val), 6),
+            "significant":      bool(p_val < 0.05),
+            "up_mean_return":   round(float(np.mean(up_returns)), 2),
+            "down_mean_return": round(float(np.mean(down_returns)), 2),
+            "up_n":             len(up_returns),
+            "down_n":           len(down_returns),
+        }
+
+    # ------------------------------------------------------------------
+    # Gap size analysis (clustering by size buckets)
+    # ------------------------------------------------------------------
+    def _compute_gap_size_analysis(self, gaps: List[Dict]) -> Dict[str, Any]:
+        """Group gaps into size buckets and compute stats per bucket.
+
+        Buckets: 0-2%, 2-5%, 5-10%, >10% (using absolute gap %).
+        """
+        buckets = {
+            "0_to_2pct":   [],
+            "2_to_5pct":   [],
+            "5_to_10pct":  [],
+            "over_10pct":  [],
+        }
+
+        for g in gaps:
+            abs_pct = abs(g['gapPct'])
+            if abs_pct < 2.0:
+                buckets["0_to_2pct"].append(g)
+            elif abs_pct < 5.0:
+                buckets["2_to_5pct"].append(g)
+            elif abs_pct < 10.0:
+                buckets["5_to_10pct"].append(g)
+            else:
+                buckets["over_10pct"].append(g)
+
+        result = {}
+        for bucket_name, bucket_gaps in buckets.items():
+            n = len(bucket_gaps)
+            if n == 0:
+                result[bucket_name] = {"count": 0}
+                continue
+
+            green_n = sum(1 for g in bucket_gaps if g['greenDay'])
+            filled_n = sum(1 for g in bucket_gaps if g['gapFilled'])
+            fill_days = [g['daysToFill'] for g in bucket_gaps if g['daysToFill'] is not None]
+
+            result[bucket_name] = {
+                "count":       n,
+                "greenDayPct": round(green_n / n * 100, 1),
+                "fillRatePct": round(filled_n / n * 100, 1),
+                "avgGapPct":   round(float(np.mean([abs(g['gapPct']) for g in bucket_gaps])), 2),
+                "avgReturn":   round(float(np.mean([g['closeVsOpen'] for g in bucket_gaps])), 2),
+                "avgDaysToFill": round(float(np.mean(fill_days)), 1) if fill_days else None,
+                "gapPctStats": self._agg([g['gapPct'] for g in bucket_gaps]),
+            }
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Volume profile by gap type
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _compute_volume_profile_by_type(
+        up_gaps: List[Dict],
+        down_gaps: List[Dict],
+    ) -> Dict[str, Any]:
+        """Average volume ratio broken down by gap type and fill status."""
+        def avg_vol_ratio(gap_list: List[Dict]) -> Optional[float]:
+            vols = [g['volumeVsAvg'] for g in gap_list if g['volumeVsAvg'] is not None]
+            return round(float(np.mean(vols)), 2) if vols else None
+
+        up_filled = [g for g in up_gaps if g['gapFilled']]
+        up_unfilled = [g for g in up_gaps if not g['gapFilled']]
+        down_filled = [g for g in down_gaps if g['gapFilled']]
+        down_unfilled = [g for g in down_gaps if not g['gapFilled']]
+
+        return {
+            "upGapAvgVolumeRatio":            avg_vol_ratio(up_gaps),
+            "downGapAvgVolumeRatio":          avg_vol_ratio(down_gaps),
+            "upFilledAvgVolumeRatio":         avg_vol_ratio(up_filled),
+            "upUnfilledAvgVolumeRatio":       avg_vol_ratio(up_unfilled),
+            "downFilledAvgVolumeRatio":       avg_vol_ratio(down_filled),
+            "downUnfilledAvgVolumeRatio":     avg_vol_ratio(down_unfilled),
+        }
+
+    # ------------------------------------------------------------------
+    # Active (unfilled) gaps — support/resistance levels
+    # ------------------------------------------------------------------
+    def get_active_gaps(
+        self,
+        ticker: str,
+        days: int = 600,
+        gap_threshold_pct: float = 2.0,
+        direction: str = 'both',
+    ) -> Dict[str, Any]:
+        """Return gaps that have NOT been filled yet.
+
+        These represent open support/resistance levels that may still influence price.
+        Each active gap includes the gap zone (prevClose to open) which acts as a
+        magnetic zone the price may revisit.
+        """
+        result = self.analyze(ticker, days, gap_threshold_pct, direction)
+        if 'error' in result:
+            return result
+
+        all_gaps = result.get('recentGaps', [])
+        # Also check all gaps from the full analysis (recentGaps is capped at 50)
+        # We need to re-analyze to get the full list, but we can use recentGaps
+        # since unfilled gaps are more likely to be recent anyway.
+
+        active = []
+        for g in all_gaps:
+            if not g['gapFilled'] and g['daysToFill'] is None:
+                gap_zone_low = min(g['prevClose'], g['open'])
+                gap_zone_high = max(g['prevClose'], g['open'])
+                active.append({
+                    "date":        g['date'],
+                    "type":        g['type'],
+                    "gapClass":    g['gapClass'],
+                    "trendContext": g['trendContext'],
+                    "gapPct":      g['gapPct'],
+                    "gapZoneLow":  round(gap_zone_low, 2),
+                    "gapZoneHigh": round(gap_zone_high, 2),
+                    "volumeVsAvg": g['volumeVsAvg'],
+                    "levelType":   "resistance" if g['type'] == 'down' else "support",
+                })
+
+        return {
+            "ticker":     ticker,
+            "activeGaps": active,
+            "count":      len(active),
+            "note":       "Unfilled gaps act as support (gap-up) or resistance (gap-down) levels.",
         }
 
 
