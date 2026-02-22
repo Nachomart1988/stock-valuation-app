@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 # backend/spectral_cycle_analyzer.py
 # FFT Spectral Cycle Analysis Engine
 # Detects dominant market cycles using Fast Fourier Transform
 # Generates trading signals based on cycle phase, momentum, and volatility
 
+import logging
+import time
 import numpy as np
 from scipy import signal as scipy_signal
 from typing import Dict, List, Tuple, Optional, Any
@@ -10,6 +14,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import requests
 import traceback
+
+logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -53,6 +59,16 @@ class HistoricalDataFetcher:
         self.api_key = api_key
         self._cache: Dict[str, Tuple[List[Dict], float]] = {}
         self.cache_ttl = 300  # 5 minutes
+        self._session = requests.Session()
+        self._max_retries = 3
+        self._retry_delay = 1.0  # seconds
+
+    def invalidate_cache(self, ticker: str) -> None:
+        """Remove cached data for a specific ticker."""
+        keys_to_remove = [k for k in self._cache if k == ticker or k.endswith(f'_{ticker}__')]
+        for key in keys_to_remove:
+            del self._cache[key]
+            logger.info("Cache invalidated for key: %s", key)
 
     def fetch(self, ticker: str, max_bars: int = 600) -> List[Dict]:
         """
@@ -66,46 +82,59 @@ class HistoricalDataFetcher:
         if ticker in self._cache:
             data, cached_at = self._cache[ticker]
             if now - cached_at < self.cache_ttl:
-                print(f"[HistoricalFetcher] Cache hit for {ticker} ({len(data)} bars)")
+                logger.info("Cache hit for %s (%d bars)", ticker, len(data))
                 return data[-max_bars:] if len(data) > max_bars else data
 
-        try:
-            url = (
-                f"https://financialmodelingprep.com/stable/historical-price-eod/full"
-                f"?symbol={ticker}&apikey={self.api_key}"
-            )
-            print(f"[HistoricalFetcher] Fetching historical data for {ticker}...")
-            response = requests.get(url, timeout=15)
-            response.raise_for_status()
+        url = (
+            f"https://financialmodelingprep.com/stable/historical-price-eod/full"
+            f"?symbol={ticker}&apikey={self.api_key}"
+        )
 
-            raw = response.json()
-            historical = raw.get('historical', [])
+        # Retry loop
+        for attempt in range(1, self._max_retries + 1):
+            try:
+                logger.info("Fetching historical data for %s (attempt %d/%d)...", ticker, attempt, self._max_retries)
+                response = self._session.get(url, timeout=15)
+                response.raise_for_status()
 
-            if not historical:
-                print(f"[HistoricalFetcher] No historical data returned for {ticker}")
-                return []
+                raw = response.json()
+                historical = raw.get('historical', [])
 
-            # FMP returns newest first — reverse to oldest first
-            historical = list(reversed(historical))
+                if not historical:
+                    logger.warning("No historical data returned for %s", ticker)
+                    return []
 
-            # Trim to max_bars
-            if len(historical) > max_bars:
-                historical = historical[-max_bars:]
+                # Validate required keys in first record
+                sample = historical[0]
+                for required_key in ('close', 'high', 'low'):
+                    if required_key not in sample:
+                        logger.error("Historical data for %s missing required key '%s'", ticker, required_key)
+                        return []
 
-            # Cache
-            self._cache[ticker] = (historical, now)
-            print(f"[HistoricalFetcher] Got {len(historical)} bars for {ticker}")
-            return historical
+                # FMP returns newest first — reverse to oldest first
+                historical = list(reversed(historical))
 
-        except requests.exceptions.Timeout:
-            print(f"[HistoricalFetcher] Timeout fetching {ticker}")
-            return []
-        except requests.exceptions.RequestException as e:
-            print(f"[HistoricalFetcher] Request error for {ticker}: {e}")
-            return []
-        except Exception as e:
-            print(f"[HistoricalFetcher] Unexpected error for {ticker}: {e}")
-            return []
+                # Trim to max_bars
+                if len(historical) > max_bars:
+                    historical = historical[-max_bars:]
+
+                # Cache
+                self._cache[ticker] = (historical, now)
+                logger.info("Got %d bars for %s", len(historical), ticker)
+                return historical
+
+            except requests.exceptions.Timeout:
+                logger.warning("Timeout fetching %s (attempt %d/%d)", ticker, attempt, self._max_retries)
+            except requests.exceptions.RequestException as e:
+                logger.warning("Request error for %s (attempt %d/%d): %s", ticker, attempt, self._max_retries, e)
+            except Exception as e:
+                logger.error("Unexpected error for %s (attempt %d/%d): %s", ticker, attempt, self._max_retries, e)
+
+            if attempt < self._max_retries:
+                time.sleep(self._retry_delay)
+
+        logger.error("All %d fetch attempts failed for %s", self._max_retries, ticker)
+        return []
 
     def fetch_sector_industry_data(self) -> Dict[str, Any]:
         """
@@ -118,7 +147,7 @@ class HistoricalDataFetcher:
         if cache_key in self._cache:
             data, cached_at = self._cache[cache_key]
             if now - cached_at < self.cache_ttl:
-                print(f"[HistoricalFetcher] Cache hit for sector/industry data")
+                logger.info("Cache hit for sector/industry data")
                 return data
 
         result = {
@@ -138,16 +167,16 @@ class HistoricalDataFetcher:
         for key, endpoint in endpoints.items():
             try:
                 url = f"https://financialmodelingprep.com/stable/{endpoint}?apikey={self.api_key}"
-                response = requests.get(url, timeout=10)
+                response = self._session.get(url, timeout=10)
                 if response.ok:
                     data = response.json()
                     if isinstance(data, list):
                         result[key] = data
-                        print(f"[HistoricalFetcher] Got {len(data)} items for {key}")
+                        logger.info("Got %d items for %s", len(data), key)
                     else:
-                        print(f"[HistoricalFetcher] Unexpected format for {key}: {type(data)}")
+                        logger.warning("Unexpected format for %s: %s", key, type(data))
             except Exception as e:
-                print(f"[HistoricalFetcher] Error fetching {key}: {e}")
+                logger.error("Error fetching %s: %s", key, e)
 
         self._cache[cache_key] = (result, now)
         return result
@@ -164,15 +193,15 @@ class HistoricalDataFetcher:
 
         try:
             url = f"https://financialmodelingprep.com/stable/profile?symbol={ticker}&apikey={self.api_key}"
-            response = requests.get(url, timeout=10)
+            response = self._session.get(url, timeout=10)
             if response.ok:
                 data = response.json()
                 profile = data[0] if isinstance(data, list) and len(data) > 0 else {}
                 self._cache[cache_key] = (profile, now)
-                print(f"[HistoricalFetcher] Got profile for {ticker}: sector={profile.get('sector')}, industry={profile.get('industry')}")
+                logger.info("Got profile for %s: sector=%s, industry=%s", ticker, profile.get('sector'), profile.get('industry'))
                 return profile
         except Exception as e:
-            print(f"[HistoricalFetcher] Error fetching profile for {ticker}: {e}")
+            logger.error("Error fetching profile for %s: %s", ticker, e)
 
         return {}
 
@@ -198,7 +227,8 @@ class SpectralCycleAnalyzer:
     """
 
     def __init__(self, window_size: int = 512):
-        self.window_size = window_size
+        # Snap to nearest power-of-2 for faster FFT
+        self.window_size = 2 ** int(np.log2(window_size)) if window_size > 0 else 512
         self.min_window = 256
         self.min_cycle_days = 10
         self.max_cycle_days = 200
@@ -209,11 +239,18 @@ class SpectralCycleAnalyzer:
         try:
             return self._run_analysis(historical_data)
         except Exception as e:
-            traceback.print_exc()
-            print(f"[SpectralAnalyzer] Error: {e}")
+            logger.error("SpectralAnalyzer error: %s", e, exc_info=True)
             return self._neutral_result(f"Analysis error: {str(e)[:80]}")
 
     def _run_analysis(self, historical_data: List[Dict]) -> SpectralCycleResult:
+        # ── Input validation ──
+        if not historical_data:
+            return self._neutral_result("No historical data provided")
+
+        sample = historical_data[0]
+        if 'close' not in sample:
+            return self._neutral_result("Historical data missing required 'close' key")
+
         # ── Step 1: Extract prices ──
         closes = np.array([float(h['close']) for h in historical_data], dtype=np.float64)
         highs = np.array([float(h.get('high', h['close'])) for h in historical_data], dtype=np.float64)
@@ -268,9 +305,15 @@ class SpectralCycleAnalyzer:
 
         total_power = np.sum(valid_amplitudes ** 2)
 
-        # Find peaks in amplitude spectrum
+        # Find peaks in amplitude spectrum using scipy.signal.find_peaks with prominence
         if len(valid_amplitudes) >= 5:
-            peak_indices = scipy_signal.argrelextrema(valid_amplitudes, np.greater, order=3)[0]
+            # Use find_peaks with prominence for better peak detection
+            min_prominence = np.std(valid_amplitudes) * 0.3
+            peak_indices, peak_props = scipy_signal.find_peaks(
+                valid_amplitudes,
+                prominence=min_prominence,
+                distance=3,
+            )
         else:
             peak_indices = np.arange(len(valid_amplitudes))
 
@@ -456,8 +499,12 @@ class SpectralCycleAnalyzer:
         avg_gain = np.mean(gains[-period:])
         avg_loss = np.mean(losses[-period:])
 
-        if avg_loss == 0:
-            return 100.0
+        if avg_loss < 1e-12:
+            # No losses: if there are gains return 100, otherwise neutral
+            return 100.0 if avg_gain > 1e-12 else 50.0
+        if avg_gain < 1e-12:
+            return 0.0
+
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
         return float(rsi)
@@ -611,9 +658,9 @@ class SpectralCycleAnalyzer:
           2. scipy.signal.detrend(prices, type='linear')  — remove linear trend
           3. trend = prices - detrended  — recover trend for last-bar add-back
           4. np.hanning(window) * detrended  — Hann window (spectral leakage)
-          5. scipy.fft.rfft(windowed)  → fft_complex (complex vector, length=window/2+1)
+          5. scipy.fft.rfft(windowed)  -> fft_complex (complex vector, length=window/2+1)
           6. fft_filtered[:num_freq] = fft_complex[:num_freq]  — low-pass (keep DC+K freqs)
-          7. scipy.fft.irfft(fft_filtered)  → reconstructed detrended signal
+          7. scipy.fft.irfft(fft_filtered)  -> reconstructed detrended signal
           8. fft_signal[i] = reconstructed[-1] + trend[-1]  — add trend back
 
         Position signal:
@@ -658,14 +705,14 @@ class SpectralCycleAnalyzer:
                 hann     = np.hanning(window)
                 windowed = detrended * hann
 
-                # 4. FFT → complex vector (length = window//2 + 1)
-                fft_complex = scipy_rfft(windowed)   # ← complex numbers
+                # 4. FFT -> complex vector (length = window//2 + 1)
+                fft_complex = scipy_rfft(windowed)   # <- complex numbers
 
                 # 5. Low-pass filter: keep first num_freq coefficients (incl. DC=0)
                 fft_filtered = np.zeros_like(fft_complex, dtype=complex)
                 fft_filtered[:num_freq] = fft_complex[:num_freq]
 
-                # 6. Inverse FFT → reconstructed detrended signal
+                # 6. Inverse FFT -> reconstructed detrended signal
                 reconstructed_detrended = scipy_irfft(fft_filtered)
 
                 # 7. Add trend back (last bar value)
@@ -728,7 +775,7 @@ class SpectralCycleAnalyzer:
             complex_components = []
             for i in range(num_freq):   # indices 0..num_freq-1 as in the filter
                 freq  = float(freqs[i])
-                period = round(1.0 / freq, 1) if freq > 0 else 0.0   # DC: period = ∞
+                period = round(1.0 / freq, 1) if freq > 0 else 0.0   # DC: period = inf
                 c     = fft_last[i]
                 mag   = float(np.abs(c))
                 pwr   = mag ** 2
@@ -755,6 +802,5 @@ class SpectralCycleAnalyzer:
             }
 
         except Exception as e:
-            traceback.print_exc()
-            print(f"[FFT Rolling] Error: {e}")
+            logger.error("FFT Rolling error: %s", e, exc_info=True)
             return {'error': str(e)}

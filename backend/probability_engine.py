@@ -1,23 +1,30 @@
+from __future__ import annotations
+
 # backend/probability_engine.py
 # CRR Binomial Tree Probability Engine
 # Calculates the probability of a stock reaching a target price
 # using Cox-Ross-Rubinstein binomial model with historical & implied volatility
 
+import logging
+import traceback
+from datetime import datetime, timedelta
+from math import exp, log, sqrt
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 from scipy.special import gammaln
-from typing import Dict, List, Optional, Any, Tuple
-from math import exp, sqrt, log
-from datetime import datetime, timedelta
-import traceback
+from scipy.stats import norm
+
+logger = logging.getLogger("ProbabilityEngine")
 
 # Try to import yfinance for implied volatility
 try:
     import yfinance as yf
     YFINANCE_AVAILABLE = True
-    print("[ProbabilityEngine] yfinance available — implied volatility enabled")
+    logger.info("yfinance available — implied volatility enabled")
 except ImportError:
     YFINANCE_AVAILABLE = False
-    print("[ProbabilityEngine] yfinance not available — using historical volatility only")
+    logger.warning("yfinance not available — using historical volatility only")
 
 
 class BinomialTreeEngine:
@@ -44,6 +51,7 @@ class BinomialTreeEngine:
     def __init__(self):
         self.max_steps = 500  # Maximum tree depth
         self.data_fetcher = None  # Injected from spectral_cycle_analyzer
+        self._hist_vol_cache: Dict[str, float | None] = {}
 
     def calculate(
         self,
@@ -56,6 +64,7 @@ class BinomialTreeEngine:
         steps: Optional[int] = None,
         use_implied_vol: bool = True,
         fmp_api_key: Optional[str] = None,
+        vol_blend_weight: float = 0.6,
     ) -> Dict[str, Any]:
         """
         Main calculation method.
@@ -70,15 +79,37 @@ class BinomialTreeEngine:
             steps: Number of binomial steps (default = min(days, 252))
             use_implied_vol: Whether to try fetching IV from Yahoo
             fmp_api_key: FMP API key for historical data
+            vol_blend_weight: Weight for implied vol when blending
+                (0.0 = pure historical, 1.0 = pure implied, default 0.6)
         """
         try:
-            print(f"[ProbabilityEngine] Calculating for {ticker}: "
-                  f"S={current_price}, T={target_price}, r={risk_free_rate}, "
-                  f"DY={dividend_yield}, days={days}")
+            # ── Input validation ──
+            if current_price <= 0:
+                raise ValueError(f"current_price must be > 0, got {current_price}")
+            if target_price <= 0:
+                raise ValueError(f"target_price must be > 0, got {target_price}")
+            if days <= 0:
+                raise ValueError(f"days must be > 0, got {days}")
+            if not fmp_api_key:
+                import os
+                fmp_api_key = os.environ.get("FMP_API_KEY")
+                if not fmp_api_key:
+                    logger.warning("No FMP API key provided and FMP_API_KEY env var not set")
+
+            logger.info(
+                "Calculating for %s: S=%s, T=%s, r=%s, DY=%s, days=%s",
+                ticker, current_price, target_price, risk_free_rate,
+                dividend_yield, days,
+            )
 
             # Determine number of steps
             if steps is None:
                 steps = min(days, 252)
+            if steps > self.max_steps:
+                logger.warning(
+                    "Requested steps=%d exceeds max_steps=%d — clamping",
+                    steps, self.max_steps,
+                )
             steps = max(10, min(steps, self.max_steps))
 
             # ── Calculate Historical Volatility ──
@@ -90,8 +121,13 @@ class BinomialTreeEngine:
             if use_implied_vol and YFINANCE_AVAILABLE:
                 implied_vol, options_chain = self._fetch_implied_volatility(ticker, days)
 
-            # Choose volatility to use
-            if implied_vol and implied_vol > 0:
+            # ── Choose / blend volatility ──
+            if implied_vol and implied_vol > 0 and hist_vol and hist_vol > 0:
+                # Blend: default 60% implied + 40% historical
+                w = max(0.0, min(1.0, vol_blend_weight))
+                vol_used = w * implied_vol + (1.0 - w) * hist_vol
+                vol_source = f"blended ({w:.0%} implied + {1-w:.0%} historical)"
+            elif implied_vol and implied_vol > 0:
                 vol_used = implied_vol
                 vol_source = "implied"
             elif hist_vol and hist_vol > 0:
@@ -101,8 +137,10 @@ class BinomialTreeEngine:
                 vol_used = 0.30  # Default 30% if nothing available
                 vol_source = "default"
 
-            print(f"[ProbabilityEngine] Volatility: hist={hist_vol}, implied={implied_vol}, "
-                  f"using={vol_used} ({vol_source})")
+            logger.info(
+                "Volatility: hist=%s, implied=%s, using=%s (%s)",
+                hist_vol, implied_vol, vol_used, vol_source,
+            )
 
             # ── CRR Parameters ──
             T = days / 365.0  # Total time in years
@@ -117,7 +155,7 @@ class BinomialTreeEngine:
 
             # Validate probabilities
             if p_up < 0 or p_up > 1:
-                print(f"[ProbabilityEngine] Warning: p_up={p_up} out of range, clamping")
+                logger.warning("p_up=%s out of [0,1] range — clamping", p_up)
                 p_up = max(0.01, min(0.99, p_up))
                 p_down = 1.0 - p_up
 
@@ -148,10 +186,12 @@ class BinomialTreeEngine:
             prob_sum_raw = float(probs.sum())
             probs = probs / prob_sum_raw
 
-            print(f"[ProbabilityEngine] Probability check: raw_sum={prob_sum_raw:.10f} → "
-                  f"normalized to 1.0 ({steps+1} terminal nodes)")
+            logger.info(
+                "Probability check: raw_sum=%.10f -> normalized to 1.0 (%d terminal nodes)",
+                prob_sum_raw, steps + 1,
+            )
 
-            # ── Target Probability ──
+            # ── Target Probability (CRR) ──
             if target_price >= current_price:
                 # Bullish: probability of price going UP to / above target
                 mask = terminal_prices >= target_price
@@ -161,6 +201,12 @@ class BinomialTreeEngine:
 
             probability    = float(np.sum(probs[mask]))
             expected_price = float(np.dot(terminal_prices, probs))
+
+            # ── Black-Scholes sanity-check probability ──
+            bs_probability = self._black_scholes_probability(
+                current_price, target_price, risk_free_rate,
+                dividend_yield, vol_used, T,
+            )
 
             # ── Price Distribution for Chart ──
             price_distribution = [
@@ -186,6 +232,7 @@ class BinomialTreeEngine:
 
             result = {
                 "probability":          round(probability * 100, 2),
+                "bsProbability":        round(bs_probability * 100, 2),
                 "upFactor":             round(u, 6),
                 "downFactor":           round(d, 6),
                 "upProbability":        round(p_up * 100, 4),
@@ -207,30 +254,67 @@ class BinomialTreeEngine:
                 "targetPrice":          target_price,
             }
 
-            print(f"[ProbabilityEngine] Result: probability={result['probability']}%, "
-                  f"expected={result['expectedPrice']}, u={result['upFactor']}, d={result['downFactor']}, "
-                  f"prob_sum={result['probSum']}%")
+            logger.info(
+                "Result: CRR probability=%.2f%%, B-S probability=%.2f%%, "
+                "expected=%s, u=%s, d=%s, prob_sum=%.4f%%",
+                result["probability"], result["bsProbability"],
+                result["expectedPrice"], result["upFactor"],
+                result["downFactor"], result["probSum"],
+            )
 
             return result
 
         except Exception as e:
-            traceback.print_exc()
-            print(f"[ProbabilityEngine] Error: {e}")
+            logger.error("Error in calculate(): %s", e, exc_info=True)
             return {
                 "error": str(e),
                 "probability": None,
             }
 
+    # ── Black-Scholes closed-form probability ──────────────────────────
+
+    @staticmethod
+    def _black_scholes_probability(
+        S: float,
+        K: float,
+        r: float,
+        q: float,
+        sigma: float,
+        T: float,
+    ) -> float:
+        """
+        Risk-neutral probability that S_T >= K (or S_T <= K when K < S)
+        under geometric Brownian motion using the Black-Scholes framework.
+
+        P(S_T >= K) = N(d2)  where d2 = [ln(S/K) + (r - q - σ²/2)T] / (σ√T)
+        """
+        if T <= 0 or sigma <= 0:
+            return 0.0
+        d2 = (log(S / K) + (r - q - 0.5 * sigma ** 2) * T) / (sigma * sqrt(T))
+        if K >= S:
+            # Bullish target: probability price ends >= K
+            return float(norm.cdf(d2))
+        else:
+            # Bearish target: probability price ends <= K
+            return float(norm.cdf(-d2))
+
+    # ── Historical volatility with retry + cache ──────────────────────
+
     def _calculate_historical_volatility(
         self, ticker: str, fmp_api_key: Optional[str]
     ) -> Optional[float]:
         """Calculate annualized historical volatility from daily returns."""
-        if not fmp_api_key:
-            import os
-            fmp_api_key = os.environ.get('FMP_API_KEY')
+        # Check cache first
+        if ticker in self._hist_vol_cache:
+            logger.info("Historical vol cache hit for %s", ticker)
+            return self._hist_vol_cache[ticker]
 
         if not fmp_api_key:
-            print("[ProbabilityEngine] No FMP API key for historical vol")
+            import os
+            fmp_api_key = os.environ.get("FMP_API_KEY")
+
+        if not fmp_api_key:
+            logger.warning("No FMP API key for historical vol")
             return None
 
         try:
@@ -239,11 +323,27 @@ class BinomialTreeEngine:
             if not self.data_fetcher:
                 self.data_fetcher = HistoricalDataFetcher(fmp_api_key)
 
-            historical = self.data_fetcher.fetch(ticker, max_bars=300)
+            # Retry loop — up to 3 attempts
+            historical = None
+            max_retries = 3
+            for attempt in range(1, max_retries + 1):
+                try:
+                    historical = self.data_fetcher.fetch(ticker, max_bars=300)
+                    if historical:
+                        break
+                except Exception as fetch_err:
+                    logger.warning(
+                        "Fetch attempt %d/%d for %s failed: %s",
+                        attempt, max_retries, ticker, fetch_err,
+                    )
+                    if attempt == max_retries:
+                        raise
+
             if not historical or len(historical) < 30:
+                self._hist_vol_cache[ticker] = None
                 return None
 
-            closes = np.array([float(h['close']) for h in historical])
+            closes = np.array([float(h["close"]) for h in historical])
 
             # Log returns
             log_returns = np.diff(np.log(closes))
@@ -252,12 +352,17 @@ class BinomialTreeEngine:
             daily_vol  = np.std(log_returns, ddof=1)
             annual_vol = daily_vol * sqrt(252)
 
-            print(f"[ProbabilityEngine] Historical vol for {ticker}: "
-                  f"{annual_vol*100:.2f}% ({len(closes)} days)")
+            logger.info(
+                "Historical vol for %s: %.2f%% (%d days)",
+                ticker, annual_vol * 100, len(closes),
+            )
+
+            # Store in cache
+            self._hist_vol_cache[ticker] = float(annual_vol)
             return float(annual_vol)
 
         except Exception as e:
-            print(f"[ProbabilityEngine] Error calculating historical vol: {e}")
+            logger.error("Error calculating historical vol: %s", e)
             return None
 
     def _fetch_implied_volatility(
@@ -272,16 +377,16 @@ class BinomialTreeEngine:
             expirations = stock.options
 
             if not expirations:
-                print(f"[ProbabilityEngine] No options available for {ticker}")
+                logger.info("No options available for %s", ticker)
                 return None, None
 
             # Find closest expiration to requested days
             target_date = datetime.now() + timedelta(days=days)
             closest_exp = None
-            min_diff = float('inf')
+            min_diff = float("inf")
 
             for exp_str in expirations:
-                exp_date = datetime.strptime(exp_str, '%Y-%m-%d')
+                exp_date = datetime.strptime(exp_str, "%Y-%m-%d")
                 diff = abs((exp_date - target_date).days)
                 if diff < min_diff:
                     min_diff = diff
@@ -290,8 +395,10 @@ class BinomialTreeEngine:
             if not closest_exp:
                 return None, None
 
-            print(f"[ProbabilityEngine] Using options expiration: {closest_exp} "
-                  f"(target was {target_date.strftime('%Y-%m-%d')}, diff={min_diff}d)")
+            logger.info(
+                "Using options expiration: %s (target was %s, diff=%dd)",
+                closest_exp, target_date.strftime("%Y-%m-%d"), min_diff,
+            )
 
             # Get options chain
             chain = stock.option_chain(closest_exp)
@@ -303,46 +410,49 @@ class BinomialTreeEngine:
             # Get current price for ATM detection — multiple fallbacks for after-hours
             info = stock.info
             current_price = (
-                info.get('currentPrice') or
-                info.get('regularMarketPrice') or
-                info.get('previousClose') or
-                info.get('regularMarketPreviousClose') or
-                0
+                info.get("currentPrice")
+                or info.get("regularMarketPrice")
+                or info.get("previousClose")
+                or info.get("regularMarketPreviousClose")
+                or 0
             )
 
             if current_price <= 0:
-                print(f"[ProbabilityEngine] No price available for {ticker} (after hours?), skipping IV")
+                logger.warning(
+                    "No price available for %s (after hours?), skipping IV", ticker,
+                )
                 return None, None
 
             # Find ATM option (closest strike to current price)
             calls_sorted = calls.copy()
-            calls_sorted['dist'] = abs(calls_sorted['strike'] - current_price)
-            atm = calls_sorted.nsmallest(1, 'dist').iloc[0]
+            calls_sorted["dist"] = abs(calls_sorted["strike"] - current_price)
+            atm = calls_sorted.nsmallest(1, "dist").iloc[0]
 
-            iv = float(atm.get('impliedVolatility', 0))
-            print(f"[ProbabilityEngine] ATM IV for {ticker}: {iv*100:.2f}% "
-                  f"(strike={atm['strike']}, price={current_price})")
+            iv = float(atm.get("impliedVolatility", 0))
+            logger.info(
+                "ATM IV for %s: %.2f%% (strike=%s, price=%s)",
+                ticker, iv * 100, atm["strike"], current_price,
+            )
 
             # Build options chain summary (top 10 near ATM)
-            near_atm = calls_sorted.nsmallest(10, 'dist')
-            options_summary = []
+            near_atm = calls_sorted.nsmallest(10, "dist")
+            options_summary: List[Dict[str, Any]] = []
             for _, row in near_atm.iterrows():
                 options_summary.append({
-                    "strike":           float(row['strike']),
-                    "lastPrice":        float(row.get('lastPrice', 0)),
-                    "bid":              float(row.get('bid', 0)),
-                    "ask":              float(row.get('ask', 0)),
-                    "impliedVolatility": round(float(row.get('impliedVolatility', 0)) * 100, 2),
-                    "volume":           int(row.get('volume', 0)) if not np.isnan(row.get('volume', 0)) else 0,
-                    "openInterest":     int(row.get('openInterest', 0)) if not np.isnan(row.get('openInterest', 0)) else 0,
+                    "strike":           float(row["strike"]),
+                    "lastPrice":        float(row.get("lastPrice", 0)),
+                    "bid":              float(row.get("bid", 0)),
+                    "ask":              float(row.get("ask", 0)),
+                    "impliedVolatility": round(float(row.get("impliedVolatility", 0)) * 100, 2),
+                    "volume":           int(row.get("volume", 0)) if not np.isnan(row.get("volume", 0)) else 0,
+                    "openInterest":     int(row.get("openInterest", 0)) if not np.isnan(row.get("openInterest", 0)) else 0,
                     "expiration":       closest_exp,
                 })
 
             return iv if iv > 0 else None, options_summary if options_summary else None
 
         except Exception as e:
-            print(f"[ProbabilityEngine] Error fetching IV from Yahoo: {e}")
-            traceback.print_exc()
+            logger.error("Error fetching IV from Yahoo: %s", e, exc_info=True)
             return None, None
 
     def _build_tree_preview(
@@ -363,10 +473,10 @@ class BinomialTreeEngine:
         - probability: C(step, j) · p_up^j · p_down^(step-j)  [% of paths at this step]
         - reachesTarget: whether this node's price hits the target
         """
-        tree = []
+        tree: List[List[Dict]] = []
 
         for step in range(levels + 1):
-            level = []
+            level: List[Dict] = []
             j_arr = np.arange(step + 1, dtype=np.float64)
 
             if step == 0:
@@ -404,8 +514,8 @@ class BinomialTreeEngine:
         if not distribution:
             return []
 
-        prices = [d['price']       for d in distribution]
-        probs  = [d['probability'] for d in distribution]  # already in %
+        prices = [d["price"]       for d in distribution]
+        probs  = [d["probability"] for d in distribution]  # already in %
 
         min_p = min(prices)
         max_p = max(prices)
@@ -414,7 +524,7 @@ class BinomialTreeEngine:
             return []
 
         bucket_width = (max_p - min_p) / num_buckets
-        buckets = []
+        buckets: List[Dict] = []
 
         for i in range(num_buckets):
             bucket_min    = min_p + i * bucket_width

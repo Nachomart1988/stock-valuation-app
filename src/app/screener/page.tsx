@@ -93,7 +93,11 @@ export default function ScreenerPage() {
       if (f.country) params.set('country', f.country);
       if (f.exchange) params.set('exchange', f.exchange);
 
-      const res = await fetch(`https://financialmodelingprep.com/stable/company-screener?${params.toString()}`);
+      // Try stable endpoint first, fallback to v3 if 401
+      let res = await fetch(`https://financialmodelingprep.com/stable/company-screener?${params.toString()}`);
+      if (res.status === 401 || res.status === 403) {
+        res = await fetch(`https://financialmodelingprep.com/api/v3/stock-screener?${params.toString()}`);
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setScreenerResults(Array.isArray(data) ? data : []);

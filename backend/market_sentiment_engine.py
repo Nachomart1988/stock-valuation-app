@@ -5,6 +5,9 @@
 # cross-correlation fusion with divergence detection.
 # Runs in <1s on CPU. Self-sufficient via FMP auto-fetch.
 
+from __future__ import annotations
+
+import logging
 import numpy as np
 import os
 import requests
@@ -12,13 +15,16 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+logger = logging.getLogger(__name__)
 
 try:
     import yfinance as yf
     YF_AVAILABLE = True
 except ImportError:
     YF_AVAILABLE = False
-    print("[NeuralMSE] yfinance not available — technical analysis layer disabled")
+    logger.warning("yfinance not available — technical analysis layer disabled")
 
 
 @dataclass
@@ -208,6 +214,7 @@ class NeuralReasoningMarketSentimentEngine:
         self.news_analyzer = AdvancedNewsSentimentAnalyzer()
         self._cache: Dict[str, Any] = {}
         self._cache_ttl = 300  # 5 min cache
+        self._session = requests.Session()
 
     # ====================== FMP FETCH HELPERS ======================
 
@@ -228,15 +235,15 @@ class NeuralReasoningMarketSentimentEngine:
         try:
             sep = '&' if params else ''
             url = f"https://financialmodelingprep.com/stable/{endpoint}?{params}{sep}apikey={api_key}"
-            print(f"[NeuralMSE v{self.version}] Fetching: {url[:100]}...")
-            resp = requests.get(url, timeout=12)
-            print(f"[NeuralMSE v{self.version}] Response {endpoint}: {resp.status_code}")
+            logger.debug(f"Fetching: {url[:100]}...")
+            resp = self._session.get(url, timeout=12)
+            logger.debug(f"Response {endpoint}: {resp.status_code}")
             if resp.ok:
                 data = resp.json()
                 self._cache[cache_key] = (data, datetime.now().timestamp())
                 return data
         except Exception as e:
-            print(f"[NeuralMSE] Fetch error ({endpoint}): {e}")
+            logger.warning(f"Fetch error ({endpoint}): {e}")
         return None
 
     def _fetch_v3(self, path: str, params: str = '') -> Any:
@@ -253,15 +260,15 @@ class NeuralReasoningMarketSentimentEngine:
         try:
             sep = '&' if params else ''
             url = f"https://financialmodelingprep.com/api/v3/{path}?{params}{sep}apikey={api_key}"
-            print(f"[NeuralMSE v{self.version}] Fetching v3: {url[:100]}...")
-            resp = requests.get(url, timeout=12)
-            print(f"[NeuralMSE v{self.version}] Response v3/{path}: {resp.status_code}")
+            logger.debug(f"Fetching v3: {url[:100]}...")
+            resp = self._session.get(url, timeout=12)
+            logger.debug(f"Response v3/{path}: {resp.status_code}")
             if resp.ok:
                 data = resp.json()
                 self._cache[cache_key] = (data, datetime.now().timestamp())
                 return data
         except Exception as e:
-            print(f"[NeuralMSE] v3 fetch error ({path}): {e}")
+            logger.warning(f"v3 fetch error ({path}): {e}")
         return None
 
     def _prev_trading_day(self, offset: int = 1) -> str:
@@ -329,10 +336,10 @@ class NeuralReasoningMarketSentimentEngine:
                     'low_52w': round(low_52w, 2),
                     'pct_from_high': round(pct_from_high, 1),
                 }
-                print(f"[NeuralMSE v6] yfinance {sym}: ${price:.2f} RSI={rsi:.0f}"
+                logger.info(f"[MSE v6] yfinance {sym}: ${price:.2f} RSI={rsi:.0f}"
                       + (f" vs 200DMA ${ma200:.0f}" if ma200 else ""))
             except Exception as e:
-                print(f"[NeuralMSE v6] yfinance {sym} error: {e}")
+                logger.info(f"[MSE v6] yfinance {sym} error: {e}")
 
         # ── Market Breadth Indicators ─────────────────────────────────────
         # Try multiple symbol variants — Yahoo Finance changes these periodically
@@ -366,85 +373,123 @@ class NeuralReasoningMarketSentimentEngine:
                     'trend': 'up' if ma10 and current > ma10 else 'down' if ma10 else 'neutral',
                 }
                 fetched_keys.add(key)
-                print(f"[NeuralMSE v6] Breadth {sym}: {current:.0f} (1d: {change_1d:+.0f})")
+                logger.info(f"[MSE v6] Breadth {sym}: {current:.0f} (1d: {change_1d:+.0f})")
             except Exception as e:
-                print(f"[NeuralMSE v6] Breadth {sym} error: {e}")
+                logger.info(f"[MSE v6] Breadth {sym} error: {e}")
 
         return result
 
     def _fill_missing_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Auto-fetch any missing market data from FMP API and yfinance."""
+        """Auto-fetch any missing market data from FMP API and yfinance.
+        Uses ThreadPoolExecutor to fetch independent data sources in parallel.
+        """
         filled = dict(data)
 
-        # ── Sector performance ──────────────────────────────────────────
-        if not filled.get('sectorPerformance'):
-            # Try today, then fallback to previous trading days
-            for offset in range(0, 4):
-                date_str = self._prev_trading_day(offset)
-                sectors = self._fetch_stable('sector-performance-snapshot', f'date={date_str}')
-                if sectors and isinstance(sectors, list) and len(sectors) > 0:
-                    filled['sectorPerformance'] = sectors
-                    print(f"[NeuralMSE] Got {len(sectors)} sectors for {date_str}")
-                    break
-
-        # ── Industry performance ─────────────────────────────────────────
-        if not filled.get('industryPerformance'):
-            for offset in range(0, 4):
-                date_str = self._prev_trading_day(offset)
-                industries = self._fetch_stable('industry-performance-snapshot', f'date={date_str}')
-                if industries and isinstance(industries, list) and len(industries) > 0:
-                    filled['industryPerformance'] = industries
-                    print(f"[NeuralMSE] Got {len(industries)} industries for {date_str}")
-                    break
-
-        # ── Index quotes (use /api/v3/quote/ path) ──────────────────────
-        if not filled.get('indexQuotes'):
-            symbols_str = ','.join(self.MAJOR_INDICES)
-            quotes = self._fetch_v3(f'quote/{symbols_str}')
-            if quotes and isinstance(quotes, list) and len(quotes) > 0:
-                filled['indexQuotes'] = quotes
-                print(f"[NeuralMSE] Got {len(quotes)} index quotes")
-            else:
-                # Try full-index-quotes stable endpoint
-                all_idx = self._fetch_stable('full-index-quotes')
-                if all_idx and isinstance(all_idx, list):
-                    # Filter to major indices only
-                    wanted = set(self.MAJOR_INDICES + [self.VIX_SYMBOL])
-                    filtered = [q for q in all_idx if q.get('symbol', '') in wanted]
-                    if filtered:
-                        filled['indexQuotes'] = filtered
-                        print(f"[NeuralMSE] Got {len(filtered)} major index quotes (full-index-quotes)")
-
-        # ── VIX quote specifically ──────────────────────────────────────
-        if not filled.get('vixQuote'):
-            vix = self._fetch_v3(f'quote/{self.VIX_SYMBOL}')
-            if vix and isinstance(vix, list) and len(vix) > 0:
-                filled['vixQuote'] = vix[0]
-                print(f"[NeuralMSE] Got VIX: {vix[0].get('price', 'N/A')}")
-            elif filled.get('indexQuotes'):
-                for q in filled['indexQuotes']:
-                    if q.get('symbol') == self.VIX_SYMBOL:
-                        filled['vixQuote'] = q
-                        break
-
-        # ── Forex quotes (/stable/fx returns all pairs) ──────────────────
+        # ── Identify which fetches are needed ────────────────────────────
+        need_sectors = not filled.get('sectorPerformance')
+        need_industries = not filled.get('industryPerformance')
+        need_indices = not filled.get('indexQuotes')
+        need_vix = not filled.get('vixQuote')
         existing_forex = filled.get('forexQuotes', [])
         forex_has_changes = any(
             fx.get('changesPercentage') is not None or fx.get('changes') is not None
             for fx in (existing_forex or [])[:5]
         )
-        if not existing_forex or not forex_has_changes:
-            # Try stable/fx first
+        need_forex = not existing_forex or not forex_has_changes
+
+        # ── Define fetch tasks ───────────────────────────────────────────
+        def fetch_sectors():
+            for offset in range(0, 4):
+                date_str = self._prev_trading_day(offset)
+                sectors = self._fetch_stable('sector-performance-snapshot', f'date={date_str}')
+                if sectors and isinstance(sectors, list) and len(sectors) > 0:
+                    logger.info(f"[MSE] Got {len(sectors)} sectors for {date_str}")
+                    return ('sectorPerformance', sectors)
+            return None
+
+        def fetch_industries():
+            for offset in range(0, 4):
+                date_str = self._prev_trading_day(offset)
+                industries = self._fetch_stable('industry-performance-snapshot', f'date={date_str}')
+                if industries and isinstance(industries, list) and len(industries) > 0:
+                    logger.info(f"[MSE] Got {len(industries)} industries for {date_str}")
+                    return ('industryPerformance', industries)
+            return None
+
+        def fetch_indices():
+            symbols_str = ','.join(self.MAJOR_INDICES)
+            quotes = self._fetch_v3(f'quote/{symbols_str}')
+            if quotes and isinstance(quotes, list) and len(quotes) > 0:
+                logger.info(f"[MSE] Got {len(quotes)} index quotes")
+                return ('indexQuotes', quotes)
+            all_idx = self._fetch_stable('full-index-quotes')
+            if all_idx and isinstance(all_idx, list):
+                wanted = set(self.MAJOR_INDICES + [self.VIX_SYMBOL])
+                filtered = [q for q in all_idx if q.get('symbol', '') in wanted]
+                if filtered:
+                    logger.info(f"[MSE] Got {len(filtered)} major index quotes (full-index-quotes)")
+                    return ('indexQuotes', filtered)
+            return None
+
+        def fetch_vix():
+            vix = self._fetch_v3(f'quote/{self.VIX_SYMBOL}')
+            if vix and isinstance(vix, list) and len(vix) > 0:
+                logger.info(f"[MSE] Got VIX: {vix[0].get('price', 'N/A')}")
+                return ('vixQuote', vix[0])
+            return None
+
+        def fetch_forex():
             forex = self._fetch_stable('fx')
             if forex and isinstance(forex, list) and len(forex) > 0:
-                filled['forexQuotes'] = forex
-                print(f"[NeuralMSE] Got {len(forex)} forex pairs from /stable/fx")
-            else:
-                # Fallback: batch-forex-quotes
-                forex2 = self._fetch_stable('batch-forex-quotes')
-                if forex2 and isinstance(forex2, list) and len(forex2) > 0:
-                    filled['forexQuotes'] = forex2
-                    print(f"[NeuralMSE] Got {len(forex2)} forex pairs from batch-forex-quotes")
+                logger.info(f"[MSE] Got {len(forex)} forex pairs from /stable/fx")
+                return ('forexQuotes', forex)
+            forex2 = self._fetch_stable('batch-forex-quotes')
+            if forex2 and isinstance(forex2, list) and len(forex2) > 0:
+                logger.info(f"[MSE] Got {len(forex2)} forex pairs from batch-forex-quotes")
+                return ('forexQuotes', forex2)
+            return None
+
+        def fetch_yfinance():
+            yf_data = self._fetch_yfinance_data()
+            if yf_data:
+                return ('yfinanceData', yf_data)
+            return None
+
+        # ── Submit all needed fetches in parallel ────────────────────────
+        tasks = []
+        task_names = []
+        if need_sectors:
+            tasks.append(fetch_sectors); task_names.append('sectors')
+        if need_industries:
+            tasks.append(fetch_industries); task_names.append('industries')
+        if need_indices:
+            tasks.append(fetch_indices); task_names.append('indices')
+        if need_vix:
+            tasks.append(fetch_vix); task_names.append('vix')
+        if need_forex:
+            tasks.append(fetch_forex); task_names.append('forex')
+        tasks.append(fetch_yfinance); task_names.append('yfinance')
+
+        if tasks:
+            logger.info(f"[MSE] Parallel fetch: {', '.join(task_names)}")
+            with ThreadPoolExecutor(max_workers=min(len(tasks), 6)) as executor:
+                futures = {executor.submit(fn): name for fn, name in zip(tasks, task_names)}
+                for future in as_completed(futures):
+                    name = futures[future]
+                    try:
+                        result = future.result(timeout=15)
+                        if result:
+                            key, value = result
+                            filled[key] = value
+                    except Exception as e:
+                        logger.warning(f"[MSE] Parallel fetch '{name}' failed: {e}")
+
+        # ── VIX fallback from indexQuotes ─────────────────────────────────
+        if not filled.get('vixQuote') and filled.get('indexQuotes'):
+            for q in filled['indexQuotes']:
+                if q.get('symbol') == self.VIX_SYMBOL:
+                    filled['vixQuote'] = q
+                    break
 
         # ── Historical trend proxy from sector changes ───────────────────
         if not filled.get('historicalSectorPerformance'):
@@ -466,16 +511,13 @@ class NeuralReasoningMarketSentimentEngine:
                     filled['sp500YearLow'] = q.get('yearLow', 0) or 0
                     break
 
-        # ── yfinance: technical analysis + VIX fallback ──────────────────
-        yf_data = self._fetch_yfinance_data()
+        # ── yfinance VIX/index fallbacks ─────────────────────────────────
+        yf_data = filled.get('yfinanceData')
         if yf_data:
-            filled['yfinanceData'] = yf_data
-            # Use yfinance VIX if FMP didn't deliver it
             if (not filled.get('vixQuote') or not (filled['vixQuote'] or {}).get('price')) and yf_data.get('vix'):
                 vd = yf_data['vix']
                 filled['vixQuote'] = {'price': vd['price'], 'changesPercentage': vd['change_1d']}
-                print(f"[NeuralMSE v6] VIX from yfinance: {vd['price']:.1f} ({vd['change_1d']:+.2f}%)")
-            # Use yfinance SPY data as S&P500 proxy if FMP indices are missing
+                logger.info(f"[MSE v6] VIX from yfinance: {vd['price']:.1f} ({vd['change_1d']:+.2f}%)")
             if not filled.get('indexQuotes') and yf_data.get('spy'):
                 spy = yf_data['spy']
                 filled['indexQuotes'] = [
@@ -498,6 +540,10 @@ class NeuralReasoningMarketSentimentEngine:
     def analyze(self, data: Dict[str, Any], language: str = 'en') -> Dict[str, Any]:
         start = datetime.now()
 
+        if not isinstance(data, dict):
+            logger.error("[MSE] analyze() received non-dict data, using empty dict")
+            data = {}
+
         # Self-sufficient data fill
         data = self._fill_missing_data(data)
 
@@ -516,7 +562,7 @@ class NeuralReasoningMarketSentimentEngine:
         signals: List[MarketSignal] = []
         full_reasoning: List[str] = [f"**NEURAL ENGINE v{self.version} — ANALYSIS INITIATED**"]
 
-        print(f"[NeuralMSE v{self.version}] Data: news={len(news)}, gainers={len(gainers)}, losers={len(losers)}, "
+        logger.info(f"[MSE v{self.version}] Data: news={len(news)}, gainers={len(gainers)}, losers={len(losers)}, "
               f"sectors={len(sectors)}, industries={len(industries)}, indices={len(indices)}, "
               f"forex={len(forex)}, vix={'YES' if vix_quote else 'NO'}")
 
@@ -590,7 +636,7 @@ class NeuralReasoningMarketSentimentEngine:
         rec, emoji, sentiment, desc, action = self._generate_conclusion(composite, vix_value, breadth_ratio)
 
         process_time = (datetime.now() - start).total_seconds()
-        print(f"[NeuralMSE v{self.version}] Done in {process_time:.3f}s → {rec} (score: {composite:.1f})")
+        logger.info(f"Done in {process_time:.3f}s → {rec} (score: {composite:.1f})")
 
         return {
             "version": self.version,
@@ -671,10 +717,10 @@ class NeuralReasoningMarketSentimentEngine:
         )
         if use_real_breadth:
             breadth_ratio = advancing / total_real
-            print(f"[NeuralMSE] SP500 real breadth: {advancing}↑ {declining}↓ of {total_real} ({breadth_ratio:.1%})")
+            logger.info(f"[MSE] SP500 real breadth: {advancing}↑ {declining}↓ of {total_real} ({breadth_ratio:.1%})")
         else:
             if total_real > 0:
-                print(f"[NeuralMSE] SP500 breadth data stale or pre-market ({advancing+declining}/{total_real} with movement), falling back to gainers/losers")
+                logger.info(f"[MSE] SP500 breadth data stale or pre-market ({advancing+declining}/{total_real} with movement), falling back to gainers/losers")
             total = len(gainers) + len(losers)
             if total == 0:
                 return 50.0, [], 0.5, {"hot": [], "cold": []}, [], []
@@ -718,7 +764,7 @@ class NeuralReasoningMarketSentimentEngine:
                 'trend': synth_trend,
                 'synthetic': True,
             }
-            print(f"[NeuralMSE v6] A/D synthetic: {net:+d} net movers ({len(gainers)}G/{len(losers)}L)")
+            logger.info(f"[MSE v6] A/D synthetic: {net:+d} net movers ({len(gainers)}G/{len(losers)}L)")
         if ad_data:
             ad_trend = ad_data.get('trend', 'neutral')
             ad_change = ad_data.get('change_1d', 0)
@@ -733,7 +779,7 @@ class NeuralReasoningMarketSentimentEngine:
             elif ad_trend == 'up' and ad_change < 0:
                 signals.append(MarketSignal("ad_line", "cautionary", 0.50, 0.08,
                     f"A/D Line above 10DMA but pulled back today ({ad_change:,.0f}) — watch for momentum shift", emoji="⚠️"))
-            print(f"[NeuralMSE v6] A/D Line: {ad_data.get('value', 0):,.0f} trend={ad_trend} 1d={ad_change:+,.0f}")
+            logger.info(f"[MSE v6] A/D Line: {ad_data.get('value', 0):,.0f} trend={ad_trend} 1d={ad_change:+,.0f}")
 
         # ── New Highs / New Lows: Market internal strength ────────────────
         nhl_data = yf_data.get('nhl_index')
@@ -753,7 +799,7 @@ class NeuralReasoningMarketSentimentEngine:
                 signals.append(MarketSignal("new_lows", "cautionary", 0.55, 0.08,
                     f"New Lows outpacing New Highs ({nhl_value:+.0f}) — breadth deteriorating", emoji="⚠️"))
                 score -= 3
-            print(f"[NeuralMSE v6] NHL Index: {nhl_value:+.0f} trend={nhl_trend}")
+            logger.info(f"[MSE v6] NHL Index: {nhl_value:+.0f} trend={nhl_trend}")
 
         # Momentum asymmetry
         if avg_gainer > 0 and avg_loser > 0:

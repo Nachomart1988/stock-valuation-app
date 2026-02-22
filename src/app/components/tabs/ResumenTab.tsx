@@ -129,73 +129,73 @@ export default function ResumenTab({
   const [fftData, setFftData] = useState<SpectralCycleData | null>(null);
   const [fftLoading, setFftLoading] = useState(false);
 
+  const generarResumen = async () => {
+    if (!advanceValueNet && !companyQualityNet && !dcfValuation) {
+      console.log('[ResumenTab] Waiting for data...');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const payload = {
+        ticker,
+        currentPrice,
+        advanceValueNet,
+        companyQualityNet,
+        keyMetricsSummary,
+        sustainableGrowthRate,
+        wacc,
+        dcfValuation,
+        monteCarlo,
+        pivotAnalysis,
+        holdersData,
+        forecasts,
+        diarioStats,
+        news,
+        averageValuation,
+      };
+
+      console.log('[ResumenTab] Sending payload to multi-layer engine:', payload);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/resumen/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      console.log('[ResumenTab] Multi-layer analysis complete:', data);
+      setResumen(data);
+    } catch (err: any) {
+      console.error('[ResumenTab] Error:', err);
+      let errorMsg = err.message || 'Error al generar el Resumen Maestro';
+      if (err.name === 'AbortError') {
+        errorMsg = 'Timeout: El servidor tardó demasiado en responder';
+      } else if (err.message === 'Failed to fetch') {
+        errorMsg = 'No se pudo conectar al servidor backend. Verifica que esté corriendo';
+      }
+      setError(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const generarResumen = async () => {
-      if (!advanceValueNet && !companyQualityNet && !dcfValuation) {
-        console.log('[ResumenTab] Waiting for data...');
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const payload = {
-          ticker,
-          currentPrice,
-          advanceValueNet,
-          companyQualityNet,
-          keyMetricsSummary,
-          sustainableGrowthRate,
-          wacc,
-          dcfValuation,
-          monteCarlo,
-          pivotAnalysis,
-          holdersData,
-          forecasts,
-          diarioStats,
-          news,
-          averageValuation,
-        };
-
-        console.log('[ResumenTab] Sending payload to multi-layer engine:', payload);
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/resumen/predict`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail || `HTTP ${res.status}`);
-        }
-
-        const data = await res.json();
-        console.log('[ResumenTab] Multi-layer analysis complete:', data);
-        setResumen(data);
-      } catch (err: any) {
-        console.error('[ResumenTab] Error:', err);
-        let errorMsg = err.message || 'Error al generar el Resumen Maestro';
-        if (err.name === 'AbortError') {
-          errorMsg = 'Timeout: El servidor tardó demasiado en responder';
-        } else if (err.message === 'Failed to fetch') {
-          errorMsg = 'No se pudo conectar al servidor backend. Verifica que esté corriendo';
-        }
-        setError(errorMsg);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     generarResumen();
-  }, [ticker, currentPrice, advanceValueNet, companyQualityNet, keyMetricsSummary, sustainableGrowthRate, wacc, dcfValuation, monteCarlo, pivotAnalysis, holdersData, forecasts, diarioStats, news]);
+  }, [ticker, currentPrice, advanceValueNet, companyQualityNet, keyMetricsSummary, sustainableGrowthRate, wacc, dcfValuation, monteCarlo, pivotAnalysis, holdersData, forecasts, diarioStats, news, averageValuation]);
 
   // Client-side DFT for a single window — returns fftSignal at last bar and complex components
   const computeWindowDFT = (prices: number[], numFreq: number) => {
@@ -659,26 +659,45 @@ export default function ResumenTab({
 
   return (
     <div className="space-y-8">
-      {/* Data Quality Indicator */}
-      {dataQuality && (
-        <div className="flex items-center justify-between px-4 py-2 bg-gray-900/50 rounded-xl border border-gray-800">
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Calidad de Datos</span>
-            <div className="flex items-center gap-2">
-              <div className="w-32 h-2 bg-gray-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all"
-                  style={{ width: `${dataQuality.completeness}%` }}
-                />
+      {/* Data Quality Indicator + Refresh Button */}
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-900/50 rounded-xl border border-gray-800">
+        <div className="flex items-center gap-4">
+          {dataQuality && (
+            <>
+              <span className="text-xs text-gray-500 uppercase tracking-wider">{es ? 'Calidad de Datos' : 'Data Quality'}</span>
+              <div className="flex items-center gap-2">
+                <div className="w-32 h-2 bg-gray-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all"
+                    style={{ width: `${dataQuality.completeness}%` }}
+                  />
+                </div>
+                <span className="text-sm text-gray-400">{dataQuality.completeness}%</span>
               </div>
-              <span className="text-sm text-gray-400">{dataQuality.completeness}%</span>
-            </div>
-          </div>
-          <span className="text-xs text-gray-600">
-            {dataQuality.sourcesUsed}/{dataQuality.totalSources} fuentes
-          </span>
+              <span className="text-xs text-gray-600">
+                {dataQuality.sourcesUsed}/{dataQuality.totalSources} {es ? 'fuentes' : 'sources'}
+              </span>
+            </>
+          )}
+          {averageValuation != null && averageValuation > 0 && (
+            <span className="text-xs text-violet-400 bg-violet-900/30 px-2 py-0.5 rounded-lg border border-violet-700/40">
+              Avg Valuaciones: ${averageValuation.toFixed(2)}
+            </span>
+          )}
         </div>
-      )}
+        <button
+          onClick={() => generarResumen()}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-1.5 bg-emerald-600/80 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          )}
+          {es ? 'Actualizar' : 'Refresh'}
+        </button>
+      </div>
 
       {/* Hero Section */}
       <div className={`rounded-3xl p-8 md:p-12 border-2 ${getRecommendationStyle()} relative overflow-hidden`}>

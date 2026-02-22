@@ -3,6 +3,9 @@
 # Full multi-source analysis with NLP, technical analysis, FFT spectral cycles,
 # institutional flow, and Monte Carlo
 
+from __future__ import annotations
+
+import logging
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass, field
@@ -12,6 +15,8 @@ import os
 from collections import defaultdict
 import math
 from spectral_cycle_analyzer import SpectralCycleAnalyzer, HistoricalDataFetcher
+
+logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ENUMS AND DATA STRUCTURES
@@ -1373,12 +1378,19 @@ class NeuralResumenEngine:
 
     def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Main analysis pipeline."""
+        if not data or not isinstance(data, dict):
+            logger.error("analyze() called with invalid data")
+            return {"error": "Invalid input data", "finalRecommendation": "Hold", "conviction": 0}
+
         self.layer_results = []
 
         ticker = data.get('ticker', 'UNKNOWN')
-        current_price = data.get('currentPrice') or 100
+        current_price = data.get('currentPrice')
+        if not isinstance(current_price, (int, float)) or current_price <= 0:
+            logger.warning(f"Invalid currentPrice ({current_price}), defaulting to 100")
+            current_price = 100
 
-        print(f"[NeuralEngine] Starting 14-layer analysis for {ticker}")
+        logger.info(f"Starting 14-layer analysis for {ticker}")
 
         # Layer 1: Data Ingestion
         ingestion_result = self._layer1_ingest(data)
@@ -1781,7 +1793,7 @@ class NeuralResumenEngine:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            print(f"[SectorIndustry] Error: {e}")
+            logger.warning(f"SectorIndustry error: {e}")
 
             result = LayerResult(
                 layer_name="Sector & Industry Context",
@@ -1823,7 +1835,7 @@ class NeuralResumenEngine:
         api_key = fmp_api_key or os.environ.get('FMP_API_KEY')
         if api_key and not self.data_fetcher:
             self.data_fetcher = HistoricalDataFetcher(api_key)
-            print(f"[NeuralEngine] Initialized historical data fetcher for FFT analysis")
+            logger.info("Initialized historical data fetcher for FFT analysis")
 
         if not self.data_fetcher:
             result = LayerResult(
@@ -1854,7 +1866,7 @@ class NeuralResumenEngine:
                 self.layer_results.append(result)
                 return result
 
-            print(f"[SpectralCycles] Running FFT analysis on {len(historical)} bars for {ticker}")
+            logger.info(f"SpectralCycles: Running FFT analysis on {len(historical)} bars for {ticker}")
 
             # Run spectral analysis
             analysis = self.spectral_analyzer.analyze(historical)
@@ -2007,7 +2019,7 @@ class NeuralResumenEngine:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            print(f"[SpectralCycles] Error in layer 4A: {e}")
+            logger.error(f"SpectralCycles error in layer 4A: {e}")
 
             result = LayerResult(
                 layer_name="Spectral Cycle Analysis (FFT)",

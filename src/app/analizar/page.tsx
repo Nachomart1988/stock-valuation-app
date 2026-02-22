@@ -45,6 +45,7 @@ import ForecastsGroup from '@/app/components/groups/ForecastsGroup';
 import GeneralInfoGroup from '@/app/components/groups/GeneralInfoGroup';
 import CompanyGroup from '@/app/components/groups/CompanyGroup';
 import InputsGroup from '@/app/components/groups/InputsGroup';
+import IntradayGroup from '@/app/components/groups/IntradayGroup';
 import DCFGroup from '@/app/components/groups/DCFGroup';
 
 // Plan access control
@@ -170,49 +171,82 @@ function convertArrayToUSD(arr: any[], rate: number): any[] {
 
 async function fetchExchangeRate(fromCurrency: string, apiKey: string): Promise<number> {
   if (!fromCurrency || fromCurrency === 'USD') return 1;
+
+  const extractRate = (p: any): number | null => {
+    const v = p?.close ?? p?.bid ?? p?.ask ?? p?.open ?? p?.price ?? p?.last;
+    return typeof v === 'number' && v > 0 ? v : null;
+  };
+
+  // Strategy 1: Try specific pair endpoint (v3)
   try {
-    // FMP stable/fx returns: { ticker: "EURUSD", bid, ask, open, ... } — no "price" field
+    const directRes = await fetch(
+      `https://financialmodelingprep.com/api/v3/fx/${fromCurrency}USD?apikey=${apiKey}`,
+      { cache: 'no-store' }
+    );
+    if (directRes.ok) {
+      const directData = await directRes.json();
+      const item = Array.isArray(directData) ? directData[0] : directData;
+      const rate = extractRate(item);
+      if (rate) {
+        console.log(`[Currency] ${fromCurrency}/USD rate (v3 direct): ${rate}`);
+        return rate;
+      }
+    }
+  } catch { /* fallback below */ }
+
+  // Strategy 2: Try stable/fx list
+  try {
     const res = await fetch(
       `https://financialmodelingprep.com/stable/fx?apikey=${apiKey}`,
       { cache: 'no-store' }
     );
-    if (!res.ok) {
-      console.warn(`[Currency] Failed to fetch FX rates: ${res.status}`);
-      return 1;
+    if (res.ok) {
+      const fxData = await res.json();
+      // Look for direct pair, e.g. EURUSD or EUR/USD
+      const pair = fxData.find?.((p: any) =>
+        p.ticker === `${fromCurrency}USD` || p.ticker === `${fromCurrency}/USD` ||
+        p.name === `${fromCurrency}/USD`
+      );
+      const directRate = extractRate(pair);
+      if (directRate) {
+        console.log(`[Currency] ${fromCurrency}/USD rate (stable): ${directRate}`);
+        return directRate;
+      }
+      // Try inverse pair USD/XXX
+      const inversePair = fxData.find?.((p: any) =>
+        p.ticker === `USD${fromCurrency}` || p.ticker === `USD/${fromCurrency}` ||
+        p.name === `USD/${fromCurrency}`
+      );
+      const inverseRate = extractRate(inversePair);
+      if (inverseRate) {
+        const rate = 1 / inverseRate;
+        console.log(`[Currency] ${fromCurrency}/USD rate (stable inverse): ${rate}`);
+        return rate;
+      }
     }
-    const fxData = await res.json();
-    // Helper to extract rate from FMP fx object — close is the settled daily price
-    const extractRate = (p: any): number | null => {
-      const v = p?.close ?? p?.bid ?? p?.ask ?? p?.open ?? p?.price ?? p?.last;
-      return typeof v === 'number' && v > 0 ? v : null;
-    };
-    // Look for direct pair, e.g. EURUSD or EUR/USD
-    const pair = fxData.find?.((p: any) =>
-      p.ticker === `${fromCurrency}USD` || p.ticker === `${fromCurrency}/USD` ||
-      p.name === `${fromCurrency}/USD`
+  } catch { /* fallback below */ }
+
+  // Strategy 3: Try v3 full list
+  try {
+    const res = await fetch(
+      `https://financialmodelingprep.com/api/v3/fx?apikey=${apiKey}`,
+      { cache: 'no-store' }
     );
-    const directRate = extractRate(pair);
-    if (directRate) {
-      console.log(`[Currency] ${fromCurrency}/USD rate: ${directRate}`);
-      return directRate;
+    if (res.ok) {
+      const fxData = await res.json();
+      const pair = fxData.find?.((p: any) =>
+        p.ticker === `${fromCurrency}USD` || p.ticker === `${fromCurrency}/USD`
+      );
+      const rate = extractRate(pair);
+      if (rate) {
+        console.log(`[Currency] ${fromCurrency}/USD rate (v3 list): ${rate}`);
+        return rate;
+      }
     }
-    // Try inverse pair USD/XXX
-    const inversePair = fxData.find?.((p: any) =>
-      p.ticker === `USD${fromCurrency}` || p.ticker === `USD/${fromCurrency}` ||
-      p.name === `USD/${fromCurrency}`
-    );
-    const inverseRate = extractRate(inversePair);
-    if (inverseRate) {
-      const rate = 1 / inverseRate;
-      console.log(`[Currency] ${fromCurrency}/USD rate (inverse of USD${fromCurrency}): ${rate}`);
-      return rate;
-    }
-    console.warn(`[Currency] Could not find FX pair for ${fromCurrency}/USD in ${fxData?.length ?? 0} records`);
-    return 1;
-  } catch (err) {
-    console.error('[Currency] Error fetching exchange rate:', err);
-    return 1;
-  }
+  } catch { /* last resort */ }
+
+  console.warn(`[Currency] Could not find FX rate for ${fromCurrency}/USD after all strategies`);
+  return 1;
 }
 
 // Helper function to extract ALL values from SEC JSON structure for a given key
@@ -1027,6 +1061,7 @@ function AnalizarContent() {
     t('analysis.categories.company'),
     t('analysis.categories.news'),
     t('analysis.categories.inputs'),
+    t('analysis.categories.intraday'),
     t('analysis.categories.dcf'),
     t('analysis.categories.valuations'),
     t('analysis.categories.probability'),
@@ -1177,7 +1212,7 @@ function AnalizarContent() {
     )}
   </Tab.Panel>
 
-  {/* 7. Inputs (Sustainable Growth, Beta, CAGR, Pivots, WACC) */}
+  {/* 7. Inputs (Sustainable Growth, Beta, CAGR, WACC) */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <InputsGroup
       SustainableGrowthTab={
@@ -1194,7 +1229,6 @@ function AnalizarContent() {
       }
       BetaTab={<BetaTab ticker={ticker} onAvgCAPMChange={setSharedAvgCAPM} />}
       CAGRTab={<CAGRTab ticker={activeTicker} onCagrStatsChange={setSharedCagrStats} />}
-      PivotsTab={<PivotsTab ticker={activeTicker} />}
       WACCTab={
         <WACCTab
           ticker={activeTicker}
@@ -1205,14 +1239,25 @@ function AnalizarContent() {
           onWACCChange={setSharedWACC}
         />
       }
-      GapsTab={<GapsTab ticker={activeTicker} />}
-      lockedSubtabs={[0,1,2,3,4].filter(i => !canAccessSubTab(userPlan, INPUTS_ACCESS)(i))}
+      lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, INPUTS_ACCESS)(i))}
       requiredPlan="pro"
       currentPlan={userPlan}
     />
   </Tab.Panel>
 
-  {/* 8. DCF (Cálculos, DCF Models) con valores intrínsecos en header */}
+  {/* 8. Intraday (Pivots + Gaps) */}
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+    {canAccessTab(userPlan, 7) ? (
+      <IntradayGroup
+        PivotsTab={<PivotsTab ticker={activeTicker} />}
+        GapsTab={<GapsTab ticker={activeTicker} />}
+      />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[7]} currentPlan={userPlan} tabName="Intraday" />
+    )}
+  </Tab.Panel>
+
+  {/* 9. DCF (Cálculos, DCF Models) */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <DCFGroup
       CalculosTab={
@@ -1243,7 +1288,7 @@ function AnalizarContent() {
     />
   </Tab.Panel>
 
-  {/* 9. Valuaciones */}
+  {/* 10. Valuaciones */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
     <ValuacionesTab
       ticker={activeTicker}
@@ -1267,9 +1312,9 @@ function AnalizarContent() {
     />
   </Tab.Panel>
 
-  {/* 10. Probability */}
+  {/* 11. Probability */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
-    {canAccessTab(userPlan, 9) ? (
+    {canAccessTab(userPlan, 10) ? (
       <ProbabilityTab
         ticker={activeTicker}
         quote={quote}
@@ -1279,13 +1324,13 @@ function AnalizarContent() {
         dividends={dividends}
       />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[9]} currentPlan={userPlan} tabName="Probability" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[10]} currentPlan={userPlan} tabName="Probability" />
     )}
   </Tab.Panel>
 
-  {/* 11. Resumen Maestro */}
+  {/* 12. Resumen Maestro */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
-    {canAccessTab(userPlan, 10) ? (
+    {canAccessTab(userPlan, 11) ? (
       <ResumenTab
         ticker={activeTicker}
         currentPrice={quote?.price || 0}
@@ -1303,16 +1348,16 @@ function AnalizarContent() {
         averageValuation={sharedAverageVal}
       />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[10]} currentPlan={userPlan} tabName="Resumen Maestro" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[11]} currentPlan={userPlan} tabName="Resumen Maestro" />
     )}
   </Tab.Panel>
 
-  {/* 12. Diario Inversor */}
+  {/* 13. Diario Inversor */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
-    {canAccessTab(userPlan, 11) ? (
+    {canAccessTab(userPlan, 12) ? (
       <DiarioInversorTab />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[11]} currentPlan={userPlan} tabName="Diario Inversor" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[12]} currentPlan={userPlan} tabName="Diario Inversor" />
     )}
   </Tab.Panel>
 </Tab.Panels>

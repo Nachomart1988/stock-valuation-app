@@ -169,26 +169,6 @@ export default function Home() {
             </Link>
           </div>
 
-          {/* Valuation Models Showcase */}
-          <div className="mt-10 p-6 bg-gray-800/30 rounded-2xl border border-white/[0.06]">
-            <h3 className="text-lg font-semibold text-gray-300 mb-4">{t('landing.valuationModelsIncluded')}</h3>
-            <div className="flex flex-wrap justify-center gap-3">
-              {[
-                'DDM 2-Stage', 'DDM 3-Stage', 'H-Model', 'DCF Multi-Etapa',
-                '2-Stage FCF', '3-Stage FCF', 'Graham Method', 'RIM Ohlson',
-                '2-Stage FCFE', '3-Stage FCFE', '2-Stage FCFF', '3-Stage FCFF',
-                'Monte Carlo DCF', 'Stochastic DCF', 'NK DSGE', 'HJM',
-                'Owner Earnings', 'EPS*Benchmark', 'Graham Number', 'Graham Net-Net'
-              ].map((model) => (
-                <span
-                  key={model}
-                  className="px-3 py-1.5 bg-gray-700/50 text-gray-300 text-sm rounded-lg border border-white/[0.08] hover:border-green-500 hover:text-green-400 transition cursor-default"
-                >
-                  {model}
-                </span>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 

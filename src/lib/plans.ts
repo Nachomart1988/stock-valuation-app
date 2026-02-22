@@ -8,12 +8,13 @@
 //  3 - Info General  (sub-tabs: AnalisisGeneral, KeyMetrics, Analistas, DuPont)
 //  4 - Company       (sub-tabs: Competidores, Industry, Segmentation, Holders)
 //  5 - News
-//  6 - Inputs        (sub-tabs: SGR, Beta, CAGR, Pivots, WACC)
-//  7 - DCF           (sub-tabs: Calculos, DCF Models)
-//  8 - Valuaciones
-//  9 - Probability
-// 10 - Diario Inversor
+//  6 - Inputs        (sub-tabs: SGR, Beta, CAGR, WACC)
+//  7 - Intraday      (sub-tabs: Pivots, Gaps)
+//  8 - DCF           (sub-tabs: Calculos, DCF Models)
+//  9 - Valuaciones
+// 10 - Probability
 // 11 - Resumen Maestro
+// 12 - Diario Inversor
 
 export type PlanTier = 'free' | 'pro' | 'elite' | 'gold';
 
@@ -30,9 +31,10 @@ export const PLAN_METADATA: Record<PlanTier, { name: string; price: number; colo
 export const TAB_MIN_PLAN: Record<number, PlanTier> = {
   2:  'pro',   // Forecasts
   5:  'pro',   // News
-  9:  'pro',   // Probability
-  10: 'elite', // Diario Inversor
+  7:  'pro',   // Intraday (Pivots + Gaps)
+  10: 'pro',   // Probability
   11: 'elite', // Resumen Maestro
+  12: 'elite', // Diario Inversor
 };
 
 // ── Sub-tab access ───────────────────────────────────────────
@@ -62,7 +64,7 @@ export const COMPANY_ACCESS: TabSubAccess = {
   gold:  'all',
 };
 
-// Tab 6 — Inputs: [0=SGR, 1=Beta, 2=CAGR, 3=Pivots, 4=WACC]
+// Tab 6 — Inputs: [0=SGR, 1=Beta, 2=CAGR, 3=WACC]
 // Free: only SGR top-down/bottom-up (=SGR tab index 0) and Beta (=index 1)
 export const INPUTS_ACCESS: TabSubAccess = {
   free:  [0, 1],   // SGR and Beta only
@@ -71,7 +73,7 @@ export const INPUTS_ACCESS: TabSubAccess = {
   gold:  'all',
 };
 
-// Tab 7 — DCF: [0=Calculos, 1=DCF Models]
+// Tab 8 — DCF: [0=Calculos, 1=DCF Models]
 // Free: only second sub-tab (DCF Models)
 export const DCF_ACCESS: TabSubAccess = {
   free:  [1],      // Only DCF Models (2nd sub-tab)
