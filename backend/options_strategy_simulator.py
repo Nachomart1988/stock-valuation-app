@@ -499,6 +499,286 @@ class OptionsStrategySimulator:
             return {"error": str(e), "ticker": ticker}
 
     # ────────────────────────────────────────────────────────────
+    # Helpers: fetch one expiration + parse rows
+    # ────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _fetch_single_expiration(ticker: str, expiration: str) -> Tuple[List[Dict], List[Dict], float]:
+        """Fetch calls, puts, and current price for ONE expiration.  Returns (calls, puts, price)."""
+        stock = yf.Ticker(ticker)
+        opt = stock.option_chain(expiration)
+
+        def _rows(df: Any) -> List[Dict]:
+            if df is None or len(df) == 0:
+                return []
+            result = []
+            for _, row in df.iterrows():
+                result.append({
+                    "strike":    float(row.get("strike", 0)),
+                    "bid":       float(row.get("bid", 0)),
+                    "ask":       float(row.get("ask", 0)),
+                    "lastPrice": float(row.get("lastPrice", 0)),
+                    "iv":        float(row.get("impliedVolatility", 0.3)),
+                    "volume":    int(row.get("volume", 0)) if not _is_nan(row.get("volume")) else 0,
+                    "openInterest": int(row.get("openInterest", 0)) if not _is_nan(row.get("openInterest")) else 0,
+                })
+            return result
+
+        calls = _rows(opt.calls)
+        puts  = _rows(opt.puts)
+
+        try:
+            price = float(stock.fast_info.get('last_price') or stock.fast_info.get('lastPrice') or 0)
+        except Exception:
+            price = 0.0
+        if not price and calls:
+            # Approximate from ATM call (put-call parity)
+            price = float(sorted(calls, key=lambda c: abs(c['strike']))[0].get('strike', 0))
+
+        return calls, puts, price
+
+    @staticmethod
+    def _mid(row: Dict) -> float:
+        """Midpoint price for an option row; fall back to lastPrice."""
+        mid = (row.get('bid', 0) + row.get('ask', 0)) / 2
+        return float(mid or row.get('lastPrice', 0) or 0.0)
+
+    def _quick_combo_metrics(
+        self,
+        legs_obj: List[OptionLeg],
+        current_price: float,
+    ) -> Dict[str, Any]:
+        """Fast analytical metrics for a strategy combo (no Monte Carlo)."""
+        cost = sum(l.premium * l.quantity for l in legs_obj)
+        # 60 test prices from -30% to +30%
+        test_prices = np.linspace(current_price * 0.70, current_price * 1.30, 60)
+        pnls = np.array([self._calculate_pnl_at_price(legs_obj, p, cost) for p in test_prices])
+
+        max_p = float(np.max(pnls))
+        max_l = float(np.min(pnls))
+
+        # Check unlimited edges
+        edge_hi = self._calculate_pnl_at_price(legs_obj, current_price * 3.0,  cost)
+        edge_lo = self._calculate_pnl_at_price(legs_obj, current_price * 0.01, cost)
+        if edge_hi > max_p * 1.5:  max_p = float('inf')
+        if edge_lo < max_l * 1.5 and max_l < 0: max_l = float('-inf')
+
+        # P(profit) approximation: fraction of test prices above breakeven
+        pop = float(np.mean(pnls > 0))
+
+        # Risk/reward
+        if max_l not in (0.0, float('-inf')) and max_p != float('inf'):
+            rr = abs(max_p / max_l) if max_l != 0 else 10.0
+        else:
+            rr = 10.0 if max_p == float('inf') else 0.0
+
+        # Composite score: weight P(profit) 45%, RR 40%, cost efficiency 15%
+        rr_score   = min(rr / 3.0, 1.0)
+        cost_eff   = max(0.0, 1.0 - abs(cost) / max(abs(max_p) * 0.5, 0.01)) if max_p not in (0, float('inf')) else 0.5
+        score      = 0.45 * pop + 0.40 * rr_score + 0.15 * cost_eff
+
+        bkevens = self._find_breakevens(legs_obj, cost, current_price)
+
+        return {
+            "maxProfit":           round(max_p, 2) if max_p != float('inf')  else "unlimited",
+            "maxLoss":             round(max_l, 2) if max_l != float('-inf') else "unlimited",
+            "riskReward":          round(rr,    2),
+            "probabilityOfProfit": round(pop,   3),
+            "costBasis":           round(cost,  2),
+            "breakevens":          [round(b, 2) for b in bkevens],
+            "score":               round(score, 4),
+        }
+
+    # ────────────────────────────────────────────────────────────
+    # Scan All Viable Strike Combinations
+    # ────────────────────────────────────────────────────────────
+
+    def scan_strategy_combinations(
+        self,
+        ticker: str,
+        strategy_name: str,
+        expiration: str,
+        current_price: float,
+        top_n: int = 8,
+    ) -> Dict[str, Any]:
+        """
+        Scan ALL viable strike combinations for a strategy on a single expiration.
+
+        For each combination it calculates quick analytical metrics (payoff at expiry,
+        P(profit) approximation, risk/reward) and returns the top_n ranked by
+        composite score.  No Monte Carlo — fast enough for Railway.
+        """
+        if not YF_AVAILABLE:
+            return {"error": "yfinance not available"}
+
+        try:
+            calls, puts, fetched_price = self._fetch_single_expiration(ticker, expiration)
+            price = current_price or fetched_price or 1.0
+
+            # Only keep tradeable strikes (bid > 0 or lastPrice > 0)
+            t_calls = [c for c in calls if c['bid'] > 0 or c['lastPrice'] > 0]
+            t_puts  = [p for p in puts  if p['bid'] > 0 or p['lastPrice'] > 0]
+
+            sn = strategy_name.lower()
+            combos: List[Dict] = []
+
+            def add(desc: str, legs_obj: List[OptionLeg]) -> None:
+                if not legs_obj:
+                    return
+                m = self._quick_combo_metrics(legs_obj, price)
+                combos.append({
+                    "description": desc,
+                    "legs": [asdict(l) for l in legs_obj],
+                    **m,
+                })
+
+            if sn == 'bull_call_spread':
+                cs = sorted(set(c['strike'] for c in t_calls))
+                for i, s1 in enumerate(cs):
+                    for s2 in cs[i+1:]:
+                        w = s2 - s1
+                        if w < price * 0.01 or w > price * 0.22: continue
+                        c1 = next((c for c in t_calls if c['strike'] == s1), None)
+                        c2 = next((c for c in t_calls if c['strike'] == s2), None)
+                        if not c1 or not c2: continue
+                        add(f"Long ${s1:.0f}C / Short ${s2:.0f}C", [
+                            OptionLeg('call', s1, expiration, self._mid(c1), +1, c1['iv']),
+                            OptionLeg('call', s2, expiration, self._mid(c2), -1, c2['iv']),
+                        ])
+
+            elif sn == 'bear_put_spread':
+                ps = sorted(set(p['strike'] for p in t_puts))
+                for i, s1 in enumerate(ps):
+                    for s2 in ps[i+1:]:
+                        w = s2 - s1
+                        if w < price * 0.01 or w > price * 0.22: continue
+                        p1 = next((p for p in t_puts if p['strike'] == s2), None)  # buy higher
+                        p2 = next((p for p in t_puts if p['strike'] == s1), None)  # sell lower
+                        if not p1 or not p2: continue
+                        add(f"Long ${s2:.0f}P / Short ${s1:.0f}P", [
+                            OptionLeg('put', s2, expiration, self._mid(p1), +1, p1['iv']),
+                            OptionLeg('put', s1, expiration, self._mid(p2), -1, p2['iv']),
+                        ])
+
+            elif sn == 'covered_call':
+                for c in t_calls:
+                    s = c['strike']
+                    if s <= price * 1.0 or s > price * 1.25: continue
+                    add(f"Short ${s:.0f} Call ({(s/price-1)*100:+.1f}% OTM)", [
+                        OptionLeg('call', s, expiration, self._mid(c), -1, c['iv']),
+                    ])
+
+            elif sn == 'protective_put':
+                for p in t_puts:
+                    s = p['strike']
+                    if s >= price * 1.0 or s < price * 0.78: continue
+                    add(f"Long ${s:.0f} Put ({(s/price-1)*100:+.1f}% OTM)", [
+                        OptionLeg('put', s, expiration, self._mid(p), +1, p['iv']),
+                    ])
+
+            elif sn == 'straddle':
+                for c in t_calls:
+                    s = c['strike']
+                    if abs(s - price) / price > 0.07: continue
+                    mp = next((p for p in t_puts if p['strike'] == s), None)
+                    if not mp: continue
+                    add(f"Straddle @ ${s:.0f}", [
+                        OptionLeg('call', s, expiration, self._mid(c),  +1, c['iv']),
+                        OptionLeg('put',  s, expiration, self._mid(mp), +1, mp['iv']),
+                    ])
+
+            elif sn == 'strangle':
+                otm_calls = sorted([c for c in t_calls if c['strike'] > price * 1.01], key=lambda x: x['strike'])
+                otm_puts  = sorted([p for p in t_puts  if p['strike'] < price * 0.99], key=lambda x: -x['strike'])
+                for c in otm_calls[:12]:
+                    for p in otm_puts[:12]:
+                        cs, ps = c['strike'], p['strike']
+                        if (cs - price) / price > 0.20: continue
+                        if (price - ps) / price > 0.20: continue
+                        add(f"Call ${cs:.0f} / Put ${ps:.0f}", [
+                            OptionLeg('call', cs, expiration, self._mid(c), +1, c['iv']),
+                            OptionLeg('put',  ps, expiration, self._mid(p), +1, p['iv']),
+                        ])
+
+            elif sn == 'iron_condor':
+                sc_list = sorted([c for c in t_calls if c['strike'] > price], key=lambda x: x['strike'])
+                lc_list = sc_list[:]
+                sp_list = sorted([p for p in t_puts if p['strike'] < price], key=lambda x: -x['strike'])
+                lp_list = sp_list[:]
+                for sc in sc_list[:8]:
+                    for lc in [c for c in lc_list if c['strike'] > sc['strike']][:4]:
+                        if (lc['strike'] - sc['strike']) > price * 0.12: continue
+                        for sp in sp_list[:8]:
+                            for lp in [p for p in lp_list if p['strike'] < sp['strike']][:3]:
+                                if (sp['strike'] - lp['strike']) > price * 0.12: continue
+                                add(
+                                    f"SC${sc['strike']:.0f}/LC${lc['strike']:.0f} | SP${sp['strike']:.0f}/LP${lp['strike']:.0f}",
+                                    [
+                                        OptionLeg('call', sc['strike'], expiration, self._mid(sc), -1, sc['iv']),
+                                        OptionLeg('call', lc['strike'], expiration, self._mid(lc), +1, lc['iv']),
+                                        OptionLeg('put',  sp['strike'], expiration, self._mid(sp), -1, sp['iv']),
+                                        OptionLeg('put',  lp['strike'], expiration, self._mid(lp), +1, lp['iv']),
+                                    ]
+                                )
+
+            elif sn == 'butterfly':
+                cs = sorted(set(c['strike'] for c in t_calls))
+                for i in range(len(cs) - 2):
+                    for j in range(i+1, len(cs) - 1):
+                        for k in range(j+1, len(cs)):
+                            s1, s2, s3 = cs[i], cs[j], cs[k]
+                            # Require roughly symmetric wings (within 30% of each other)
+                            w1, w2 = s2 - s1, s3 - s2
+                            if max(w1, w2) / max(min(w1, w2), 0.01) > 1.3: continue
+                            if w1 + w2 > price * 0.22: continue
+                            c1 = next((c for c in t_calls if c['strike'] == s1), None)
+                            c2 = next((c for c in t_calls if c['strike'] == s2), None)
+                            c3 = next((c for c in t_calls if c['strike'] == s3), None)
+                            if not all([c1, c2, c3]): continue
+                            add(f"${s1:.0f}/${s2:.0f}/${s3:.0f} Butterfly", [
+                                OptionLeg('call', s1, expiration, self._mid(c1), +1, c1['iv']),
+                                OptionLeg('call', s2, expiration, self._mid(c2), -2, c2['iv']),
+                                OptionLeg('call', s3, expiration, self._mid(c3), +1, c3['iv']),
+                            ])
+
+            elif sn == 'collar':
+                for sc in t_calls:
+                    if sc['strike'] <= price: continue
+                    for lp in t_puts:
+                        if lp['strike'] >= price: continue
+                        if (sc['strike'] - price) > price * 0.20: continue
+                        if (price - lp['strike']) > price * 0.20: continue
+                        add(f"Short ${sc['strike']:.0f}C / Long ${lp['strike']:.0f}P", [
+                            OptionLeg('call', sc['strike'], expiration, self._mid(sc), -1, sc['iv']),
+                            OptionLeg('put',  lp['strike'], expiration, self._mid(lp), +1, lp['iv']),
+                        ])
+
+            if not combos:
+                return {"error": f"No viable combinations found for '{strategy_name}' on {expiration}.",
+                        "ticker": ticker}
+
+            # Sort by score descending, take top_n
+            combos.sort(key=lambda x: x.get('score', 0), reverse=True)
+            top = combos[:top_n]
+            # Mark optimal
+            if top:
+                top[0]['optimal'] = True
+
+            return {
+                "ticker":       ticker,
+                "strategy":     strategy_name,
+                "expiration":   expiration,
+                "currentPrice": round(price, 2),
+                "total":        len(combos),
+                "combinations": top,
+            }
+
+        except Exception as e:
+            logger.error(f"[Scan] {strategy_name} {ticker} {expiration}: {e}")
+            import traceback; traceback.print_exc()
+            return {"error": str(e), "ticker": ticker}
+
+    # ────────────────────────────────────────────────────────────
     # Auto-Build Strategy Legs + Analyze by Name
     # ────────────────────────────────────────────────────────────
 
@@ -655,6 +935,7 @@ class OptionsStrategySimulator:
         self,
         ticker: str,
         outlook: str,
+        lang: str = 'en',
         budget: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -669,6 +950,83 @@ class OptionsStrategySimulator:
             List of strategy suggestions with name, description, legs template, and rationale.
         """
         outlook = outlook.lower().strip()
+        use_es = lang.lower().startswith('es')
+
+        strategy_map_es: Dict[str, List[Dict[str, Any]]] = {
+            "bullish": [
+                {"name": "Bull Call Spread", "template": "bull_call_spread",
+                 "description": "Compra un call de strike bajo y vende uno de strike alto. Riesgo y recompensa limitados.",
+                 "riskProfile": "definido", "idealIV": "baja-moderada",
+                 "rationale": "Ganar con subida moderada del precio, reduciendo el costo con el call vendido.",
+                 "maxRisk": "débito neto pagado", "maxReward": "ancho del spread menos débito neto"},
+                {"name": "Covered Call", "template": "covered_call",
+                 "description": "Posees 100 acciones y vendes un call OTM. Genera ingreso y limita la suba.",
+                 "riskProfile": "riesgo de posición en acciones", "idealIV": "alta",
+                 "rationale": "Ideal cuando eres moderadamente alcista; cobra prima para mejorar el rendimiento de acciones ya en cartera.",
+                 "maxRisk": "precio acción a cero menos prima", "maxReward": "prima + (strike - precio compra)"},
+                {"name": "Long Call", "template": "long_call",
+                 "description": "Compra un call para exposición alcista apalancada.",
+                 "riskProfile": "definido (prima pagada)", "idealIV": "baja",
+                 "rationale": "Máximo apalancamiento para una convicción alcista fuerte. Riesgo limitado a la prima.",
+                 "maxRisk": "prima pagada", "maxReward": "ilimitado"},
+                {"name": "Collar", "template": "collar",
+                 "description": "Posees acciones + compras put protector + vendes call cubierto. Limita alza y baja.",
+                 "riskProfile": "definido", "idealIV": "moderada-alta",
+                 "rationale": "Protege posición larga existente mientras financias parcialmente el put con la prima del call.",
+                 "maxRisk": "precio acción - strike put + prima neta", "maxReward": "strike call - precio acción - prima neta"},
+            ],
+            "bearish": [
+                {"name": "Bear Put Spread", "template": "bear_put_spread",
+                 "description": "Compra un put de strike alto y vende uno de strike bajo. Riesgo y recompensa limitados.",
+                 "riskProfile": "definido", "idealIV": "baja-moderada",
+                 "rationale": "Ganar con caída moderada del precio, reduciendo el costo con el put vendido.",
+                 "maxRisk": "débito neto pagado", "maxReward": "ancho del spread menos débito neto"},
+                {"name": "Protective Put", "template": "protective_put",
+                 "description": "Posees acciones + compras un put como seguro contra caídas.",
+                 "riskProfile": "baja definida", "idealIV": "baja (puts baratos)",
+                 "rationale": "Cubre una posición larga contra caídas manteniendo la suba ilimitada.",
+                 "maxRisk": "precio acción - strike put + prima pagada", "maxReward": "suba ilimitada menos prima"},
+                {"name": "Long Put", "template": "long_put",
+                 "description": "Compra un put para exposición bajista apalancada.",
+                 "riskProfile": "definido (prima pagada)", "idealIV": "baja",
+                 "rationale": "Máximo apalancamiento bajista. Riesgo limitado a la prima.",
+                 "maxRisk": "prima pagada", "maxReward": "strike - prima (acción a cero)"},
+            ],
+            "neutral": [
+                {"name": "Iron Condor", "template": "iron_condor",
+                 "description": "Vende spread de call OTM + vende spread de put OTM. Gana con precio en rango.",
+                 "riskProfile": "definido", "idealIV": "alta (vender prima)",
+                 "rationale": "Cobrar prima de ambos lados cuando se espera baja volatilidad y precio en rango.",
+                 "maxRisk": "ancho del spread mayor menos crédito neto", "maxReward": "crédito neto recibido"},
+                {"name": "Butterfly Spread", "template": "butterfly",
+                 "description": "Compra 1 call bajo + vende 2 calls medios + compra 1 call alto. Máximo en el strike central.",
+                 "riskProfile": "definido", "idealIV": "alta",
+                 "rationale": "Máxima ganancia si el precio termina exactamente en el strike central al vencimiento.",
+                 "maxRisk": "débito neto pagado", "maxReward": "ancho del spread menos débito neto"},
+                {"name": "Short Straddle", "template": "short_straddle",
+                 "description": "Vende call ATM + vende put ATM. Crédito máximo, riesgo gamma alto.",
+                 "riskProfile": "indefinido", "idealIV": "muy alta",
+                 "rationale": "Ideal cuando la IV está elevada y se espera compresión. Requiere gestión activa.",
+                 "maxRisk": "ilimitado", "maxReward": "prima total recibida"},
+            ],
+            "volatile": [
+                {"name": "Long Straddle", "template": "straddle",
+                 "description": "Compra call ATM + put ATM. Gana con un movimiento grande en cualquier dirección.",
+                 "riskProfile": "definido (prima total)", "idealIV": "baja",
+                 "rationale": "Ganar con un movimiento grande sin importar la dirección. Ideal antes de earnings.",
+                 "maxRisk": "prima total pagada", "maxReward": "ilimitado"},
+                {"name": "Long Strangle", "template": "strangle",
+                 "description": "Compra call OTM + put OTM. Más barato que el straddle pero requiere mayor movimiento.",
+                 "riskProfile": "definido (prima total)", "idealIV": "baja",
+                 "rationale": "Menor costo que el straddle pero necesita un movimiento de precio mayor para ganar.",
+                 "maxRisk": "prima total pagada", "maxReward": "ilimitado"},
+                {"name": "Reverse Iron Condor", "template": "reverse_iron_condor",
+                 "description": "Compra spread de call OTM + spread de put OTM. Riesgo definido en volatilidad.",
+                 "riskProfile": "definido", "idealIV": "baja",
+                 "rationale": "Ganar con un movimiento grande en cualquier dirección con riesgo acotado.",
+                 "maxRisk": "débito neto pagado", "maxReward": "ancho del spread menos débito neto"},
+            ],
+        }
 
         strategy_map: Dict[str, List[Dict[str, Any]]] = {
             "bullish": [
@@ -811,12 +1169,14 @@ class OptionsStrategySimulator:
             ],
         }
 
-        suggestions = strategy_map.get(outlook, [])
+        active_map = strategy_map_es if use_es else strategy_map
+        suggestions = active_map.get(outlook, [])
 
         if not suggestions:
-            return [{
-                "error": f"Unknown outlook '{outlook}'. Use: bullish, bearish, neutral, volatile."
-            }]
+            msg = (f"Perspectiva '{outlook}' desconocida. Usa: bullish, bearish, neutral, volatile."
+                   if use_es else
+                   f"Unknown outlook '{outlook}'. Use: bullish, bearish, neutral, volatile.")
+            return [{"error": msg}]
 
         # Fetch expirations + price quickly (no stock.info — it's too slow)
         context: Dict[str, Any] = {"ticker": ticker, "outlook": outlook}
@@ -1380,11 +1740,21 @@ def auto_analyze_options_strategy(
     )
 
 
-def suggest_options_strategies(ticker: str, outlook: str, **kwargs) -> List[Dict]:
+def suggest_options_strategies(ticker: str, outlook: str, lang: str = 'en', **kwargs) -> List[Dict]:
     """Suggest strategies based on market outlook."""
-    return options_simulator.suggest_strategies(ticker, outlook, **kwargs)
+    return options_simulator.suggest_strategies(ticker, outlook, lang=lang, **kwargs)
 
 
 def get_iv_surface(ticker: str) -> Dict[str, Any]:
     """Build IV surface data for 3D visualization."""
     return options_simulator.iv_surface(ticker)
+
+
+def scan_options_combinations(
+    ticker: str, strategy_name: str, expiration: str,
+    current_price: float, top_n: int = 8
+) -> Dict[str, Any]:
+    """Scan all viable strike combos for a strategy, return top_n by score."""
+    return options_simulator.scan_strategy_combinations(
+        ticker, strategy_name, expiration, current_price, top_n
+    )

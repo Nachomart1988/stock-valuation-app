@@ -19,6 +19,18 @@ interface OptionLeg {
   iv: number;
 }
 
+interface ScanCombo {
+  description: string;
+  legs: OptionLeg[];
+  maxProfit: number | string;
+  maxLoss: number | string;
+  probabilityOfProfit: number;
+  riskReward: number;
+  costBasis: number;
+  score: number;
+  optimal?: boolean;
+}
+
 interface StrategyAnalysis {
   name: string;
   legs: OptionLeg[];
@@ -93,7 +105,6 @@ function PayoffSVG({ diagram, contracts }: { diagram: { price: number; pnl: numb
 
   const zeroY = sy(0);
 
-  // Build polyline paths split at zero line
   const above: string[] = [], below: string[] = [];
   scaledDiagram.forEach(({ price, pnl }) => {
     const px = sx(price).toFixed(1), py = sy(pnl).toFixed(1);
@@ -104,17 +115,14 @@ function PayoffSVG({ diagram, contracts }: { diagram: { price: number; pnl: numb
     .map(({ price, pnl }, i) => `${i === 0 ? 'M' : 'L'}${sx(price).toFixed(1)},${sy(pnl).toFixed(1)}`)
     .join(' ');
 
-  // Y-axis ticks
   const ticks = [-absMax, -absMax / 2, 0, absMax / 2, absMax];
   const fmt = (v: number) =>
     Math.abs(v) >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(0)}`;
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 180 }}>
-      {/* Background */}
       <rect x={PAD.l} y={PAD.t} width={iW} height={iH} fill="rgba(255,255,255,0.02)" rx={4} />
 
-      {/* Grid lines + Y labels */}
       {ticks.map((v, i) => {
         const y = sy(v);
         if (y < PAD.t || y > PAD.t + iH) return null;
@@ -131,7 +139,6 @@ function PayoffSVG({ diagram, contracts }: { diagram: { price: number; pnl: numb
         );
       })}
 
-      {/* Profit fill (above zero) */}
       <clipPath id="above-clip">
         <rect x={PAD.l} y={PAD.t} width={iW} height={Math.max(0, zeroY - PAD.t)} />
       </clipPath>
@@ -141,7 +148,6 @@ function PayoffSVG({ diagram, contracts }: { diagram: { price: number; pnl: numb
         points={`${PAD.l},${zeroY} ${above.join(' ')} ${PAD.l + iW},${zeroY}`}
         fill="rgba(74,222,128,0.12)" clipPath="url(#above-clip)" />
 
-      {/* Loss fill (below zero) */}
       <clipPath id="below-clip">
         <rect x={PAD.l} y={zeroY} width={iW} height={Math.max(0, PAD.t + iH - zeroY)} />
       </clipPath>
@@ -151,13 +157,9 @@ function PayoffSVG({ diagram, contracts }: { diagram: { price: number; pnl: numb
         points={`${PAD.l},${zeroY} ${below.join(' ')} ${PAD.l + iW},${zeroY}`}
         fill="rgba(248,113,113,0.12)" clipPath="url(#below-clip)" />
 
-      {/* Full line (crisp) */}
       <path d={linePath} fill="none" stroke="#f59e0b" strokeWidth={1.5} />
-
-      {/* Zero line label */}
       <text x={PAD.l - 4} y={zeroY + 4} textAnchor="end" fontSize={9} fill="#9ca3af">$0</text>
 
-      {/* X-axis labels */}
       {[0, 0.25, 0.5, 0.75, 1].map((t, i) => {
         const price = minP + t * (maxP - minP);
         const x = PAD.l + t * iW;
@@ -177,17 +179,31 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
   const { locale } = useLanguage();
   const es = locale === 'es';
 
-  const [chain, setChain]             = useState<ChainData | null>(null);
+  // Chain state
+  const [chain, setChain]               = useState<ChainData | null>(null);
   const [chainLoading, setChainLoading] = useState(false);
-  const [selectedExp, setSelectedExp] = useState('');
-  const [strategy, setStrategy]       = useState('covered_call');
-  const [outlook, setOutlook]         = useState('bullish');
-  const [contracts, setContracts]     = useState(1);
-  const [analysis, setAnalysis]       = useState<StrategyAnalysis | null>(null);
-  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  const [selectedExp, setSelectedExp]   = useState('');
+
+  // Strategy state
+  const [strategy, setStrategy]   = useState('covered_call');
+  const [outlook, setOutlook]     = useState('bullish');
+  const [contracts, setContracts] = useState(1);
+
+  // Scan state
+  const [scanResults, setScanResults]         = useState<ScanCombo[] | null>(null);
+  const [scanTotal, setScanTotal]             = useState(0);
+  const [scanLoading, setScanLoading]         = useState(false);
+  const [selectedComboIdx, setSelectedComboIdx] = useState(0);
+
+  // Analysis state
+  const [analysis, setAnalysis]               = useState<StrategyAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [suggestLoading, setSuggestLoading]   = useState(false);
-  const [error, setError]             = useState<string | null>(null);
+
+  // Suggestions
+  const [suggestions, setSuggestions]       = useState<Suggestion[] | null>(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -223,16 +239,62 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
     }
   }, [ticker, backendUrl, es]);
 
-  // ── Analyze strategy ───────────────────────────────────────────
-  const analyzeStrategy = useCallback(async () => {
-    if (!selectedExp) return;
+  // ── Scan all strike combinations ───────────────────────────────
+  const scanCombinations = useCallback(async () => {
+    if (!selectedExp) {
+      setError(es ? 'Selecciona un vencimiento primero.' : 'Select an expiration first.');
+      return;
+    }
+    setScanLoading(true);
+    setScanResults(null);
+    setAnalysis(null);
+    setError(null);
+    try {
+      const res = await fetch(`${backendUrl}/options/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker,
+          strategyName: strategy,
+          expiration: selectedExp,
+          currentPrice,
+          topN: 12,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${body ? `: ${body.slice(0, 300)}` : ''}`);
+      }
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const combos: ScanCombo[] = data.combinations ?? [];
+      setScanResults(combos);
+      setScanTotal(data.total ?? combos.length);
+      const optIdx = combos.findIndex((c) => c.optimal);
+      setSelectedComboIdx(optIdx >= 0 ? optIdx : 0);
+    } catch (err: any) {
+      const msg = err.message || 'Unknown error';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        setError(es ? 'No se pudo conectar al backend.' : 'Cannot connect to backend.');
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setScanLoading(false);
+    }
+  }, [ticker, strategy, selectedExp, currentPrice, backendUrl, es]);
+
+  // ── Analyze selected combo (with legs from scan) ───────────────
+  const analyzeSelected = useCallback(async () => {
+    if (!scanResults || scanResults.length === 0) return;
+    const combo = scanResults[selectedComboIdx];
     setAnalysisLoading(true);
     setError(null);
     try {
       const res = await fetch(`${backendUrl}/options/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker, strategyName: strategy, expiration: selectedExp, currentPrice }),
+        body: JSON.stringify({ ticker, legs: combo.legs, currentPrice }),
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
@@ -246,7 +308,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
     } finally {
       setAnalysisLoading(false);
     }
-  }, [ticker, strategy, selectedExp, currentPrice, backendUrl]);
+  }, [ticker, scanResults, selectedComboIdx, currentPrice, backendUrl]);
 
   // ── Get suggestions ────────────────────────────────────────────
   const getSuggestions = useCallback(async () => {
@@ -256,12 +318,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
       const res = await fetch(`${backendUrl}/options/suggest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker, outlook }),
+        body: JSON.stringify({ ticker, outlook, lang: locale }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      // Backend returns {ticker, outlook, strategies: [...]}
       const list = Array.isArray(data) ? data : (data.strategies ?? data.suggestions ?? []);
       setSuggestions(list);
     } catch (err: any) {
@@ -269,15 +330,25 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
     } finally {
       setSuggestLoading(false);
     }
-  }, [ticker, outlook, backendUrl]);
+  }, [ticker, outlook, locale, backendUrl]);
 
   // ── Helpers ────────────────────────────────────────────────────
   const fmtDollar = (v: number | string | null) => {
     if (v === null || v === undefined) return '—';
-    if (typeof v === 'string') return v; // "unlimited"
+    if (typeof v === 'string') return v;
     const scaled = v * contracts * 100;
     return scaled >= 0 ? `+$${scaled.toFixed(2)}` : `-$${Math.abs(scaled).toFixed(2)}`;
   };
+
+  // Format scan table values (raw, per-contract amounts from backend)
+  const fmtScan = (v: number | string | null | undefined) => {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'string') return v;
+    return v >= 0 ? `+$${v.toFixed(0)}` : `-$${Math.abs(v).toFixed(0)}`;
+  };
+
+  const scoreColor = (s: number) =>
+    s >= 0.65 ? 'text-green-400' : s >= 0.45 ? 'text-yellow-400' : 'text-red-400';
 
   const subtabs = [
     es ? 'Cadena de Opciones' : 'Options Chain',
@@ -438,7 +509,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   <label className="block text-sm text-gray-400 mb-1">{es ? 'Estrategia' : 'Strategy'}</label>
                   <select
                     value={strategy}
-                    onChange={(e) => setStrategy(e.target.value)}
+                    onChange={(e) => { setStrategy(e.target.value); setScanResults(null); setAnalysis(null); }}
                     className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
                   >
                     {STRATEGIES.map((s) => (
@@ -451,7 +522,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   <label className="block text-sm text-gray-400 mb-1">{es ? 'Vencimiento' : 'Expiration'}</label>
                   <select
                     value={selectedExp}
-                    onChange={(e) => setSelectedExp(e.target.value)}
+                    onChange={(e) => { setSelectedExp(e.target.value); setScanResults(null); setAnalysis(null); }}
                     className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
                   >
                     {(chain?.allExpirations ?? chain?.expirations)?.map((exp) => (
@@ -460,7 +531,6 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   </select>
                 </div>
 
-                {/* Contracts input */}
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">
                     {es ? 'Contratos' : 'Contracts'}
@@ -477,31 +547,149 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   />
                 </div>
 
+                {/* Scan button */}
                 <button
-                  onClick={analyzeStrategy}
-                  disabled={analysisLoading || !selectedExp}
-                  className="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg text-sm transition-all disabled:opacity-50"
+                  onClick={scanCombinations}
+                  disabled={scanLoading || !selectedExp}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg text-sm transition-all disabled:opacity-50 flex items-center gap-2"
                 >
-                  {analysisLoading
-                    ? (es ? 'Analizando...' : 'Analyzing...')
-                    : (es ? 'Analizar' : 'Analyze')}
+                  {scanLoading
+                    ? <><span className="inline-block animate-spin">↻</span> {es ? 'Escaneando...' : 'Scanning...'}</>
+                    : <>{es ? '🔍 Escanear Combinaciones' : '🔍 Scan Combinations'}</>
+                  }
                 </button>
               </div>
 
               {!chain && (
                 <p className="text-xs text-gray-500 italic">
                   {es
-                    ? 'Tip: Carga la cadena de opciones primero para ver todas las expirations disponibles.'
-                    : 'Tip: Load the options chain first to see all available expirations.'}
+                    ? 'Tip: Carga la cadena de opciones (pestaña izquierda) para ver todas las expirations.'
+                    : 'Tip: Load the options chain (left tab) to see all available expirations.'}
                 </p>
               )}
 
+              {/* ── Scan results table ───────────────────────────────────── */}
+              {scanResults !== null && (
+                <div className="bg-gray-700/30 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h4 className="text-sm font-semibold text-amber-400">
+                      {es
+                        ? `Top ${scanResults.length} combinaciones`
+                        : `Top ${scanResults.length} Combinations`}
+                      <span className="ml-2 text-xs font-normal text-gray-500">
+                        {es ? `de ${scanTotal} evaluadas` : `of ${scanTotal} evaluated`}
+                      </span>
+                    </h4>
+                    <span className="text-xs text-gray-500 italic">
+                      {es ? '★ = Óptima  ·  Haz clic en una fila para seleccionar' : '★ = Optimal  ·  Click a row to select'}
+                    </span>
+                  </div>
+
+                  {scanResults.length === 0 ? (
+                    <p className="text-sm text-gray-400 py-2">
+                      {es
+                        ? 'No se encontraron combinaciones válidas para esta estrategia y vencimiento.'
+                        : 'No valid combinations found for this strategy and expiration.'}
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-gray-500 border-b border-gray-600 bg-gray-800/50">
+                            <th className="py-2 px-2 text-left w-6">#</th>
+                            <th className="py-2 px-2 text-left">{es ? 'Descripción' : 'Description'}</th>
+                            <th className="py-2 px-2 text-right whitespace-nowrap">{es ? 'Max Gan.' : 'Max Profit'}</th>
+                            <th className="py-2 px-2 text-right whitespace-nowrap">{es ? 'Max Pérd.' : 'Max Loss'}</th>
+                            <th className="py-2 px-2 text-right whitespace-nowrap">{es ? 'P(Gan.)' : 'P(Profit)'}</th>
+                            <th className="py-2 px-2 text-right">R/R</th>
+                            <th className="py-2 px-2 text-right">{es ? 'Costo' : 'Cost'}</th>
+                            <th className="py-2 px-2 text-right">Score</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {scanResults.map((combo, i) => {
+                            const isSelected = i === selectedComboIdx;
+                            const isOptimal  = combo.optimal;
+                            const pop = combo.probabilityOfProfit != null
+                              ? combo.probabilityOfProfit * (combo.probabilityOfProfit <= 1 ? 100 : 1)
+                              : null;
+                            const scoreDisp = combo.score != null ? (combo.score * 10).toFixed(1) : '—';
+                            return (
+                              <tr
+                                key={i}
+                                onClick={() => setSelectedComboIdx(i)}
+                                className={`border-t border-gray-700/30 cursor-pointer transition-colors ${
+                                  isSelected
+                                    ? 'bg-amber-900/25 ring-1 ring-inset ring-amber-500/50'
+                                    : 'hover:bg-gray-700/40'
+                                }`}
+                              >
+                                <td className="py-2 px-2 text-gray-500 font-mono">{i + 1}</td>
+                                <td className="py-2 px-2">
+                                  {isOptimal && <span className="text-amber-400 mr-1 font-bold">★</span>}
+                                  <span className={isSelected ? 'text-white font-medium' : 'text-gray-200'}>
+                                    {combo.description}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2 text-right text-green-400 font-mono">
+                                  {fmtScan(combo.maxProfit)}
+                                </td>
+                                <td className="py-2 px-2 text-right text-red-400 font-mono">
+                                  {typeof combo.maxLoss === 'number'
+                                    ? fmtScan(-Math.abs(combo.maxLoss))
+                                    : combo.maxLoss ?? '—'}
+                                </td>
+                                <td className="py-2 px-2 text-right text-cyan-400">
+                                  {pop != null ? `${pop.toFixed(1)}%` : '—'}
+                                </td>
+                                <td className="py-2 px-2 text-right text-yellow-400">
+                                  {combo.riskReward != null ? `${combo.riskReward.toFixed(2)}x` : '—'}
+                                </td>
+                                <td className="py-2 px-2 text-right text-gray-300 font-mono">
+                                  {combo.costBasis != null ? `$${Math.abs(combo.costBasis).toFixed(2)}` : '—'}
+                                </td>
+                                <td className="py-2 px-2 text-right">
+                                  <span className={`font-bold ${scoreColor(combo.score)}`}>
+                                    {scoreDisp}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Selected summary + Analyze button */}
+                  {scanResults.length > 0 && (
+                    <div className="flex items-center justify-between pt-1 flex-wrap gap-3">
+                      <div className="text-xs text-gray-400">
+                        {es ? 'Seleccionada' : 'Selected'}:{' '}
+                        <span className="text-amber-300 font-medium">
+                          {scanResults[selectedComboIdx]?.description ?? '—'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={analyzeSelected}
+                        disabled={analysisLoading}
+                        className="px-6 py-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg text-sm transition-all disabled:opacity-50"
+                      >
+                        {analysisLoading
+                          ? (es ? 'Analizando...' : 'Analyzing...')
+                          : (es ? '📊 Analizar Seleccionada' : '📊 Analyze Selected')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Full analysis result ─────────────────────────────────── */}
               {analysis && (
                 <>
-                  {/* Summary metrics */}
                   <div className="bg-gray-700/30 rounded-xl p-5 space-y-4">
                     <h4 className="text-lg font-bold text-amber-400">
-                      {analysis.name || strategy.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      {analysis.name || strategy.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                       {contracts > 1 && (
                         <span className="ml-2 text-sm font-normal text-gray-400">× {contracts} {es ? 'contratos' : 'contracts'}</span>
                       )}
@@ -519,7 +707,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                       <div>
                         <div className="text-xs text-gray-500 uppercase">Breakeven{analysis.breakevens.length > 1 ? 's' : ''}</div>
                         <div className="text-base font-semibold text-yellow-400">
-                          {analysis.breakevens.map(b => `$${b.toFixed(2)}`).join(' / ') || '—'}
+                          {analysis.breakevens.map((b) => `$${b.toFixed(2)}`).join(' / ') || '—'}
                         </div>
                       </div>
                       <div>
@@ -535,7 +723,9 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                       <div className="bg-gray-800/60 rounded-lg p-3">
                         <div className="text-xs text-gray-500 mb-2">
                           {es ? 'Diagrama de Payoff' : 'Payoff Diagram'}
-                          {contracts > 1 && <span className="ml-1 text-amber-500">({contracts} × 100 {es ? 'acciones' : 'shares'})</span>}
+                          {contracts > 1 && (
+                            <span className="ml-1 text-amber-500">({contracts} × 100 {es ? 'acciones' : 'shares'})</span>
+                          )}
                         </div>
                         <PayoffSVG diagram={analysis.payoffDiagram} contracts={contracts} />
                         <div className="flex justify-between text-xs text-gray-600 mt-1 px-1">
@@ -559,7 +749,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     </div>
                   </div>
 
-                  {/* Legs detail — editable quantity display */}
+                  {/* Legs detail */}
                   <div className="bg-gray-700/30 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-3">
                       <h5 className="text-sm font-semibold text-gray-300">Legs</h5>

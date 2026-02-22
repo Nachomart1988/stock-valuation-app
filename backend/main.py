@@ -19,6 +19,7 @@ from ml_prediction_engine import predict_price, MLPredictionEngine, TORCH_AVAILA
 from options_strategy_simulator import (
     options_simulator, fetch_options_chain, analyze_options_strategy,
     auto_analyze_options_strategy, suggest_options_strategies, get_iv_surface,
+    scan_options_combinations,
 )
 
 app = FastAPI(
@@ -646,7 +647,17 @@ class OptionsSuggestRequest(BaseModel):
     """Request body for strategy suggestions"""
     ticker: str
     outlook: str  # bullish, bearish, neutral, volatile
+    lang: str = 'en'   # 'en' or 'es'
     budget: Optional[float] = None
+
+
+class OptionsScanRequest(BaseModel):
+    """Request body for scanning all viable strike combinations."""
+    ticker: str
+    strategyName: str
+    expiration: str
+    currentPrice: float
+    topN: int = 8
 
 
 class OptionsIVSurfaceRequest(BaseModel):
@@ -750,6 +761,7 @@ async def options_suggest(req: OptionsSuggestRequest):
         result = suggest_options_strategies(
             ticker=req.ticker,
             outlook=req.outlook,
+            lang=req.lang,
             budget=req.budget,
         )
 
@@ -760,6 +772,38 @@ async def options_suggest(req: OptionsSuggestRequest):
         print(f"[Options] Error suggesting strategies: {e}")
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/options/scan")
+async def options_scan(req: OptionsScanRequest):
+    """
+    Scan ALL viable strike combinations for a strategy on a single expiration.
+
+    Returns up to topN combinations ranked by a composite score that weights
+    P(profit) 45%, risk/reward 40%, and cost efficiency 15%.
+    The first result is the 'optimal' combination.
+    Each combination includes pre-built legs ready to pass to /options/analyze.
+    """
+    try:
+        print(f"[Options] Scanning '{req.strategyName}' for {req.ticker} exp={req.expiration}")
+        result = scan_options_combinations(
+            ticker=req.ticker,
+            strategy_name=req.strategyName,
+            expiration=req.expiration,
+            current_price=req.currentPrice,
+            top_n=req.topN,
+        )
+        if result.get('error'):
+            raise HTTPException(status_code=500, detail=result['error'])
+        print(f"[Options] Scan done: {result.get('total', 0)} combos evaluated, "
+              f"returning {len(result.get('combinations', []))}")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Options] Scan error: {e}")
+        import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
