@@ -38,11 +38,33 @@ interface PredictionResult {
   historicalPredictions: { date: string; actual: number; predicted: number }[];
 }
 
+const PROGRESS_STEPS_ES = [
+  'Descargando datos históricos...',
+  'Calculando indicadores técnicos...',
+  'Preparando secuencias LSTM...',
+  'Entrenando modelo neuronal...',
+  'Calculando predicciones...',
+  'Estimando incertidumbre (MC dropout)...',
+  'Calculando importancia de features...',
+  'Finalizando resultados...',
+];
+const PROGRESS_STEPS_EN = [
+  'Downloading historical data...',
+  'Computing technical indicators...',
+  'Preparing LSTM sequences...',
+  'Training neural network...',
+  'Generating predictions...',
+  'Estimating uncertainty (MC dropout)...',
+  'Computing feature importance...',
+  'Finalizing results...',
+];
+
 export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTabProps) {
   const { locale } = useLanguage();
   const es = locale === 'es';
 
   const [loading, setLoading] = useState(false);
+  const [progressStep, setProgressStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PredictionResult | null>(null);
 
@@ -50,18 +72,32 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
 
   const runPrediction = useCallback(async () => {
     setLoading(true);
+    setProgressStep(0);
     setError(null);
+
+    // Animate progress steps while waiting
+    const steps = es ? PROGRESS_STEPS_ES : PROGRESS_STEPS_EN;
+    let stepIdx = 0;
+    const progressTimer = setInterval(() => {
+      stepIdx = Math.min(stepIdx + 1, steps.length - 1);
+      setProgressStep(stepIdx);
+    }, 8000); // advance every 8s (total ~64s covers full training)
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3 min timeout
+
     try {
       const res = await fetch(`${backendUrl}/ml/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker, horizons: [5, 10, 20, 30] }),
+        signal: controller.signal,
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
         let detail = body;
         try { detail = JSON.parse(body)?.detail ?? body; } catch {}
-        if (res.status === 503) throw new Error(es ? 'PyTorch no está instalado en el servidor. Contacta al administrador.' : 'PyTorch is not installed on the server. Contact administrator.');
+        if (res.status === 503) throw new Error(es ? 'PyTorch no está instalado en el servidor.' : 'PyTorch is not installed on the server.');
         if (res.status === 500) throw new Error(es ? `Error del servidor: ${detail.slice(0, 200)}` : `Server error: ${detail.slice(0, 200)}`);
         throw new Error(`HTTP ${res.status}: ${detail.slice(0, 100)}`);
       }
@@ -70,15 +106,19 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
       setResult(data);
     } catch (err: any) {
       const msg = err.message || '';
-      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+      if (err.name === 'AbortError') {
+        setError(es ? 'Tiempo de espera agotado (3 min). El servidor tardó demasiado.' : 'Request timed out (3 min). Server took too long.');
+      } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
         setError(es ? `No se pudo conectar al backend (${backendUrl}).` : `Cannot connect to backend (${backendUrl}).`);
       } else {
         setError(msg || 'Error running prediction');
       }
     } finally {
+      clearInterval(progressTimer);
+      clearTimeout(timeoutId);
       setLoading(false);
     }
-  }, [ticker, backendUrl]);
+  }, [ticker, backendUrl, es]);
 
   const fmtPrice = (v: number) => `$${v.toFixed(2)}`;
   const fmtPct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
@@ -124,13 +164,33 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
         </div>
       )}
 
+      {loading && (
+        <div className="text-center py-12">
+          <svg className="w-12 h-12 mx-auto mb-4 animate-spin text-cyan-500" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <p className="text-cyan-400 font-medium text-lg">
+            {(es ? PROGRESS_STEPS_ES : PROGRESS_STEPS_EN)[progressStep]}
+          </p>
+          <p className="text-xs text-gray-500 mt-2">
+            {es ? 'Esto puede tardar 30–90 segundos en el servidor' : 'This may take 30–90 seconds on the server'}
+          </p>
+          <div className="mt-4 flex justify-center gap-1">
+            {(es ? PROGRESS_STEPS_ES : PROGRESS_STEPS_EN).map((_, i) => (
+              <div key={i} className={`h-1 w-6 rounded-full transition-all ${i <= progressStep ? 'bg-cyan-500' : 'bg-gray-700'}`} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {!result && !loading && !error && (
         <div className="text-center py-16 text-gray-500">
           <svg className="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
           <p className="text-lg">{es ? 'Presiona "Ejecutar Predicción" para comenzar' : 'Press "Run Prediction" to start'}</p>
-          <p className="text-sm mt-2">{es ? 'El modelo LSTM se entrena en ~500 días de datos históricos' : 'LSTM model trains on ~500 days of historical data'}</p>
+          <p className="text-sm mt-2">{es ? 'El modelo LSTM se entrena en ~30 segundos' : 'LSTM model trains in ~30 seconds'}</p>
         </div>
       )}
 

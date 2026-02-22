@@ -303,16 +303,16 @@ class MLPredictionEngine:
     Supports multiple prediction horizons with walk-forward validation.
     """
 
-    # Default configuration
-    DEFAULT_LOOKBACK = 60       # Sequence length (trading days)
-    DEFAULT_HIDDEN_SIZE = 128
-    DEFAULT_NUM_LAYERS = 2
+    # Default configuration — kept lean for CPU inference on cloud servers
+    DEFAULT_LOOKBACK = 30       # Sequence length (trading days)
+    DEFAULT_HIDDEN_SIZE = 64    # Smaller hidden size → much faster on CPU
+    DEFAULT_NUM_LAYERS = 1      # Single LSTM layer → 2× faster than 2-layer
     DEFAULT_DROPOUT = 0.2
-    DEFAULT_EPOCHS = 50
-    DEFAULT_BATCH_SIZE = 32
+    DEFAULT_EPOCHS = 20         # Enough with early stopping (patience=5)
+    DEFAULT_BATCH_SIZE = 64     # Larger batches → fewer optimizer steps per epoch
     DEFAULT_LEARNING_RATE = 0.001
-    DEFAULT_MC_SAMPLES = 30     # Monte Carlo forward passes
-    DEFAULT_HISTORY_DAYS = 750  # Fetch at least 3 years of data
+    DEFAULT_MC_SAMPLES = 10     # Fewer MC samples → faster uncertainty estimation
+    DEFAULT_HISTORY_DAYS = 500  # ~2 years is plenty for LSTM training
 
     def __init__(self, api_key: Optional[str] = None):
         if not TORCH_AVAILABLE:
@@ -407,12 +407,13 @@ class MLPredictionEngine:
             all_metrics_list = []
             training_info = {}
             historical_preds = []
-            feature_importance_agg: Dict[str, List[float]] = {
-                name: [] for name in TechnicalFeatureEngine.FEATURE_NAMES
-            }
+            feature_importance: Dict[str, float] = {}
+            shared_model = None  # train once, reuse for all horizons
 
-            for horizon in horizons:
-                logger.info("[MLPredict] Processing horizon=%d days", horizon)
+            current_price = float(closes_trimmed[-1])
+
+            for i_h, horizon in enumerate(horizons):
+                logger.info("[MLPredict] Processing horizon=%d days (%d/%d)", horizon, i_h + 1, len(horizons))
 
                 # Build sequences: X[i] = features[i:i+lookback], y[i] = close[i+lookback+horizon-1]
                 X, y, seq_dates = self._prepare_sequences(
@@ -428,15 +429,15 @@ class MLPredictionEngine:
                 X_test, y_test = X[split_idx:], y[split_idx:]
                 test_dates = seq_dates[split_idx:]
 
-                # Train model
-                model, train_loss, val_loss = self._train_model(
-                    X_train, y_train, X_test, y_test,
-                    input_size=feature_matrix.shape[1],
-                    epochs=epochs,
-                    batch_size=batch_size,
-                )
-
-                if horizon == horizons[0]:
+                # Train only once (shortest horizon) — reuse weights for longer horizons
+                if shared_model is None:
+                    logger.info("[MLPredict] Training shared LSTM model on horizon=%d...", horizon)
+                    shared_model, train_loss, val_loss = self._train_model(
+                        X_train, y_train, X_test, y_test,
+                        input_size=feature_matrix.shape[1],
+                        epochs=epochs,
+                        batch_size=batch_size,
+                    )
                     training_info = {
                         'epochs': epochs,
                         'trainLoss': round(float(train_loss), 6),
@@ -448,62 +449,61 @@ class MLPredictionEngine:
                         'lookback': lookback,
                         'device': str(self.device),
                     }
+                    # Feature importance once
+                    fi = self._permutation_importance(shared_model, X_test, y_test, target_scaler, mc_samples)
+                    for idx, name in enumerate(TechnicalFeatureEngine.FEATURE_NAMES):
+                        if idx < len(fi):
+                            feature_importance[name] = round(float(fi[idx]), 4)
+                    feature_importance = dict(sorted(feature_importance.items(), key=lambda x: x[1], reverse=True))
+
+                model = shared_model
 
                 # Evaluate on test set
-                test_preds_scaled, test_std_scaled = self._monte_carlo_predict(model, X_test, mc_samples)
+                test_preds_scaled, _ = self._monte_carlo_predict(model, X_test, mc_samples)
                 test_preds = target_scaler.inverse_transform(test_preds_scaled.reshape(-1, 1)).flatten()
                 test_actuals = target_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
                 metrics = self._evaluate(test_preds, test_actuals)
 
-                # Historical predictions (last 30 from test set) for the shortest horizon
-                if horizon == horizons[0]:
+                # Historical predictions for shortest horizon only
+                if i_h == 0:
                     n_hist = min(30, len(test_preds))
-                    for i in range(len(test_preds) - n_hist, len(test_preds)):
+                    for j in range(len(test_preds) - n_hist, len(test_preds)):
                         historical_preds.append({
-                            'date': test_dates[i] if i < len(test_dates) else '',
-                            'actual': round(float(test_actuals[i]), 2),
-                            'predicted': round(float(test_preds[i]), 2),
+                            'date': test_dates[j] if j < len(test_dates) else '',
+                            'actual': round(float(test_actuals[j]), 2),
+                            'predicted': round(float(test_preds[j]), 2),
                         })
 
-                # Future prediction: use the most recent lookback window
+                # Future prediction using most recent lookback window
                 last_seq = scaled_features[-lookback:]
-                last_seq_tensor = torch.FloatTensor(last_seq).unsqueeze(0).to(self.device)
-
                 future_pred_scaled, future_std_scaled = self._monte_carlo_predict(
-                    model, last_seq_tensor.cpu().numpy(), mc_samples
+                    model, last_seq.reshape(1, lookback, -1), mc_samples
                 )
-                future_price = target_scaler.inverse_transform(
+                future_price = float(target_scaler.inverse_transform(
                     future_pred_scaled.reshape(-1, 1)
-                ).flatten()[0]
+                ).flatten()[0])
                 future_std = float(future_std_scaled[0]) * (
                     target_scaler.data_max_[0] - target_scaler.data_min_[0]
                 )
+                # Scale uncertainty band with sqrt(horizon) to reflect longer-horizon risk
+                band_scale = math.sqrt(horizon / horizons[0]) if i_h > 0 else 1.0
+                future_std_adj = future_std * band_scale
 
-                # Confidence bands (approx 90% interval via 1.645 * std)
-                upper_band = future_price + 1.645 * future_std
-                lower_band = future_price - 1.645 * future_std
-                confidence = max(0.0, min(1.0, 1.0 - (future_std / max(future_price, 1.0))))
-
-                current_price = float(closes_trimmed[-1])
+                upper_band = future_price + 1.645 * future_std_adj
+                lower_band = future_price - 1.645 * future_std_adj
+                confidence = max(0.0, min(1.0, 1.0 - (future_std_adj / max(future_price, 1.0))))
                 predicted_change_pct = ((future_price - current_price) / current_price) * 100
 
                 all_predictions.append({
                     'horizon': horizon,
-                    'predictedPrice': round(float(future_price), 2),
+                    'predictedPrice': round(future_price, 2),
                     'upperBand': round(float(upper_band), 2),
                     'lowerBand': round(float(max(lower_band, 0)), 2),
-                    'confidence': round(float(confidence), 4),
-                    'predictedChangePct': round(float(predicted_change_pct), 2),
+                    'confidence': round(confidence, 4),
+                    'predictedChangePct': round(predicted_change_pct, 2),
                 })
 
                 all_metrics_list.append(metrics)
-
-                # Feature importance via permutation (on test set, for first horizon)
-                if horizon == horizons[0]:
-                    fi = self._permutation_importance(model, X_test, y_test, target_scaler, mc_samples)
-                    for idx, name in enumerate(TechnicalFeatureEngine.FEATURE_NAMES):
-                        if idx < len(fi):
-                            feature_importance_agg[name].append(fi[idx])
 
             # Aggregate metrics across horizons
             if all_metrics_list:
@@ -513,17 +513,7 @@ class MLPredictionEngine:
                     avg_metrics[key] = round(float(np.mean(vals)), 4)
             else:
                 avg_metrics = {'mae': 0, 'rmse': 0, 'mape': 0, 'directionalAccuracy': 0}
-
-            # Aggregate feature importance
-            feature_importance = {}
-            for name, vals in feature_importance_agg.items():
-                if vals:
-                    feature_importance[name] = round(float(np.mean(vals)), 4)
-
-            # Sort feature importance descending
-            feature_importance = dict(
-                sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)
-            )
+            # feature_importance already built during training loop
 
             elapsed = time.time() - start_time
             logger.info("[MLPredict] Completed for %s in %.1fs", ticker, elapsed)
@@ -683,7 +673,7 @@ class MLPredictionEngine:
 
         best_val_loss = float('inf')
         patience_counter = 0
-        patience_limit = 10
+        patience_limit = 5
         best_state = None
         final_train_loss = 0.0
         final_val_loss = 0.0
