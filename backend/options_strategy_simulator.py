@@ -262,65 +262,74 @@ class OptionsStrategySimulator:
 
         try:
             stock = yf.Ticker(ticker)
-            expirations = list(stock.options)  # List of 'YYYY-MM-DD' strings
+            all_expirations = list(stock.options)  # List of 'YYYY-MM-DD' strings
 
-            if not expirations:
+            if not all_expirations:
                 return {
                     "error": f"No options data available for {ticker}",
                     "ticker": ticker,
                 }
 
-            # Get current price
-            info = stock.info or {}
-            current_price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
+            # Get current price — fast path: use fast_info to avoid slow info dict
+            try:
+                current_price = float(stock.fast_info.get('last_price') or stock.fast_info.get('lastPrice') or 0)
+            except Exception:
+                current_price = 0.0
             if not current_price:
-                hist = stock.history(period="1d")
-                current_price = float(hist['Close'].iloc[-1]) if len(hist) > 0 else 0
+                try:
+                    hist = stock.history(period="1d")
+                    current_price = float(hist['Close'].iloc[-1]) if len(hist) > 0 else 0.0
+                except Exception:
+                    current_price = 0.0
 
-            chain: Dict[str, Any] = {}
+            # Limit to MAX_EXP nearest expirations to avoid Railway timeout.
+            # Each option_chain() call is a separate HTTP request to Yahoo Finance.
+            # Fetching 8 expirations ≈ 5-8 seconds, which is well within limits.
+            MAX_EXP = 8
+            expirations_to_fetch = all_expirations[:MAX_EXP]
 
-            for exp_date in expirations:
+            # Flat dicts keyed by date — this is the format the frontend expects:
+            # calls["YYYY-MM-DD"] = [{strike, lastPrice, bid, ask, iv, ...}, ...]
+            calls_by_exp: Dict[str, List] = {}
+            puts_by_exp: Dict[str, List] = {}
+
+            def _parse_chain_row(row: Any) -> Dict:
+                return {
+                    "strike": float(row.get("strike", 0)),
+                    "lastPrice": float(row.get("lastPrice", 0)),
+                    "bid": float(row.get("bid", 0)),
+                    "ask": float(row.get("ask", 0)),
+                    "volume": int(row.get("volume", 0)) if not _is_nan(row.get("volume")) else 0,
+                    "openInterest": int(row.get("openInterest", 0)) if not _is_nan(row.get("openInterest")) else 0,
+                    "iv": float(row.get("impliedVolatility", 0)),
+                    "inTheMoney": bool(row.get("inTheMoney", False)),
+                }
+
+            for exp_date in expirations_to_fetch:
                 try:
                     opt = stock.option_chain(exp_date)
-
-                    calls_data = []
-                    if opt.calls is not None and len(opt.calls) > 0:
-                        for _, row in opt.calls.iterrows():
-                            calls_data.append({
-                                "strike": float(row.get("strike", 0)),
-                                "lastPrice": float(row.get("lastPrice", 0)),
-                                "bid": float(row.get("bid", 0)),
-                                "ask": float(row.get("ask", 0)),
-                                "volume": int(row.get("volume", 0)) if not _is_nan(row.get("volume")) else 0,
-                                "openInterest": int(row.get("openInterest", 0)) if not _is_nan(row.get("openInterest")) else 0,
-                                "iv": float(row.get("impliedVolatility", 0)),
-                                "inTheMoney": bool(row.get("inTheMoney", False)),
-                            })
-
-                    puts_data = []
-                    if opt.puts is not None and len(opt.puts) > 0:
-                        for _, row in opt.puts.iterrows():
-                            puts_data.append({
-                                "strike": float(row.get("strike", 0)),
-                                "lastPrice": float(row.get("lastPrice", 0)),
-                                "bid": float(row.get("bid", 0)),
-                                "ask": float(row.get("ask", 0)),
-                                "volume": int(row.get("volume", 0)) if not _is_nan(row.get("volume")) else 0,
-                                "openInterest": int(row.get("openInterest", 0)) if not _is_nan(row.get("openInterest")) else 0,
-                                "iv": float(row.get("impliedVolatility", 0)),
-                                "inTheMoney": bool(row.get("inTheMoney", False)),
-                            })
-
-                    chain[exp_date] = {"calls": calls_data, "puts": puts_data}
+                    calls_by_exp[exp_date] = [
+                        _parse_chain_row(row)
+                        for _, row in opt.calls.iterrows()
+                    ] if opt.calls is not None and len(opt.calls) > 0 else []
+                    puts_by_exp[exp_date] = [
+                        _parse_chain_row(row)
+                        for _, row in opt.puts.iterrows()
+                    ] if opt.puts is not None and len(opt.puts) > 0 else []
                 except Exception as e:
                     logger.warning(f"Failed to fetch chain for {ticker} exp={exp_date}: {e}")
-                    continue
+                    calls_by_exp[exp_date] = []
+                    puts_by_exp[exp_date] = []
 
+            fetched_exps = list(calls_by_exp.keys())
             return {
                 "ticker": ticker,
                 "currentPrice": current_price,
-                "expirations": expirations,
-                "chain": chain,
+                "expirations": fetched_exps,
+                "calls": calls_by_exp,
+                "puts": puts_by_exp,
+                # also expose all available expirations for the strategy simulator dropdown
+                "allExpirations": all_expirations,
             }
 
         except Exception as e:

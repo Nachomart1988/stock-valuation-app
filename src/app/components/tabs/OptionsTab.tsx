@@ -32,7 +32,8 @@ interface StrategyAnalysis {
 }
 
 interface ChainData {
-  expirations: string[];
+  expirations: string[];    // fetched expirations (up to 8)
+  allExpirations?: string[]; // all available expirations from Yahoo
   calls: Record<string, any[]>;
   puts: Record<string, any[]>;
 }
@@ -331,9 +332,9 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     onChange={(e) => setSelectedExp(e.target.value)}
                     className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
                   >
-                    {chain?.expirations.map((exp) => (
+                    {(chain?.allExpirations ?? chain?.expirations)?.map((exp) => (
                       <option key={exp} value={exp}>{exp}</option>
-                    )) || <option value="">{es ? 'Carga la cadena primero' : 'Load chain first'}</option>}
+                    )) ?? <option value="">{es ? 'Carga la cadena primero' : 'Load chain first'}</option>}
                   </select>
                 </div>
                 <button
