@@ -818,20 +818,30 @@ class OptionsStrategySimulator:
                 "error": f"Unknown outlook '{outlook}'. Use: bullish, bearish, neutral, volatile."
             }]
 
-        # Try to fetch current price and nearest expiration for context
+        # Fetch expirations + price quickly (no stock.info — it's too slow)
         context: Dict[str, Any] = {"ticker": ticker, "outlook": outlook}
         if YF_AVAILABLE:
             try:
                 stock = yf.Ticker(ticker)
-                info = stock.info or {}
-                current_price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
+                # fast_info is non-blocking and much faster than stock.info
+                try:
+                    current_price = float(
+                        stock.fast_info.get('last_price')
+                        or stock.fast_info.get('lastPrice')
+                        or 0
+                    )
+                except Exception:
+                    current_price = 0.0
                 if not current_price:
-                    hist = stock.history(period="1d")
-                    current_price = float(hist['Close'].iloc[-1]) if len(hist) > 0 else 0
+                    try:
+                        hist = stock.history(period="1d")
+                        current_price = float(hist['Close'].iloc[-1]) if len(hist) > 0 else 0.0
+                    except Exception:
+                        pass
                 context["currentPrice"] = current_price
                 exps = list(stock.options) if stock.options else []
                 context["nearestExpiration"] = exps[0] if exps else None
-                context["availableExpirations"] = exps[:6]  # first 6
+                context["availableExpirations"] = exps[:6]
             except Exception:
                 pass
 
