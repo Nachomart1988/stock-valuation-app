@@ -172,60 +172,40 @@ function convertArrayToUSD(arr: any[], rate: number): any[] {
   return arr.map(item => convertObjectToUSD(item, rate));
 }
 
-async function fetchExchangeRate(fromCurrency: string, apiKey: string): Promise<number> {
+async function fetchExchangeRate(fromCurrency: string, _apiKey: string): Promise<number> {
   if (!fromCurrency || fromCurrency === 'USD') return 1;
 
   const from = fromCurrency.toUpperCase();
 
-  // Strategy 1: /stable/batch-forex-quotes (working endpoint, uses "symbol" field)
+  // Strategy 1: open.er-api.com — free, CORS-enabled, no API key, highly reliable
   try {
-    const res = await fetch(
-      `https://financialmodelingprep.com/stable/batch-forex-quotes?apikey=${apiKey}`,
-      { cache: 'no-store' }
-    );
+    const res = await fetch(`https://open.er-api.com/v6/latest/${from}`, { cache: 'no-store' });
     if (res.ok) {
-      const fxData = await res.json();
-      if (Array.isArray(fxData) && fxData.length > 0) {
-        // Direct pair: e.g. JPYUSD → price is JPY→USD rate
-        const direct = fxData.find((p: any) => p.symbol === `${from}USD`);
-        if (direct?.price && direct.price > 0) {
-          console.log(`[Currency] ${from}/USD rate (batch direct): ${direct.price}`);
-          return direct.price;
-        }
-        // Inverse pair: e.g. USDJPY → rate = 1/price
-        const inverse = fxData.find((p: any) => p.symbol === `USD${from}`);
-        if (inverse?.price && inverse.price > 0) {
-          const rate = 1 / inverse.price;
-          console.log(`[Currency] ${from}/USD rate (batch inverse): ${rate}`);
-          return rate;
-        }
+      const data = await res.json();
+      if (data?.result === 'success' && data.rates?.USD && data.rates.USD > 0) {
+        console.log(`[Currency] ${from}/USD rate (open.er-api): ${data.rates.USD}`);
+        return data.rates.USD;
       }
     }
-  } catch { /* fallback below */ }
+  } catch (e) {
+    console.warn(`[Currency] open.er-api.com failed for ${from}:`, e);
+  }
 
-  // Strategy 2: /stable/fx (may return data on some plans)
+  // Strategy 2: exchangerate-api.com — another free, reliable FX API
   try {
-    const res = await fetch(
-      `https://financialmodelingprep.com/stable/fx?apikey=${apiKey}`,
-      { cache: 'no-store' }
-    );
+    const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${from}`, { cache: 'no-store' });
     if (res.ok) {
-      const fxData = await res.json();
-      if (Array.isArray(fxData) && fxData.length > 0) {
-        const pair = fxData.find?.((p: any) =>
-          p.symbol === `${from}USD` || p.ticker === `${from}USD` ||
-          p.ticker === `${from}/USD` || p.name === `${from}/USD`
-        );
-        const v = pair?.price ?? pair?.close ?? pair?.bid ?? pair?.ask;
-        if (typeof v === 'number' && v > 0) {
-          console.log(`[Currency] ${from}/USD rate (stable/fx): ${v}`);
-          return v;
-        }
+      const data = await res.json();
+      if (data?.rates?.USD && data.rates.USD > 0) {
+        console.log(`[Currency] ${from}/USD rate (exchangerate-api): ${data.rates.USD}`);
+        return data.rates.USD;
       }
     }
-  } catch { /* fallback below */ }
+  } catch (e) {
+    console.warn(`[Currency] exchangerate-api.com failed for ${from}:`, e);
+  }
 
-  // Strategy 3: Hardcoded major currency fallbacks (approximate, better than no conversion)
+  // Strategy 3: Hardcoded major currency fallbacks (approximate, last resort)
   const FALLBACK_RATES: Record<string, number> = {
     EUR: 1.08, GBP: 1.27, JPY: 0.0067, CHF: 1.13, CAD: 0.74, AUD: 0.65,
     NZD: 0.61, SEK: 0.096, NOK: 0.094, DKK: 0.145, HKD: 0.128, SGD: 0.75,

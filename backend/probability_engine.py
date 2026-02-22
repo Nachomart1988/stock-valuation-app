@@ -58,10 +58,13 @@ class BinomialTreeEngine:
     """
 
     def __init__(self):
-        self.max_steps = 500  # Maximum tree depth
+        self.max_steps = 2000  # Maximum tree depth (increased for convergence)
+        self.convergence_tol = 0.005  # 0.5% tolerance for CRR vs BS
         self.data_fetcher = None  # Injected from spectral_cycle_analyzer
         self._hist_vol_cache: Dict[str, float | None] = {}
         self._hist_drift_cache: Dict[str, float] = {}
+        self._ewma_vol_cache: Dict[str, float] = {}
+        self._drift_confidence_cache: Dict[str, float] = {}
 
     def calculate(
         self,
@@ -112,18 +115,9 @@ class BinomialTreeEngine:
                 dividend_yield, days,
             )
 
-            # Determine number of steps
-            if steps is None:
-                steps = min(days, 252)
-            if steps > self.max_steps:
-                logger.warning(
-                    "Requested steps=%d exceeds max_steps=%d — clamping",
-                    steps, self.max_steps,
-                )
-            steps = max(10, min(steps, self.max_steps))
-
-            # ── Calculate Historical Volatility ──
+            # ── Calculate Historical Volatility + EWMA ──
             hist_vol = self._calculate_historical_volatility(ticker, fmp_api_key)
+            ewma_vol = self._ewma_vol_cache.get(ticker)
 
             # ── Try Implied Volatility ──
             implied_vol = None
@@ -131,26 +125,77 @@ class BinomialTreeEngine:
             if use_implied_vol and YFINANCE_AVAILABLE:
                 implied_vol, options_chain = self._fetch_implied_volatility(ticker, days)
 
-            # ── Choose / blend volatility ──
-            if implied_vol and implied_vol > 0 and hist_vol and hist_vol > 0:
-                # Blend: default 60% implied + 40% historical
+            # ── Choose / blend volatility (EWMA + hist + implied) ──
+            vol_clamped = False
+            if implied_vol and implied_vol > 0 and hist_vol and hist_vol > 0 and ewma_vol and ewma_vol > 0:
+                # 3-way blend: 30% implied + 30% EWMA + 40% historical (more robust)
+                vol_used = 0.30 * implied_vol + 0.30 * ewma_vol + 0.40 * hist_vol
+                vol_source = "blended (30% implied + 30% EWMA + 40% historical)"
+            elif implied_vol and implied_vol > 0 and ewma_vol and ewma_vol > 0:
+                vol_used = 0.5 * implied_vol + 0.5 * ewma_vol
+                vol_source = "blended (50% implied + 50% EWMA)"
+            elif implied_vol and implied_vol > 0 and hist_vol and hist_vol > 0:
                 w = max(0.0, min(1.0, vol_blend_weight))
                 vol_used = w * implied_vol + (1.0 - w) * hist_vol
                 vol_source = f"blended ({w:.0%} implied + {1-w:.0%} historical)"
+            elif ewma_vol and ewma_vol > 0 and hist_vol and hist_vol > 0:
+                vol_used = 0.5 * ewma_vol + 0.5 * hist_vol
+                vol_source = "blended (50% EWMA + 50% historical)"
             elif implied_vol and implied_vol > 0:
                 vol_used = implied_vol
                 vol_source = "implied"
+            elif ewma_vol and ewma_vol > 0:
+                vol_used = ewma_vol
+                vol_source = "EWMA"
             elif hist_vol and hist_vol > 0:
                 vol_used = hist_vol
                 vol_source = "historical"
             else:
-                vol_used = 0.30  # Default 30% if nothing available
+                vol_used = 0.30
                 vol_source = "default"
 
+            # Clamp vol to [0.05, 1.0] for numerical stability
+            if vol_used < 0.05:
+                logger.warning("Clamping vol from %.4f to 0.05", vol_used)
+                vol_used = 0.05
+                vol_clamped = True
+            elif vol_used > 1.0:
+                logger.warning("Clamping vol from %.4f to 1.0", vol_used)
+                vol_used = 1.0
+                vol_clamped = True
+
             logger.info(
-                "Volatility: hist=%s, implied=%s, using=%s (%s)",
-                hist_vol, implied_vol, vol_used, vol_source,
+                "Volatility: hist=%s, EWMA=%s, implied=%s, using=%s (%s)%s",
+                hist_vol, ewma_vol, implied_vol, vol_used, vol_source,
+                " [CLAMPED]" if vol_clamped else "",
             )
+
+            # ── Auto-tune steps for convergence ──
+            T = days / 365.0
+            bs_probability_ref = self._black_scholes_probability(
+                current_price, target_price, risk_free_rate,
+                dividend_yield, vol_used, T,
+            )
+            if steps is None:
+                # Start at 200, double until convergence or max
+                steps = 200
+                for _ in range(5):  # max 5 doublings: 200→400→800→1600→2000
+                    crr_test = self._quick_crr_probability(
+                        current_price, target_price, risk_free_rate,
+                        dividend_yield, vol_used, days, steps,
+                    )
+                    diff = abs(crr_test - bs_probability_ref)
+                    if diff < self.convergence_tol or steps >= self.max_steps:
+                        break
+                    steps = min(steps * 2, self.max_steps)
+                logger.info(
+                    "Auto-tuned steps=%d (CRR-BS diff=%.4f, tol=%.4f)",
+                    steps, diff, self.convergence_tol,
+                )
+            else:
+                if steps > self.max_steps:
+                    logger.warning("Requested steps=%d > max=%d, clamping", steps, self.max_steps)
+                steps = max(10, min(steps, self.max_steps))
 
             # ── CRR Parameters ──
             T = days / 365.0  # Total time in years
@@ -297,11 +342,41 @@ class BinomialTreeEngine:
                 dividend_yield, vol_used,
             )
 
+            # ── Richardson Extrapolation for higher accuracy ──
+            half_steps = max(10, steps // 2)
+            p_half = self._quick_crr_probability(
+                current_price, target_price, risk_free_rate,
+                dividend_yield, vol_used, days, half_steps,
+            )
+            p_full = self._quick_crr_probability(
+                current_price, target_price, risk_free_rate,
+                dividend_yield, vol_used, days, steps,
+            )
+            # Richardson: (4*P_2N - P_N) / 3
+            richardson_prob = (4.0 * p_full - p_half) / 3.0
+            richardson_prob = max(0.0, min(1.0, richardson_prob))
+
+            # ── Convergence metrics ──
+            convergence_diff = abs(probability - bs_probability)
+            accuracy_score = 1.0 - convergence_diff / max(bs_probability, 0.001)
+            accuracy_score = max(0.0, min(1.0, accuracy_score))
+            convergence_warning = None
+            if convergence_diff > 0.05:
+                convergence_warning = f"CRR-BS diff is {convergence_diff*100:.1f}% — consider increasing steps for better accuracy"
+            elif convergence_diff > 0.02:
+                convergence_warning = f"CRR-BS diff is {convergence_diff*100:.1f}% — moderate convergence"
+
+            # ── Monte Carlo barrier check (10000 paths) ──
+            mc_barrier_prob = self._monte_carlo_barrier(
+                current_price, target_price, hist_drift, vol_used, T,
+                n_paths=10000,
+            )
+
             # ── Bootstrap Confidence Interval ──
             bootstrap_ci = self._bootstrap_confidence_interval(
                 ticker, current_price, target_price, risk_free_rate,
                 dividend_yield, days, steps, fmp_api_key,
-                n_bootstrap=500, confidence=0.90,
+                n_bootstrap=1000, confidence=0.90,
             )
 
             # ── IV Skew Analysis ──
@@ -309,27 +384,38 @@ class BinomialTreeEngine:
             if use_implied_vol and YFINANCE_AVAILABLE:
                 iv_skew = self._compute_iv_skew(ticker, days)
 
+            # ── Drift confidence ──
+            drift_confidence = self._drift_confidence_cache.get(ticker, 0.0)
+
             result = {
                 "probability":          round(probability * 100, 2),
                 "bsProbability":        round(bs_probability * 100, 2),
+                "richardsonProbability": round(richardson_prob * 100, 2),
                 "barrierProbability":   round(barrier_prob_real * 100, 2),
                 "barrierProbabilityRN": round(barrier_prob_rn * 100, 2),
+                "mcBarrierProbability": round(mc_barrier_prob * 100, 2),
                 "realWorldProbability": round(real_world_prob * 100, 2),
                 "historicalDrift":      round(hist_drift * 100, 2),
+                "driftConfidence":      round(drift_confidence * 100, 1),
                 "upFactor":             round(u, 6),
                 "downFactor":           round(d, 6),
                 "upProbability":        round(p_up * 100, 4),
                 "downProbability":      round(p_down * 100, 4),
                 "historicalVolatility": round(hist_vol * 100, 2) if hist_vol else None,
+                "ewmaVolatility":       round(ewma_vol * 100, 2) if ewma_vol else None,
                 "impliedVolatility":    round(implied_vol * 100, 2) if implied_vol else None,
                 "volatilityUsed":       round(vol_used * 100, 2),
                 "volatilitySource":     vol_source,
+                "volatilityClamped":    vol_clamped,
                 "expectedPrice":        round(expected_price, 2),
                 "steps":                steps,
                 "days":                 days,
                 "deltaT":               round(T, 6),
                 "deltaTPerStep":        round(dt, 6),
-                "probSum":              round(float(np.sum(probs)) * 100, 4),  # sanity check (should be 100)
+                "probSum":              round(float(np.sum(probs)) * 100, 4),
+                "convergenceDiff":      round(convergence_diff * 100, 2),
+                "accuracyScore":        round(accuracy_score * 100, 1),
+                "convergenceWarning":   convergence_warning,
                 "priceDistribution":    distribution_chart,
                 "treePreview":          tree_preview,
                 "optionsChain":         options_chain,
@@ -471,7 +557,7 @@ class BinomialTreeEngine:
     def _calculate_historical_volatility(
         self, ticker: str, fmp_api_key: Optional[str]
     ) -> Optional[float]:
-        """Calculate annualized historical volatility from daily returns."""
+        """Calculate annualized historical volatility + EWMA vol + drift from daily returns."""
         # Check cache first
         if ticker in self._hist_vol_cache:
             logger.info("Historical vol cache hit for %s", ticker)
@@ -491,12 +577,12 @@ class BinomialTreeEngine:
             if not self.data_fetcher:
                 self.data_fetcher = HistoricalDataFetcher(fmp_api_key)
 
-            # Retry loop — up to 3 attempts
+            # Fetch 500+ days for better drift estimation
             historical = None
             max_retries = 3
             for attempt in range(1, max_retries + 1):
                 try:
-                    historical = self.data_fetcher.fetch(ticker, max_bars=300)
+                    historical = self.data_fetcher.fetch(ticker, max_bars=600)
                     if historical:
                         break
                 except Exception as fetch_err:
@@ -516,17 +602,42 @@ class BinomialTreeEngine:
             # Log returns
             log_returns = np.diff(np.log(closes))
 
-            # Annualized volatility (ddof=1 for sample std dev)
-            daily_vol  = np.std(log_returns, ddof=1)
+            # Standard annualized volatility (ddof=1 for sample std dev)
+            daily_vol = np.std(log_returns, ddof=1)
             annual_vol = daily_vol * sqrt(252)
+
+            # EWMA volatility (lambda=0.94, RiskMetrics standard)
+            ewma_lambda = 0.94
+            n = len(log_returns)
+            ewma_var = float(log_returns[0] ** 2)
+            for i in range(1, n):
+                ewma_var = ewma_lambda * ewma_var + (1 - ewma_lambda) * log_returns[i] ** 2
+            ewma_daily_vol = sqrt(ewma_var)
+            ewma_annual_vol = ewma_daily_vol * sqrt(252)
+            self._ewma_vol_cache[ticker] = float(ewma_annual_vol)
 
             # Annualized drift (mean log return) — for real-world probability
             daily_drift = np.mean(log_returns)
             annual_drift = daily_drift * 252
 
+            # Drift confidence: based on data length and stability
+            # Higher confidence with more data and lower standard error
+            drift_se = np.std(log_returns, ddof=1) / sqrt(n) * sqrt(252)
+            # Confidence = 1 - (standard_error / abs(drift)) clamped to [0, 1]
+            if abs(annual_drift) > 0.001:
+                drift_conf = max(0.0, min(1.0, 1.0 - drift_se / abs(annual_drift)))
+            else:
+                drift_conf = 0.0
+            # Bonus for having more data
+            data_bonus = min(0.3, n / 1000.0)
+            drift_conf = min(1.0, drift_conf + data_bonus)
+            self._drift_confidence_cache[ticker] = float(drift_conf)
+
             logger.info(
-                "Historical vol for %s: %.2f%%, drift: %.2f%% (%d days)",
-                ticker, annual_vol * 100, annual_drift * 100, len(closes),
+                "Vol for %s: hist=%.2f%%, EWMA=%.2f%%, drift=%.2f%% "
+                "(drift_conf=%.0f%%, %d days)",
+                ticker, annual_vol * 100, ewma_annual_vol * 100,
+                annual_drift * 100, drift_conf * 100, len(closes),
             )
 
             # Store in cache
@@ -537,6 +648,41 @@ class BinomialTreeEngine:
         except Exception as e:
             logger.error("Error calculating historical vol: %s", e)
             return None
+
+    @staticmethod
+    def _monte_carlo_barrier(
+        S: float, K: float, mu: float, sigma: float, T: float,
+        n_paths: int = 10000, n_steps: int = 252,
+    ) -> float:
+        """
+        Monte Carlo simulation for barrier probability verification.
+        Simulates n_paths GBM paths and counts how many touch the target.
+        """
+        if T <= 0 or sigma <= 0:
+            return 0.0
+        try:
+            rng = np.random.default_rng(seed=42)
+            dt = T / n_steps
+            sqrt_dt = sqrt(dt)
+            drift_per_step = (mu - 0.5 * sigma ** 2) * dt
+            bullish = K >= S
+
+            touched = 0
+            for _ in range(n_paths):
+                price = S
+                for __ in range(n_steps):
+                    z = rng.standard_normal()
+                    price *= exp(drift_per_step + sigma * sqrt_dt * z)
+                    if bullish and price >= K:
+                        touched += 1
+                        break
+                    elif not bullish and price <= K:
+                        touched += 1
+                        break
+
+            return touched / n_paths
+        except Exception:
+            return 0.0
 
     def _fetch_implied_volatility(
         self, ticker: str, days: int
@@ -807,6 +953,25 @@ class BinomialTreeEngine:
                 "delta": round((p - base_prob) * 100, 2),
             })
         results["daysToExpiry"] = days_results
+
+        # Drift perturbation (real-world probability sensitivity)
+        T = days / 365.0
+        drift_shifts = [-0.10, -0.05, 0.05, 0.10]
+        drift_results = []
+        base_drift = self._hist_drift_cache.get(
+            "", risk_free_rate
+        )  # approx — will use r as base
+        for dd in drift_shifts:
+            shifted_drift = risk_free_rate + dd
+            rw_p = self._real_world_terminal_probability(
+                current_price, target_price, shifted_drift, vol, T,
+            )
+            drift_results.append({
+                "driftShift": round(dd * 100, 1),
+                "driftUsed": round(shifted_drift * 100, 2),
+                "realWorldProb": round(rw_p * 100, 2),
+            })
+        results["drift"] = drift_results
 
         return results
 

@@ -93,22 +93,27 @@ export default function ScreenerPage() {
       if (f.country) params.set('country', f.country);
       if (f.exchange) params.set('exchange', f.exchange);
 
-      // Try stable endpoint first, then multiple fallbacks
-      let res = await fetch(`https://financialmodelingprep.com/stable/company-screener?${params.toString()}`);
-      if (!res.ok) {
-        // Fallback 1: stable stock-screener
-        res = await fetch(`https://financialmodelingprep.com/stable/stock-screener?${params.toString()}`);
+      // Try multiple FMP endpoints (some plans only support certain ones)
+      const endpoints = [
+        `https://financialmodelingprep.com/stable/company-screener?${params.toString()}`,
+        `https://financialmodelingprep.com/stable/stock-screener?${params.toString()}`,
+        `https://financialmodelingprep.com/api/v3/stock-screener?${params.toString()}`,
+      ];
+      let res: Response | null = null;
+      let lastStatus = 0;
+      for (const url of endpoints) {
+        try {
+          const r = await fetch(url);
+          lastStatus = r.status;
+          if (r.ok) { res = r; break; }
+        } catch { /* try next */ }
       }
-      if (!res.ok) {
-        // Fallback 2: v3 stock-screener (legacy)
-        res = await fetch(`https://financialmodelingprep.com/api/v3/stock-screener?${params.toString()}`);
-      }
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        const isAuthError = res.status === 401 || res.status === 403;
-        throw new Error(isAuthError
-          ? `Authentication error (HTTP ${res.status}). Check that NEXT_PUBLIC_FMP_API_KEY is valid.`
-          : `HTTP ${res.status}: ${body.slice(0, 200)}`);
+      if (!res) {
+        throw new Error(
+          lastStatus === 401 || lastStatus === 403
+            ? `FMP Screener returned HTTP ${lastStatus}. Your FMP plan may not include the screener endpoint, or the API key may have expired. Verify your key at financialmodelingprep.com/developer/docs.`
+            : `All screener endpoints failed (last HTTP ${lastStatus}).`
+        );
       }
       const data = await res.json();
       setScreenerResults(Array.isArray(data) ? data : []);

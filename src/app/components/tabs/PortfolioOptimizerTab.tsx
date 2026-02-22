@@ -1,7 +1,7 @@
 // src/app/components/tabs/PortfolioOptimizerTab.tsx
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 interface OptimizationResult {
@@ -40,7 +40,34 @@ export default function PortfolioOptimizerTab() {
   const { locale } = useLanguage();
   const es = locale === 'es';
 
-  const [tickerInput, setTickerInput] = useState('AAPL, MSFT, GOOGL, AMZN, NVDA');
+  const [tickerInput, setTickerInput] = useState('');
+  const [diaryLoaded, setDiaryLoaded] = useState(false);
+
+  // Auto-load open positions from diary
+  useEffect(() => {
+    if (diaryLoaded) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/diary');
+        if (!res.ok) return;
+        const data = await res.json();
+        const trades = data?.trades || [];
+        const openSymbols = [...new Set(
+          trades
+            .filter((t: any) => t.state === 'Open' && t.symbol)
+            .map((t: any) => t.symbol.toUpperCase().trim())
+        )] as string[];
+        if (openSymbols.length >= 2) {
+          setTickerInput(openSymbols.join(', '));
+        } else {
+          setTickerInput('AAPL, MSFT, GOOGL, AMZN, NVDA');
+        }
+      } catch {
+        setTickerInput('AAPL, MSFT, GOOGL, AMZN, NVDA');
+      }
+      setDiaryLoaded(true);
+    })();
+  }, [diaryLoaded]);
   const [objective, setObjective] = useState('max_sharpe');
   const [maxWeight, setMaxWeight] = useState(0.40);
   const [loading, setLoading] = useState(false);

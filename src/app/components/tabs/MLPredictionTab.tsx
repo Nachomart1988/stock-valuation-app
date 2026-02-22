@@ -56,12 +56,22 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker, horizons: [5, 10, 20, 30] }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        if (res.status === 503) throw new Error(es ? 'PyTorch no está instalado en el servidor. Contacta al administrador.' : 'PyTorch is not installed on the server. Contact administrator.');
+        if (res.status === 500) throw new Error(es ? `Error del servidor: ${body.slice(0, 200)}` : `Server error: ${body.slice(0, 200)}`);
+        throw new Error(`HTTP ${res.status}`);
+      }
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setResult(data);
     } catch (err: any) {
-      setError(err.message || 'Error running prediction');
+      const msg = err.message || '';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        setError(es ? `No se pudo conectar al backend (${backendUrl}).` : `Cannot connect to backend (${backendUrl}).`);
+      } else {
+        setError(msg || 'Error running prediction');
+      }
     } finally {
       setLoading(false);
     }

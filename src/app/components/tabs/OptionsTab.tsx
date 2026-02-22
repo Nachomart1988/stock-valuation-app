@@ -91,17 +91,27 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`Backend HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}. Ensure the backend is running at ${backendUrl}`);
+      }
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setChain(data);
       if (data.expirations?.length > 0) setSelectedExp(data.expirations[0]);
     } catch (err: any) {
-      setError(err.message);
+      const msg = err.message || 'Unknown error';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch')) {
+        setError(es
+          ? `No se pudo conectar al backend (${backendUrl}). Verifica que el backend esté corriendo.`
+          : `Cannot connect to backend (${backendUrl}). Make sure the backend server is running.`);
+      } else {
+        setError(msg);
+      }
     } finally {
       setChainLoading(false);
     }
-  }, [ticker, backendUrl]);
+  }, [ticker, backendUrl, es]);
 
   const analyzeStrategy = useCallback(async () => {
     if (!selectedExp) return;
