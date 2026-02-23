@@ -46,25 +46,46 @@ export default function PortfolioOptimizerTab() {
   // Auto-load open positions from diary
   useEffect(() => {
     if (diaryLoaded) return;
+
+    const getOpenSymbols = (trades: any[]): string[] =>
+      [...new Set(
+        trades
+          .filter((t: any) => t.state === 'Open' && t.symbol)
+          .map((t: any) => t.symbol.toUpperCase().trim())
+      )] as string[];
+
+    // 1. Try localStorage first (most reliable — DiarioInversorTab stores here)
+    try {
+      const raw = localStorage.getItem('diario_trades_v2');
+      if (raw) {
+        const trades = JSON.parse(raw);
+        const openSymbols = getOpenSymbols(trades);
+        if (openSymbols.length >= 2) {
+          setTickerInput(openSymbols.join(', '));
+          setDiaryLoaded(true);
+          return;
+        }
+      }
+    } catch { /* ignore parse errors */ }
+
+    // 2. Fallback: try /api/diary endpoint
     (async () => {
       try {
         const res = await fetch('/api/diary');
-        if (!res.ok) return;
-        const data = await res.json();
-        const trades = data?.trades || [];
-        const openSymbols = [...new Set(
-          trades
-            .filter((t: any) => t.state === 'Open' && t.symbol)
-            .map((t: any) => t.symbol.toUpperCase().trim())
-        )] as string[];
-        if (openSymbols.length >= 2) {
-          setTickerInput(openSymbols.join(', '));
-        } else {
-          setTickerInput('AAPL, MSFT, GOOGL, AMZN, NVDA');
+        if (res.ok) {
+          const data = await res.json();
+          const trades = data?.trades || [];
+          const openSymbols = getOpenSymbols(trades);
+          if (openSymbols.length >= 2) {
+            setTickerInput(openSymbols.join(', '));
+            setDiaryLoaded(true);
+            return;
+          }
         }
-      } catch {
-        setTickerInput('AAPL, MSFT, GOOGL, AMZN, NVDA');
-      }
+      } catch { /* ignore */ }
+
+      // 3. Default tickers if no diary data
+      setTickerInput('AAPL, MSFT, GOOGL, AMZN, NVDA');
       setDiaryLoaded(true);
     })();
   }, [diaryLoaded]);
