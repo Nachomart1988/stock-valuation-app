@@ -1366,45 +1366,69 @@ class BinomialTreeEngine:
 
     def _aggregate_distribution(
         self, distribution: List[Dict], current_price: float,
-        target_price: float, num_buckets: int = 30
+        target_price: float, num_buckets: int = 60
     ) -> List[Dict]:
-        """Aggregate terminal price distribution into buckets for chart display."""
+        """
+        Aggregate terminal price distribution into buckets for chart display.
+
+        The binomial tree generates terminal prices spanning many orders of
+        magnitude (e.g. $2 to $15,000 for a $200 stock over 200 steps).
+        To avoid an absurdly wide X-axis, we trim to the central 99.8% of
+        the probability mass (0.1th to 99.9th percentile) before bucketing.
+        """
         if not distribution:
             return []
 
-        prices = [d["price"]       for d in distribution]
-        probs  = [d["probability"] for d in distribution]  # already in %
+        prices_arr = np.array([d["price"]       for d in distribution], dtype=np.float64)
+        probs_arr  = np.array([d["probability"] for d in distribution], dtype=np.float64)  # in %
 
-        min_p = min(prices)
-        max_p = max(prices)
-
-        if max_p <= min_p:
+        if prices_arr.max() <= prices_arr.min():
             return []
 
-        bucket_width = (max_p - min_p) / num_buckets
+        # ── Trim to 99.8% probability mass to exclude extreme tails ──
+        sorted_idx  = np.argsort(prices_arr)
+        sorted_p    = prices_arr[sorted_idx]
+        sorted_q    = probs_arr[sorted_idx]
+        cum_q       = np.cumsum(sorted_q)
+        total_q     = cum_q[-1]
+
+        lo = float(np.interp(total_q * 0.001, cum_q, sorted_p))  # 0.1th pct
+        hi = float(np.interp(total_q * 0.999, cum_q, sorted_p))  # 99.9th pct
+
+        # Never shrink range below ±5% of current price (avoids degenerate case)
+        lo = min(lo, current_price * 0.95)
+        hi = max(hi, current_price * 1.05)
+
+        if hi <= lo:
+            hi = lo * 1.2
+
+        # ── Build buckets over the trimmed range ──
+        bucket_width = (hi - lo) / num_buckets
+        prices_list  = prices_arr.tolist()
+        probs_list   = probs_arr.tolist()
         buckets: List[Dict] = []
 
         for i in range(num_buckets):
-            bucket_min    = min_p + i * bucket_width
+            bucket_min    = lo + i * bucket_width
             bucket_max    = bucket_min + bucket_width
             bucket_center = (bucket_min + bucket_max) / 2
 
             total_prob = sum(
-                p for price, p in zip(prices, probs)
+                p for price, p in zip(prices_list, probs_list)
                 if bucket_min <= price < bucket_max
             )
 
-            if total_prob > 0.001:
-                buckets.append({
-                    "priceRange":  f"${bucket_min:.0f}-${bucket_max:.0f}",
-                    "center":      round(bucket_center, 2),
-                    "probability": round(total_prob, 4),
-                    "aboveTarget": (
-                        bucket_center >= target_price
-                        if target_price >= current_price
-                        else bucket_center <= target_price
-                    ),
-                })
+            # Include all buckets within the range (even empty ones keep the bell shape)
+            buckets.append({
+                "priceRange":  f"${bucket_min:.0f}-${bucket_max:.0f}",
+                "center":      round(bucket_center, 2),
+                "probability": round(total_prob, 4),
+                "aboveTarget": (
+                    bucket_center >= target_price
+                    if target_price >= current_price
+                    else bucket_center <= target_price
+                ),
+            })
 
         return buckets
 

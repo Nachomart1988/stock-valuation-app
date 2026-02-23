@@ -1027,7 +1027,7 @@
     "calculating": "Calculating...",
     "calculate": "Calculate Probability",
     "missingInputs": "Please enter target price and days",
-    "probabilityOfReaching": "Probability of reaching",
+    "probabilityOfReaching": "Probability of reaching or exceeding",
     "in": "in",
     "upFactor": "Up Factor",
     "downFactor": "Down Factor",

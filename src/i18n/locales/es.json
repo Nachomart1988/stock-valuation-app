@@ -1027,7 +1027,7 @@
     "calculating": "Calculando...",
     "calculate": "Calcular Probabilidad",
     "missingInputs": "Ingrese precio objetivo y días",
-    "probabilityOfReaching": "Probabilidad de alcanzar",
+    "probabilityOfReaching": "Probabilidad de alcanzar o superar",
     "in": "en",
     "upFactor": "Factor de Subida",
     "downFactor": "Factor de Bajada",
