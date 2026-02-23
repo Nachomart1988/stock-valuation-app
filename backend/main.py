@@ -665,6 +665,15 @@ class OptionsIVSurfaceRequest(BaseModel):
     ticker: str
 
 
+class OptionsEvaluateRequest(BaseModel):
+    """Request body for AI-style strategy evaluation"""
+    ticker: str
+    legs: List[Dict[str, Any]]
+    currentPrice: float
+    analysis: Dict[str, Any]
+    lang: str = 'en'
+
+
 @app.post("/options/chain")
 async def options_chain(req: OptionsChainRequest):
     """
@@ -834,6 +843,165 @@ async def options_iv_surface(req: OptionsIVSurfaceRequest):
         print(f"[Options] Error building IV surface: {e}")
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/options/evaluate")
+async def options_evaluate(req: OptionsEvaluateRequest):
+    """
+    Rule-based AI evaluation of a custom options strategy.
+    Analyzes greeks, risk/reward, and market conditions for the strategy.
+    """
+    try:
+        import math
+        legs = req.legs
+        analysis = req.analysis
+        es = req.lang == 'es'
+        S = req.currentPrice
+
+        greeks = analysis.get('greeks', {})
+        delta = greeks.get('delta', 0)
+        gamma = greeks.get('gamma', 0)
+        theta = greeks.get('theta', 0)
+        vega = greeks.get('vega', 0)
+
+        max_profit = analysis.get('maxProfit')
+        max_loss = analysis.get('maxLoss')
+        breakevens = analysis.get('breakevens', [])
+        pop = analysis.get('probabilityOfProfit', 0)
+        cost_basis = analysis.get('costBasis', 0)
+
+        # ── Classify strategy structure ──
+        n_legs = len(legs)
+        n_calls = sum(1 for l in legs if l.get('type') == 'call')
+        n_puts  = sum(1 for l in legs if l.get('type') == 'put')
+        n_stock = sum(1 for l in legs if l.get('type') == 'stock')
+        long_legs  = sum(1 for l in legs if int(l.get('quantity', 1)) > 0)
+        short_legs = sum(1 for l in legs if int(l.get('quantity', 1)) < 0)
+
+        # ── Directional bias ──
+        if delta > 0.5:    bias = 'es Bullish (delta alto)' if es else 'is Bullish (high delta)'
+        elif delta > 0.2:  bias = 'es ligeramente Bullish' if es else 'is mildly Bullish'
+        elif delta < -0.5: bias = 'es Bearish (delta bajo)' if es else 'is Bearish (low delta)'
+        elif delta < -0.2: bias = 'es ligeramente Bearish' if es else 'is mildly Bearish'
+        else:              bias = 'es neutral' if es else 'is neutral'
+
+        # ── Theta analysis ──
+        if theta < -0.05:
+            theta_txt = ('Theta negativo: la estrategia pierde valor con el paso del tiempo. '
+                         'Ideal si el movimiento ocurre rápido.' if es else
+                         'Negative theta: the strategy loses value with time decay. '
+                         'Works best if the move happens quickly.')
+        elif theta > 0.05:
+            theta_txt = ('Theta positivo: la estrategia se beneficia del paso del tiempo. '
+                         'Funciona bien en mercados laterales.' if es else
+                         'Positive theta: the strategy benefits from time decay. '
+                         'Works well in sideways markets.')
+        else:
+            theta_txt = ('Theta cercano a cero: exposición al tiempo mínima.' if es else
+                         'Theta near zero: minimal time decay exposure.')
+
+        # ── Vega analysis ──
+        if vega > 0.05:
+            vega_txt = ('Vega positivo: gana con aumento de volatilidad implícita (long vega).' if es else
+                        'Positive vega: profits from rising implied volatility (long vega).')
+        elif vega < -0.05:
+            vega_txt = ('Vega negativo: gana con caída de volatilidad implícita (short vega).' if es else
+                        'Negative vega: profits from falling implied volatility (short vega).')
+        else:
+            vega_txt = ('Vega neutro: poca exposición a cambios de volatilidad.' if es else
+                        'Neutral vega: low exposure to volatility changes.')
+
+        # ── Risk/reward score ──
+        score = 50  # base
+        if isinstance(max_profit, (int, float)) and isinstance(max_loss, (int, float)):
+            if max_loss != 0:
+                rr = abs(max_profit) / (abs(max_loss) + 1e-9)
+                if rr >= 3:    score += 25
+                elif rr >= 2:  score += 15
+                elif rr >= 1:  score += 5
+                else:          score -= 10
+        if pop > 0.65: score += 15
+        elif pop > 0.50: score += 8
+        elif pop < 0.35: score -= 10
+        if cost_basis < 0: score += 5   # credit strategy bonus
+        score = max(10, min(95, score))
+
+        if score >= 75: rating = 'Excelente' if es else 'Excellent'
+        elif score >= 60: rating = 'Buena' if es else 'Good'
+        elif score >= 45: rating = 'Moderada' if es else 'Moderate'
+        elif score >= 30: rating = 'Riesgosa' if es else 'Risky'
+        else: rating = 'Desfavorable' if es else 'Unfavorable'
+
+        # ── Market conditions ──
+        conditions = []
+        if delta > 0.3:
+            conditions.append('mercado alcista o ruptura al alza' if es else 'bullish market or upside breakout')
+        elif delta < -0.3:
+            conditions.append('mercado bajista o ruptura a la baja' if es else 'bearish market or downside break')
+        if theta > 0:
+            conditions.append('mercado lateral sin grandes movimientos' if es else 'sideways market with low movement')
+        if vega > 0:
+            conditions.append('expansión de volatilidad (evento, earnings)' if es else 'volatility expansion (events, earnings)')
+        elif vega < 0:
+            conditions.append('contracción de volatilidad post-evento' if es else 'volatility contraction post-event')
+        if not conditions:
+            conditions.append('cualquier entorno de mercado moderado' if es else 'any moderate market environment')
+
+        # ── Suggestions ──
+        suggestions = []
+        if isinstance(max_loss, (int, float)) and abs(max_loss) > abs(max_profit if isinstance(max_profit, (int, float)) else 0) * 2:
+            suggestions.append(('Considera agregar una pierna de cobertura para limitar la pérdida máxima.' if es else
+                                 'Consider adding a hedge leg to cap the maximum loss.'))
+        if theta < -0.1 and vega < 0.05:
+            suggestions.append(('El tiempo juega en tu contra. Asegúrate de tener un catalizador claro.' if es else
+                                 'Time decay is working against you. Make sure you have a clear catalyst.'))
+        if pop < 0.40:
+            suggestions.append(('Probabilidad de ganancia baja (<40%). Evalúa ajustar los strikes.' if es else
+                                 'Low probability of profit (<40%). Consider adjusting strikes.'))
+        if n_legs > 4:
+            suggestions.append(('Estrategia compleja. Mayor número de piernas implica más comisiones y slippage.' if es else
+                                 'Complex strategy. More legs mean higher commissions and slippage.'))
+        if cost_basis > S * 0.03:
+            suggestions.append(('Costo de entrada elevado respecto al precio del subyacente.' if es else
+                                 'High entry cost relative to underlying price.'))
+        if not suggestions:
+            suggestions.append(('Estrategia bien estructurada. Monitorea los greeks al acercarse al vencimiento.' if es else
+                                 'Well-structured strategy. Monitor greeks as expiration approaches.'))
+
+        # ── Summary ──
+        be_str = ' / '.join(f'${b:.2f}' for b in breakevens[:2]) if breakevens else ('N/A')
+        summary = (f'Esta estrategia de {n_legs} piernas {bias}, con delta={delta:.3f}, '
+                   f'theta={theta:.4f}, vega={vega:.4f}. '
+                   f'Breakeven{"s" if len(breakevens) > 1 else ""}: {be_str}. '
+                   f'Probabilidad de ganancia estimada: {pop*100:.1f}%.' if es else
+                   f'This {n_legs}-leg strategy {bias}, with delta={delta:.3f}, '
+                   f'theta={theta:.4f}, vega={vega:.4f}. '
+                   f'Breakeven{"s" if len(breakevens) > 1 else ""}: {be_str}. '
+                   f'Estimated probability of profit: {pop*100:.1f}%.')
+
+        return {
+            'rating': rating,
+            'ratingScore': round(score),
+            'summary': summary,
+            'greeksAnalysis': f'{theta_txt} {vega_txt}',
+            'riskAnalysis': (
+                f'Ganancia máx.: {"ilimitada" if not isinstance(max_profit,(int,float)) else f"${max_profit*100:.0f}/ct"}, '
+                f'Pérdida máx.: {"ilimitada" if not isinstance(max_loss,(int,float)) else f"${abs(max_loss)*100:.0f}/ct"}. '
+                f'Relación R/R: {f"{abs(max_profit/max_loss):.1f}x" if isinstance(max_profit,(int,float)) and isinstance(max_loss,(int,float)) and max_loss != 0 else "N/A"}.' if es else
+                f'Max profit: {"unlimited" if not isinstance(max_profit,(int,float)) else f"${max_profit*100:.0f}/ct"}, '
+                f'Max loss: {"unlimited" if not isinstance(max_loss,(int,float)) else f"${abs(max_loss)*100:.0f}/ct"}. '
+                f'R/R ratio: {f"{abs(max_profit/max_loss):.1f}x" if isinstance(max_profit,(int,float)) and isinstance(max_loss,(int,float)) and max_loss != 0 else "N/A"}.'
+            ),
+            'marketOutlook': (
+                ('Funciona mejor en: ' if es else 'Works best in: ') + (', '.join(conditions))
+            ),
+            'suggestions': suggestions,
+        }
+
+    except Exception as e:
+        print(f"[Options] Error evaluating strategy: {e}")
+        import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

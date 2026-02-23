@@ -1,7 +1,7 @@
 // src/app/components/tabs/OptionsTab.tsx
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Tab } from '@headlessui/react';
 import { useLanguage } from '@/i18n/LanguageContext';
 
@@ -23,10 +23,19 @@ interface CustomLeg {
   id: string;
   type: 'stock' | 'call' | 'put';
   side: 'long' | 'short';
+  qty: number;           // number of contracts (100 shares each) for options/stock
   strike: number;
   expiration: string;
   entryPremium: number;  // user's entry price per share (editable)
   iv: number;
+}
+
+interface SavedStrategy {
+  id: string;
+  name: string;
+  ticker: string;
+  legs: CustomLeg[];
+  savedAt: string;
 }
 
 interface ScanCombo {
@@ -226,7 +235,26 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
   const [customLoading, setCustomLoading]     = useState(false);
   const [customError, setCustomError]         = useState<string | null>(null);
 
+  // Saved strategies (localStorage)
+  const STORAGE_KEY = 'options_saved_strategies';
+  const [savedStrategies, setSavedStrategies] = useState<SavedStrategy[]>([]);
+  const [strategyName, setStrategyName]       = useState('');
+  const [showSaved, setShowSaved]             = useState(false);
+
+  // AI evaluation
+  const [aiEval, setAiEval]           = useState<any>(null);
+  const [aiEvalLoading, setAiEvalLoading] = useState(false);
+  const [aiEvalError, setAiEvalError]   = useState<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
+
+  // Load saved strategies from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) setSavedStrategies(JSON.parse(raw));
+    } catch {}
+  }, []);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -373,7 +401,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
         iv = atm.iv ?? 0;
       }
     }
-    setCustomLegs(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, type, side: 'long', strike, expiration: defExp, entryPremium: prem, iv }]);
+    setCustomLegs(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, type, side: 'long', qty: 1, strike, expiration: defExp, entryPremium: prem, iv }]);
   }, [chain, currentPrice]);
 
   const updateCustomLeg = useCallback((id: string, field: keyof CustomLeg, value: any) => {
@@ -405,13 +433,14 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
     if (customLegs.length === 0) return;
     setCustomLoading(true);
     setCustomError(null);
+    setAiEval(null);
     try {
       const legs = customLegs.map(leg => ({
         type: leg.type,
         strike: leg.type === 'stock' ? currentPrice : leg.strike,
         expiration: leg.expiration || (chain?.expirations?.[0] ?? ''),
         premium: leg.type === 'stock' ? 0 : leg.entryPremium,
-        quantity: leg.side === 'long' ? 1 : -1,
+        quantity: (leg.side === 'long' ? 1 : -1) * (leg.qty || 1),
         iv: leg.iv,
       }));
       const res = await fetch(`${backendUrl}/options/analyze`, {
@@ -429,6 +458,65 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
       setCustomLoading(false);
     }
   }, [customLegs, ticker, currentPrice, backendUrl, chain]);
+
+  // ── Save / load / delete strategies ───────────────────────────
+  const saveStrategy = useCallback(() => {
+    if (customLegs.length === 0) return;
+    const name = strategyName.trim() || `Strategy ${new Date().toLocaleDateString()}`;
+    const newStrategy: SavedStrategy = {
+      id: `${Date.now()}`,
+      name,
+      ticker,
+      legs: customLegs,
+      savedAt: new Date().toISOString(),
+    };
+    const updated = [newStrategy, ...savedStrategies].slice(0, 20); // max 20 saved
+    setSavedStrategies(updated);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    setStrategyName('');
+  }, [customLegs, savedStrategies, strategyName, ticker]);
+
+  const loadStrategy = useCallback((s: SavedStrategy) => {
+    setCustomLegs(s.legs.map(l => ({ ...l, id: `${Date.now()}-${Math.random()}` })));
+    setCustomAnalysis(null);
+    setAiEval(null);
+    setShowSaved(false);
+  }, []);
+
+  const deleteStrategy = useCallback((id: string) => {
+    const updated = savedStrategies.filter(s => s.id !== id);
+    setSavedStrategies(updated);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  }, [savedStrategies]);
+
+  // ── AI evaluation ──────────────────────────────────────────────
+  const getAIEvaluation = useCallback(async () => {
+    if (!customAnalysis) return;
+    setAiEvalLoading(true);
+    setAiEvalError(null);
+    try {
+      const legs = customLegs.map(leg => ({
+        type: leg.type,
+        strike: leg.type === 'stock' ? currentPrice : leg.strike,
+        expiration: leg.expiration || '',
+        premium: leg.type === 'stock' ? 0 : leg.entryPremium,
+        quantity: (leg.side === 'long' ? 1 : -1) * (leg.qty || 1),
+        iv: leg.iv,
+      }));
+      const res = await fetch(`${backendUrl}/options/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker, legs, currentPrice, analysis: customAnalysis, lang: es ? 'es' : 'en' }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setAiEval(data);
+    } catch (e: any) {
+      setAiEvalError(e.message || 'Error getting evaluation');
+    } finally {
+      setAiEvalLoading(false);
+    }
+  }, [customAnalysis, customLegs, ticker, currentPrice, backendUrl, es]);
 
   // ── Helpers ────────────────────────────────────────────────────
   const fmtDollar = (v: number | string | null) => {
@@ -1035,7 +1123,40 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
           <Tab.Panel>
             <div className="space-y-4">
 
-              {/* Add leg buttons */}
+              {/* ── Mis Estrategias (Saved) ── */}
+              {savedStrategies.length > 0 && (
+                <div className="bg-gray-800/50 rounded-xl border border-amber-500/20 overflow-hidden">
+                  <button
+                    onClick={() => setShowSaved(v => !v)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-700/40 transition-all"
+                  >
+                    <span className="font-medium text-amber-400">
+                      💾 {es ? 'Mis Estrategias' : 'My Strategies'} ({savedStrategies.length})
+                    </span>
+                    <span className="text-gray-500 text-xs">{showSaved ? '▲' : '▼'}</span>
+                  </button>
+                  {showSaved && (
+                    <div className="px-4 pb-3 grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                      {savedStrategies.map(s => (
+                        <div key={s.id} className="flex items-center gap-2 bg-gray-700/40 rounded-lg px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-semibold text-gray-200 truncate">{s.name}</div>
+                            <div className="text-xs text-gray-500">{s.ticker} · {s.legs.length} {es ? 'piernas' : 'legs'} · {new Date(s.savedAt).toLocaleDateString()}</div>
+                          </div>
+                          <button onClick={() => loadStrategy(s)}
+                            className="text-xs text-amber-400 hover:text-amber-300 font-medium px-2 py-0.5 bg-amber-900/30 rounded transition-all">
+                            {es ? 'Cargar' : 'Load'}
+                          </button>
+                          <button onClick={() => deleteStrategy(s.id)}
+                            className="text-gray-600 hover:text-red-400 text-base font-bold leading-none transition-all">×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Add leg buttons ── */}
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-sm text-gray-400 font-medium">{es ? 'Agregar pierna:' : 'Add leg:'}</span>
                 <button onClick={() => addCustomLeg('call')}
@@ -1051,7 +1172,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   + {es ? 'Acción' : 'Stock'}
                 </button>
                 {customLegs.length > 0 && (
-                  <button onClick={() => { setCustomLegs([]); setCustomAnalysis(null); }}
+                  <button onClick={() => { setCustomLegs([]); setCustomAnalysis(null); setAiEval(null); }}
                     className="ml-auto text-xs text-gray-500 hover:text-red-400 transition-all">
                     {es ? 'Limpiar todo' : 'Clear all'}
                   </button>
@@ -1067,7 +1188,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                 </div>
               )}
 
-              {/* Legs table */}
+              {/* ── Legs table ── */}
               {customLegs.length > 0 && (
                 <div className="bg-gray-700/30 rounded-xl p-4 space-y-3">
                   <div className="overflow-x-auto">
@@ -1076,6 +1197,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                         <tr className="text-xs text-gray-500 border-b border-gray-700">
                           <th className="py-1 text-left">{es ? 'Tipo' : 'Type'}</th>
                           <th className="py-1 text-center">{es ? 'Posición' : 'Side'}</th>
+                          <th className="py-1 text-center">{es ? 'Contratos' : 'Qty'}</th>
                           <th className="py-1 text-right">Strike</th>
                           <th className="py-1 text-right">{es ? 'Vencim.' : 'Exp.'}</th>
                           <th className="py-1 text-right">{es ? 'Entrada ✎' : 'Entry ✎'}</th>
@@ -1090,11 +1212,13 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                             ? ((leg.type === 'call' ? chain.calls : chain.puts)[leg.expiration] ?? [])
                             : [];
                           const chainPrem = getChainPremium(leg);
-                          const qty = leg.side === 'long' ? 1 : -1;
+                          const sign = leg.side === 'long' ? 1 : -1;
+                          const legQty = leg.qty || 1;
+                          // P&L = price_diff × sign × qty × 100 (for both options and stock: 1 contract = 100 shares)
                           const pnlToday = leg.type === 'stock'
-                            ? (currentPrice - leg.entryPremium) * qty * contracts * 100
+                            ? (currentPrice - leg.entryPremium) * sign * legQty * 100
                             : chainPrem !== null
-                              ? (chainPrem - leg.entryPremium) * qty * contracts * 100
+                              ? (chainPrem - leg.entryPremium) * sign * legQty * 100
                               : null;
                           const tc = leg.type === 'call' ? 'text-green-400' : leg.type === 'put' ? 'text-red-400' : 'text-blue-400';
                           return (
@@ -1107,6 +1231,12 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                   <option value="long">{es ? 'Compra' : 'Buy'}</option>
                                   <option value="short">{es ? 'Venta' : 'Sell'}</option>
                                 </select>
+                              </td>
+                              <td className="py-2 text-center">
+                                <input type="number" value={leg.qty || 1} min={1} step={1}
+                                  onChange={e => updateCustomLeg(leg.id, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                                  className="w-14 bg-gray-800 text-amber-300 rounded px-2 py-0.5 text-xs border border-gray-600 text-center" />
+                                <div className="text-xs text-gray-600 mt-0.5">{(leg.qty || 1) * 100}{es ? 'acc' : 'sh'}</div>
                               </td>
                               <td className="py-2 text-right">
                                 {leg.type === 'stock' ? (
@@ -1190,10 +1320,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   {/* Net P&L today */}
                   {(() => {
                     const totalPnl = customLegs.reduce((sum, leg) => {
-                      const qty = leg.side === 'long' ? 1 : -1;
-                      if (leg.type === 'stock') return sum + (currentPrice - leg.entryPremium) * qty * contracts * 100;
+                      const sign = leg.side === 'long' ? 1 : -1;
+                      const legQty = leg.qty || 1;
+                      if (leg.type === 'stock') return sum + (currentPrice - leg.entryPremium) * sign * legQty * 100;
                       const cp = getChainPremium(leg);
-                      return cp !== null ? sum + (cp - leg.entryPremium) * qty * contracts * 100 : sum;
+                      return cp !== null ? sum + (cp - leg.entryPremium) * sign * legQty * 100 : sum;
                     }, 0);
                     const hasAny = customLegs.some(l => l.type === 'stock' || getChainPremium(l) !== null);
                     if (!hasAny) return null;
@@ -1202,11 +1333,6 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                         <span className="text-gray-400">{es ? 'P&L neto si cierras hoy:' : 'Net P&L if closed today:'}</span>
                         <span className={`font-bold text-base ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                           {totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl).toFixed(2)}
-                          {contracts > 1 && (
-                            <span className="ml-1 text-xs font-normal text-gray-500">
-                              ({totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl / contracts).toFixed(2)}/ct)
-                            </span>
-                          )}
                         </span>
                       </div>
                     );
@@ -1219,27 +1345,44 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                 <div className="p-3 bg-red-900/30 border border-red-500/50 rounded-lg text-red-300 text-sm">{customError}</div>
               )}
 
-              {/* Analyze button */}
+              {/* ── Analyze + Save buttons ── */}
               {customLegs.length > 0 && (
-                <button onClick={analyzeCustom} disabled={customLoading}
-                  className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold rounded-xl transition-all disabled:opacity-50">
-                  {customLoading
-                    ? (es ? 'Analizando...' : 'Analyzing...')
-                    : (es ? '📊 Analizar Estrategia Custom' : '📊 Analyze Custom Strategy')}
-                </button>
+                <div className="space-y-2">
+                  <button onClick={analyzeCustom} disabled={customLoading}
+                    className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold rounded-xl transition-all disabled:opacity-50">
+                    {customLoading
+                      ? (es ? 'Analizando...' : 'Analyzing...')
+                      : (es ? '📊 Analizar Estrategia Custom' : '📊 Analyze Custom Strategy')}
+                  </button>
+
+                  {/* Save strategy */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={strategyName}
+                      onChange={e => setStrategyName(e.target.value)}
+                      placeholder={es ? 'Nombre de estrategia...' : 'Strategy name...'}
+                      className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:border-amber-500 focus:outline-none"
+                      onKeyDown={e => e.key === 'Enter' && saveStrategy()}
+                    />
+                    <button onClick={saveStrategy}
+                      className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-amber-400 text-sm font-medium rounded-lg border border-gray-600 transition-all whitespace-nowrap">
+                      💾 {es ? 'Guardar' : 'Save'}
+                    </button>
+                  </div>
+                </div>
               )}
 
-              {/* Analysis results */}
+              {/* ── Analysis results ── */}
               {customAnalysis && (
                 <div className="bg-gray-700/30 rounded-xl p-5 space-y-4">
                   <h4 className="text-lg font-bold text-amber-400">
                     {es ? 'Análisis Custom' : 'Custom Analysis'}
-                    {contracts > 1 && <span className="ml-2 text-sm font-normal text-gray-400">× {contracts} {es ? 'contratos' : 'contracts'}</span>}
                   </h4>
 
                   {customAnalysis.legs?.some((l: any) => l.type === 'stock') && (
                     <div className="text-xs text-blue-400/80 bg-blue-900/20 rounded px-3 py-1.5">
-                      ℹ️ {es ? `Montos incluyen P&L de ${contracts * 100} acciones + prima.` : `Amounts include P&L of ${contracts * 100} shares + premium.`}
+                      ℹ️ {es ? 'Montos incluyen P&L de acciones + prima de opciones.' : 'Amounts include stock P&L + options premium.'}
                     </div>
                   )}
 
@@ -1251,7 +1394,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                       <div key={label}>
                         <div className="text-xs text-gray-500 uppercase">{label}</div>
                         <div className={`text-lg font-semibold ${cls}`}>{fmtDollar(val)}</div>
-                        {contracts > 1 && typeof val === 'number' && (
+                        {typeof val === 'number' && (
                           <div className="text-xs text-gray-500 mt-0.5">{val >= 0 ? '+' : '-'}${(Math.abs(val) * 100).toFixed(0)}/ct</div>
                         )}
                       </div>
@@ -1272,11 +1415,9 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
 
                   {customAnalysis.payoffDiagram?.length > 0 && (
                     <div className="bg-gray-800/60 rounded-lg p-3">
-                      <div className="text-xs text-gray-500 mb-2">
-                        {es ? 'Diagrama de Payoff' : 'Payoff Diagram'}
-                        {contracts > 1 && <span className="ml-1 text-amber-500">({contracts} × 100 {es ? 'acciones' : 'shares'})</span>}
-                      </div>
-                      <PayoffSVG diagram={customAnalysis.payoffDiagram} contracts={contracts} />
+                      <div className="text-xs text-gray-500 mb-2">{es ? 'Diagrama de Payoff' : 'Payoff Diagram'}</div>
+                      {/* contracts=1 since qty is already baked into backend quantities */}
+                      <PayoffSVG diagram={customAnalysis.payoffDiagram} contracts={1} />
                     </div>
                   )}
 
@@ -1288,6 +1429,64 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                       </div>
                     ))}
                   </div>
+
+                  {/* ── AI Evaluation ── */}
+                  <div className="border-t border-gray-700/50 pt-4">
+                    {!aiEval && !aiEvalLoading && (
+                      <button onClick={getAIEvaluation}
+                        className="w-full py-2.5 bg-purple-700/30 hover:bg-purple-700/50 text-purple-300 font-medium rounded-lg border border-purple-600/40 text-sm transition-all">
+                        🤖 {es ? 'Obtener Evaluación AI' : 'Get AI Evaluation'}
+                      </button>
+                    )}
+                    {aiEvalLoading && (
+                      <div className="text-center py-4 text-purple-400 text-sm">
+                        <div className="inline-block animate-spin mr-2">⟳</div>
+                        {es ? 'Evaluando estrategia...' : 'Evaluating strategy...'}
+                      </div>
+                    )}
+                    {aiEvalError && (
+                      <div className="text-xs text-red-400 bg-red-900/20 rounded px-3 py-2">{aiEvalError}</div>
+                    )}
+                    {aiEval && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-sm font-bold text-purple-300">🤖 {es ? 'Evaluación AI' : 'AI Evaluation'}</h5>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-base font-bold ${
+                              aiEval.ratingScore >= 70 ? 'text-green-400' :
+                              aiEval.ratingScore >= 50 ? 'text-yellow-400' : 'text-red-400'
+                            }`}>{aiEval.rating}</span>
+                            <span className="text-xs text-gray-500">({aiEval.ratingScore}/100)</span>
+                            <button onClick={() => setAiEval(null)}
+                              className="text-gray-600 hover:text-gray-400 text-xs ml-1">↻</button>
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-300 bg-gray-800/50 rounded-lg px-3 py-2 leading-relaxed">{aiEval.summary}</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                          <div className="bg-gray-800/40 rounded-lg p-3">
+                            <div className="text-purple-400 font-medium mb-1">⚡ Greeks</div>
+                            <p className="text-gray-400 leading-relaxed">{aiEval.greeksAnalysis}</p>
+                          </div>
+                          <div className="bg-gray-800/40 rounded-lg p-3">
+                            <div className="text-amber-400 font-medium mb-1">⚖️ {es ? 'Riesgo / Reward' : 'Risk / Reward'}</div>
+                            <p className="text-gray-400 leading-relaxed">{aiEval.riskAnalysis}</p>
+                          </div>
+                          <div className="bg-gray-800/40 rounded-lg p-3">
+                            <div className="text-cyan-400 font-medium mb-1">📈 {es ? 'Mercado ideal' : 'Ideal Market'}</div>
+                            <p className="text-gray-400 leading-relaxed">{aiEval.marketOutlook}</p>
+                          </div>
+                          <div className="bg-gray-800/40 rounded-lg p-3">
+                            <div className="text-green-400 font-medium mb-1">💡 {es ? 'Sugerencias' : 'Suggestions'}</div>
+                            <ul className="space-y-1">
+                              {(aiEval.suggestions ?? []).map((s: string, i: number) => (
+                                <li key={i} className="text-gray-400 leading-relaxed">• {s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1298,7 +1497,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
                   </svg>
                   <p className="text-lg">{es ? 'Agrega calls, puts o acciones para construir tu estrategia' : 'Add calls, puts, or stocks to build your strategy'}</p>
-                  <p className="text-sm mt-2 text-gray-600">{es ? 'Puedes editar el precio de entrada de cada pierna' : "You can edit each leg's entry price"}</p>
+                  <p className="text-sm mt-2 text-gray-600">{es ? 'Cada pierna tiene su propio número de contratos y precio de entrada' : "Each leg has its own contract count and entry price"}</p>
                 </div>
               )}
 
