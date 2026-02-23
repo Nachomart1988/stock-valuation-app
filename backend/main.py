@@ -543,6 +543,26 @@ async def portfolio_optimize(req: PortfolioOptimizeRequest):
             monte_carlo_sims=req.monteCarloSims,
         )
 
+        # ── Transform result to match frontend interface ──────────────
+        # 1. correlationMatrix: raw 2D array → {tickers, matrix}
+        valid_tickers = result.get('tickers', req.tickers)
+        raw_corr = result.get('correlationMatrix', [])
+        result['correlationMatrix'] = {
+            'tickers': valid_tickers,
+            'matrix': raw_corr if isinstance(raw_corr, list) else [],
+        }
+
+        # 2. riskMetrics: add var95/cvar aliases expected by frontend
+        rm = result.get('riskMetrics', {})
+        rm['var95'] = rm.get('var95Annual', rm.get('var95Daily', 0.0))
+        rm['var99'] = rm.get('var99Annual', rm.get('var99Daily', 0.0))
+        rm['cvar'] = rm.get('cvar95Annual', rm.get('cvar95Daily', 0.0))
+
+        # 3. individualStats: inject weight from optimalWeights
+        opt_w = result.get('optimalWeights', {})
+        for stat in result.get('individualStats', []):
+            stat['weight'] = opt_w.get(stat['ticker'], 0.0)
+
         print(f"[PortfolioOpt] Done — Sharpe={result['portfolioSharpe']}, "
               f"Return={result['portfolioReturn']:.2%}, Vol={result['portfolioVolatility']:.2%}")
 
