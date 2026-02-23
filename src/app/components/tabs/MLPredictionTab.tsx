@@ -85,10 +85,10 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
     const progressTimer = setInterval(() => {
       stepIdx = Math.min(stepIdx + 1, steps.length - 1);
       setProgressStep(stepIdx);
-    }, 8000); // advance every 8s (total ~64s covers full training)
+    }, 6000); // advance every 6s (total ~48s for optimized training)
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3 min timeout
+    const timeoutId = setTimeout(() => controller.abort(), 300_000); // 5 min timeout
 
     try {
       const res = await fetch(`${backendUrl}/ml/predict`, {
@@ -111,7 +111,7 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
     } catch (err: any) {
       const msg = err.message || '';
       if (err.name === 'AbortError') {
-        setError(es ? 'Tiempo de espera agotado (3 min). El servidor tardó demasiado.' : 'Request timed out (3 min). Server took too long.');
+        setError(es ? 'Tiempo de espera agotado (5 min). El servidor tardó demasiado.' : 'Request timed out (5 min). Server took too long.');
       } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
         setError(es ? `No se pudo conectar al backend (${backendUrl}).` : `Cannot connect to backend (${backendUrl}).`);
       } else {

@@ -308,11 +308,11 @@ class MLPredictionEngine:
     DEFAULT_HIDDEN_SIZE = 64    # Smaller hidden size → much faster on CPU
     DEFAULT_NUM_LAYERS = 1      # Single LSTM layer → 2× faster than 2-layer
     DEFAULT_DROPOUT = 0.2
-    DEFAULT_EPOCHS = 20         # Enough with early stopping (patience=5)
+    DEFAULT_EPOCHS = 10         # Reduced: early stopping (patience=3) handles convergence
     DEFAULT_BATCH_SIZE = 64     # Larger batches → fewer optimizer steps per epoch
     DEFAULT_LEARNING_RATE = 0.001
-    DEFAULT_MC_SAMPLES = 10     # Fewer MC samples → faster uncertainty estimation
-    DEFAULT_HISTORY_DAYS = 1100  # ~750 trading days (~3 years) for better LSTM training
+    DEFAULT_MC_SAMPLES = 8      # Fewer MC samples → faster uncertainty estimation
+    DEFAULT_HISTORY_DAYS = 756  # ~504 trading days (~2 years) — enough, fetches faster
 
     def __init__(self, api_key: Optional[str] = None):
         if not TORCH_AVAILABLE:
@@ -686,7 +686,7 @@ class MLPredictionEngine:
 
         best_val_loss = float('inf')
         patience_counter = 0
-        patience_limit = 5
+        patience_limit = 3      # Reduced from 5 → stops sooner when converged
         best_state = None
         final_train_loss = 0.0
         final_val_loss = 0.0
@@ -836,44 +836,49 @@ class MLPredictionEngine:
         X_test: np.ndarray,
         y_test: np.ndarray,
         target_scaler: Any,
-        mc_samples: int = 10,
+        mc_samples: int = 8,
     ) -> np.ndarray:
         """
-        Estimate feature importance via permutation shuffling.
+        Estimate feature importance via input gradients (saliency map).
 
-        For each feature, shuffle its column across all sequences and
-        measure the increase in prediction error (MAE).
+        Requires a single forward+backward pass — O(1) vs O(n_features) for
+        permutation importance, so ~30× faster on CPU.
 
         Returns array of importance scores (higher = more important), shape (n_features,).
         """
-        # Baseline MAE
-        base_preds, _ = self._monte_carlo_predict(model, X_test, mc_samples)
-        base_preds_inv = target_scaler.inverse_transform(base_preds.reshape(-1, 1)).flatten()
-        y_inv = target_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
-        base_mae = float(np.mean(np.abs(base_preds_inv - y_inv)))
+        try:
+            n_features = X_test.shape[2]
+            # Use a random subset of test samples (max 64) for speed
+            n_samples = min(64, X_test.shape[0])
+            idx = np.random.choice(X_test.shape[0], n_samples, replace=False)
+            X_sub = X_test[idx]
+            y_sub = y_test[idx]
 
-        n_features = X_test.shape[2]
-        importances = np.zeros(n_features)
+            X_t = torch.FloatTensor(X_sub).to(self.device).requires_grad_(True)
+            y_t = torch.FloatTensor(y_sub).unsqueeze(1).to(self.device)
 
-        for f_idx in range(n_features):
-            X_shuffled = X_test.copy()
-            # Shuffle this feature across all samples (permute across sample axis)
-            perm = np.random.permutation(X_shuffled.shape[0])
-            X_shuffled[:, :, f_idx] = X_shuffled[perm, :, f_idx]
+            model.eval()
+            preds = model(X_t)
+            loss = nn.MSELoss()(preds, y_t)
+            loss.backward()
 
-            shuf_preds, _ = self._monte_carlo_predict(model, X_shuffled, max(mc_samples // 3, 3))
-            shuf_preds_inv = target_scaler.inverse_transform(shuf_preds.reshape(-1, 1)).flatten()
-            shuf_mae = float(np.mean(np.abs(shuf_preds_inv - y_inv)))
+            # Gradient magnitude averaged over time steps → (n_samples, n_features)
+            grads = X_t.grad.detach().cpu().numpy()  # (n_samples, lookback, n_features)
+            importances = np.mean(np.abs(grads), axis=(0, 1))  # (n_features,)
 
-            # Importance = increase in error when feature is shuffled
-            importances[f_idx] = max(0.0, shuf_mae - base_mae)
+            # Normalize to sum to 1
+            total = importances.sum()
+            if total > 0:
+                importances = importances / total
+            else:
+                importances = np.ones(n_features) / n_features
 
-        # Normalize to sum to 1
-        total = importances.sum()
-        if total > 0:
-            importances = importances / total
+            return importances
 
-        return importances
+        except Exception as e:
+            logger.warning("[MLPredict] Gradient importance failed (%s), using equal weights", e)
+            n_features = X_test.shape[2]
+            return np.ones(n_features) / n_features
 
     # ───────────────────────────────────────────────────────────────────
     # HELPERS
