@@ -11,11 +11,21 @@ interface OptionsTabProps {
 }
 
 interface OptionLeg {
-  type: 'call' | 'put';
+  type: 'call' | 'put' | 'stock';
   strike: number;
   expiration: string;
   premium: number;
   quantity: number;
+  iv: number;
+}
+
+interface CustomLeg {
+  id: string;
+  type: 'stock' | 'call' | 'put';
+  side: 'long' | 'short';
+  strike: number;
+  expiration: string;
+  entryPremium: number;  // user's entry price per share (editable)
   iv: number;
 }
 
@@ -210,6 +220,12 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
   const [suggestions, setSuggestions]       = useState<Suggestion[] | null>(null);
   const [suggestLoading, setSuggestLoading] = useState(false);
 
+  // Custom strategy builder
+  const [customLegs, setCustomLegs]           = useState<CustomLeg[]>([]);
+  const [customAnalysis, setCustomAnalysis]   = useState<StrategyAnalysis | null>(null);
+  const [customLoading, setCustomLoading]     = useState(false);
+  const [customError, setCustomError]         = useState<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
@@ -339,6 +355,81 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
     }
   }, [ticker, outlook, locale, backendUrl]);
 
+  // ── Custom strategy helpers ────────────────────────────────────
+  const addCustomLeg = useCallback((type: 'stock' | 'call' | 'put') => {
+    const exps = chain?.expirations ?? [];
+    const defExp = exps[0] ?? '';
+    let strike = currentPrice;
+    let prem = type === 'stock' ? currentPrice : 0;
+    let iv = 0;
+    if (type !== 'stock' && chain && defExp) {
+      const opts: any[] = (type === 'call' ? chain.calls[defExp] : chain.puts[defExp]) ?? [];
+      if (opts.length) {
+        const atm = opts.reduce((a, b) =>
+          Math.abs(b.strike - currentPrice) < Math.abs(a.strike - currentPrice) ? b : a
+        );
+        strike = atm.strike;
+        prem = +((((atm.bid ?? 0) + (atm.ask ?? atm.lastPrice ?? 0)) / 2)).toFixed(2);
+        iv = atm.iv ?? 0;
+      }
+    }
+    setCustomLegs(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, type, side: 'long', strike, expiration: defExp, entryPremium: prem, iv }]);
+  }, [chain, currentPrice]);
+
+  const updateCustomLeg = useCallback((id: string, field: keyof CustomLeg, value: any) => {
+    setCustomLegs(prev => prev.map(leg => {
+      if (leg.id !== id) return leg;
+      const updated = { ...leg, [field]: value };
+      // Auto-fill premium when strike/expiration changes
+      if ((field === 'strike' || field === 'expiration' || field === 'type') && updated.type !== 'stock' && chain) {
+        const opts: any[] = (updated.type === 'call' ? chain.calls[updated.expiration] : chain.puts[updated.expiration]) ?? [];
+        const match = opts.find((o: any) => o.strike === +updated.strike);
+        if (match) {
+          updated.entryPremium = +((((match.bid ?? 0) + (match.ask ?? match.lastPrice ?? 0)) / 2)).toFixed(2);
+          updated.iv = match.iv ?? 0;
+        }
+      }
+      return updated;
+    }));
+  }, [chain]);
+
+  const getChainPremium = useCallback((leg: CustomLeg): number | null => {
+    if (!chain || leg.type === 'stock') return null;
+    const opts: any[] = (leg.type === 'call' ? chain.calls[leg.expiration] : chain.puts[leg.expiration]) ?? [];
+    const match = opts.find((o: any) => o.strike === leg.strike);
+    if (!match) return null;
+    return +((((match.bid ?? 0) + (match.ask ?? match.lastPrice ?? 0)) / 2)).toFixed(2);
+  }, [chain]);
+
+  const analyzeCustom = useCallback(async () => {
+    if (customLegs.length === 0) return;
+    setCustomLoading(true);
+    setCustomError(null);
+    try {
+      const legs = customLegs.map(leg => ({
+        type: leg.type,
+        strike: leg.type === 'stock' ? currentPrice : leg.strike,
+        expiration: leg.expiration || (chain?.expirations?.[0] ?? ''),
+        premium: leg.type === 'stock' ? 0 : leg.entryPremium,
+        quantity: leg.side === 'long' ? 1 : -1,
+        iv: leg.iv,
+      }));
+      const res = await fetch(`${backendUrl}/options/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker, legs, currentPrice }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setCustomAnalysis(data);
+    } catch (e: any) {
+      setCustomError(e.message || 'Error analyzing custom strategy');
+    } finally {
+      setCustomLoading(false);
+    }
+  }, [customLegs, ticker, currentPrice, backendUrl, chain]);
+
   // ── Helpers ────────────────────────────────────────────────────
   const fmtDollar = (v: number | string | null) => {
     if (v === null || v === undefined) return '—';
@@ -362,6 +453,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
     es ? 'Cadena de Opciones' : 'Options Chain',
     es ? 'Simulador de Estrategias' : 'Strategy Simulator',
     es ? 'Sugerencias' : 'Suggestions',
+    'Custom',
   ];
 
   // ── Render ─────────────────────────────────────────────────────
@@ -831,12 +923,16 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                 </td>
                                 <td className="py-2 text-right text-white font-semibold">${leg.strike}</td>
                                 <td className="py-2 text-right text-gray-400 text-xs">{leg.expiration}</td>
-                                <td className="py-2 text-right text-yellow-400">${(leg.premium || 0).toFixed(2)}</td>
+                                <td className="py-2 text-right">
+                                  <div className="text-yellow-400">${(leg.premium || 0).toFixed(2)}<span className="text-gray-600 text-xs">/sh</span></div>
+                                  <div className="text-xs text-gray-500">${((leg.premium || 0) * 100).toFixed(0)}/ct</div>
+                                </td>
                                 <td className="py-2 text-right text-gray-400">
                                   {leg.iv ? (leg.iv * 100).toFixed(1) + '%' : '—'}
                                 </td>
                                 <td className={`py-2 text-right font-semibold ${totalCost > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                                  {totalCost > 0 ? `-$${totalCost.toFixed(2)}` : `+$${Math.abs(totalCost).toFixed(2)}`}
+                                  <div>{totalCost > 0 ? `-$${totalCost.toFixed(2)}` : `+$${Math.abs(totalCost).toFixed(2)}`}</div>
+                                  {contracts > 1 && <div className="text-xs text-gray-500 font-normal">{totalCost / contracts > 0 ? '-' : '+'}${Math.abs(totalCost / contracts).toFixed(2)}/ct</div>}
                                 </td>
                               </tr>
                             );
@@ -932,6 +1028,280 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   ))}
                 </div>
               )}
+            </div>
+          </Tab.Panel>
+
+          {/* ══ Custom Strategy ════════════════════════════════════════════ */}
+          <Tab.Panel>
+            <div className="space-y-4">
+
+              {/* Add leg buttons */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm text-gray-400 font-medium">{es ? 'Agregar pierna:' : 'Add leg:'}</span>
+                <button onClick={() => addCustomLeg('call')}
+                  className="px-3 py-1.5 bg-green-700/50 hover:bg-green-600/60 text-green-300 text-sm font-medium rounded-lg border border-green-600/40 transition-all">
+                  + Call
+                </button>
+                <button onClick={() => addCustomLeg('put')}
+                  className="px-3 py-1.5 bg-red-700/50 hover:bg-red-600/60 text-red-300 text-sm font-medium rounded-lg border border-red-600/40 transition-all">
+                  + Put
+                </button>
+                <button onClick={() => addCustomLeg('stock')}
+                  className="px-3 py-1.5 bg-blue-700/50 hover:bg-blue-600/60 text-blue-300 text-sm font-medium rounded-lg border border-blue-600/40 transition-all">
+                  + {es ? 'Acción' : 'Stock'}
+                </button>
+                {customLegs.length > 0 && (
+                  <button onClick={() => { setCustomLegs([]); setCustomAnalysis(null); }}
+                    className="ml-auto text-xs text-gray-500 hover:text-red-400 transition-all">
+                    {es ? 'Limpiar todo' : 'Clear all'}
+                  </button>
+                )}
+              </div>
+
+              {/* Chain not loaded hint */}
+              {!chain && (
+                <div className="text-xs text-amber-500/80 bg-amber-900/20 px-3 py-2 rounded-lg">
+                  ℹ️ {es
+                    ? 'Carga la cadena de opciones (pestaña 1) para acceder a strikes y vencimientos disponibles automáticamente.'
+                    : 'Load the options chain (tab 1) to auto-populate available strikes and expirations.'}
+                </div>
+              )}
+
+              {/* Legs table */}
+              {customLegs.length > 0 && (
+                <div className="bg-gray-700/30 rounded-xl p-4 space-y-3">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-500 border-b border-gray-700">
+                          <th className="py-1 text-left">{es ? 'Tipo' : 'Type'}</th>
+                          <th className="py-1 text-center">{es ? 'Posición' : 'Side'}</th>
+                          <th className="py-1 text-right">Strike</th>
+                          <th className="py-1 text-right">{es ? 'Vencim.' : 'Exp.'}</th>
+                          <th className="py-1 text-right">{es ? 'Entrada ✎' : 'Entry ✎'}</th>
+                          <th className="py-1 text-right">{es ? 'Precio hoy' : 'Today'}</th>
+                          <th className="py-1 text-right">P&amp;L {es ? 'hoy' : 'today'}</th>
+                          <th className="py-1 w-6"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customLegs.map(leg => {
+                          const strikeOpts: any[] = leg.type !== 'stock' && chain && leg.expiration
+                            ? ((leg.type === 'call' ? chain.calls : chain.puts)[leg.expiration] ?? [])
+                            : [];
+                          const chainPrem = getChainPremium(leg);
+                          const qty = leg.side === 'long' ? 1 : -1;
+                          const pnlToday = leg.type === 'stock'
+                            ? (currentPrice - leg.entryPremium) * qty * contracts * 100
+                            : chainPrem !== null
+                              ? (chainPrem - leg.entryPremium) * qty * contracts * 100
+                              : null;
+                          const tc = leg.type === 'call' ? 'text-green-400' : leg.type === 'put' ? 'text-red-400' : 'text-blue-400';
+                          return (
+                            <tr key={leg.id} className="border-t border-gray-700/40">
+                              <td className={`py-2 font-semibold ${tc}`}>{leg.type.toUpperCase()}</td>
+                              <td className="py-2 text-center">
+                                <select value={leg.side}
+                                  onChange={e => updateCustomLeg(leg.id, 'side', e.target.value)}
+                                  className="bg-gray-800 text-gray-200 rounded px-2 py-0.5 text-xs border border-gray-600">
+                                  <option value="long">{es ? 'Compra' : 'Buy'}</option>
+                                  <option value="short">{es ? 'Venta' : 'Sell'}</option>
+                                </select>
+                              </td>
+                              <td className="py-2 text-right">
+                                {leg.type === 'stock' ? (
+                                  <span className="text-blue-300 text-xs">${currentPrice.toFixed(2)}</span>
+                                ) : strikeOpts.length > 0 ? (
+                                  <select value={leg.strike}
+                                    onChange={e => updateCustomLeg(leg.id, 'strike', +e.target.value)}
+                                    className="bg-gray-800 text-gray-200 rounded px-2 py-0.5 text-xs border border-gray-600">
+                                    {strikeOpts.map((o: any) => (
+                                      <option key={o.strike} value={o.strike}>${o.strike}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input type="number" value={leg.strike} step="0.5"
+                                    onChange={e => updateCustomLeg(leg.id, 'strike', +e.target.value)}
+                                    className="w-20 bg-gray-800 text-gray-200 rounded px-2 py-0.5 text-xs border border-gray-600 text-right" />
+                                )}
+                              </td>
+                              <td className="py-2 text-right">
+                                {leg.type === 'stock' ? (
+                                  <span className="text-gray-500 text-xs">—</span>
+                                ) : (chain?.expirations ?? []).length > 0 ? (
+                                  <select value={leg.expiration}
+                                    onChange={e => updateCustomLeg(leg.id, 'expiration', e.target.value)}
+                                    className="bg-gray-800 text-gray-200 rounded px-2 py-0.5 text-xs border border-gray-600">
+                                    {(chain?.expirations ?? []).map(exp => (
+                                      <option key={exp} value={exp}>{exp}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input type="text" value={leg.expiration} placeholder="YYYY-MM-DD"
+                                    onChange={e => updateCustomLeg(leg.id, 'expiration', e.target.value)}
+                                    className="w-24 bg-gray-800 text-gray-200 rounded px-2 py-0.5 text-xs border border-gray-600 text-right" />
+                                )}
+                              </td>
+                              <td className="py-2 text-right">
+                                {leg.type === 'stock' ? (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <input type="number" value={leg.entryPremium} step="0.01"
+                                      onChange={e => updateCustomLeg(leg.id, 'entryPremium', +e.target.value)}
+                                      className="w-20 bg-gray-800 text-blue-300 rounded px-2 py-0.5 text-xs border border-gray-600 text-right" />
+                                    <span className="text-xs text-gray-500">/sh</span>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="flex items-center justify-end gap-1">
+                                      <input type="number" value={leg.entryPremium} step="0.01"
+                                        onChange={e => updateCustomLeg(leg.id, 'entryPremium', +e.target.value)}
+                                        className="w-16 bg-gray-800 text-yellow-300 rounded px-2 py-0.5 text-xs border border-gray-600 text-right" />
+                                      <span className="text-xs text-gray-500">/sh</span>
+                                    </div>
+                                    <div className="text-xs text-gray-500 text-right mt-0.5">
+                                      ${(leg.entryPremium * 100).toFixed(0)}/ct
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-2 text-right text-gray-300 text-xs">
+                                {leg.type === 'stock'
+                                  ? `$${currentPrice.toFixed(2)}`
+                                  : chainPrem !== null ? `$${chainPrem.toFixed(2)}` : '—'}
+                              </td>
+                              <td className="py-2 text-right">
+                                {pnlToday !== null ? (
+                                  <span className={`font-semibold text-xs ${pnlToday >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {pnlToday >= 0 ? '+' : '-'}${Math.abs(pnlToday).toFixed(0)}
+                                  </span>
+                                ) : <span className="text-gray-600 text-xs">—</span>}
+                              </td>
+                              <td className="py-2 pl-2">
+                                <button onClick={() => setCustomLegs(prev => prev.filter(l => l.id !== leg.id))}
+                                  className="text-gray-600 hover:text-red-400 font-bold text-base leading-none transition-all">×</button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Net P&L today */}
+                  {(() => {
+                    const totalPnl = customLegs.reduce((sum, leg) => {
+                      const qty = leg.side === 'long' ? 1 : -1;
+                      if (leg.type === 'stock') return sum + (currentPrice - leg.entryPremium) * qty * contracts * 100;
+                      const cp = getChainPremium(leg);
+                      return cp !== null ? sum + (cp - leg.entryPremium) * qty * contracts * 100 : sum;
+                    }, 0);
+                    const hasAny = customLegs.some(l => l.type === 'stock' || getChainPremium(l) !== null);
+                    if (!hasAny) return null;
+                    return (
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-700/50 text-sm">
+                        <span className="text-gray-400">{es ? 'P&L neto si cierras hoy:' : 'Net P&L if closed today:'}</span>
+                        <span className={`font-bold text-base ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl).toFixed(2)}
+                          {contracts > 1 && (
+                            <span className="ml-1 text-xs font-normal text-gray-500">
+                              ({totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl / contracts).toFixed(2)}/ct)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Error */}
+              {customError && (
+                <div className="p-3 bg-red-900/30 border border-red-500/50 rounded-lg text-red-300 text-sm">{customError}</div>
+              )}
+
+              {/* Analyze button */}
+              {customLegs.length > 0 && (
+                <button onClick={analyzeCustom} disabled={customLoading}
+                  className="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold rounded-xl transition-all disabled:opacity-50">
+                  {customLoading
+                    ? (es ? 'Analizando...' : 'Analyzing...')
+                    : (es ? '📊 Analizar Estrategia Custom' : '📊 Analyze Custom Strategy')}
+                </button>
+              )}
+
+              {/* Analysis results */}
+              {customAnalysis && (
+                <div className="bg-gray-700/30 rounded-xl p-5 space-y-4">
+                  <h4 className="text-lg font-bold text-amber-400">
+                    {es ? 'Análisis Custom' : 'Custom Analysis'}
+                    {contracts > 1 && <span className="ml-2 text-sm font-normal text-gray-400">× {contracts} {es ? 'contratos' : 'contracts'}</span>}
+                  </h4>
+
+                  {customAnalysis.legs?.some((l: any) => l.type === 'stock') && (
+                    <div className="text-xs text-blue-400/80 bg-blue-900/20 rounded px-3 py-1.5">
+                      ℹ️ {es ? `Montos incluyen P&L de ${contracts * 100} acciones + prima.` : `Amounts include P&L of ${contracts * 100} shares + premium.`}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                      { label: es ? 'Ganancia Máx.' : 'Max Profit', val: customAnalysis.maxProfit, cls: 'text-green-400' },
+                      { label: es ? 'Pérdida Máx.' : 'Max Loss',   val: customAnalysis.maxLoss,   cls: 'text-red-400' },
+                    ].map(({ label, val, cls }) => (
+                      <div key={label}>
+                        <div className="text-xs text-gray-500 uppercase">{label}</div>
+                        <div className={`text-lg font-semibold ${cls}`}>{fmtDollar(val)}</div>
+                        {contracts > 1 && typeof val === 'number' && (
+                          <div className="text-xs text-gray-500 mt-0.5">{val >= 0 ? '+' : '-'}${(Math.abs(val) * 100).toFixed(0)}/ct</div>
+                        )}
+                      </div>
+                    ))}
+                    <div>
+                      <div className="text-xs text-gray-500 uppercase">Breakeven{(customAnalysis.breakevens?.length ?? 0) > 1 ? 's' : ''}</div>
+                      <div className="text-base font-semibold text-yellow-400">
+                        {customAnalysis.breakevens?.map((b: number) => `$${b.toFixed(2)}`).join(' / ') || '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 uppercase">{es ? 'Prob. Ganancia' : 'P(Profit)'}</div>
+                      <div className="text-lg font-semibold text-cyan-400">
+                        {((customAnalysis.probabilityOfProfit ?? 0) * ((customAnalysis.probabilityOfProfit ?? 0) <= 1 ? 100 : 1)).toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+
+                  {customAnalysis.payoffDiagram?.length > 0 && (
+                    <div className="bg-gray-800/60 rounded-lg p-3">
+                      <div className="text-xs text-gray-500 mb-2">
+                        {es ? 'Diagrama de Payoff' : 'Payoff Diagram'}
+                        {contracts > 1 && <span className="ml-1 text-amber-500">({contracts} × 100 {es ? 'acciones' : 'shares'})</span>}
+                      </div>
+                      <PayoffSVG diagram={customAnalysis.payoffDiagram} contracts={contracts} />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-4 gap-3">
+                    {(['delta', 'gamma', 'theta', 'vega'] as const).map(g => (
+                      <div key={g} className="text-center bg-gray-800/40 rounded-lg p-2">
+                        <div className="text-xs text-gray-500 uppercase">{g}</div>
+                        <div className="text-sm font-semibold text-gray-200">{((customAnalysis.greeks as any)[g] ?? 0).toFixed(4)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {customLegs.length === 0 && !customAnalysis && (
+                <div className="text-center py-16 text-gray-500">
+                  <svg className="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <p className="text-lg">{es ? 'Agrega calls, puts o acciones para construir tu estrategia' : 'Add calls, puts, or stocks to build your strategy'}</p>
+                  <p className="text-sm mt-2 text-gray-600">{es ? 'Puedes editar el precio de entrada de cada pierna' : "You can edit each leg's entry price"}</p>
+                </div>
+              )}
+
             </div>
           </Tab.Panel>
 

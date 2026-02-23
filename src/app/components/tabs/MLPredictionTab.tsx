@@ -26,6 +26,7 @@ interface PredictionResult {
     rmse: number;
     mape: number;
     directionalAccuracy: number;
+    improvementVsNaive?: number;
   };
   featureImportance: Record<string, number>;
   trainingInfo: {
@@ -33,9 +34,12 @@ interface PredictionResult {
     trainLoss: number;
     valLoss: number;
     dataPoints: number;
-    modelType: string;
+    modelType?: string;
   };
   historicalPredictions: { date: string; actual: number; predicted: number }[];
+  modelType?: string;
+  disclaimer?: string;
+  warning?: string | null;
 }
 
 const PROGRESS_STEPS_ES = [
@@ -194,6 +198,12 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
         </div>
       )}
 
+      {result && result.warning && (
+        <div className="p-3 bg-yellow-900/30 border border-yellow-500/50 rounded-xl text-yellow-300 text-sm">
+          ⚠️ {result.warning}
+        </div>
+      )}
+
       {result && (
         <>
           {/* Predictions Grid */}
@@ -248,7 +258,14 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
             </div>
             <div className="bg-gray-700/30 rounded-lg p-3">
               <div className="text-xs text-gray-500 uppercase">{es ? 'Precisión Direc.' : 'Dir. Accuracy'}</div>
-              <div className="text-lg font-semibold text-cyan-400">{result.metrics.directionalAccuracy.toFixed(1)}%</div>
+              <div className={`text-lg font-semibold ${(result.metrics.directionalAccuracy ?? 0) >= 55 ? 'text-green-400' : (result.metrics.directionalAccuracy ?? 0) >= 50 ? 'text-cyan-400' : 'text-red-400'}`}>
+                {(result.metrics.directionalAccuracy ?? 0).toFixed(1)}%
+              </div>
+              {result.metrics.improvementVsNaive !== undefined && (
+                <div className={`text-xs mt-0.5 ${result.metrics.improvementVsNaive >= 0 ? 'text-gray-400' : 'text-red-400'}`}>
+                  {result.metrics.improvementVsNaive >= 0 ? '+' : ''}{result.metrics.improvementVsNaive.toFixed(1)}% {es ? 'vs random' : 'vs random'}
+                </div>
+              )}
             </div>
           </div>
 
@@ -318,12 +335,19 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
 
           {/* Training Info */}
           <div className="text-xs text-gray-500 flex flex-wrap gap-4">
-            <span>Model: {(result as any).modelType ?? result.trainingInfo?.modelType ?? 'LSTM'}</span>
+            <span>Model: {result.modelType ?? result.trainingInfo?.modelType ?? 'LSTM'}</span>
             <span>Epochs: {result.trainingInfo?.epochs ?? '—'}</span>
             <span>Train Loss: {result.trainingInfo?.trainLoss?.toFixed(6) ?? '—'}</span>
             <span>Val Loss: {result.trainingInfo?.valLoss?.toFixed(6) ?? '—'}</span>
             <span>Data Points: {result.trainingInfo?.dataPoints ?? '—'}</span>
           </div>
+
+          {/* Disclaimer */}
+          {result.disclaimer && (
+            <div className="text-xs text-gray-600 italic border-t border-gray-700/50 pt-3">
+              ⚠️ {result.disclaimer}
+            </div>
+          )}
         </>
       )}
     </div>

@@ -518,17 +518,22 @@ class MLPredictionEngine:
             elapsed = time.time() - start_time
             logger.info("[MLPredict] Completed for %s in %.1fs", ticker, elapsed)
 
+            dir_acc = avg_metrics.get('directionalAccuracy', 50.0)
+            improvement_vs_naive = round(dir_acc - 50.0, 2)  # edge over random walk
+
             return {
                 'ticker': ticker,
                 'currentPrice': round(float(closes_trimmed[-1]), 2),
                 'lastDate': dates_trimmed[-1] if dates_trimmed else '',
                 'predictions': all_predictions,
-                'metrics': avg_metrics,
+                'metrics': {**avg_metrics, 'improvementVsNaive': improvement_vs_naive},
                 'featureImportance': feature_importance,
                 'trainingInfo': training_info,
                 'historicalPredictions': historical_preds,
-                'modelType': 'LSTM',
+                'modelType': 'LSTM+DirectionBCE',
                 'elapsedSeconds': round(elapsed, 2),
+                'disclaimer': 'Predictions are for educational/exploratory purposes only and do not constitute financial advice.',
+                'warning': None if dir_acc >= 50 else f'Directional accuracy {dir_acc:.1f}% < 50% — predictions may not be reliable.',
                 'error': None,
             }
 
@@ -660,7 +665,8 @@ class MLPredictionEngine:
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='min', factor=0.5, patience=5, min_lr=1e-6
         )
-        criterion = nn.MSELoss()
+        mse_loss = nn.MSELoss()
+        bce_loss = nn.BCEWithLogitsLoss()
 
         # Convert to tensors
         X_train_t = torch.FloatTensor(X_train).to(self.device)
@@ -668,7 +674,13 @@ class MLPredictionEngine:
         X_val_t = torch.FloatTensor(X_val).to(self.device)
         y_val_t = torch.FloatTensor(y_val).unsqueeze(1).to(self.device)
 
-        train_dataset = TensorDataset(X_train_t, y_train_t)
+        # Direction labels: 1 if price goes up vs the last known close in the sequence
+        # We approximate "up" as y > median(y_train)
+        y_med = float(y_train_t.median())
+        y_dir_train = (y_train_t > y_med).float()
+        y_dir_val   = (y_val_t   > y_med).float()
+
+        train_dataset = TensorDataset(X_train_t, y_train_t, y_dir_train)
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
         best_val_loss = float('inf')
@@ -684,10 +696,11 @@ class MLPredictionEngine:
             epoch_loss = 0.0
             n_batches = 0
 
-            for batch_X, batch_y in train_loader:
+            for batch_X, batch_y, batch_dir in train_loader:
                 optimizer.zero_grad()
                 preds = model(batch_X)
-                loss = criterion(preds, batch_y)
+                # Hybrid loss: 70% MSE (price accuracy) + 30% BCE (direction)
+                loss = 0.7 * mse_loss(preds, batch_y) + 0.3 * bce_loss(preds, batch_dir)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
@@ -700,7 +713,7 @@ class MLPredictionEngine:
             model.eval()
             with torch.no_grad():
                 val_preds = model(X_val_t)
-                val_loss = criterion(val_preds, y_val_t).item()
+                val_loss = (0.7 * mse_loss(val_preds, y_val_t) + 0.3 * bce_loss(val_preds, y_dir_val)).item()
 
             scheduler.step(val_loss)
 
