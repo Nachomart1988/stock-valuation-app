@@ -1438,7 +1438,16 @@ export default function ValuacionesTab({
             value: (() => {
               // FMP TTM endpoint may return grahamNetNet or grahamNetNetTTM
               const v = keyMetricsTTM?.grahamNetNet ?? keyMetricsTTM?.grahamNetNetTTM;
-              return v && isFinite(v) ? v : null; // Net-Net can be negative (valid signal)
+              if (v != null && isFinite(v)) return v; // null/undefined filtered, 0 and negatives are valid
+              // Fallback: calculate Net-Net from balance sheet (value can be negative)
+              const currentAssets = lastBalance.totalCurrentAssets || 0;
+              const totalLiabilities = lastBalance.totalLiabilities || 0;
+              const shares = lastIncome.weightedAverageShsOutDil || lastIncome.weightedAverageShsOut || quote?.sharesOutstanding || 0;
+              if (currentAssets > 0 && shares > 0) {
+                const netNet = (currentAssets - totalLiabilities) / shares;
+                return isFinite(netNet) ? netNet : null;
+              }
+              return null;
             })(),
             enabled: true,
             description: 'Net-Net Working Capital: (Current Assets - Total Liabilities) / Shares',

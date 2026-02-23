@@ -453,8 +453,15 @@ export default function ProbabilityTab({
                 const W = 600, H = 200, padL = 40, padR = 12, padTop = 20, padBot = 28;
                 const chartW = W - padL - padR;
                 const chartH = H - padTop - padBot;
-                const minPrice = dist[0].center;
-                const maxPrice = dist[dist.length - 1].center;
+                // Ensure both currentPrice and targetPrice are always visible in chart
+                const distMin = dist[0].center;
+                const distMax = dist[dist.length - 1].center;
+                const allEndpoints = [distMin, distMax, result.currentPrice, result.targetPrice];
+                const rawMin = Math.min(...allEndpoints);
+                const rawMax = Math.max(...allEndpoints);
+                const padding = (rawMax - rawMin) * 0.08 || rawMin * 0.08 || 1;
+                const minPrice = rawMin - padding;
+                const maxPrice = rawMax + padding;
                 const priceRange = maxPrice - minPrice || 1;
                 const maxProb = Math.max(...dist.map((b: any) => b.probability));
 

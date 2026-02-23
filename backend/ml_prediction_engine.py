@@ -312,7 +312,7 @@ class MLPredictionEngine:
     DEFAULT_BATCH_SIZE = 64     # Larger batches → fewer optimizer steps per epoch
     DEFAULT_LEARNING_RATE = 0.001
     DEFAULT_MC_SAMPLES = 10     # Fewer MC samples → faster uncertainty estimation
-    DEFAULT_HISTORY_DAYS = 500  # ~2 years is plenty for LSTM training
+    DEFAULT_HISTORY_DAYS = 1100  # ~750 trading days (~3 years) for better LSTM training
 
     def __init__(self, api_key: Optional[str] = None):
         if not TORCH_AVAILABLE:
@@ -561,6 +561,7 @@ class MLPredictionEngine:
             'symbol': ticker,
             'from': from_date,
             'to': to_date,
+            'limit': 2000,  # Explicitly request up to 2000 bars to avoid API pagination
             'apikey': self.api_key,
         }
 

@@ -79,7 +79,8 @@ const MONETARY_FIELDS = new Set([
   'ebitda', 'netIncome', 'incomeBeforeTax', 'incomeTaxExpense',
   'sellingAndMarketingExpenses', 'generalAndAdministrativeExpenses',
   'researchAndDevelopmentExpenses', 'depreciationAndAmortization',
-  'weightedAverageShsOut', 'weightedAverageShsOutDil',
+  // NOTE: weightedAverageShsOut/Dil are share COUNTS, not monetary — must NOT be converted
+  // or the FX rate cancels out in FCF/shares divisions, leaving results in report currency
   'epsdiluted', 'epsDiluted',
   // Income Statement (additional)
   'ebit', 'sellingGeneralAndAdministrativeExpenses', 'totalOtherIncomeExpensesNet',
@@ -110,10 +111,12 @@ const MONETARY_FIELDS = new Set([
   'investmentsInPropertyPlantAndEquipment', 'otherInvestingActivites',
   'otherFinancingActivites', 'effectOfForexChangesOnCash',
   'cashAtEndOfPeriod', 'cashAtBeginningOfPeriod', 'capexPerShare',
-  // Key Metrics
+  // Key Metrics (per-share values in reporting currency — need FX conversion)
   'revenuePerShare', 'netIncomePerShare', 'operatingCashFlowPerShare',
   'freeCashFlowPerShare', 'cashPerShare', 'bookValuePerShare',
   'tangibleBookValuePerShare', 'interestDebtPerShare',
+  'grahamNumber', 'grahamNetNet', 'grahamNumberTTM', 'grahamNetNetTTM',
+  'ownersEarningsPerShare', 'evToOperatingCashFlowPerShare',
   'marketCap', 'enterpriseValue', 'workingCapital',
   'tangibleAssetValue', 'netCurrentAssetValue',
   // Enterprise Value
