@@ -453,15 +453,14 @@ export default function ProbabilityTab({
                 const W = 600, H = 200, padL = 40, padR = 12, padTop = 20, padBot = 28;
                 const chartW = W - padL - padR;
                 const chartH = H - padTop - padBot;
-                // Ensure both currentPrice and targetPrice are always visible in chart
+                // X-axis: use ONLY the distribution range so the bell curve fills the chart.
+                // currentPrice and targetPrice lines are clamped to chart edges if outside.
                 const distMin = dist[0].center;
                 const distMax = dist[dist.length - 1].center;
-                const allEndpoints = [distMin, distMax, result.currentPrice, result.targetPrice];
-                const rawMin = Math.min(...allEndpoints);
-                const rawMax = Math.max(...allEndpoints);
-                const padding = (rawMax - rawMin) * 0.08 || rawMin * 0.08 || 1;
-                const minPrice = rawMin - padding;
-                const maxPrice = rawMax + padding;
+                const distRange = distMax - distMin || 1;
+                const padding = distRange * 0.04; // 4% padding so curve isn't cut at edges
+                const minPrice = distMin - padding;
+                const maxPrice = distMax + padding;
                 const priceRange = maxPrice - minPrice || 1;
                 const maxProb = Math.max(...dist.map((b: any) => b.probability));
 
@@ -491,9 +490,13 @@ export default function ProbabilityTab({
                 const pathStr = smooth(pts);
                 const areaPath = `${pathStr} L ${pts[pts.length - 1].x} ${padTop + chartH} L ${pts[0].x} ${padTop + chartH} Z`;
 
-                // X positions for key prices
-                const targetX = Math.max(padL, Math.min(padL + chartW, toX(result.targetPrice)));
-                const currentX = Math.max(padL, Math.min(padL + chartW, toX(result.currentPrice)));
+                // X positions for key prices — clamped to chart edges
+                const targetXRaw = toX(result.targetPrice);
+                const currentXRaw = toX(result.currentPrice);
+                const targetX = Math.max(padL, Math.min(padL + chartW, targetXRaw));
+                const currentX = Math.max(padL, Math.min(padL + chartW, currentXRaw));
+                const targetOutside = targetXRaw < padL || targetXRaw > padL + chartW;
+                const currentOutside = currentXRaw < padL || currentXRaw > padL + chartW;
 
                 // Y-axis grid labels (25%, 50%, 75%, 100% of max)
                 const yLabels = [0.25, 0.5, 0.75, 1.0].map(pct => ({
@@ -546,13 +549,13 @@ export default function ProbabilityTab({
                       {/* Current price marker */}
                       <line x1={currentX} y1={padTop} x2={currentX} y2={padTop + chartH} stroke="#facc15" strokeWidth="1.5" strokeDasharray="3,3" opacity="0.7"/>
                       <text x={currentX} y={padTop - 4} fill="#facc15" fontSize="8" textAnchor="middle" fontFamily="monospace">
-                        ${result.currentPrice.toFixed(0)} ▼
+                        {currentOutside ? (currentXRaw < padL ? '◀ ' : ' ▶') : ''}${result.currentPrice.toFixed(0)} ▼
                       </text>
 
                       {/* Target price marker */}
                       <line x1={targetX} y1={padTop} x2={targetX} y2={padTop + chartH} stroke="#34d399" strokeWidth="1.5" strokeDasharray="4,3" opacity="0.9"/>
                       <text x={targetX} y={padTop - 4} fill="#34d399" fontSize="8" textAnchor="middle" fontFamily="monospace">
-                        ${result.targetPrice.toFixed(0)} 🎯
+                        {targetOutside ? (targetXRaw < padL ? '◀ ' : ' ▶') : ''}${result.targetPrice.toFixed(0)} 🎯
                       </text>
 
                       {/* Probability label at target */}
