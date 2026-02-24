@@ -247,13 +247,9 @@ class BinomialTreeEngine:
             )
 
             # ── Target Probability (CRR) ──
-            if target_price >= current_price:
-                # Bullish: probability of price going UP to / above target
-                mask = terminal_prices >= target_price
-            else:
-                # Bearish: probability of price going DOWN to / below target
-                mask = terminal_prices <= target_price
-
+            # Always P(S_T >= target): probability of ending AT OR ABOVE the target price.
+            # This is the natural interpretation regardless of whether target is above or below current.
+            mask = terminal_prices >= target_price
             probability    = float(np.sum(probs[mask]))
             expected_price = float(np.dot(terminal_prices, probs))
 
@@ -467,13 +463,9 @@ class BinomialTreeEngine:
         """
         if T <= 0 or sigma <= 0:
             return 0.0
+        # Always P(S_T >= K): probability price ends at or above K
         d2 = (log(S / K) + (r - q - 0.5 * sigma ** 2) * T) / (sigma * sqrt(T))
-        if K >= S:
-            # Bullish target: probability price ends >= K
-            return float(norm.cdf(d2))
-        else:
-            # Bearish target: probability price ends <= K
-            return float(norm.cdf(-d2))
+        return float(norm.cdf(d2))
 
     @staticmethod
     def _barrier_probability(
@@ -502,28 +494,20 @@ class BinomialTreeEngine:
         if T <= 0 or sigma <= 0:
             return 0.0
 
-        bullish = K >= S
-
-        if bullish:
-            alpha = log(K / S)
-        else:
-            # For bearish: P(min S_t <= K) = P(max(1/S_t) >= 1/K)
-            # Equivalent: flip and use -mu drift
-            alpha = log(S / K)
-            mu = -mu
-
-        nu = mu - 0.5 * sigma ** 2
+        # Always P(max S_t >= K) — probability the stock ever reaches or exceeds K
+        alpha  = log(K / S)   # log(K/S): positive when K > S, negative when K < S
+        nu     = mu - 0.5 * sigma ** 2
         sqrt_T = sigma * sqrt(T)
 
         if sqrt_T < 1e-12:
-            return 1.0 if (bullish and S >= K) or (not bullish and S <= K) else 0.0
+            return 1.0 if S >= K else 0.0
 
-        d_plus = (-alpha + nu * T) / sqrt_T
+        d_plus  = (-alpha + nu * T) / sqrt_T
         d_minus = (-alpha - nu * T) / sqrt_T
 
-        # Reflection principle formula
+        # Reflection principle: P(max S_t >= K) = N(d+) + exp(2*nu*alpha/σ²)*N(d-)
         exponent = 2.0 * nu * alpha / (sigma ** 2)
-        exponent = max(-500.0, min(500.0, exponent))  # Prevent overflow
+        exponent = max(-500.0, min(500.0, exponent))
 
         prob = float(norm.cdf(d_plus) + exp(exponent) * norm.cdf(d_minus))
         return max(0.0, min(1.0, prob))
@@ -546,11 +530,9 @@ class BinomialTreeEngine:
         """
         if T <= 0 or sigma <= 0:
             return 0.0
+        # Always P(S_T >= K)
         d2 = (log(S / K) + (mu - 0.5 * sigma ** 2) * T) / (sigma * sqrt(T))
-        if K >= S:
-            return float(norm.cdf(d2))
-        else:
-            return float(norm.cdf(-d2))
+        return float(norm.cdf(d2))
 
     # ── Historical volatility with retry + cache ──────────────────────
 
@@ -665,18 +647,15 @@ class BinomialTreeEngine:
             dt = T / n_steps
             sqrt_dt = sqrt(dt)
             drift_per_step = (mu - 0.5 * sigma ** 2) * dt
-            bullish = K >= S
 
+            # Always count paths where price ever reaches or exceeds K
             touched = 0
             for _ in range(n_paths):
                 price = S
                 for __ in range(n_steps):
                     z = rng.standard_normal()
                     price *= exp(drift_per_step + sigma * sqrt_dt * z)
-                    if bullish and price >= K:
-                        touched += 1
-                        break
-                    elif not bullish and price <= K:
+                    if price >= K:
                         touched += 1
                         break
 
@@ -999,11 +978,8 @@ class BinomialTreeEngine:
         probs = np.exp(log_probs)
         probs /= probs.sum()
 
-        if K >= S:
-            mask = terminal >= K
-        else:
-            mask = terminal <= K
-
+        # Always P(S_T >= K)
+        mask = terminal >= K
         return float(np.sum(probs[mask]))
 
     # ── Bootstrap Confidence Interval ─────────────────────────────────
