@@ -2,10 +2,20 @@
 // Professional Financial Analysis PDF — Black + Deutsche Bank Green #00A651
 
 export interface PDFBranding {
-  bgColor?:     [number, number, number];  // default [0,0,0]
-  accentColor?: [number, number, number];  // default [0,166,81]
-  fontFamily?:  string;                    // default 'helvetica'
-  logoBase64?:  string;                    // optional base64 data URL
+  bgColor?:          [number, number, number];  // default [0,0,0]
+  accentColor?:      [number, number, number];  // default [0,166,81]
+  fontFamily?:       string;                    // default 'helvetica'
+  logoBase64?:       string;                    // optional base64 data URL
+  customDisclaimer?: string;                    // optional replacement disclaimer text
+}
+
+export interface MLPrediction {
+  horizon:           number;
+  predictedPrice:    number;
+  upperBand:         number;
+  lowerBand:         number;
+  confidence:        number;
+  predictedChangePct: number;
 }
 
 export interface PDFData {
@@ -27,8 +37,10 @@ export interface PDFData {
   sharedCagrStats: { avgCagr: number | null; minCagr: number | null; maxCagr: number | null } | null;
   sharedPivotAnalysis: any;
   // Optional config
-  sections?: string[];   // which pages to include; default: all
-  branding?: PDFBranding;
+  sections?:      string[];        // which pages to include; default: all
+  branding?:      PDFBranding;
+  mlPredictions?: MLPrediction[];  // fetched by PDFConfigModal
+  preview?:       boolean;         // if true → return blob URL instead of saving
 }
 
 const f  = (v: any, d = 2) => (v == null || isNaN(+v)) ? '-' : (+v).toFixed(d);
@@ -45,7 +57,7 @@ const fl = (v: any) => {
 
 type RGB = [number, number, number];
 
-export async function generateAnalysisPDF(d: PDFData): Promise<void> {
+export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   const { default: jsPDF } = await import('jspdf');
   const atMod = await import('jspdf-autotable');
   if (typeof (atMod as any).applyPlugin === 'function') {
@@ -54,6 +66,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   const doc: any = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
   // ── Sections & branding (from config or defaults) ─────────────────────
+  // ml_predictions is opt-in (requires a fetch), so NOT in default set
   const activeSections = new Set(
     d.sections ?? ['cover', 'financial', 'valuation', 'forecasts', 'technical', 'disclaimer']
   );
@@ -652,6 +665,104 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   }
 
   // ════════════════════════════════════════════════════════════════════════
+  // PAGE ML — ML PREDICTIONS (LSTM / Transformer Engine)
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('ml_predictions') && d.mlPredictions?.length) {
+    const preds = d.mlPredictions;
+    y = newPage();
+
+    y = section(y, 'ML Price Predictions — LSTM/Transformer Engine');
+    doc.setFont(FONT, 'normal'); doc.setFontSize(6.5); st(TG);
+    doc.text(`Horizons: ${preds.map(p => `${p.horizon}d`).join(', ')}  ·  Model: LSTM + Attention  ·  Generated: ${date}`, M, y);
+    y += 6;
+
+    // Summary table
+    y = atable({
+      startY: y,
+      head: [['Horizon', 'Predicted Price', 'Change %', 'Confidence', 'Upper Band', 'Lower Band']],
+      body: preds.map(p => [
+        `${p.horizon}d`,
+        `$${f(p.predictedPrice)}`,
+        `${p.predictedChangePct >= 0 ? '+' : ''}${f(p.predictedChangePct)}%`,
+        `${f(p.confidence * 100, 1)}%`,
+        `$${f(p.upperBand)}`,
+        `$${f(p.lowerBand)}`,
+      ]),
+      columnStyles: {
+        0: { cellWidth: 22, fontStyle: 'bold', fillColor: [14, 14, 14] },
+        2: { cellWidth: 24 },
+        3: { cellWidth: 26 },
+      },
+    });
+
+    // Price forecast bar chart
+    y = checkY(y, 58);
+    y = section(y, 'Predicted Price by Horizon');
+    if (price) {
+      // Draw current price reference line
+      const chartX = M, chartW = CW, chartH = 40;
+      const maxP = Math.max(...preds.map(p => p.upperBand), price) * 1.05;
+      const minP = Math.min(...preds.map(p => p.lowerBand), price) * 0.95;
+      const span = maxP - minP || 1;
+      const scl  = chartH / span;
+
+      const bw   = (chartW - (preds.length - 1) * 3) / preds.length;
+
+      preds.forEach((p, i) => {
+        const bx   = chartX + i * (bw + 3);
+        const bh   = Math.max(1, (p.predictedPrice - minP) * scl);
+        const by   = y + chartH - bh;
+        const clr: RGB = p.predictedChangePct >= 0 ? G : RD;
+
+        // Band range bar (faint)
+        const bandH = (p.upperBand - p.lowerBand) * scl;
+        const bandY = y + chartH - (p.upperBand - minP) * scl;
+        sf([20, 40, 25] as RGB); doc.roundedRect(bx, bandY, bw, bandH, 0.5, 0.5, 'F');
+
+        // Main bar
+        sf(clr); doc.roundedRect(bx, by, bw, bh, 0.8, 0.8, 'F');
+
+        // Price label
+        doc.setFont(FONT, 'bold'); doc.setFontSize(5.5); st(clr);
+        doc.text(`$${f(p.predictedPrice, 0)}`, bx + bw / 2, by - 1.5, { align: 'center' });
+
+        // Change % label
+        doc.setFont(FONT, 'normal'); doc.setFontSize(5); st(TG);
+        doc.text(`${p.predictedChangePct >= 0 ? '+' : ''}${f(p.predictedChangePct, 1)}%`, bx + bw / 2, y + chartH + 4.5, { align: 'center' });
+
+        // Horizon label
+        doc.setFontSize(5.5); st(TG);
+        doc.text(`${p.horizon}d`, bx + bw / 2, y + chartH + 9.5, { align: 'center' });
+      });
+
+      // Current price horizontal line
+      const pY = y + chartH - (price - minP) * scl;
+      ss(W); doc.setLineWidth(0.4); doc.setLineDash([1.5, 1]);
+      doc.line(chartX, pY, chartX + chartW, pY);
+      doc.setLineDash([]);
+      doc.setFont(FONT, 'bold'); doc.setFontSize(6); st(W);
+      doc.text(`Current $${f(price, 0)}`, chartX + chartW - 2, pY - 1.5, { align: 'right' });
+
+      y += chartH + 14;
+    } else {
+      barChart(M, y, CW, 40,
+        preds.map(p => `${p.horizon}d`),
+        preds.map(p => p.predictedPrice), G);
+      y += 50;
+    }
+
+    // Confidence bar chart
+    y = checkY(y, 45);
+    y = section(y, 'Model Confidence by Horizon');
+    preds.forEach((p, i) => {
+      const pct = +(p.confidence * 100).toFixed(0);
+      scoreBar(M, y, CW, `${p.horizon}-day horizon`, pct);
+      y += 8;
+    });
+    y += 4;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   // PAGE 5 — TECHNICAL
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('technical') && sharedPivotAnalysis) {
@@ -731,27 +842,34 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   doc.text('Disclaimer & Important Disclosures', PW/2, y, { align:'center' });
   y += 10;
 
-  const disc = [
-    'This Investment Analysis Report has been generated automatically by the Prismo platform for',
-    'informational and educational purposes only. It does not constitute financial advice, investment',
-    'recommendations, or an offer to buy or sell any security.',
-    '',
-    'All data is sourced from Financial Modeling Prep (FMP) and third-party data providers. No guarantee',
-    'is made regarding accuracy, completeness, or timeliness. Investing in securities involves risk,',
-    'including possible loss of principal. Past performance does not guarantee future results.',
-    '',
-    'Valuation models (DCF, DDM, Graham Number, Multiples, etc.) rely on assumptions and estimates',
-    'that may not reflect actual future performance. Different analysts may reach different conclusions.',
-    '',
-    'Always consult a qualified financial advisor before making any investment decisions.',
-  ];
-
   doc.setFont(FONT,'normal'); doc.setFontSize(7.5); st(TW);
-  disc.forEach(line => {
-    st(line==='' ? TG : TW);
-    if (line !== '') doc.text(line, PW/2, y, { align:'center' });
-    y += line==='' ? 4 : 5.5;
-  });
+  if (d.branding?.customDisclaimer) {
+    const customLines: string[] = doc.splitTextToSize(d.branding.customDisclaimer, CW - 10);
+    customLines.forEach((line: string) => {
+      doc.text(line, PW/2, y, { align:'center' });
+      y += 5.5;
+    });
+  } else {
+    const disc = [
+      'This Investment Analysis Report has been generated automatically by the Prismo platform for',
+      'informational and educational purposes only. It does not constitute financial advice, investment',
+      'recommendations, or an offer to buy or sell any security.',
+      '',
+      'All data is sourced from Financial Modeling Prep (FMP) and third-party data providers. No guarantee',
+      'is made regarding accuracy, completeness, or timeliness. Investing in securities involves risk,',
+      'including possible loss of principal. Past performance does not guarantee future results.',
+      '',
+      'Valuation models (DCF, DDM, Graham Number, Multiples, etc.) rely on assumptions and estimates',
+      'that may not reflect actual future performance. Different analysts may reach different conclusions.',
+      '',
+      'Always consult a qualified financial advisor before making any investment decisions.',
+    ];
+    disc.forEach(line => {
+      st(line==='' ? TG : TW);
+      if (line !== '') doc.text(line, PW/2, y, { align:'center' });
+      y += line==='' ? 4 : 5.5;
+    });
+  }
 
   y += 6;
   ss(D3); doc.setLineWidth(0.2); doc.line(M+30, y, PW-M-30, y);
@@ -762,6 +880,10 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   pageFooter();
   } // end disclaimer
 
-  // ── Save ──────────────────────────────────────────────────────────────
+  // ── Save or preview ───────────────────────────────────────────────────
+  if (d.preview) {
+    const blob: Blob = doc.output('blob');
+    return URL.createObjectURL(blob);
+  }
   doc.save(`${ticker}_Prismo_${today.toISOString().split('T')[0]}.pdf`);
 }

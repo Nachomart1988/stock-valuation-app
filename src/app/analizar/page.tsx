@@ -1006,10 +1006,11 @@ function AnalizarContent() {
   const handleExportPDF = async (config: PDFConfig) => {
     if (pdfExporting) return;
     setPdfExporting(true);
-    setShowPDFModal(false);
+    // Close modal for save mode; keep open for preview so user can adjust
+    if (!config.preview) setShowPDFModal(false);
     try {
       const { generateAnalysisPDF } = await import('@/app/utils/generateAnalysisPDF');
-      await generateAnalysisPDF({
+      const result = await generateAnalysisPDF({
         ticker: activeTicker,
         profile,
         quote,
@@ -1027,9 +1028,15 @@ function AnalizarContent() {
         sharedCompanyQualityNet,
         sharedCagrStats,
         sharedPivotAnalysis,
-        sections: config.sections,
-        branding: config.branding,
+        sections:       config.sections,
+        branding:       config.branding,
+        mlPredictions:  config.mlPredictions,
+        preview:        config.preview,
       });
+      // Preview mode: open blob URL in new tab
+      if (config.preview && typeof result === 'string') {
+        window.open(result, '_blank');
+      }
     } catch (err) {
       console.error('[PDF] Export error:', err);
       alert('Error al generar el PDF. Por favor intenta de nuevo.');
@@ -1438,6 +1445,7 @@ function AnalizarContent() {
         onClose={() => setShowPDFModal(false)}
         onGenerate={handleExportPDF}
         generating={pdfExporting}
+        ticker={activeTicker}
       />
     </main>
   );
