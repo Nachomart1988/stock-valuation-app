@@ -1,6 +1,13 @@
 // src/app/utils/generateAnalysisPDF.ts
 // Professional Financial Analysis PDF — Black + Deutsche Bank Green #00A651
 
+export interface PDFBranding {
+  bgColor?:     [number, number, number];  // default [0,0,0]
+  accentColor?: [number, number, number];  // default [0,166,81]
+  fontFamily?:  string;                    // default 'helvetica'
+  logoBase64?:  string;                    // optional base64 data URL
+}
+
 export interface PDFData {
   ticker: string;
   profile: any;
@@ -19,6 +26,9 @@ export interface PDFData {
   sharedCompanyQualityNet: any;
   sharedCagrStats: { avgCagr: number | null; minCagr: number | null; maxCagr: number | null } | null;
   sharedPivotAnalysis: any;
+  // Optional config
+  sections?: string[];   // which pages to include; default: all
+  branding?: PDFBranding;
 }
 
 const f  = (v: any, d = 2) => (v == null || isNaN(+v)) ? '-' : (+v).toFixed(d);
@@ -43,13 +53,19 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   }
   const doc: any = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
+  // ── Sections & branding (from config or defaults) ─────────────────────
+  const activeSections = new Set(
+    d.sections ?? ['cover', 'financial', 'valuation', 'forecasts', 'technical', 'disclaimer']
+  );
+  const FONT = d.branding?.fontFamily ?? 'helvetica';
+
   // ── Palette ────────────────────────────────────────────────────────────
-  const G:  RGB = [0,  166, 81];   // #00A651 Deutsche Bank Green
-  const G2: RGB = [0,  100, 44];   // darker green
+  const G:  RGB = d.branding?.accentColor ?? [0,  166, 81];  // accent (default: #00A651)
+  const G2: RGB = [Math.max(0, G[0]-0), Math.max(0, Math.round(G[1]*0.6)), Math.max(0, Math.round(G[2]*0.54))]; // darker accent
   const W:  RGB = [255,255,255];
-  const BK: RGB = [0,  0,  0];
-  const D1: RGB = [8,  8,  8];     // card background
-  const D3: RGB = [22, 22, 22];    // subtle divider
+  const BK: RGB = d.branding?.bgColor    ?? [0,  0,  0];     // background (default: black)
+  const D1: RGB = BK[0]+BK[1]+BK[2] === 0 ? [8,8,8]   : [Math.min(255,BK[0]+8), Math.min(255,BK[1]+8), Math.min(255,BK[2]+8)];
+  const D3: RGB = BK[0]+BK[1]+BK[2] === 0 ? [22,22,22] : [Math.min(255,BK[0]+22),Math.min(255,BK[1]+22),Math.min(255,BK[2]+22)];
   const TW: RGB = [220,220,220];   // main text
   const TG: RGB = [130,130,130];   // muted text
   const RD: RGB = [220, 50, 50];   // negative/red
@@ -78,7 +94,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   // ── App Logo (green square "P") ────────────────────────────────────────
   function appLogo(x: number, y: number, sz = 8) {
     sf(G); doc.roundedRect(x, y, sz, sz, 1.2, 1.2, 'F');
-    doc.setFont('helvetica','bold'); doc.setFontSize(sz * 0.8);
+    doc.setFont(FONT,'bold'); doc.setFontSize(sz * 0.8);
     st(W); doc.text('P', x + sz/2, y + sz*0.72, { align:'center' });
   }
 
@@ -87,9 +103,9 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
     sf(BK); doc.rect(0, 0, PW, 11, 'F');
     ss(G);  doc.setLineWidth(0.25); doc.line(0, 11, PW, 11);
     appLogo(M, 2, 7);
-    doc.setFont('helvetica','bold'); doc.setFontSize(7); st(G);
+    doc.setFont(FONT,'bold'); doc.setFontSize(7); st(G);
     doc.text('Prismo', M+9.5, 7);
-    doc.setFont('helvetica','normal'); doc.setFontSize(6.5); st(TG);
+    doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TG);
     doc.text(`${ticker}  ·  ${co}`, M+22, 7);
     doc.text(`p.${pg}  ·  ${date}`, PW-M, 7, { align:'right' });
   }
@@ -97,7 +113,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   // ── Page footer ────────────────────────────────────────────────────────
   function pageFooter() {
     ss(D3); doc.setLineWidth(0.2); doc.line(M, PH-11, PW-M, PH-11);
-    doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+    doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
     doc.text('Prismo Investment Intelligence  ·  For informational purposes only  ·  Not financial advice', PW/2, PH-6.5, { align:'center' });
   }
 
@@ -115,7 +131,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
 
   // ── Section heading ────────────────────────────────────────────────────
   function section(y: number, title: string): number {
-    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); st(G);
+    doc.setFont(FONT,'bold'); doc.setFontSize(7.5); st(G);
     doc.text(title.toUpperCase(), M, y);
     ss(G); doc.setLineWidth(0.25); doc.line(M, y+1.8, PW-M, y+1.8);
     return y+7;
@@ -125,9 +141,9 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   function pill(x: number, y: number, w: number, label: string, val: string, vc?: RGB) {
     sf(D1); doc.roundedRect(x, y, w, 13, 1.5, 1.5, 'F');
     ss(D3); doc.setLineWidth(0.15); doc.roundedRect(x, y, w, 13, 1.5, 1.5, 'S');
-    doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+    doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
     doc.text(label, x+w/2, y+5, { align:'center' });
-    doc.setFont('helvetica','bold'); doc.setFontSize(9); st(vc||TW);
+    doc.setFont(FONT,'bold'); doc.setFontSize(9); st(vc||TW);
     doc.text(val, x+w/2, y+11, { align:'center' });
   }
 
@@ -157,11 +173,11 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
       sf(v < 0 ? RD : color);
       doc.roundedRect(bx, by, bw, bh, 0.8, 0.8, 'F');
 
-      doc.setFont('helvetica','bold'); doc.setFontSize(5); st(v<0 ? RD : G);
+      doc.setFont(FONT,'bold'); doc.setFontSize(5); st(v<0 ? RD : G);
       const lv = isPct ? fp(v) : fl(v);
       doc.text(lv, bx+bw/2, by-(v>=0?1.5:-1.5), { align:'center' });
 
-      doc.setFont('helvetica','normal'); doc.setFontSize(5.5); st(TG);
+      doc.setFont(FONT,'normal'); doc.setFontSize(5.5); st(TG);
       doc.text(lbl, bx+bw/2, y+h+4, { align:'center' });
     });
   }
@@ -169,13 +185,13 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   // ── Horizontal score bar ──────────────────────────────────────────────
   function scoreBar(x: number, y: number, w: number, label: string, pct: number) {
     const c: RGB = pct>=70 ? G : pct>=45 ? [190,140,0] : RD;
-    doc.setFont('helvetica','normal'); doc.setFontSize(7); st(TW);
+    doc.setFont(FONT,'normal'); doc.setFontSize(7); st(TW);
     doc.text(label, x, y+3.5);
     const bx = x+55, bw = w-65;
     sf(D3); doc.roundedRect(bx, y, bw, 4.5, 1, 1, 'F');
     const fw = Math.max(1.5, bw*pct/100);
     sf(c); doc.roundedRect(bx, y, fw, 4.5, 1, 1, 'F');
-    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); st(c);
+    doc.setFont(FONT,'bold'); doc.setFontSize(6.5); st(c);
     doc.text(`${pct.toFixed(0)}%`, bx+bw+3, y+3.5);
   }
 
@@ -193,9 +209,12 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
     return (doc.lastAutoTable?.finalY || opts.startY+20) + 6;
   }
 
+  let y = 0; // shared Y cursor across pages
+
   // ════════════════════════════════════════════════════════════════════════
   // PAGE 1 — COVER
   // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('cover')) {
   sf(BK); doc.rect(0, 0, PW, PH, 'F');
   // Green left edge
   sf(G); doc.rect(0, 0, 2.5, PH, 'F');
@@ -204,16 +223,22 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
 
   // App branding top-left
   appLogo(M+2, 14, 11);
-  doc.setFont('helvetica','black'); doc.setFontSize(14); st(G);
+  doc.setFont(FONT,'black'); doc.setFontSize(14); st(G);
   doc.text('Prismo', M+16, 21.5);
-  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); st(TG);
+  doc.setFont(FONT,'normal'); doc.setFontSize(7.5); st(TG);
   doc.text('Investment Intelligence Platform', M+16, 27);
 
   // Thin divider
   ss(D3); doc.setLineWidth(0.3); doc.line(M+2, 32, PW-M, 32);
 
-  // Company logo (right side)
-  if (profile?.image) {
+  // User uploaded logo (top-right, replaces company logo)
+  if (d.branding?.logoBase64) {
+    try {
+      sf(W); doc.circle(PW-M-15, 22, 14, 'F');
+      doc.addImage(d.branding.logoBase64, PW-M-26, 11, 22, 22, '', 'FAST');
+    } catch { /* skip */ }
+  } else if (profile?.image) {
+    // Company logo (right side)
     try {
       const res = await fetch(profile.image);
       if (res.ok) {
@@ -232,7 +257,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   }
 
   // Company name
-  doc.setFont('helvetica','black'); doc.setFontSize(24); st(W);
+  doc.setFont(FONT,'black'); doc.setFontSize(24); st(W);
   const nameLn: string[] = doc.splitTextToSize(co, 140);
   doc.text(nameLn, M+2, 47);
   const afterName = 47 + nameLn.length*11;
@@ -240,13 +265,13 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   // Ticker + exchange
   sf(G); doc.roundedRect(M+2, afterName, 30, 10, 2, 2, 'F');
   sf([28,28,28]); doc.roundedRect(M+35, afterName, 26, 10, 2, 2, 'F');
-  doc.setFont('helvetica','bold'); doc.setFontSize(10); st(W);
+  doc.setFont(FONT,'bold'); doc.setFontSize(10); st(W);
   doc.text(ticker, M+17, afterName+7, { align:'center' });
   doc.setFontSize(8); st(TG);
   doc.text(exch, M+48, afterName+7, { align:'center' });
 
   // Sector / industry
-  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); st(TG);
+  doc.setFont(FONT,'normal'); doc.setFontSize(7.5); st(TG);
   doc.text(`${sect}  ·  ${ind}`, M+2, afterName+17);
 
   // ── 4 KPI cards ──────────────────────────────────────────────────────
@@ -262,9 +287,9 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
     sf(D1); doc.roundedRect(bx, kY, kW, 20, 2, 2, 'F');
     ss(i===3 ? G : D3); doc.setLineWidth(i===3 ? 0.4 : 0.15);
     doc.roundedRect(bx, kY, kW, 20, 2, 2, 'S');
-    doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+    doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
     doc.text(k.l, bx+kW/2, kY+6, { align:'center' });
-    doc.setFont('helvetica','black'); doc.setFontSize(11); st(k.c as RGB);
+    doc.setFont(FONT,'black'); doc.setFontSize(11); st(k.c as RGB);
     doc.text(k.v, bx+kW/2, kY+14.5, { align:'center' });
   });
 
@@ -275,12 +300,12 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
     const uy   = kY + 26;
     sf(isUp ? [0,45,22] as RGB : [60,5,5] as RGB);
     doc.roundedRect(M+2, uy, 58, 14, 2, 2, 'F');
-    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); st(TG);
+    doc.setFont(FONT,'bold'); doc.setFontSize(6.5); st(TG);
     doc.text(isUp ? 'POTENTIAL UPSIDE' : 'POTENTIAL DOWNSIDE', M+31, uy+4.5, { align:'center' });
-    doc.setFont('helvetica','black'); doc.setFontSize(13);
+    doc.setFont(FONT,'black'); doc.setFontSize(13);
     st(isUp ? [90,255,150] as RGB : [255,110,110] as RGB);
     doc.text(`${isUp?'+':''}${up.toFixed(1)}%`, M+31, uy+12, { align:'center' });
-    doc.setFont('helvetica','normal'); doc.setFontSize(6.5); st(TG);
+    doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TG);
     doc.text(`vs avg model valuation $${f(sharedAverageVal)}`, M+64, uy+9);
   }
 
@@ -288,7 +313,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   const covInc = (income||[]).slice(0,5).reverse();
   if (covInc.length >= 2) {
     const cchY = kY + 48;
-    doc.setFont('helvetica','bold'); doc.setFontSize(6.5); st(TG);
+    doc.setFont(FONT,'bold'); doc.setFontSize(6.5); st(TG);
     doc.text('REVENUE TREND', M+2, cchY-2);
     barChart(M+2, cchY, CW-4, 36,
       covInc.map((i:any) => i.date?.substring(0,4)||''),
@@ -299,22 +324,24 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   if (profile?.description) {
     const dY = kY + 93;
     const desc = profile.description.substring(0, 350)+(profile.description.length>350?'...':'');
-    doc.setFont('helvetica','normal'); doc.setFontSize(7); st(TG);
+    doc.setFont(FONT,'normal'); doc.setFontSize(7); st(TG);
     const dl:string[] = doc.splitTextToSize(desc, CW-4);
     doc.text(dl.slice(0,5), M+2, dY);
   }
 
   // Cover footer
   ss(G); doc.setLineWidth(0.5); doc.line(M, PH-20, PW-M, PH-20);
-  doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+  doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
   doc.text('For informational purposes only · Not financial advice · Generated by Prismo', PW/2, PH-14, { align:'center' });
   doc.setFontSize(7); st(TG);
   doc.text(date, PW/2, PH-8.5, { align:'center' });
+  } // end cover
 
   // ════════════════════════════════════════════════════════════════════════
   // PAGE 2 — FINANCIAL HIGHLIGHTS
   // ════════════════════════════════════════════════════════════════════════
-  let y = newPage();
+  if (activeSections.has('financial')) {
+  y = newPage();
 
   // Market summary pills
   y = section(y, 'Market Summary');
@@ -348,7 +375,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
     const hw = (CW/2) - 4;
     barChart(M, y, hw, 40, inc5.map((i:any)=>i.date?.substring(0,4)||''), inc5.map((i:any)=>i.revenue||0), G);
     barChart(M+hw+8, y, hw, 40, inc5.map((i:any)=>i.date?.substring(0,4)||''), inc5.map((i:any)=>i.netIncome||0), [80,190,130] as RGB);
-    doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+    doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
     doc.text('Revenue', M+hw/2, y+47, { align:'center' });
     doc.text('Net Income', M+hw+8+hw/2, y+47, { align:'center' });
     y += 52;
@@ -369,7 +396,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
         inc5.map((i:any)=>i.date?.substring(0,4)||''),
         inc5.map((i:any)=>(i[m.key]||0)*100),
         m.color, true);
-      doc.setFont('helvetica','normal'); doc.setFontSize(6); st(TG);
+      doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
       doc.text(m.label, M+mi*(mW+4)+mW/2, y+37, { align:'center' });
     });
     y += 43;
@@ -413,10 +440,12 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
       columnStyles: {0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:52}},
     });
   }
+  } // end financial
 
   // ════════════════════════════════════════════════════════════════════════
   // PAGE 3 — VALUATION
   // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('valuation')) {
   y = newPage();
 
   // Valuation model visual bars
@@ -441,13 +470,13 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
       const by = y + i*bSp;
       const bw = Math.max(2, (m.val/maxV)*barMaxW);
       // Label
-      doc.setFont('helvetica','normal'); doc.setFontSize(6.5); st(TG);
+      doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TG);
       doc.text(m.name, M, by+bH-0.5);
       // Bar
       sf(m.name==='Average' ? G : [20,60,35] as RGB);
       doc.roundedRect(M+36, by, bw, bH, 0.8, 0.8, 'F');
       // Value
-      doc.setFont('helvetica','bold'); doc.setFontSize(6);
+      doc.setFont(FONT,'bold'); doc.setFontSize(6);
       st(m.name==='Average' ? G : TW);
       doc.text(`$${f(m.val,0)}`, M+36+bw+2, by+bH-0.5);
     });
@@ -457,7 +486,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
     doc.line(pLine, y-2, pLine, y + Math.min(models.length,10)*bSp+2);
     // Price label
     sf(W); doc.roundedRect(pLine-8, y-7, 16, 5, 1, 1, 'F');
-    doc.setFont('helvetica','bold'); doc.setFontSize(6); st(BK);
+    doc.setFont(FONT,'bold'); doc.setFontSize(6); st(BK);
     doc.text(`$${f(price,0)}`, pLine, y-3.5, { align:'center' });
 
     y += Math.min(models.length,10)*bSp + 10;
@@ -501,7 +530,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
     const total = sharedCompanyQualityNet.totalScore;
     if (total != null) {
       ss(D3); doc.setLineWidth(0.2); doc.line(M, y+1, PW-M, y+1);
-      doc.setFont('helvetica','bold'); doc.setFontSize(9); st(G);
+      doc.setFont(FONT,'bold'); doc.setFontSize(9); st(G);
       doc.text(`Overall: ${(total*100).toFixed(0)}/100  ·  ${sharedCompanyQualityNet.rating||''}`, M, y+8);
       y += 13;
     }
@@ -519,11 +548,12 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
     y = atable({ startY:y, head:[['Metric','Value']], body:capRows,
       columnStyles:{0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:120},1:{cellWidth:60}} });
   }
+  } // end valuation
 
   // ════════════════════════════════════════════════════════════════════════
   // PAGE 4 — ANALYST FORECASTS
   // ════════════════════════════════════════════════════════════════════════
-  if (sharedForecasts?.length) {
+  if (activeSections.has('forecasts') && sharedForecasts?.length) {
     y = newPage();
     y = section(y, 'Analyst Consensus Estimates');
     y = atable({
@@ -576,7 +606,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
       const tX2 = M+10+(tgt-mn)*scl;
       sf(G); doc.circle(tX2, tY+2.5, 2.5, 'F');
 
-      doc.setFont('helvetica','bold'); doc.setFontSize(6.5);
+      doc.setFont(FONT,'bold'); doc.setFontSize(6.5);
       st(W); doc.text(`$${f(price,0)}`, pX, tY+11, { align:'center' });
       st(G); doc.text(`$${f(tgt,0)}\nTarget`, tX2, tY+11, { align:'center' });
       st(TG); doc.setFontSize(5.5);
@@ -624,7 +654,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   // ════════════════════════════════════════════════════════════════════════
   // PAGE 5 — TECHNICAL
   // ════════════════════════════════════════════════════════════════════════
-  if (sharedPivotAnalysis) {
+  if (activeSections.has('technical') && sharedPivotAnalysis) {
     y = newPage();
     const pa = sharedPivotAnalysis;
 
@@ -644,14 +674,14 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
       // Dot
       sf(W); doc.circle(ppos, tY+3, 3, 'F');
 
-      doc.setFont('helvetica','bold'); doc.setFontSize(7); st(W);
+      doc.setFont(FONT,'bold'); doc.setFontSize(7); st(W);
       doc.text(`$${f(price,0)}`, ppos, tY+13, { align:'center' });
       st(TG); doc.setFontSize(6);
       doc.text(`$${f(pa.low52Week,0)}  52W Low`, M+10, tY+13);
       doc.text(`52W High  $${f(pa.high52Week,0)}`, PW-M-10, tY+13, { align:'right' });
 
       // % from high
-      doc.setFont('helvetica','bold'); doc.setFontSize(8);
+      doc.setFont(FONT,'bold'); doc.setFontSize(8);
       const fromHigh = ((price/pa.high52Week)-1)*100;
       st(fromHigh < -20 ? RD : fromHigh < -5 ? [200,150,0] as RGB : G);
       doc.text(`${fromHigh.toFixed(1)}% from 52W High`, PW/2, tY+21, { align:'center' });
@@ -683,20 +713,21 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   // ════════════════════════════════════════════════════════════════════════
   // FINAL PAGE — DISCLAIMER
   // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('disclaimer')) {
   y = newPage();
 
   // Centered branding
   appLogo(PW/2 - 6, y, 12);
-  doc.setFont('helvetica','black'); doc.setFontSize(18); st(G);
+  doc.setFont(FONT,'black'); doc.setFontSize(18); st(G);
   doc.text('Prismo', PW/2, y+22, { align:'center' });
-  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); st(TG);
+  doc.setFont(FONT,'normal'); doc.setFontSize(8.5); st(TG);
   doc.text('Investment Intelligence Platform', PW/2, y+29, { align:'center' });
 
   y += 38;
   ss(G); doc.setLineWidth(0.3); doc.line(M+20, y, PW-M-20, y);
   y += 8;
 
-  doc.setFont('helvetica','bold'); doc.setFontSize(10); st(TW);
+  doc.setFont(FONT,'bold'); doc.setFontSize(10); st(TW);
   doc.text('Disclaimer & Important Disclosures', PW/2, y, { align:'center' });
   y += 10;
 
@@ -715,7 +746,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
     'Always consult a qualified financial advisor before making any investment decisions.',
   ];
 
-  doc.setFont('helvetica','normal'); doc.setFontSize(7.5); st(TW);
+  doc.setFont(FONT,'normal'); doc.setFontSize(7.5); st(TW);
   disc.forEach(line => {
     st(line==='' ? TG : TW);
     if (line !== '') doc.text(line, PW/2, y, { align:'center' });
@@ -729,6 +760,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<void> {
   doc.text(`${co}  (${ticker})  ·  ${date}`, PW/2, y, { align:'center' });
 
   pageFooter();
+  } // end disclaimer
 
   // ── Save ──────────────────────────────────────────────────────────────
   doc.save(`${ticker}_Prismo_${today.toISOString().split('T')[0]}.pdf`);

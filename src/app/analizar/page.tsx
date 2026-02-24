@@ -41,6 +41,7 @@ import ResumenTab from '@/app/components/tabs/ResumenTab';
 import MLPredictionTab from '@/app/components/tabs/MLPredictionTab';
 import PortfolioOptimizerTab from '@/app/components/tabs/PortfolioOptimizerTab';
 import OptionsTab from '@/app/components/tabs/OptionsTab';
+import PDFConfigModal, { PDFConfig } from '@/app/components/PDFConfigModal';
 
 // Group components for reorganized layout
 import FinancialStatementsGroup from '@/app/components/groups/FinancialStatementsGroup';
@@ -434,6 +435,7 @@ function AnalizarContent() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [showPDFModal, setShowPDFModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sharedAverageVal, setSharedAverageVal] = useState<number | null>(null);
   const [sharedSGR, setSharedSGR] = useState<number | null>(null);
@@ -1000,10 +1002,11 @@ function AnalizarContent() {
 
   const { quote, profile, income, balance, cashFlow, priceTarget, estimates, dcfStandard, dcfCustom, incomeTTM, balanceTTM, cashFlowTTM, secData, secReportsRaw, cashFlowAsReported, dividends, incomeAsReported, balanceAsReported, incomeGrowth, balanceGrowth, cashFlowGrowth, financialGrowth, keyMetrics, keyMetricsTTM, ratios, ratiosTTM, enterpriseValue, ownerEarnings } = data;
 
-  // PDF Export handler
-  const handleExportPDF = async () => {
+  // PDF Export handler — called from PDFConfigModal with section + branding config
+  const handleExportPDF = async (config: PDFConfig) => {
     if (pdfExporting) return;
     setPdfExporting(true);
+    setShowPDFModal(false);
     try {
       const { generateAnalysisPDF } = await import('@/app/utils/generateAnalysisPDF');
       await generateAnalysisPDF({
@@ -1024,6 +1027,8 @@ function AnalizarContent() {
         sharedCompanyQualityNet,
         sharedCagrStats,
         sharedPivotAnalysis,
+        sections: config.sections,
+        branding: config.branding,
       });
     } catch (err) {
       console.error('[PDF] Export error:', err);
@@ -1070,31 +1075,44 @@ function AnalizarContent() {
               {profile.companyName || t('analysis.company')}
             </h2>
           </div>
-          {/* PDF Export Button — shown to all signed-in users */}
+          {/* PDF Export Button — Elite/Gold plans only */}
           {isSignedIn && (
-            <button
-              onClick={handleExportPDF}
-              disabled={pdfExporting}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-700 to-emerald-700 hover:from-green-600 hover:to-emerald-600 text-white font-semibold rounded-xl border border-green-500 shadow-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0 text-sm"
-              title="Download full investment analysis as PDF"
-            >
-              {pdfExporting ? (
-                <>
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Generating PDF...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Download PDF Report
-                </>
-              )}
-            </button>
+            (user?.publicMetadata?.plan === 'elite' || user?.publicMetadata?.plan === 'gold') ? (
+              <button
+                onClick={() => setShowPDFModal(true)}
+                disabled={pdfExporting}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-700 to-emerald-700 hover:from-green-600 hover:to-emerald-600 text-white font-semibold rounded-xl border border-green-500 shadow-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0 text-sm"
+                title="Descargar análisis completo en PDF"
+              >
+                {pdfExporting ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Generando PDF...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Descargar PDF
+                  </>
+                )}
+              </button>
+            ) : (
+              <a
+                href="/pricing"
+                className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-300 font-semibold rounded-xl border border-gray-700 transition shrink-0 text-sm"
+                title="Plan Elite requerido para exportar PDF"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                PDF — Plan Elite
+              </a>
+            )
           )}
         </div>
 
@@ -1413,6 +1431,14 @@ function AnalizarContent() {
           </div>
         </Tab.Group>
       </div>
+
+      {/* PDF Config Modal */}
+      <PDFConfigModal
+        isOpen={showPDFModal}
+        onClose={() => setShowPDFModal(false)}
+        onGenerate={handleExportPDF}
+        generating={pdfExporting}
+      />
     </main>
   );
 }

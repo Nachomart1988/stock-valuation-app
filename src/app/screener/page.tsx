@@ -73,12 +73,11 @@ export default function ScreenerPage() {
   });
 
   const runScreener = async (page = 0) => {
-    const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-    if (!apiKey) { setScreenerError('API key not configured'); return; }
     setScreenerLoading(true);
     setScreenerError(null);
     try {
-      const params = new URLSearchParams({ apikey: apiKey, limit: String(SCREENER_LIMIT), offset: String(page * SCREENER_LIMIT) });
+      // Build params WITHOUT apikey — server-side proxy adds it
+      const params = new URLSearchParams({ limit: String(SCREENER_LIMIT), offset: String(page * SCREENER_LIMIT) });
       const f = screenerFilters;
       if (f.marketCapMoreThan) params.set('marketCapMoreThan', f.marketCapMoreThan);
       if (f.marketCapLowerThan) params.set('marketCapLowerThan', f.marketCapLowerThan);
@@ -93,33 +92,16 @@ export default function ScreenerPage() {
       if (f.country) params.set('country', f.country);
       if (f.exchange) params.set('exchange', f.exchange);
 
-      // Try multiple FMP endpoints (some plans only support certain ones)
-      const endpoints = [
-        `https://financialmodelingprep.com/stable/company-screener?${params.toString()}`,
-        `https://financialmodelingprep.com/stable/stock-screener?${params.toString()}`,
-        `https://financialmodelingprep.com/api/v3/stock-screener?${params.toString()}`,
-      ];
-      let res: Response | null = null;
-      let lastStatus = 0;
-      for (const url of endpoints) {
-        try {
-          const r = await fetch(url);
-          lastStatus = r.status;
-          if (r.ok) { res = r; break; }
-        } catch { /* try next */ }
-      }
-      if (!res) {
-        throw new Error(
-          lastStatus === 401 || lastStatus === 403
-            ? `El screener requiere un plan FMP con acceso al endpoint de screening (HTTP ${lastStatus}). El plan actual no incluye esta función — considera actualizar en financialmodelingprep.com.`
-            : `Error al conectar con FMP Screener (HTTP ${lastStatus}). Intenta de nuevo.`
-        );
+      const res = await fetch(`/api/screener?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error al cargar el screener (HTTP ${res.status}). Intenta de nuevo.`);
       }
       const data = await res.json();
       setScreenerResults(Array.isArray(data) ? data : []);
       setScreenerPage(page);
     } catch (err: any) {
-      setScreenerError(err.message || 'Error fetching screener results');
+      setScreenerError(err.message || 'Error al cargar el screener. Intenta de nuevo.');
     } finally {
       setScreenerLoading(false);
     }
