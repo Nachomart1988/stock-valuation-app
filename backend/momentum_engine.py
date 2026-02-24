@@ -85,7 +85,7 @@ class IntradayMomentumAnalyzer:
     (tight base + diagonal ceiling), and scores breakout proximity.
     """
 
-    def __init__(self, api_key: str, quillamaggie_mode: bool = True):
+    def __init__(self, api_key: str):
         self.api_key = api_key
         self._cache: Dict[str, Any] = {}
         self._cache_ts: Dict[str, float] = {}
@@ -427,6 +427,7 @@ class IntradayMomentumAnalyzer:
         empty = {
             'detected': False, 'score': 0.0,
             'big_run_pct': 0.0, 'big_run_confirmed': False,
+            'bullish_run_valid': False,
             'base_window_days': 0,
             'range_compression': 1.0, 'range_compressed': False,
             'vol_dry_up': 1.0, 'vol_contracting': False,
@@ -439,19 +440,34 @@ class IntradayMomentumAnalyzer:
 
         current_price = daily[-1]['close']
 
-        # ── 1. Big run detection ────────────────────────────────────────────
-        # Look for max gain in prior 252 days (exclude last 30 days = base)
+        # ── 1. Big BULLISH run detection ────────────────────────────────────
+        # The run MUST be bullish: price went UP and is now consolidating near highs.
+        # A crash (high → low) is NOT a valid Prismo setup — e.g. UNH -60% is disqualified.
         run_end   = max(0, len(daily) - 30)
         run_start = max(0, len(daily) - 252)
         run_bars  = daily[run_start:run_end] if run_end > run_start else daily
 
+        bullish_run_valid = False
+        big_run = 0.0
         if run_bars:
-            min_close = min(b['close'] for b in run_bars)
-            max_close = max(b['close'] for b in run_bars)
-            big_run = _safe_div(max_close - min_close, min_close) * 100
-        else:
-            big_run = 0.0
-        big_run_confirmed = big_run >= PRISMO_THRESHOLDS['big_run_min']
+            min_idx = min(range(len(run_bars)), key=lambda i: run_bars[i]['close'])
+            max_idx = max(range(len(run_bars)), key=lambda i: run_bars[i]['close'])
+            min_close = run_bars[min_idx]['close']
+            max_close = run_bars[max_idx]['close']
+            big_run   = _safe_div(max_close - min_close, min_close) * 100
+
+            # Bullish: minimum came BEFORE maximum (stock went up, not crashed)
+            if max_idx > min_idx:
+                # Also: current price must still be near the run peak (≥70%)
+                # — consolidating at the top, not collapsed back to the bottom
+                proximity_to_peak = _safe_div(current_price, max_close)
+                near_highs = proximity_to_peak >= 0.70
+                bullish_run_valid = (
+                    big_run >= PRISMO_THRESHOLDS['big_run_min'] and near_highs
+                )
+            # else: max_idx <= min_idx → crash pattern → bullish_run_valid stays False
+
+        big_run_confirmed = bullish_run_valid
 
         # ── 2. Base window detection ────────────────────────────────────────
         # Auto-detect: last 10-40 days depending on available data
@@ -541,13 +557,19 @@ class IntradayMomentumAnalyzer:
         elif breakout_proximity >= 65: cs +=  8
         elif breakout_proximity >= 45: cs +=  4
 
-        detected = big_run_confirmed and range_compressed
+        detected = bullish_run_valid and range_compressed
+
+        # If the run is not bullish, all compression scores are meaningless
+        if not bullish_run_valid:
+            cs = 0.0
+            breakout_proximity = 0.0
 
         return {
             'detected':                detected,
             'score':                   round(min(cs, 100), 1),
             'big_run_pct':             round(big_run, 1),
             'big_run_confirmed':       big_run_confirmed,
+            'bullish_run_valid':       bullish_run_valid,
             'base_window_days':        base_window,
             'range_compression':       round(range_compression, 3),
             'range_compressed':        range_compressed,
@@ -575,12 +597,25 @@ class IntradayMomentumAnalyzer:
         score   = 0.0
         factors: List[str] = []
 
-        # ── 1. Leader score (30%) ──────────────────────────────────────────
-        leader_s = leader.get('score', 0)
-        score += leader_s * 0.30
         r12m = leader.get('r12m', 0)
         ex6m = leader.get('ex6m', 0)
         ex3m = leader.get('ex3m', 0)
+
+        # ── HARD GATE: Prismo only applies to MARKET LEADERS ──────────────
+        # A stock down >10% in 12 months is NOT a leader — disqualify immediately.
+        # This prevents crashed stocks (UNH -60%, etc.) from scoring as "breakout".
+        if r12m < -10:
+            return {
+                'score':   0.0,
+                'factors': [
+                    f"❌ No es candidato Prismo: rendimiento 12m {r12m:.0f}% (negativo)",
+                    "Prismo requiere líderes con retorno positivo en 3/6/12 meses.",
+                ],
+            }
+
+        # ── 1. Leader score (30%) ──────────────────────────────────────────
+        leader_s = leader.get('score', 0)
+        score += leader_s * 0.30
         if r12m >= 100:
             factors.append(f"Líder: +{r12m:.0f}% en 12 meses (top performer)")
         elif r12m >= 50:
@@ -715,6 +750,16 @@ class IntradayMomentumAnalyzer:
         Breakout probability (0-99%):
         Prismo score 40% | Compression quality 30% | Proximity 20% | Intraday 10%
         """
+        # Hard gates: crashed or non-leader stocks cannot have high breakout prob
+        if prismo_score == 0.0:          # disqualified by leader gate
+            return 0.0
+        if not compression.get('bullish_run_valid', False):
+            # No valid bullish base → at most intraday bounce probability
+            roc_5m    = metrics.get('roc_5m', 0)
+            vol_surge = metrics.get('vol_surge', 1.0)
+            intra = (5 if roc_5m > 2 else 0) + (5 if vol_surge >= 2 else 0)
+            return round(min(intra, 15), 1)
+
         score = 0.0
 
         # 1. Prismo score (40%)
@@ -755,8 +800,21 @@ class IntradayMomentumAnalyzer:
         bb         = metrics.get('bb', {})
         session_high = metrics.get('session_high', 0)
 
-        # ── Breakout alert ──────────────────────────────────────────────────
-        if breakout_prob >= 80 and direction == 'alcista':
+        is_leader = leader.get('r12m', 0) >= 0 and compression.get('bullish_run_valid', False)
+
+        # ── Disqualified signal ─────────────────────────────────────────────
+        if prismo_s == 0 and leader.get('r12m', 0) < -10:
+            signals.append({
+                'type':     '❌ FUERA DE CRITERIO',
+                'color':    'red',
+                'message':  f"Rendimiento 12m {leader.get('r12m', 0):.0f}% — no es candidato Prismo "
+                            f"(requiere liderazgo positivo en 3/6/12m)",
+                'priority': 1,
+            })
+            return signals
+
+        # ── Breakout alert — only for confirmed leaders with bullish base ───
+        if breakout_prob >= 80 and direction == 'alcista' and is_leader:
             ceil = compression.get('ceiling_level')
             level_str = f"${'%.2f' % ceil}" if ceil else "máximo sesión"
             signals.append({
@@ -766,7 +824,7 @@ class IntradayMomentumAnalyzer:
                             f"monitorear ruptura de {level_str} con vol>2x",
                 'priority': 1,
             })
-        elif breakout_prob >= 60 and direction == 'alcista':
+        elif breakout_prob >= 60 and direction == 'alcista' and is_leader:
             signals.append({
                 'type':     '📈 SETUP EN DESARROLLO',
                 'color':    'yellow',
@@ -774,8 +832,8 @@ class IntradayMomentumAnalyzer:
                 'priority': 2,
             })
 
-        # ── Prismo setup ────────────────────────────────────────────────────
-        if prismo_s >= 70 and direction == 'alcista':
+        # ── Prismo setup — only for confirmed leaders ────────────────────────
+        if prismo_s >= 70 and direction == 'alcista' and is_leader:
             signals.append({
                 'type':     '⚡ PRISMO SETUP',
                 'color':    'purple',
@@ -886,6 +944,24 @@ class IntradayMomentumAnalyzer:
         bb         = metrics.get('bb', {})
 
         lines = []
+
+        # ── Not a Prismo candidate ─────────────────────────────────────────
+        r12m_val = leader.get('r12m', 0)
+        if r12m_val < -10:
+            lines.append(f"**❌ No es candidato Prismo**")
+            lines.append(
+                f"Esta acción ha caído {r12m_val:.0f}% en los últimos 12 meses. "
+                f"Prismo sólo analiza líderes de mercado con retorno positivo "
+                f"en 3/6/12 meses (top 2% performers). "
+                f"Una acción en caída libre no tiene una base post-corrida válida."
+            )
+            lines.append(
+                f"Momentum intraday: {direction} {strength} (confianza: {momentum['confidence']}%). "
+                f"Este indicador refleja únicamente el movimiento del día de hoy, "
+                f"no la tendencia estructural."
+            )
+            lines.append("*Análisis no constituye consejo de inversión.*")
+            return "\n\n".join(lines)
 
         # Opening: momentum + Prismo score
         mom_label = f"Momentum {direction} {strength}"

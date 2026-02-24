@@ -407,19 +407,18 @@ class FFTSignalRequest(BaseModel):
 
 
 # ════════════════════════════════════════════════════════════════════
-# Momentum Analysis (Quillamaggie-style intraday)
+# Prismo Momentum Analysis
 # ════════════════════════════════════════════════════════════════════
 
 class MomentumRequest(BaseModel):
     ticker: str
     benchmark: str = 'SPY'
     timeframes: Optional[List[str]] = None
-    quillamaggie_mode: bool = True
 
 
 @app.post("/momentum/analyze")
 async def momentum_analyze(req: MomentumRequest):
-    """Quillamaggie-style intraday momentum & breakout detection."""
+    """Prismo momentum analysis: leader score + post-run compression + breakout detection."""
     try:
         from momentum_engine import get_momentum_analyzer
         analyzer = get_momentum_analyzer()
