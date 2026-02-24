@@ -35,31 +35,50 @@ const SECTION_GROUPS: SectionGroup[] = [
     label: 'Básicas',
     color: 'text-emerald-400',
     sections: [
-      { key: 'cover',     label: 'Portada' },
-      { key: 'financial', label: 'Highlights Financieros' },
+      { key: 'cover',           label: 'Portada' },
+      { key: 'financial',       label: 'Resumen de Mercado' },
+      { key: 'disclaimer',      label: 'Disclaimer' },
     ],
   },
   {
-    label: 'Avanzadas',
+    label: 'Estados Financieros',
     color: 'text-blue-400',
     sections: [
-      { key: 'valuation',  label: 'Valuación' },
-      { key: 'forecasts',  label: 'Forecasts de Analistas' },
-      { key: 'technical',  label: 'Análisis Técnico' },
-      { key: 'disclaimer', label: 'Disclaimer' },
+      { key: 'income_statement', label: 'Estado de Resultados (5 años)' },
+      { key: 'balance_sheet',    label: 'Balance General (5 años)' },
+      { key: 'cash_flow',        label: 'Flujo de Caja (5 años)' },
     ],
   },
   {
-    label: 'IA',
+    label: 'Valuación & Análisis',
+    color: 'text-yellow-400',
+    sections: [
+      { key: 'valuation',        label: 'Modelos de Valuación + Ratios' },
+      { key: 'key_metrics',      label: 'Key Metrics Extendido' },
+    ],
+  },
+  {
+    label: 'Forecasts & Técnico',
+    color: 'text-orange-400',
+    sections: [
+      { key: 'forecasts',        label: 'Forecasts de Analistas' },
+      { key: 'technical',        label: 'Pivots & Análisis Técnico' },
+    ],
+  },
+  {
+    label: 'Predicciones',
     color: 'text-violet-400',
     sections: [
-      { key: 'ml_predictions', label: 'ML Predictions (LSTM)', badge: 'AI' },
+      { key: 'ml_predictions',   label: 'Predicciones del Modelo', badge: 'ML' },
     ],
   },
 ];
 
 const ALL_SECTION_KEYS = SECTION_GROUPS.flatMap(g => g.sections.map(s => s.key));
-const DEFAULT_SECTIONS = new Set(['cover', 'financial', 'valuation', 'forecasts', 'technical', 'disclaimer']);
+const DEFAULT_SECTIONS = new Set([
+  'cover', 'financial', 'income_statement', 'balance_sheet', 'cash_flow',
+  'valuation', 'forecasts', 'technical', 'disclaimer',
+]);
 
 const FONTS = ['helvetica', 'times', 'courier'] as const;
 const PRESETS_KEY = 'prismo_pdf_presets';
@@ -185,21 +204,26 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
     if (isValidHex(v)) setAccentHex(v);
   };
 
-  // ── Fetch ML predictions ───────────────────────────────────────────────
+  // ── Fetch ML predictions (15s timeout) ───────────────────────────────
   const fetchML = async (): Promise<MLPrediction[] | undefined> => {
     if (!ticker) return undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
     try {
       const base = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
       const res = await fetch(`${base}/ml/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker, horizons: [5, 10, 20, 30] }),
+        signal: controller.signal,
       });
+      clearTimeout(timer);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return (data.predictions || data) as MLPrediction[];
     } catch {
-      flash('No se pudo obtener ML Predictions — se generará sin esa sección.');
+      clearTimeout(timer);
+      flash('No se pudieron obtener las predicciones — el PDF se generará sin esa sección.');
       setSelectedSections(prev => { const n = new Set(prev); n.delete('ml_predictions'); return n; });
       return undefined;
     }
@@ -627,7 +651,7 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  {mlLoading ? 'Obteniendo IA…' : 'Generando…'}
+                  {mlLoading ? 'Cargando predicciones…' : 'Generando…'}
                 </>
               ) : (
                 <>

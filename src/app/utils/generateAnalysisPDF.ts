@@ -456,6 +456,121 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   } // end financial
 
   // ════════════════════════════════════════════════════════════════════════
+  // INCOME STATEMENT — DETAILED 5-YEAR TABLE
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('income_statement')) {
+    const inc5 = (income||[]).slice(0,5).reverse();
+    if (inc5.length > 0) {
+      y = newPage();
+      y = section(y, 'Income Statement — Annual Detail');
+      const yrs = inc5.map((i:any) => i.date?.substring(0,4)||'');
+      y = atable({
+        startY: y,
+        head:  [['', ...yrs]],
+        body: [
+          ['Revenue',             ...inc5.map((i:any) => fl(i.revenue))],
+          ['Cost of Revenue',     ...inc5.map((i:any) => fl(i.costOfRevenue))],
+          ['Gross Profit',        ...inc5.map((i:any) => fl(i.grossProfit))],
+          ['Gross Margin %',      ...inc5.map((i:any) => fp((i.grossProfitRatio||0)*100))],
+          ['R&D Expenses',        ...inc5.map((i:any) => fl(i.researchAndDevelopmentExpenses))],
+          ['SG&A Expenses',       ...inc5.map((i:any) => fl(i.sellingGeneralAndAdministrativeExpenses))],
+          ['Operating Income',    ...inc5.map((i:any) => fl(i.operatingIncome))],
+          ['Operating Margin %',  ...inc5.map((i:any) => fp((i.operatingIncomeRatio||0)*100))],
+          ['EBITDA',              ...inc5.map((i:any) => fl(i.ebitda))],
+          ['Interest Expense',    ...inc5.map((i:any) => fl(i.interestExpense))],
+          ['Income Before Tax',   ...inc5.map((i:any) => fl(i.incomeBeforeTax))],
+          ['Income Tax',          ...inc5.map((i:any) => fl(i.incomeTaxExpense))],
+          ['Net Income',          ...inc5.map((i:any) => fl(i.netIncome))],
+          ['Net Margin %',        ...inc5.map((i:any) => fp((i.netIncomeRatio||0)*100))],
+          ['EPS (Diluted)',        ...inc5.map((i:any) => `$${f(i.epsdiluted||i.eps)}`)],
+        ],
+        columnStyles: { 0:{ fontStyle:'bold', fillColor:[14,14,14], cellWidth:52 } },
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // BALANCE SHEET — DETAILED 5-YEAR TABLE
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('balance_sheet')) {
+    const bal5 = (balance||[]).slice(0,5).reverse();
+    if (bal5.length > 0) {
+      y = newPage();
+      y = section(y, 'Balance Sheet — Annual Detail');
+      const yrs = bal5.map((b:any) => b.date?.substring(0,4)||'');
+      y = atable({
+        startY: y,
+        head:  [['ASSETS', ...yrs]],
+        body: [
+          ['Cash & Equivalents',      ...bal5.map((b:any) => fl(b.cashAndCashEquivalents))],
+          ['Short-term Investments',  ...bal5.map((b:any) => fl(b.shortTermInvestments))],
+          ['Receivables',             ...bal5.map((b:any) => fl(b.netReceivables))],
+          ['Inventory',               ...bal5.map((b:any) => fl(b.inventory))],
+          ['Total Current Assets',    ...bal5.map((b:any) => fl(b.totalCurrentAssets))],
+          ['PP&E (Net)',               ...bal5.map((b:any) => fl(b.propertyPlantEquipmentNet))],
+          ['Goodwill',                ...bal5.map((b:any) => fl(b.goodwill))],
+          ['Total Assets',            ...bal5.map((b:any) => fl(b.totalAssets))],
+        ],
+        columnStyles: { 0:{ fontStyle:'bold', fillColor:[14,14,14], cellWidth:52 } },
+      });
+      y = atable({
+        startY: y,
+        head:  [['LIABILITIES & EQUITY', ...yrs]],
+        body: [
+          ['Accounts Payable',            ...bal5.map((b:any) => fl(b.accountPayables))],
+          ['Short-term Debt',             ...bal5.map((b:any) => fl(b.shortTermDebt))],
+          ['Total Current Liabilities',   ...bal5.map((b:any) => fl(b.totalCurrentLiabilities))],
+          ['Long-term Debt',              ...bal5.map((b:any) => fl(b.longTermDebt))],
+          ['Total Liabilities',           ...bal5.map((b:any) => fl(b.totalLiabilities))],
+          ["Shareholders' Equity",        ...bal5.map((b:any) => fl(b.totalStockholdersEquity||b.totalEquity))],
+          ['Net Debt',                    ...bal5.map((b:any) => fl(b.netDebt))],
+        ],
+        columnStyles: { 0:{ fontStyle:'bold', fillColor:[14,14,14], cellWidth:52 } },
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // CASH FLOW — DETAILED 5-YEAR TABLE
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('cash_flow')) {
+    const cf5 = (cashFlow||[]).slice(0,5).reverse();
+    if (cf5.length > 0) {
+      y = newPage();
+      y = section(y, 'Cash Flow Statement — Annual Detail');
+      const yrs = cf5.map((c:any) => c.date?.substring(0,4)||'');
+      y = atable({
+        startY: y,
+        head:  [['', ...yrs]],
+        body: [
+          ['Net Income',              ...cf5.map((c:any) => fl(c.netIncome))],
+          ['D&A',                     ...cf5.map((c:any) => fl(c.depreciationAndAmortization))],
+          ['Stock-Based Comp.',       ...cf5.map((c:any) => fl(c.stockBasedCompensation))],
+          ['Working Capital Chg.',    ...cf5.map((c:any) => fl(c.changeInWorkingCapital))],
+          ['Operating Cash Flow',     ...cf5.map((c:any) => fl(c.operatingCashFlow||c.netCashProvidedByOperatingActivities))],
+          ['CapEx',                   ...cf5.map((c:any) => fl(c.capitalExpenditure))],
+          ['Free Cash Flow',          ...cf5.map((c:any) => fl(c.freeCashFlow))],
+          ['Acquisitions (Net)',       ...cf5.map((c:any) => fl(c.acquisitionsNet))],
+          ['Investing Cash Flow',     ...cf5.map((c:any) => fl(c.netCashUsedForInvestingActivites))],
+          ['Debt Issuance/Repayment', ...cf5.map((c:any) => fl(c.debtRepayment))],
+          ['Dividends Paid',          ...cf5.map((c:any) => fl(c.dividendsPaid))],
+          ['Stock Buybacks',          ...cf5.map((c:any) => fl(c.commonStockRepurchased))],
+          ['Financing Cash Flow',     ...cf5.map((c:any) => fl(c.netCashUsedProvidedByFinancingActivities))],
+          ['Net Change in Cash',      ...cf5.map((c:any) => fl(c.netChangeInCash))],
+        ],
+        columnStyles: { 0:{ fontStyle:'bold', fillColor:[14,14,14], cellWidth:52 } },
+      });
+      // FCF trend chart
+      if (cf5.length >= 2) {
+        y = checkY(y, 55);
+        y = section(y, 'Free Cash Flow Trend');
+        barChart(M, y, CW, 40, yrs, cf5.map((c:any) => c.freeCashFlow||0), G);
+        y += 50;
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   // PAGE 3 — VALUATION
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('valuation')) {
@@ -562,6 +677,43 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
       columnStyles:{0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:120},1:{cellWidth:60}} });
   }
   } // end valuation
+
+  // ════════════════════════════════════════════════════════════════════════
+  // KEY METRICS — EXTENDED TABLE
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('key_metrics')) {
+    const km = sharedKeyMetricsSummary || {};
+    y = newPage();
+    y = section(y, 'Key Metrics — Extended Analysis');
+    y = atable({
+      startY: y,
+      head: [['Metric','Value','Metric','Value']],
+      body: [
+        ['P/E Ratio',             f(quote?.pe),                       'P/B Ratio',             f(km.priceToBook)],
+        ['P/S Ratio',             f(km.priceToSalesRatio),             'P/FCF',                 f(km.priceToFCF)],
+        ['EV/EBITDA',             f(km.evToEbitda),                   'EV/Sales',              f(km.evToSales)],
+        ['ROE',                   fp((km.roe||0)*100),                 'ROA',                   fp((km.roa||0)*100)],
+        ['ROIC',                  fp((km.roic||0)*100),                'Return on Capital',     fp((km.returnOnCapitalEmployed||0)*100)],
+        ['Gross Margin',          fp((income?.[0]?.grossProfitRatio||0)*100), 'Operating Margin', fp((income?.[0]?.operatingIncomeRatio||0)*100)],
+        ['Net Margin',            fp((income?.[0]?.netIncomeRatio||0)*100),   'FCF Margin',        fp((km.freeCashFlowMargin||0)*100)],
+        ['Debt / Equity',         f(km.debtToEquity),                 'Net Debt / EBITDA',     f(km.netDebtToEBITDA)],
+        ['Current Ratio',         f(km.currentRatio),                  'Quick Ratio',           f(km.quickRatio)],
+        ['Interest Coverage',     f(km.interestCoverage),             'Payout Ratio',          fp((km.payoutRatio||0)*100)],
+        ['Book Value / Share',    `$${f(km.bookValuePerShare)}`,       'Revenue / Share',       `$${f(km.revenuePerShare)}`],
+        ['FCF / Share',           `$${f(km.freeCashFlowPerShare)}`,    'Earnings Yield',        fp(km.earningsYield)],
+        ['Dividend Yield',        fp((quote?.dividendYield||0)*100),  'Enterprise Value',      fl(km.enterpriseValue)],
+        ['Asset Turnover',        f(km.assetTurnover),                'Inventory Turnover',    f(km.inventoryTurnover)],
+        ['Receivables Turnover',  f(km.receivablesTurnover),          'Days Payable',          f(km.daysPayablesOutstanding)],
+        ['Days Sales Outstanding',f(km.daysSalesOutstanding),         'Days Inventory',        f(km.daysOfInventoryOnHand)],
+      ],
+      columnStyles: {
+        0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:50},
+        1:{cellWidth:36},
+        2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:50},
+        3:{cellWidth:44},
+      },
+    });
+  }
 
   // ════════════════════════════════════════════════════════════════════════
   // PAGE 4 — ANALYST FORECASTS
