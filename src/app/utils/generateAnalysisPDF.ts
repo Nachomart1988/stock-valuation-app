@@ -9,15 +9,6 @@ export interface PDFBranding {
   customDisclaimer?: string;                    // optional replacement disclaimer text
 }
 
-export interface MLPrediction {
-  horizon:           number;
-  predictedPrice:    number;
-  upperBand:         number;
-  lowerBand:         number;
-  confidence:        number;
-  predictedChangePct: number;
-}
-
 export interface PDFData {
   ticker: string;
   profile: any;
@@ -37,10 +28,9 @@ export interface PDFData {
   sharedCagrStats: { avgCagr: number | null; minCagr: number | null; maxCagr: number | null } | null;
   sharedPivotAnalysis: any;
   // Optional config
-  sections?:      string[];        // which pages to include; default: all
-  branding?:      PDFBranding;
-  mlPredictions?: MLPrediction[];  // fetched by PDFConfigModal
-  preview?:       boolean;         // if true → return blob URL instead of saving
+  sections?:  string[];    // which pages to include
+  branding?:  PDFBranding;
+  preview?:   boolean;     // if true → return blob URL instead of saving
 }
 
 const f  = (v: any, d = 2) => (v == null || isNaN(+v)) ? '-' : (+v).toFixed(d);
@@ -66,9 +56,13 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   const doc: any = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
   // ── Sections & branding (from config or defaults) ─────────────────────
-  // ml_predictions is opt-in (requires a fetch), so NOT in default set
   const activeSections = new Set(
-    d.sections ?? ['cover', 'financial', 'valuation', 'forecasts', 'technical', 'disclaimer']
+    d.sections ?? [
+      'cover', 'market_summary', 'income_statement', 'balance_sheet', 'cash_flow',
+      'key_metrics', 'dupont', 'quality_score', 'wacc_cagr', 'sgr',
+      'valuation_models', 'analyst_forecasts', 'price_target', 'ttm_snapshot',
+      'technical_52w', 'pivots_fibonacci', 'disclaimer',
+    ]
   );
   const FONT = d.branding?.fontFamily ?? 'helvetica';
 
@@ -353,7 +347,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ════════════════════════════════════════════════════════════════════════
   // PAGE 2 — FINANCIAL HIGHLIGHTS
   // ════════════════════════════════════════════════════════════════════════
-  if (activeSections.has('financial')) {
+  if (activeSections.has('market_summary')) {
   y = newPage();
 
   // Market summary pills
@@ -453,7 +447,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
       columnStyles: {0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:52}},
     });
   }
-  } // end financial
+  } // end market_summary
 
   // ════════════════════════════════════════════════════════════════════════
   // INCOME STATEMENT — DETAILED 5-YEAR TABLE
@@ -571,9 +565,9 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  // PAGE 3 — VALUATION
+  // VALUATION MODELS
   // ════════════════════════════════════════════════════════════════════════
-  if (activeSections.has('valuation')) {
+  if (activeSections.has('valuation_models')) {
   y = newPage();
 
   // Valuation model visual bars
@@ -623,17 +617,17 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // Key Ratios
   y = checkY(y, 45);
   y = section(y, 'Key Financial Ratios');
-  const km = sharedKeyMetricsSummary || {};
+  const kmVal = sharedKeyMetricsSummary || {};
   y = atable({
     startY: y,
     head: [['Metric','Value','Metric','Value']],
     body: [
-      ['P/E Ratio',         f(quote?.pe),               'P/B Ratio',          f(km.priceToBook)],
-      ['EV/EBITDA',         f(km.evToEbitda),            'P/FCF',              f(km.priceToFCF)],
-      ['ROE',               fp((km.roe||0)*100),         'ROA',                fp((km.roa||0)*100)],
-      ['Debt / Equity',     f(km.debtToEquity),          'Current Ratio',      f(km.currentRatio)],
+      ['P/E Ratio',         f(quote?.pe),               'P/B Ratio',          f(kmVal.priceToBook)],
+      ['EV/EBITDA',         f(kmVal.evToEbitda),            'P/FCF',              f(kmVal.priceToFCF)],
+      ['ROE',               fp((kmVal.roe||0)*100),         'ROA',                fp((kmVal.roa||0)*100)],
+      ['Debt / Equity',     f(kmVal.debtToEquity),          'Current Ratio',      f(kmVal.currentRatio)],
       ['Gross Margin',      fp((income?.[0]?.grossProfitRatio||0)*100), 'Net Margin', fp((income?.[0]?.netIncomeRatio||0)*100)],
-      ['Interest Coverage', f(km.interestCoverage),      'Quick Ratio',        f(km.quickRatio)],
+      ['Interest Coverage', f(kmVal.interestCoverage),      'Quick Ratio',        f(kmVal.quickRatio)],
     ],
     columnStyles:{
       0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:46},
@@ -642,11 +636,67 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
       3:{cellWidth:46},
     },
   });
+  } // end valuation_models
 
-  // Quality score bars
-  if (sharedCompanyQualityNet?.scores) {
-    y = checkY(y, 65);
-    y = section(y, 'Company Quality Score — CompanyQualityNet AI');
+  // ════════════════════════════════════════════════════════════════════════
+  // DUPONT ANALYSIS
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('dupont')) {
+    const incLatest = (income||[])[0];
+    const balLatest = (balance||[])[0];
+    if (incLatest && balLatest) {
+      y = newPage();
+      y = section(y, 'DuPont Analysis — 3-Factor Decomposition');
+
+      const rev    = incLatest.revenue || 0;
+      const ni     = incLatest.netIncome || 0;
+      const ta     = balLatest.totalAssets || 1;
+      const te     = balLatest.totalStockholdersEquity || balLatest.totalEquity || 1;
+
+      const netMargin     = rev ? ni / rev : 0;
+      const assetTurnover = ta  ? rev / ta : 0;
+      const equityMult    = te  ? ta / te : 0;
+      const roe           = netMargin * assetTurnover * equityMult;
+
+      y = atable({
+        startY: y,
+        head: [['Component', 'Formula', 'Value']],
+        body: [
+          ['Net Profit Margin',  'Net Income / Revenue',        fp(netMargin * 100)],
+          ['Asset Turnover',     'Revenue / Total Assets',      f(assetTurnover)],
+          ['Equity Multiplier',  'Total Assets / Equity',       f(equityMult)],
+          ['ROE (DuPont)',       'Margin × Turnover × Multiplier', fp(roe * 100)],
+        ],
+        columnStyles: {
+          0: { fontStyle: 'bold', fillColor: [14,14,14], cellWidth: 55 },
+          1: { cellWidth: 70 },
+          2: { cellWidth: 55 },
+        },
+      });
+
+      // Visual bars for the 3 components
+      y = checkY(y, 45);
+      y = section(y, 'DuPont Component Breakdown');
+      scoreBar(M, y, CW, 'Net Profit Margin', Math.min(100, Math.max(0, +(netMargin*100).toFixed(0))));
+      y += 10;
+      scoreBar(M, y, CW, 'Asset Turnover (×100)', Math.min(100, Math.max(0, +(assetTurnover*100).toFixed(0))));
+      y += 10;
+      scoreBar(M, y, CW, 'Equity Multiplier (×10)', Math.min(100, Math.max(0, +(equityMult*10).toFixed(0))));
+      y += 10;
+
+      ss(D3); doc.setLineWidth(0.2); doc.line(M, y+1, PW-M, y+1);
+      doc.setFont(FONT,'bold'); doc.setFontSize(9); st(G);
+      doc.text(`DuPont ROE: ${fp(roe*100)}`, M, y+8);
+      y += 13;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // COMPANY QUALITY SCORE
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('quality_score') && sharedCompanyQualityNet?.scores) {
+    y = newPage();
+    y = section(y, 'Company Quality Score');
     const sc = sharedCompanyQualityNet.scores;
     Object.entries(sc).forEach(([dim, score]:any) => {
       const pct = typeof score==='number' ? +(score*100).toFixed(0) : 0;
@@ -664,19 +714,60 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     }
   }
 
-  // Cost of Capital
-  y = checkY(y, 35);
-  y = section(y, 'Cost of Capital');
-  const capRows:any[] = [];
-  if (sharedWACC)     capRows.push(['WACC (Weighted Avg Cost of Capital)',      fp(sharedWACC)]);
-  if (sharedAvgCAPM)  capRows.push(['Cost of Equity — CAPM Average',            fp(sharedAvgCAPM)]);
-  if (sharedCagrStats?.avgCagr != null) capRows.push(['Historical Revenue CAGR (Avg)', fp(sharedCagrStats.avgCagr)]);
-  if (sharedCagrStats?.minCagr != null) capRows.push(['CAGR Range (Min – Max)', `${fp(sharedCagrStats.minCagr)} – ${fp(sharedCagrStats.maxCagr)}`]);
-  if (capRows.length>0) {
-    y = atable({ startY:y, head:[['Metric','Value']], body:capRows,
-      columnStyles:{0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:120},1:{cellWidth:60}} });
+  // ════════════════════════════════════════════════════════════════════════
+  // WACC & CAGR
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('wacc_cagr')) {
+    y = checkY(y, 35);
+    y = section(y, 'Cost of Capital — WACC & CAGR');
+    const capRows:any[] = [];
+    if (sharedWACC)     capRows.push(['WACC (Weighted Avg Cost of Capital)',      fp(sharedWACC)]);
+    if (sharedAvgCAPM)  capRows.push(['Cost of Equity — CAPM Average',            fp(sharedAvgCAPM)]);
+    if (sharedCagrStats?.avgCagr != null) capRows.push(['Historical Revenue CAGR (Avg)', fp(sharedCagrStats.avgCagr)]);
+    if (sharedCagrStats?.minCagr != null) capRows.push(['CAGR Range (Min – Max)', `${fp(sharedCagrStats.minCagr)} – ${fp(sharedCagrStats.maxCagr)}`]);
+    if (capRows.length>0) {
+      y = atable({ startY:y, head:[['Metric','Value']], body:capRows,
+        columnStyles:{0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:120},1:{cellWidth:60}} });
+    }
   }
-  } // end valuation
+
+  // ════════════════════════════════════════════════════════════════════════
+  // SUSTAINABLE GROWTH RATE (SGR)
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('sgr')) {
+    const incSgr = (income||[])[0];
+    const balSgr = (balance||[])[0];
+    const cfSgr  = (cashFlow||[])[0];
+    if (incSgr && balSgr) {
+      y = checkY(y, 55);
+      y = section(y, 'Sustainable Growth Rate (SGR)');
+
+      const niSgr  = incSgr.netIncome || 0;
+      const eqSgr  = balSgr.totalStockholdersEquity || balSgr.totalEquity || 1;
+      const divP   = Math.abs(cfSgr?.dividendsPaid || 0);
+      const roeSgr = niSgr / eqSgr;
+      const payR   = niSgr ? divP / niSgr : 0;
+      const retR   = 1 - payR;
+      const sgr    = roeSgr * retR;
+
+      y = atable({
+        startY: y,
+        head: [['Component', 'Value']],
+        body: [
+          ['Return on Equity (ROE)',   fp(roeSgr * 100)],
+          ['Dividends Paid',           fl(divP)],
+          ['Net Income',               fl(niSgr)],
+          ['Payout Ratio',             fp(payR * 100)],
+          ['Retention Ratio (b)',      fp(retR * 100)],
+          ['SGR = ROE × b',           fp(sgr * 100)],
+        ],
+        columnStyles: {
+          0: { fontStyle: 'bold', fillColor: [14,14,14], cellWidth: 120 },
+          1: { cellWidth: 60 },
+        },
+      });
+    }
+  }
 
   // ════════════════════════════════════════════════════════════════════════
   // KEY METRICS — EXTENDED TABLE
@@ -716,9 +807,9 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  // PAGE 4 — ANALYST FORECASTS
+  // ANALYST FORECASTS
   // ════════════════════════════════════════════════════════════════════════
-  if (activeSections.has('forecasts') && sharedForecasts?.length) {
+  if (activeSections.has('analyst_forecasts') && sharedForecasts?.length) {
     y = newPage();
     y = section(y, 'Analyst Consensus Estimates');
     y = atable({
@@ -743,14 +834,18 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
         fcD.map((fc:any)=>fc.estimatedRevenueAvg||0), G);
       y += 50;
     }
+  }
 
-    // Price target visual
+  // ════════════════════════════════════════════════════════════════════════
+  // PRICE TARGET
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('price_target')) {
     const tgt  = priceTarget?.priceTarget || priceTarget?.priceTargetAvg;
     const tgtH = priceTarget?.priceTargetHigh;
     const tgtL = priceTarget?.priceTargetLow;
 
     if (tgt && tgtL && tgtH && price) {
-      y = checkY(y, 45);
+      y = newPage();
       y = section(y, 'Analyst Price Target');
 
       const mn  = Math.min(+price, +tgtL)*0.94;
@@ -792,8 +887,12 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
         columnStyles:{0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:90},1:{cellWidth:90}},
       });
     }
+  }
 
-    // TTM snapshot
+  // ════════════════════════════════════════════════════════════════════════
+  // TTM SNAPSHOT
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('ttm_snapshot')) {
     const ttm = Array.isArray(incomeTTM) ? incomeTTM[0] : incomeTTM;
     if (ttm) {
       y = checkY(y, 42);
@@ -817,114 +916,15 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  // PAGE ML — ML PREDICTIONS (LSTM / Transformer Engine)
+  // 52-WEEK PRICE POSITION
   // ════════════════════════════════════════════════════════════════════════
-  if (activeSections.has('ml_predictions') && d.mlPredictions?.length) {
-    const preds = d.mlPredictions;
+  if (activeSections.has('technical_52w') && sharedPivotAnalysis) {
     y = newPage();
+    const pa52 = sharedPivotAnalysis;
 
-    y = section(y, 'ML Price Predictions — LSTM/Transformer Engine');
-    doc.setFont(FONT, 'normal'); doc.setFontSize(6.5); st(TG);
-    doc.text(`Horizons: ${preds.map(p => `${p.horizon}d`).join(', ')}  ·  Model: LSTM + Attention  ·  Generated: ${date}`, M, y);
-    y += 6;
-
-    // Summary table
-    y = atable({
-      startY: y,
-      head: [['Horizon', 'Predicted Price', 'Change %', 'Confidence', 'Upper Band', 'Lower Band']],
-      body: preds.map(p => [
-        `${p.horizon}d`,
-        `$${f(p.predictedPrice)}`,
-        `${p.predictedChangePct >= 0 ? '+' : ''}${f(p.predictedChangePct)}%`,
-        `${f(p.confidence * 100, 1)}%`,
-        `$${f(p.upperBand)}`,
-        `$${f(p.lowerBand)}`,
-      ]),
-      columnStyles: {
-        0: { cellWidth: 22, fontStyle: 'bold', fillColor: [14, 14, 14] },
-        2: { cellWidth: 24 },
-        3: { cellWidth: 26 },
-      },
-    });
-
-    // Price forecast bar chart
-    y = checkY(y, 58);
-    y = section(y, 'Predicted Price by Horizon');
-    if (price) {
-      // Draw current price reference line
-      const chartX = M, chartW = CW, chartH = 40;
-      const maxP = Math.max(...preds.map(p => p.upperBand), price) * 1.05;
-      const minP = Math.min(...preds.map(p => p.lowerBand), price) * 0.95;
-      const span = maxP - minP || 1;
-      const scl  = chartH / span;
-
-      const bw   = (chartW - (preds.length - 1) * 3) / preds.length;
-
-      preds.forEach((p, i) => {
-        const bx   = chartX + i * (bw + 3);
-        const bh   = Math.max(1, (p.predictedPrice - minP) * scl);
-        const by   = y + chartH - bh;
-        const clr: RGB = p.predictedChangePct >= 0 ? G : RD;
-
-        // Band range bar (faint)
-        const bandH = (p.upperBand - p.lowerBand) * scl;
-        const bandY = y + chartH - (p.upperBand - minP) * scl;
-        sf([20, 40, 25] as RGB); doc.roundedRect(bx, bandY, bw, bandH, 0.5, 0.5, 'F');
-
-        // Main bar
-        sf(clr); doc.roundedRect(bx, by, bw, bh, 0.8, 0.8, 'F');
-
-        // Price label
-        doc.setFont(FONT, 'bold'); doc.setFontSize(5.5); st(clr);
-        doc.text(`$${f(p.predictedPrice, 0)}`, bx + bw / 2, by - 1.5, { align: 'center' });
-
-        // Change % label
-        doc.setFont(FONT, 'normal'); doc.setFontSize(5); st(TG);
-        doc.text(`${p.predictedChangePct >= 0 ? '+' : ''}${f(p.predictedChangePct, 1)}%`, bx + bw / 2, y + chartH + 4.5, { align: 'center' });
-
-        // Horizon label
-        doc.setFontSize(5.5); st(TG);
-        doc.text(`${p.horizon}d`, bx + bw / 2, y + chartH + 9.5, { align: 'center' });
-      });
-
-      // Current price horizontal line
-      const pY = y + chartH - (price - minP) * scl;
-      ss(W); doc.setLineWidth(0.4); doc.setLineDash([1.5, 1]);
-      doc.line(chartX, pY, chartX + chartW, pY);
-      doc.setLineDash([]);
-      doc.setFont(FONT, 'bold'); doc.setFontSize(6); st(W);
-      doc.text(`Current $${f(price, 0)}`, chartX + chartW - 2, pY - 1.5, { align: 'right' });
-
-      y += chartH + 14;
-    } else {
-      barChart(M, y, CW, 40,
-        preds.map(p => `${p.horizon}d`),
-        preds.map(p => p.predictedPrice), G);
-      y += 50;
-    }
-
-    // Confidence bar chart
-    y = checkY(y, 45);
-    y = section(y, 'Model Confidence by Horizon');
-    preds.forEach((p, i) => {
-      const pct = +(p.confidence * 100).toFixed(0);
-      scoreBar(M, y, CW, `${p.horizon}-day horizon`, pct);
-      y += 8;
-    });
-    y += 4;
-  }
-
-  // ════════════════════════════════════════════════════════════════════════
-  // PAGE 5 — TECHNICAL
-  // ════════════════════════════════════════════════════════════════════════
-  if (activeSections.has('technical') && sharedPivotAnalysis) {
-    y = newPage();
-    const pa = sharedPivotAnalysis;
-
-    // 52-week price position visual
-    if (pa.low52Week && pa.high52Week && price) {
+    if (pa52.low52Week && pa52.high52Week && price) {
       y = section(y, '52-Week Price Position');
-      const lo = +pa.low52Week*0.96, hi = +pa.high52Week*1.04;
+      const lo = +pa52.low52Week*0.96, hi = +pa52.high52Week*1.04;
       const sp = hi-lo, sc = (CW-20)/sp;
       const tY = y+10;
 
@@ -940,29 +940,36 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
       doc.setFont(FONT,'bold'); doc.setFontSize(7); st(W);
       doc.text(`$${f(price,0)}`, ppos, tY+13, { align:'center' });
       st(TG); doc.setFontSize(6);
-      doc.text(`$${f(pa.low52Week,0)}  52W Low`, M+10, tY+13);
-      doc.text(`52W High  $${f(pa.high52Week,0)}`, PW-M-10, tY+13, { align:'right' });
+      doc.text(`$${f(pa52.low52Week,0)}  52W Low`, M+10, tY+13);
+      doc.text(`52W High  $${f(pa52.high52Week,0)}`, PW-M-10, tY+13, { align:'right' });
 
       // % from high
       doc.setFont(FONT,'bold'); doc.setFontSize(8);
-      const fromHigh = ((price/pa.high52Week)-1)*100;
+      const fromHigh = ((price/pa52.high52Week)-1)*100;
       st(fromHigh < -20 ? RD : fromHigh < -5 ? [200,150,0] as RGB : G);
       doc.text(`${fromHigh.toFixed(1)}% from 52W High`, PW/2, tY+21, { align:'center' });
 
       y = tY + 27;
     }
+  }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // PIVOTS & FIBONACCI
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('pivots_fibonacci') && sharedPivotAnalysis) {
+    const paFib = sharedPivotAnalysis;
+    y = checkY(y, 50);
     y = section(y, 'Pivot Points & Fibonacci Levels');
     y = atable({
       startY: y,
       head:[['Level','Price','Level','Price']],
       body:[
-        ['Pivot Point',    `$${f(pa.pivotPoint)}`,          'Current Price',   `$${f(pa.currentPrice)}`],
-        ['Resistance R1',  `$${f(pa.resistance?.R1)}`,      'Resistance R2',   `$${f(pa.resistance?.R2)}`],
-        ['Support S1',     `$${f(pa.support?.S1)}`,         'Support S2',      `$${f(pa.support?.S2)}`],
-        ['Fibonacci 23.6%',`$${f(pa.fibonacci?.level236)}`, 'Fibonacci 38.2%', `$${f(pa.fibonacci?.level382)}`],
-        ['Fibonacci 50.0%',`$${f(pa.fibonacci?.level500)}`, 'Fibonacci 61.8%', `$${f(pa.fibonacci?.level618)}`],
-        ['Fibonacci 78.6%',`$${f(pa.fibonacci?.level786)}`, '% from 52W Low',  fp(pa.priceVsLow)],
+        ['Pivot Point',    `$${f(paFib.pivotPoint)}`,          'Current Price',   `$${f(paFib.currentPrice)}`],
+        ['Resistance R1',  `$${f(paFib.resistance?.R1)}`,      'Resistance R2',   `$${f(paFib.resistance?.R2)}`],
+        ['Support S1',     `$${f(paFib.support?.S1)}`,         'Support S2',      `$${f(paFib.support?.S2)}`],
+        ['Fibonacci 23.6%',`$${f(paFib.fibonacci?.level236)}`, 'Fibonacci 38.2%', `$${f(paFib.fibonacci?.level382)}`],
+        ['Fibonacci 50.0%',`$${f(paFib.fibonacci?.level500)}`, 'Fibonacci 61.8%', `$${f(paFib.fibonacci?.level618)}`],
+        ['Fibonacci 78.6%',`$${f(paFib.fibonacci?.level786)}`, '% from 52W Low',  fp(paFib.priceVsLow)],
       ],
       columnStyles:{
         0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:48},

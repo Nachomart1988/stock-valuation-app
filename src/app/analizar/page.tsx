@@ -1030,7 +1030,6 @@ function AnalizarContent() {
         sharedPivotAnalysis,
         sections:       config.sections,
         branding:       config.branding,
-        mlPredictions:  config.mlPredictions,
         preview:        config.preview,
       });
       // Preview mode: open blob URL in new tab
