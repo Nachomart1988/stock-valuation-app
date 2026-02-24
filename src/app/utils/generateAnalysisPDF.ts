@@ -27,6 +27,13 @@ export interface PDFData {
   sharedCompanyQualityNet: any;
   sharedCagrStats: { avgCagr: number | null; minCagr: number | null; maxCagr: number | null } | null;
   sharedPivotAnalysis: any;
+  // Raw FMP data (primary source — doesn't depend on backend or tab navigation)
+  keyMetrics?: any[];
+  keyMetricsTTM?: any;
+  ratios?: any[];
+  ratiosTTM?: any;
+  estimates?: any[];
+  dcfCustom?: any;
   // Optional config
   sections?:  string[];    // which pages to include
   branding?:  PDFBranding;
@@ -46,6 +53,14 @@ const fl = (v: any) => {
 };
 
 type RGB = [number, number, number];
+
+// Filter out rows where ALL value columns are '-' (empty data)
+function filterRows(rows: string[][], valueCols?: number[]): string[][] {
+  return rows.filter(row => {
+    const cols = valueCols || row.slice(1).map((_, i) => i + 1);
+    return cols.some(i => row[i] != null && row[i] !== '-' && row[i] !== '$-' && row[i] !== '-%' && row[i] !== '0.0%');
+  });
+}
 
 export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   const { default: jsPDF } = await import('jspdf');
@@ -88,7 +103,30 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   const { ticker, profile, quote, income, balance, cashFlow, incomeTTM,
           priceTarget, sharedAverageVal, sharedWACC, sharedAvgCAPM,
           sharedForecasts, sharedKeyMetricsSummary, sharedAdvanceValueNet,
-          sharedCompanyQualityNet, sharedCagrStats, sharedPivotAnalysis } = d;
+          sharedCompanyQualityNet, sharedCagrStats, sharedPivotAnalysis,
+          keyMetrics, keyMetricsTTM, ratios, ratiosTTM, estimates, dcfCustom } = d;
+
+  // ── Resolve key metrics: raw FMP > shared state ──────────────────────
+  const km0  = (keyMetrics || [])[0] || keyMetricsTTM || {};
+  const rat0 = (ratios || [])[0] || ratiosTTM || {};
+  // Merge raw metrics into a single lookup (raw FMP fields take priority)
+  const KM: any = { ...rat0, ...km0, ...sharedKeyMetricsSummary };
+
+  // ── Resolve forecasts: raw estimates > shared state ──────────────────
+  const forecasts = (sharedForecasts?.length ? sharedForecasts : estimates) || [];
+
+  // ── Resolve pivot/52w: shared state > quote fallback ─────────────────
+  const pivot = sharedPivotAnalysis || (quote ? {
+    currentPrice: quote.price,
+    high52Week: quote.yearHigh,
+    low52Week: quote.yearLow,
+    pivotPoint: quote.yearHigh && quote.yearLow ? +((+quote.yearHigh + +quote.yearLow + quote.price) / 3).toFixed(2) : null,
+    resistance: { R1: null, R2: null },
+    support: { S1: null, S2: null },
+    fibonacci: { level236: null, level382: null, level500: null, level618: null, level786: null },
+    priceVsLow: quote.yearLow ? +((quote.price / quote.yearLow - 1) * 100).toFixed(1) : null,
+    priceVsHigh: quote.yearHigh ? +((quote.price / quote.yearHigh - 1) * 100).toFixed(1) : null,
+  } : null);
 
   const co    = profile?.companyName || ticker;
   const sect  = profile?.sector   || '-';
@@ -581,6 +619,13 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
       }
     });
   }
+  // Fallback: use raw DCF data if no backend valuations available
+  if (models.length === 0 && dcfCustom) {
+    if (dcfCustom.dcf && isFinite(dcfCustom.dcf) && dcfCustom.dcf > 0)
+      models.push({ name: 'DCF Intrinsic', val: +dcfCustom.dcf });
+    if (dcfCustom.stockPrice && isFinite(dcfCustom.stockPrice))
+      models.push({ name: 'Stock Price', val: +dcfCustom.stockPrice });
+  }
   if (sharedAverageVal) models.push({ name:'Average', val:sharedAverageVal });
 
   if (models.length>0 && price) {
@@ -615,27 +660,29 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   }
 
   // Key Ratios
-  y = checkY(y, 45);
-  y = section(y, 'Key Financial Ratios');
-  const kmVal = sharedKeyMetricsSummary || {};
-  y = atable({
-    startY: y,
-    head: [['Metric','Value','Metric','Value']],
-    body: [
-      ['P/E Ratio',         f(quote?.pe),               'P/B Ratio',          f(kmVal.priceToBook)],
-      ['EV/EBITDA',         f(kmVal.evToEbitda),            'P/FCF',              f(kmVal.priceToFCF)],
-      ['ROE',               fp((kmVal.roe||0)*100),         'ROA',                fp((kmVal.roa||0)*100)],
-      ['Debt / Equity',     f(kmVal.debtToEquity),          'Current Ratio',      f(kmVal.currentRatio)],
-      ['Gross Margin',      fp((income?.[0]?.grossProfitRatio||0)*100), 'Net Margin', fp((income?.[0]?.netIncomeRatio||0)*100)],
-      ['Interest Coverage', f(kmVal.interestCoverage),      'Quick Ratio',        f(kmVal.quickRatio)],
-    ],
-    columnStyles:{
-      0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:46},
-      1:{cellWidth:42},
-      2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:46},
-      3:{cellWidth:46},
-    },
-  });
+  const ratioRows = filterRows([
+    ['P/E Ratio',         f(KM.peRatio ?? quote?.pe),          'P/B Ratio',          f(KM.priceToBook ?? KM.pbRatio)],
+    ['EV/EBITDA',         f(KM.evToEbitda ?? KM.enterpriseValueOverEBITDA), 'P/FCF', f(KM.priceToFCF ?? KM.pfcfRatio)],
+    ['ROE',               fp((KM.roe ?? KM.returnOnEquity ?? 0)*100),  'ROA',        fp((KM.roa ?? KM.returnOnAssets ?? 0)*100)],
+    ['Debt / Equity',     f(KM.debtToEquity ?? KM.debtEquityRatio),    'Current Ratio', f(KM.currentRatio)],
+    ['Gross Margin',      fp((KM.grossProfitMargin ?? income?.[0]?.grossProfitRatio ?? 0)*100), 'Net Margin', fp((KM.netProfitMargin ?? income?.[0]?.netIncomeRatio ?? 0)*100)],
+    ['Interest Coverage', f(KM.interestCoverage),                       'Quick Ratio', f(KM.quickRatio)],
+  ], [1, 3]);
+  if (ratioRows.length > 0) {
+    y = checkY(y, 45);
+    y = section(y, 'Key Financial Ratios');
+    y = atable({
+      startY: y,
+      head: [['Metric','Value','Metric','Value']],
+      body: ratioRows,
+      columnStyles:{
+        0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:46},
+        1:{cellWidth:42},
+        2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:46},
+        3:{cellWidth:46},
+      },
+    });
+  }
   } // end valuation_models
 
   // ════════════════════════════════════════════════════════════════════════
@@ -718,16 +765,20 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // WACC & CAGR
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('wacc_cagr')) {
-    y = checkY(y, 35);
-    y = section(y, 'Cost of Capital — WACC & CAGR');
-    const capRows:any[] = [];
-    if (sharedWACC)     capRows.push(['WACC (Weighted Avg Cost of Capital)',      fp(sharedWACC)]);
-    if (sharedAvgCAPM)  capRows.push(['Cost of Equity — CAPM Average',            fp(sharedAvgCAPM)]);
+    const capRows: any[] = [];
+    const waccVal = sharedWACC ?? dcfCustom?.wacc;
+    const capmVal = sharedAvgCAPM ?? dcfCustom?.costOfEquity;
+    if (waccVal)    capRows.push(['WACC (Weighted Avg Cost of Capital)', fp(waccVal)]);
+    if (capmVal)    capRows.push(['Cost of Equity — CAPM', fp(capmVal)]);
+    if (dcfCustom?.costOfDebt) capRows.push(['Cost of Debt', fp(dcfCustom.costOfDebt)]);
+    if (dcfCustom?.riskFreeRate) capRows.push(['Risk-Free Rate', fp(dcfCustom.riskFreeRate)]);
     if (sharedCagrStats?.avgCagr != null) capRows.push(['Historical Revenue CAGR (Avg)', fp(sharedCagrStats.avgCagr)]);
     if (sharedCagrStats?.minCagr != null) capRows.push(['CAGR Range (Min – Max)', `${fp(sharedCagrStats.minCagr)} – ${fp(sharedCagrStats.maxCagr)}`]);
-    if (capRows.length>0) {
-      y = atable({ startY:y, head:[['Metric','Value']], body:capRows,
-        columnStyles:{0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:120},1:{cellWidth:60}} });
+    if (capRows.length > 0) {
+      y = checkY(y, 35);
+      y = section(y, 'Cost of Capital — WACC & CAGR');
+      y = atable({ startY: y, head: [['Metric', 'Value']], body: capRows,
+        columnStyles: { 0: { fontStyle: 'bold', fillColor: [14, 14, 14], cellWidth: 120 }, 1: { cellWidth: 60 } } });
     }
   }
 
@@ -773,66 +824,72 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // KEY METRICS — EXTENDED TABLE
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('key_metrics')) {
-    const km = sharedKeyMetricsSummary || {};
-    y = newPage();
-    y = section(y, 'Key Metrics — Extended Analysis');
-    y = atable({
-      startY: y,
-      head: [['Metric','Value','Metric','Value']],
-      body: [
-        ['P/E Ratio',             f(quote?.pe),                       'P/B Ratio',             f(km.priceToBook)],
-        ['P/S Ratio',             f(km.priceToSalesRatio),             'P/FCF',                 f(km.priceToFCF)],
-        ['EV/EBITDA',             f(km.evToEbitda),                   'EV/Sales',              f(km.evToSales)],
-        ['ROE',                   fp((km.roe||0)*100),                 'ROA',                   fp((km.roa||0)*100)],
-        ['ROIC',                  fp((km.roic||0)*100),                'Return on Capital',     fp((km.returnOnCapitalEmployed||0)*100)],
-        ['Gross Margin',          fp((income?.[0]?.grossProfitRatio||0)*100), 'Operating Margin', fp((income?.[0]?.operatingIncomeRatio||0)*100)],
-        ['Net Margin',            fp((income?.[0]?.netIncomeRatio||0)*100),   'FCF Margin',        fp((km.freeCashFlowMargin||0)*100)],
-        ['Debt / Equity',         f(km.debtToEquity),                 'Net Debt / EBITDA',     f(km.netDebtToEBITDA)],
-        ['Current Ratio',         f(km.currentRatio),                  'Quick Ratio',           f(km.quickRatio)],
-        ['Interest Coverage',     f(km.interestCoverage),             'Payout Ratio',          fp((km.payoutRatio||0)*100)],
-        ['Book Value / Share',    `$${f(km.bookValuePerShare)}`,       'Revenue / Share',       `$${f(km.revenuePerShare)}`],
-        ['FCF / Share',           `$${f(km.freeCashFlowPerShare)}`,    'Earnings Yield',        fp(km.earningsYield)],
-        ['Dividend Yield',        fp((quote?.dividendYield||0)*100),  'Enterprise Value',      fl(km.enterpriseValue)],
-        ['Asset Turnover',        f(km.assetTurnover),                'Inventory Turnover',    f(km.inventoryTurnover)],
-        ['Receivables Turnover',  f(km.receivablesTurnover),          'Days Payable',          f(km.daysPayablesOutstanding)],
-        ['Days Sales Outstanding',f(km.daysSalesOutstanding),         'Days Inventory',        f(km.daysOfInventoryOnHand)],
-      ],
-      columnStyles: {
-        0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:50},
-        1:{cellWidth:36},
-        2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:50},
-        3:{cellWidth:44},
-      },
-    });
+    const kmRows = filterRows([
+      ['P/E Ratio',             f(KM.peRatio ?? quote?.pe),             'P/B Ratio',             f(KM.priceToBook ?? KM.pbRatio)],
+      ['P/S Ratio',             f(KM.priceToSalesRatio ?? KM.priceToSales), 'P/FCF',             f(KM.priceToFCF ?? KM.pfcfRatio)],
+      ['EV/EBITDA',             f(KM.evToEbitda ?? KM.enterpriseValueOverEBITDA), 'EV/Sales',     f(KM.evToSales ?? KM.evToRevenue)],
+      ['ROE',                   fp((KM.roe ?? KM.returnOnEquity ?? 0)*100),       'ROA',          fp((KM.roa ?? KM.returnOnAssets ?? 0)*100)],
+      ['ROIC',                  fp((KM.roic ?? KM.returnOnCapitalEmployed ?? 0)*100), 'Ret. on Capital', fp((KM.returnOnCapitalEmployed ?? 0)*100)],
+      ['Gross Margin',          fp((KM.grossProfitMargin ?? income?.[0]?.grossProfitRatio ?? 0)*100), 'Operating Margin', fp((KM.operatingProfitMargin ?? income?.[0]?.operatingIncomeRatio ?? 0)*100)],
+      ['Net Margin',            fp((KM.netProfitMargin ?? income?.[0]?.netIncomeRatio ?? 0)*100), 'FCF Margin', fp((KM.freeCashFlowMargin ?? 0)*100)],
+      ['Debt / Equity',         f(KM.debtToEquity ?? KM.debtEquityRatio),  'Net Debt / EBITDA',  f(KM.netDebtToEBITDA)],
+      ['Current Ratio',         f(KM.currentRatio),                         'Quick Ratio',         f(KM.quickRatio)],
+      ['Interest Coverage',     f(KM.interestCoverage),                     'Payout Ratio',        fp((KM.payoutRatio ?? 0)*100)],
+      ['Book Value / Share',    `$${f(KM.bookValuePerShare)}`,              'Revenue / Share',     `$${f(KM.revenuePerShare)}`],
+      ['FCF / Share',           `$${f(KM.freeCashFlowPerShare)}`,           'Earnings Yield',      fp((KM.earningsYield ?? 0)*100)],
+      ['Dividend Yield',        fp((KM.dividendYield ?? quote?.dividendYield ?? 0)*100), 'Enterprise Value', fl(KM.enterpriseValue)],
+    ], [1, 3]);
+    if (kmRows.length > 0) {
+      y = newPage();
+      y = section(y, 'Key Metrics — Extended Analysis');
+      y = atable({
+        startY: y,
+        head: [['Metric','Value','Metric','Value']],
+        body: kmRows,
+        columnStyles: {
+          0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:50},
+          1:{cellWidth:36},
+          2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:50},
+          3:{cellWidth:44},
+        },
+      });
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════
   // ANALYST FORECASTS
   // ════════════════════════════════════════════════════════════════════════
-  if (activeSections.has('analyst_forecasts') && sharedForecasts?.length) {
-    y = newPage();
-    y = section(y, 'Analyst Consensus Estimates');
-    y = atable({
-      startY: y,
-      head: [['Year','Revenue Est.','EPS Est.','Net Income','EBITDA Est.']],
-      body: sharedForecasts.slice(0,6).map((fc:any) => [
-        fc.date?.substring(0,4)||'-',
+  if (activeSections.has('analyst_forecasts') && forecasts.length > 0) {
+    const fcSlice = forecasts.slice(0, 6);
+    const fcRows = filterRows(
+      fcSlice.map((fc: any) => [
+        fc.date?.substring(0, 4) || '-',
         fl(fc.estimatedRevenueAvg),
         `$${f(fc.estimatedEpsAvg)}`,
         fl(fc.estimatedNetIncomeAvg),
         fl(fc.estimatedEbitdaAvg),
       ]),
-    });
+      [1, 2, 3, 4],
+    );
+    if (fcRows.length > 0) {
+      y = newPage();
+      y = section(y, 'Analyst Consensus Estimates');
+      y = atable({
+        startY: y,
+        head: [['Year', 'Revenue Est.', 'EPS Est.', 'Net Income', 'EBITDA Est.']],
+        body: fcRows,
+      });
 
-    // Revenue forecast bar chart
-    if (sharedForecasts.length >= 2) {
-      y = checkY(y, 58);
-      y = section(y, 'Revenue Forecast Chart (Analyst Consensus)');
-      const fcD = sharedForecasts.slice(0,6);
-      barChart(M, y, CW, 42,
-        fcD.map((fc:any)=>fc.date?.substring(0,4)||''),
-        fcD.map((fc:any)=>fc.estimatedRevenueAvg||0), G);
-      y += 50;
+      // Revenue forecast bar chart
+      const revData = fcSlice.filter((fc: any) => fc.estimatedRevenueAvg);
+      if (revData.length >= 2) {
+        y = checkY(y, 58);
+        y = section(y, 'Revenue Forecast Chart (Analyst Consensus)');
+        barChart(M, y, CW, 42,
+          revData.map((fc: any) => fc.date?.substring(0, 4) || ''),
+          revData.map((fc: any) => fc.estimatedRevenueAvg || 0), G);
+        y += 50;
+      }
     }
   }
 
@@ -918,11 +975,11 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ════════════════════════════════════════════════════════════════════════
   // 52-WEEK PRICE POSITION
   // ════════════════════════════════════════════════════════════════════════
-  if (activeSections.has('technical_52w') && sharedPivotAnalysis) {
-    y = newPage();
-    const pa52 = sharedPivotAnalysis;
+  if (activeSections.has('technical_52w') && pivot) {
+    const pa52 = pivot;
 
     if (pa52.low52Week && pa52.high52Week && price) {
+      y = newPage();
       y = section(y, '52-Week Price Position');
       const lo = +pa52.low52Week*0.96, hi = +pa52.high52Week*1.04;
       const sp = hi-lo, sc = (CW-20)/sp;
@@ -956,8 +1013,8 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ════════════════════════════════════════════════════════════════════════
   // PIVOTS & FIBONACCI
   // ════════════════════════════════════════════════════════════════════════
-  if (activeSections.has('pivots_fibonacci') && sharedPivotAnalysis) {
-    const paFib = sharedPivotAnalysis;
+  if (activeSections.has('pivots_fibonacci') && pivot?.pivotPoint) {
+    const paFib = pivot;
     y = checkY(y, 50);
     y = section(y, 'Pivot Points & Fibonacci Levels');
     y = atable({

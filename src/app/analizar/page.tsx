@@ -1028,6 +1028,13 @@ function AnalizarContent() {
         sharedCompanyQualityNet,
         sharedCagrStats,
         sharedPivotAnalysis,
+        // Raw FMP data (primary source for metrics)
+        keyMetrics:     keyMetrics || [],
+        keyMetricsTTM:  keyMetricsTTM || null,
+        ratios:         ratios || [],
+        ratiosTTM:      ratiosTTM || null,
+        estimates:      estimates || [],
+        dcfCustom:      dcfCustom || null,
         sections:       config.sections,
         branding:       config.branding,
         preview:        config.preview,
