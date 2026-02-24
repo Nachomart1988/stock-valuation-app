@@ -1022,7 +1022,7 @@
     "days": "días",
     "steps": "Pasos",
     "volatilitySource": "Volatilidad:",
-    "implied": "Implícita (Yahoo)",
+    "implied": "Implícita (IV)",
     "historical": "Histórica",
     "calculating": "Calculando...",
     "calculate": "Calcular Probabilidad",

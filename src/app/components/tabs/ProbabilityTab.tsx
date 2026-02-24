@@ -576,7 +576,7 @@ export default function ProbabilityTab({
                 );
               })()}
               <p className="text-xs text-gray-600 mt-1 text-center">
-                Distribución de precios terminales · {result.steps} pasos · σ={result.volatilityUsed.toFixed(1)}% ({result.volatilitySource})
+                Distribución de precios terminales · {result.steps} pasos · σ={result.volatilityUsed.toFixed(1)}%
               </p>
             </div>
           )}

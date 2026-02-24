@@ -308,7 +308,7 @@ class BinomialTreeEngine:
 
             # ── Aggregate price distribution for chart ──
             distribution_chart = self._aggregate_distribution(
-                price_distribution, current_price, target_price, num_buckets=30
+                price_distribution, current_price, target_price, num_buckets=40
             )
 
             # ── Expected Move ──
@@ -1342,7 +1342,7 @@ class BinomialTreeEngine:
 
     def _aggregate_distribution(
         self, distribution: List[Dict], current_price: float,
-        target_price: float, num_buckets: int = 60
+        target_price: float, num_buckets: int = 40
     ) -> List[Dict]:
         """
         Aggregate terminal price distribution into buckets for chart display.

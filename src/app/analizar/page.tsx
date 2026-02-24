@@ -1953,6 +1953,8 @@ function InicioTab({
 }
 
 function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; ticker: string }) {
+  const { locale } = useLanguage();
+  const es = locale === 'es';
   const [floatData, setFloatData] = useState<any>(null);
   const [executives, setExecutives] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2003,16 +2005,18 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
   return (
     <div className="space-y-6 sm:space-y-12">
       <section className="bg-gray-800 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-white/[0.06]">
-        <h3 className="text-xl sm:text-3xl font-bold text-gray-100 mb-4 sm:mb-8">Información Básica</h3>
+        <h3 className="text-xl sm:text-3xl font-bold text-gray-100 mb-4 sm:mb-8">
+          {es ? 'Información Básica' : 'Basic Information'}
+        </h3>
         <p className="text-sm sm:text-xl text-gray-300 leading-relaxed mb-4 sm:mb-8">
-          {profile.description || 'No hay descripción disponible.'}
+          {profile.description || (es ? 'No hay descripción disponible.' : 'No description available.')}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 text-sm sm:text-xl">
-          <p><strong className="text-gray-200">Sector:</strong> {profile.sector || 'N/A'}</p>
-          <p><strong className="text-gray-200">Industria:</strong> {profile.industry || 'N/A'}</p>
+          <p><strong className="text-gray-200">{es ? 'Sector' : 'Sector'}:</strong> {profile.sector || 'N/A'}</p>
+          <p><strong className="text-gray-200">{es ? 'Industria' : 'Industry'}:</strong> {profile.industry || 'N/A'}</p>
           <p><strong className="text-gray-200">CEO:</strong> {profile.ceo || 'N/A'}</p>
           <p>
-            <strong className="text-gray-200">Sitio web:</strong>{' '}
+            <strong className="text-gray-200">{es ? 'Sitio web' : 'Website'}:</strong>{' '}
             {profile.website ? (
               <a href={profile.website} className="text-green-400 hover:underline text-sm sm:text-xl break-all" target="_blank" rel="noopener noreferrer">
                 {profile.website}
@@ -2023,10 +2027,12 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
       </section>
 
       <section className="bg-gray-800 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-white/[0.06]">
-        <h3 className="text-xl sm:text-3xl font-bold text-gray-100 mb-4 sm:mb-8">Datos de Mercado</h3>
+        <h3 className="text-xl sm:text-3xl font-bold text-gray-100 mb-4 sm:mb-8">
+          {es ? 'Datos de Mercado' : 'Market Data'}
+        </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-10 text-center">
           <div>
-            <p className="text-sm sm:text-xl text-gray-400 mb-2 sm:mb-3">Precio Actual</p>
+            <p className="text-sm sm:text-xl text-gray-400 mb-2 sm:mb-3">{es ? 'Precio Actual' : 'Current Price'}</p>
             <p className="text-3xl sm:text-5xl font-bold text-green-400">
               ${quote.price?.toFixed(2) || 'N/A'}
             </p>
@@ -2038,7 +2044,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
             </p>
           </div>
           <div>
-            <p className="text-sm sm:text-xl text-gray-400 mb-2 sm:mb-3">Volumen</p>
+            <p className="text-sm sm:text-xl text-gray-400 mb-2 sm:mb-3">{es ? 'Volumen' : 'Volume'}</p>
             <p className="text-2xl sm:text-4xl font-bold text-gray-200">
               {quote.volume?.toLocaleString() || 'N/A'}
             </p>
@@ -2048,7 +2054,9 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
 
       {/* Float & Liquidity Section */}
       <section className="bg-gray-950 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-green-600">
-        <h3 className="text-xl sm:text-3xl font-bold text-green-400 mb-4 sm:mb-8">Float & Liquidity</h3>
+        <h3 className="text-xl sm:text-3xl font-bold text-green-400 mb-4 sm:mb-8">
+          {es ? 'Float y Liquidez' : 'Float & Liquidity'}
+        </h3>
         {loading ? (
           <div className="text-center py-8">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-green-500 border-t-transparent"></div>
@@ -2056,11 +2064,11 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
         ) : floatData ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
             <div className="bg-gray-800/50 p-3 sm:p-6 rounded-xl text-center">
-              <p className="text-gray-400 text-xs sm:text-base mb-1 sm:mb-2">Float Shares</p>
+              <p className="text-gray-400 text-xs sm:text-base mb-1 sm:mb-2">{es ? 'Acciones en Float' : 'Float Shares'}</p>
               <p className="text-xl sm:text-3xl font-bold text-green-400">{formatNumber(floatData.floatShares)}</p>
             </div>
             <div className="bg-gray-800/50 p-3 sm:p-6 rounded-xl text-center">
-              <p className="text-gray-400 text-xs sm:text-base mb-1 sm:mb-2">Outstanding Shares</p>
+              <p className="text-gray-400 text-xs sm:text-base mb-1 sm:mb-2">{es ? 'Acciones en Circulación' : 'Outstanding Shares'}</p>
               <p className="text-xl sm:text-3xl font-bold text-emerald-400">{formatNumber(floatData.outstandingShares)}</p>
             </div>
             <div className="bg-gray-800/50 p-3 sm:p-6 rounded-xl text-center">
@@ -2070,18 +2078,22 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
               </p>
             </div>
             <div className="bg-gray-800/50 p-3 sm:p-6 rounded-xl text-center">
-              <p className="text-gray-400 text-xs sm:text-base mb-1 sm:mb-2">Avg Volume</p>
+              <p className="text-gray-400 text-xs sm:text-base mb-1 sm:mb-2">{es ? 'Volumen Promedio' : 'Avg Volume'}</p>
               <p className="text-xl sm:text-3xl font-bold text-emerald-400">{formatNumber(quote.avgVolume)}</p>
             </div>
           </div>
         ) : (
-          <p className="text-gray-400 text-center">No hay datos de float disponibles</p>
+          <p className="text-gray-400 text-center">
+            {es ? 'No hay datos de float disponibles' : 'No float data available'}
+          </p>
         )}
       </section>
 
       {/* Executives Section */}
       <section className="bg-gradient-to-r bg-gray-900 p-4 sm:p-6 md:p-10 rounded-2xl shadow-2xl border border-emerald-600">
-        <h3 className="text-xl sm:text-3xl font-bold text-emerald-400 mb-4 sm:mb-8">Key Executives</h3>
+        <h3 className="text-xl sm:text-3xl font-bold text-emerald-400 mb-4 sm:mb-8">
+          {es ? 'Ejecutivos Clave' : 'Key Executives'}
+        </h3>
         {loading ? (
           <div className="text-center py-8">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
@@ -2097,14 +2109,16 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
                   <p className="text-lg font-semibold text-gray-100">{exec.name || 'N/A'}</p>
                   <p className="text-sm text-gray-400">{exec.title || 'N/A'}</p>
                   {exec.pay && (
-                    <p className="text-sm text-green-400">Compensation: ${formatNumber(exec.pay)}</p>
+                    <p className="text-sm text-green-400">{es ? 'Compensación' : 'Compensation'}: ${formatNumber(exec.pay)}</p>
                   )}
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-gray-400 text-center">No hay datos de ejecutivos disponibles</p>
+          <p className="text-gray-400 text-center">
+            {es ? 'No hay datos de ejecutivos disponibles' : 'No executive data available'}
+          </p>
         )}
       </section>
     </div>

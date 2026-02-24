@@ -32,7 +32,8 @@ export default function Home() {
   const [losers, setLosers] = useState<StockMover[]>([]);
   const [loadingMarket, setLoadingMarket] = useState(true);
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
+  const es = locale === 'es';
 
   useEffect(() => {
     const fetchMarketData = async () => {
@@ -434,70 +435,97 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Free Plan */}
-            <div className="p-8 rounded-2xl bg-gray-800/50 border border-white/[0.06]/50">
-              <div className="text-lg font-semibold text-gray-400 mb-2">Free</div>
-              <div className="text-4xl font-bold mb-6">$0<span className="text-lg text-gray-500">{t('pricing.perMonth')}</span></div>
-              <ul className="space-y-3 mb-8">
-                {[t('pricing.features.fiveAnalyses'), t('pricing.features.basicTabs'), t('pricing.features.realTimeData'), t('pricing.features.emailSupport')].map((item) => (
-                  <li key={item} className="flex items-center gap-2 text-gray-400">
-                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/analizar" className="block w-full py-3 rounded-xl border border-white/[0.08] text-gray-300 font-semibold hover:bg-gray-700/50 transition text-center">
+          {/* Plan headers — 4 columns */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 max-w-5xl mx-auto mb-6">
+            {/* Free */}
+            <div className="p-5 rounded-2xl bg-gray-900/80 border-2 border-gray-700 flex flex-col items-center text-center">
+              <div className="text-sm font-semibold text-gray-400 mb-1">Free</div>
+              <div className="text-3xl font-black mb-1">$0</div>
+              <div className="text-xs text-gray-500 mb-4">{t('pricing.perMonth')}</div>
+              <Link href="/analizar" className="w-full py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-sm font-bold transition text-center block">
                 {t('pricing.free.cta')}
               </Link>
             </div>
 
-            {/* Pro Plan */}
-            <div className="p-8 rounded-2xl bg-gray-950 border-2 border-green-500/50 relative">
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full text-sm font-semibold">
+            {/* Pro */}
+            <div className="p-5 rounded-2xl bg-gray-900/80 border-2 border-emerald-500 relative flex flex-col items-center text-center">
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap">
                 {t('pricing.mostPopular')}
               </div>
-              <div className="text-lg font-semibold text-green-400 mb-2">Pro</div>
-              <div className="text-4xl font-bold mb-6">$29<span className="text-lg text-gray-500">{t('pricing.perMonth')}</span></div>
-              <ul className="space-y-3 mb-8">
-                {[t('pricing.features.unlimitedAnalyses'), t('pricing.features.allTabs'), t('pricing.features.neuralSummary'), t('pricing.features.valuationModels'), t('pricing.features.customInputs'), t('pricing.features.exportPdfExcel')].map((item) => (
-                  <li key={item} className="flex items-center gap-2 text-gray-300">
-                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/pricing" className="block w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 font-semibold hover:from-green-600 hover:to-emerald-700 transition text-center">
+              <div className="text-sm font-semibold text-emerald-400 mb-1">Pro</div>
+              <div className="text-3xl font-black mb-1">$29</div>
+              <div className="text-xs text-gray-500 mb-4">{t('pricing.perMonth')}</div>
+              <Link href="/pricing" className="w-full py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-sm font-bold transition text-center block">
                 {t('pricing.pro.cta')}
               </Link>
             </div>
 
-            {/* Elite Plan */}
-            <div className="p-8 rounded-2xl bg-gray-800/50 border border-white/[0.06]/50">
-              <div className="text-lg font-semibold text-gray-400 mb-2">Elite</div>
-              <div className="text-4xl font-bold mb-6">$79<span className="text-lg text-gray-500">{t('pricing.perMonth')}</span></div>
-              <ul className="space-y-3 mb-8">
-                {[t('pricing.features.everythingInPro'), t('pricing.features.apiAccess'), t('pricing.features.customReports'), t('pricing.features.vipSupport'), t('pricing.features.privateWebinars'), t('pricing.features.consulting')].map((item) => (
-                  <li key={item} className="flex items-center gap-2 text-gray-400">
-                    <svg className="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/pricing" className="block w-full py-3 rounded-xl border border-white/[0.08] text-gray-300 font-semibold hover:bg-gray-700/50 transition text-center">
+            {/* Elite */}
+            <div className="p-5 rounded-2xl bg-gray-900/80 border-2 border-violet-500 flex flex-col items-center text-center">
+              <div className="text-sm font-semibold text-violet-400 mb-1">Elite</div>
+              <div className="text-3xl font-black mb-1">$59</div>
+              <div className="text-xs text-gray-500 mb-4">{t('pricing.perMonth')}</div>
+              <Link href="/pricing" className="w-full py-2 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white text-sm font-bold transition text-center block">
                 {t('pricing.elite.cta')}
+              </Link>
+            </div>
+
+            {/* Gold */}
+            <div className="p-5 rounded-2xl bg-gray-900/80 border-2 border-yellow-500 flex flex-col items-center text-center">
+              <div className="text-sm font-semibold text-yellow-400 mb-1">⭐ Gold</div>
+              <div className="text-3xl font-black mb-1">$100</div>
+              <div className="text-xs text-gray-500 mb-4">{t('pricing.perMonth')}</div>
+              <Link href="/pricing" className="w-full py-2 rounded-xl bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-white text-sm font-bold transition text-center block">
+                {es ? 'Empezar con Gold' : 'Start with Gold'}
               </Link>
             </div>
           </div>
 
+          {/* Comparison table */}
+          <div className="max-w-5xl mx-auto bg-gray-900/50 rounded-2xl border border-gray-800 overflow-hidden mb-8">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-800">
+                    <th className="text-left p-4 text-gray-400 font-semibold min-w-[180px]">
+                      {es ? 'Función' : 'Feature'}
+                    </th>
+                    <th className="p-3 text-center text-gray-400 font-semibold text-sm">Free</th>
+                    <th className="p-3 text-center text-emerald-400 font-semibold text-sm bg-emerald-500/5">Pro</th>
+                    <th className="p-3 text-center text-violet-400 font-semibold text-sm">Elite</th>
+                    <th className="p-3 text-center text-yellow-400 font-semibold text-sm">Gold</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {([
+                    { feature: es ? 'Estados Financieros + Info General' : 'Financial Statements + General Info', free: true,  pro: true,  elite: true,  gold: true  },
+                    { feature: es ? 'Competidores + Beta + SGR'           : 'Competitors + Beta + SGR',           free: true,  pro: true,  elite: true,  gold: true  },
+                    { feature: es ? 'DDMs + DCF básico'                   : 'DDMs + Basic DCF',                   free: true,  pro: true,  elite: true,  gold: true  },
+                    { feature: es ? 'Forecasts + Noticias'                : 'Forecasts + News',                   free: false, pro: true,  elite: true,  gold: true  },
+                    { feature: es ? 'WACC + CAGR + Probabilidad'          : 'WACC + CAGR + Probability',          free: false, pro: true,  elite: true,  gold: true  },
+                    { feature: es ? 'Todos los modelos de valuación'      : 'All valuation models',               free: false, pro: true,  elite: true,  gold: true  },
+                    { feature: es ? 'Key Metrics + DuPont + Holders'      : 'Key Metrics + DuPont + Holders',     free: false, pro: true,  elite: true,  gold: true  },
+                    { feature: es ? 'Diario del Inversor'                 : 'Investor Diary',                     free: false, pro: false, elite: true,  gold: true  },
+                    { feature: es ? 'Resumen Maestro Neural (IA)'         : 'Neural Master Summary (AI)',          free: false, pro: false, elite: true,  gold: true  },
+                    { feature: es ? 'Exportar PDF'                        : 'Export PDF',                         free: false, pro: false, elite: true,  gold: true  },
+                    { feature: es ? 'Acceso Early Beta'                   : 'Early Beta Access',                  free: false, pro: false, elite: false, gold: true  },
+                    { feature: es ? 'Soporte'                             : 'Support',                            free: 'Email', pro: es ? 'Prior.' : 'Priority', elite: 'VIP', gold: 'VIP <2h' },
+                  ] as { feature: string; free: boolean | string; pro: boolean | string; elite: boolean | string; gold: boolean | string }[]).map((row, i) => (
+                    <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/20">
+                      <td className="p-3 text-gray-300 text-sm">{row.feature}</td>
+                      <td className="p-3 text-center">{typeof row.free === 'string' ? <span className="text-gray-300 text-xs font-semibold">{row.free}</span> : row.free ? <svg className="w-4 h-4 text-emerald-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> : <span className="text-gray-600">—</span>}</td>
+                      <td className="p-3 text-center bg-emerald-500/5">{typeof row.pro === 'string' ? <span className="text-gray-300 text-xs font-semibold">{row.pro}</span> : row.pro ? <svg className="w-4 h-4 text-emerald-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> : <span className="text-gray-600">—</span>}</td>
+                      <td className="p-3 text-center">{typeof row.elite === 'string' ? <span className="text-gray-300 text-xs font-semibold">{row.elite}</span> : row.elite ? <svg className="w-4 h-4 text-emerald-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> : <span className="text-gray-600">—</span>}</td>
+                      <td className="p-3 text-center">{typeof row.gold === 'string' ? <span className="text-gray-300 text-xs font-semibold">{row.gold}</span> : row.gold ? <svg className="w-4 h-4 text-yellow-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> : <span className="text-gray-600">—</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* Link to full pricing page */}
-          <div className="text-center mt-8">
+          <div className="text-center">
             <Link href="/pricing" className="text-green-400 hover:text-green-300 transition inline-flex items-center gap-2">
               {t('pricing.viewFullComparison')}
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

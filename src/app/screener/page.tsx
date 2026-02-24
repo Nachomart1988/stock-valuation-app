@@ -111,8 +111,8 @@ export default function ScreenerPage() {
       if (!res) {
         throw new Error(
           lastStatus === 401 || lastStatus === 403
-            ? `FMP Screener returned HTTP ${lastStatus}. Your FMP plan may not include the screener endpoint, or the API key may have expired. Verify your key at financialmodelingprep.com/developer/docs.`
-            : `All screener endpoints failed (last HTTP ${lastStatus}).`
+            ? `El screener requiere un plan FMP con acceso al endpoint de screening (HTTP ${lastStatus}). El plan actual no incluye esta función — considera actualizar en financialmodelingprep.com.`
+            : `Error al conectar con FMP Screener (HTTP ${lastStatus}). Intenta de nuevo.`
         );
       }
       const data = await res.json();
