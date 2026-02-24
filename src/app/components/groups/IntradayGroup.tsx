@@ -4,15 +4,24 @@
 import { Tab } from '@headlessui/react';
 
 interface IntradayGroupProps {
-  PivotsTab: React.ReactNode;
-  GapsTab: React.ReactNode;
+  PivotsTab:   React.ReactNode;
+  GapsTab:     React.ReactNode;
+  MomentumTab: React.ReactNode;
 }
 
 export default function IntradayGroup({
   PivotsTab,
   GapsTab,
+  MomentumTab,
 }: IntradayGroupProps) {
-  const subtabs = ['Pivots', 'Gaps'];
+  const subtabs = ['Pivots', 'Gaps', 'Momentum'];
+
+  const tabColor = (tab: string, selected: boolean) => {
+    if (!selected) return 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white';
+    if (tab === 'Gaps')     return 'bg-purple-600 text-white shadow-lg';
+    if (tab === 'Momentum') return 'bg-emerald-600 text-white shadow-lg';
+    return 'bg-emerald-600 text-white shadow-lg';
+  };
 
   return (
     <div className="space-y-4">
@@ -24,13 +33,7 @@ export default function IntradayGroup({
             <Tab
               key={tab}
               className={({ selected }) =>
-                `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
-                  selected
-                    ? tab === 'Gaps'
-                      ? 'bg-purple-600 text-white shadow-lg'
-                      : 'bg-emerald-600 text-white shadow-lg'
-                    : 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white'
-                }`
+                `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${tabColor(tab, selected)}`
               }
             >
               {tab}
@@ -41,6 +44,7 @@ export default function IntradayGroup({
         <Tab.Panels className="mt-4">
           <Tab.Panel unmount={false}>{PivotsTab}</Tab.Panel>
           <Tab.Panel unmount={false}>{GapsTab}</Tab.Panel>
+          <Tab.Panel unmount={false}>{MomentumTab}</Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
     </div>

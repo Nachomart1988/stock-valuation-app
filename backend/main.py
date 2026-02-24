@@ -407,6 +407,35 @@ class FFTSignalRequest(BaseModel):
 
 
 # ════════════════════════════════════════════════════════════════════
+# Momentum Analysis (Quillamaggie-style intraday)
+# ════════════════════════════════════════════════════════════════════
+
+class MomentumRequest(BaseModel):
+    ticker: str
+    benchmark: str = 'SPY'
+    timeframes: Optional[List[str]] = None
+    quillamaggie_mode: bool = True
+
+
+@app.post("/momentum/analyze")
+async def momentum_analyze(req: MomentumRequest):
+    """Quillamaggie-style intraday momentum & breakout detection."""
+    try:
+        from momentum_engine import get_momentum_analyzer
+        analyzer = get_momentum_analyzer()
+        result = analyzer.analyze(
+            ticker=req.ticker,
+            benchmark=req.benchmark,
+            timeframes=req.timeframes,
+        )
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════════════════════════════════
 # Gap Analysis
 # ════════════════════════════════════════════════════════════════════
 
