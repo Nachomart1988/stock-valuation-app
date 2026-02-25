@@ -225,6 +225,132 @@ interface Props {
   dcfFromCalculos?: number | null; // Intrinsic value from Calculo tab
 }
 
+// ────────────────────────────────────────────────
+// INDUSTRY WEIGHTS LOOKUP TABLE
+// Maps (industry, paysDividends) → optimal model weights (relative, normalized at runtime)
+// ────────────────────────────────────────────────
+type WeightSet = Record<string, number>;
+
+// Model name aliases
+const MN = {
+  DDM2:  '2-Stage DDM',
+  DDM3:  '3-Stage DDM',
+  HMOD:  'H Model',
+  FCF2:  '2-Stage FCF',
+  FCF3:  '3-Stage FCF',
+  MTGT:  'Mean Target',
+  GRM:   'Graham Method',
+  RIM:   'RIM (Ohlson)',
+  DCF:   'DCF',
+  EPS:   'EPS*Benchmark',
+  SDCF:  'Stochastic DCF',
+  DSGE:  'Bayesian (NK DSGE)',
+  HJM:   'HJM',
+  FCFE2: '2-Stage FCFE',
+  FCFE3: '3-Stage FCFE',
+  FCFF2: '2-Stage FCFF',
+  FCFF3: '3-Stage FCFF',
+  ADCF:  'Advance DCF (API)',
+  MCDCF: 'Monte Carlo DCF',
+  DCFC:  'DCF (Cálculos)',
+  GN:    'Graham Number (API)',
+  GNN:   'Graham Net-Net (API)',
+  OE:    'Owner Earnings (Buffett)',
+  PR:    'Price Return (T5)',
+} as const;
+
+const ALL_MODEL_NAMES: string[] = Object.values(MN);
+
+// Index [0] = no dividend, [1] = pays dividend
+const INDUSTRY_WEIGHTS: Record<string, [WeightSet, WeightSet]> = {
+  // ── Technology ──
+  'Software - Application':      [{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:15,[MN.FCF3]:10,[MN.MCDCF]:10,[MN.MTGT]:10,[MN.OE]:5,[MN.SDCF]:5 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.MCDCF]:10,[MN.MTGT]:15,[MN.OE]:10 }],
+  'Software - Infrastructure':   [{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:15,[MN.FCF3]:10,[MN.MCDCF]:10,[MN.MTGT]:10,[MN.OE]:5,[MN.SDCF]:5 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.MCDCF]:10,[MN.MTGT]:15,[MN.OE]:10 }],
+  'Semiconductors':               [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:15,[MN.MCDCF]:10,[MN.MTGT]:15,[MN.OE]:10,[MN.EPS]:10 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:10,[MN.MCDCF]:10,[MN.MTGT]:15,[MN.OE]:10,[MN.EPS]:5 }],
+  'Semiconductor Equipment':      [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:15,[MN.MCDCF]:10,[MN.MTGT]:15,[MN.OE]:10,[MN.EPS]:10 },{ [MN.DDM2]:10,[MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:15,[MN.MCDCF]:10,[MN.MTGT]:15,[MN.OE]:10 }],
+  'Consumer Electronics':         [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.OE]:15,[MN.EPS]:15,[MN.MTGT]:10,[MN.GRM]:10 },{ [MN.DDM2]:15,[MN.DCF]:15,[MN.ADCF]:15,[MN.FCF2]:15,[MN.OE]:15,[MN.MTGT]:15,[MN.EPS]:10 }],
+  'Internet Content & Information':[{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:20,[MN.MCDCF]:15,[MN.MTGT]:15,[MN.SDCF]:5 },{ [MN.DDM2]:10,[MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:20,[MN.MCDCF]:15,[MN.MTGT]:15 }],
+  'Electronic Components':        [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.EPS]:20,[MN.GRM]:15,[MN.MTGT]:15 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.EPS]:15,[MN.GRM]:15,[MN.MTGT]:15 }],
+  'Information Technology Services':[{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:15,[MN.OE]:15,[MN.MTGT]:15,[MN.EPS]:10 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.OE]:15,[MN.MTGT]:20 }],
+  // ── Healthcare ──
+  'Biotechnology':                [{ [MN.DCF]:30,[MN.ADCF]:25,[MN.MCDCF]:20,[MN.SDCF]:15,[MN.MTGT]:10 },{ [MN.DDM2]:10,[MN.DCF]:25,[MN.ADCF]:20,[MN.MCDCF]:20,[MN.SDCF]:15,[MN.MTGT]:10 }],
+  'Drug Manufacturers - General': [{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:15,[MN.MCDCF]:15,[MN.MTGT]:15,[MN.OE]:10 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.MCDCF]:10,[MN.MTGT]:15,[MN.OE]:5 }],
+  'Drug Manufacturers - Specialty & Generic':[{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:15,[MN.MCDCF]:15,[MN.MTGT]:15,[MN.OE]:10 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:15,[MN.MCDCF]:10,[MN.MTGT]:15,[MN.OE]:5 }],
+  'Medical Devices':              [{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:15,[MN.OE]:15,[MN.MTGT]:15,[MN.EPS]:10 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.OE]:15,[MN.MTGT]:15,[MN.EPS]:5 }],
+  'Medical Instruments & Supplies':[{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:15,[MN.OE]:15,[MN.MTGT]:15,[MN.EPS]:10 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.OE]:15,[MN.MTGT]:15,[MN.EPS]:5 }],
+  'Health Care Plans':            [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:20,[MN.EPS]:20,[MN.MTGT]:15,[MN.OE]:5 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:20,[MN.EPS]:15,[MN.MTGT]:15 }],
+  'Hospitals':                    [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:20,[MN.FCFF2]:15,[MN.EPS]:15,[MN.MTGT]:10 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:20,[MN.FCFF2]:15,[MN.MTGT]:15 }],
+  // ── Financial ──
+  'Banks - Regional':             [{ [MN.RIM]:25,[MN.EPS]:20,[MN.GRM]:15,[MN.GN]:15,[MN.MTGT]:15,[MN.DCFC]:10 },{ [MN.DDM2]:25,[MN.DDM3]:15,[MN.RIM]:20,[MN.EPS]:15,[MN.GN]:10,[MN.MTGT]:15 }],
+  'Banks - Diversified':          [{ [MN.RIM]:25,[MN.EPS]:20,[MN.GRM]:15,[MN.GN]:15,[MN.MTGT]:15,[MN.DCFC]:10 },{ [MN.DDM2]:25,[MN.DDM3]:15,[MN.RIM]:20,[MN.EPS]:15,[MN.GN]:10,[MN.MTGT]:15 }],
+  'Insurance - Life':             [{ [MN.RIM]:20,[MN.DCF]:20,[MN.EPS]:20,[MN.GN]:15,[MN.MTGT]:15,[MN.DSGE]:10 },{ [MN.DDM2]:25,[MN.RIM]:20,[MN.DCF]:15,[MN.EPS]:15,[MN.GN]:10,[MN.MTGT]:15 }],
+  'Insurance - Property & Casualty':[{ [MN.RIM]:20,[MN.DCF]:20,[MN.EPS]:20,[MN.GN]:15,[MN.MTGT]:15,[MN.DSGE]:10 },{ [MN.DDM2]:25,[MN.RIM]:20,[MN.DCF]:15,[MN.EPS]:15,[MN.GN]:10,[MN.MTGT]:15 }],
+  'Insurance - Diversified':      [{ [MN.RIM]:20,[MN.DCF]:20,[MN.EPS]:20,[MN.GN]:15,[MN.MTGT]:15,[MN.DSGE]:10 },{ [MN.DDM2]:25,[MN.RIM]:20,[MN.DCF]:15,[MN.EPS]:15,[MN.GN]:10,[MN.MTGT]:15 }],
+  'Asset Management':             [{ [MN.RIM]:20,[MN.DCF]:20,[MN.FCF2]:20,[MN.EPS]:20,[MN.MTGT]:20 },{ [MN.DDM2]:25,[MN.DDM3]:10,[MN.RIM]:20,[MN.DCF]:15,[MN.FCF2]:15,[MN.MTGT]:15 }],
+  'Capital Markets':              [{ [MN.RIM]:20,[MN.DCF]:20,[MN.FCF2]:20,[MN.EPS]:20,[MN.MTGT]:20 },{ [MN.DDM2]:20,[MN.RIM]:20,[MN.DCF]:15,[MN.FCF2]:20,[MN.EPS]:15,[MN.MTGT]:10 }],
+  'Real Estate Investment Trusts (REITs)':[{ [MN.DCF]:30,[MN.ADCF]:20,[MN.FCFE2]:20,[MN.MTGT]:20,[MN.GN]:10 },{ [MN.DDM2]:35,[MN.DDM3]:15,[MN.DCF]:20,[MN.FCFE2]:15,[MN.MTGT]:15 }],
+  'REIT - Diversified':           [{ [MN.DCF]:30,[MN.ADCF]:20,[MN.FCFE2]:20,[MN.MTGT]:20,[MN.GN]:10 },{ [MN.DDM2]:35,[MN.DDM3]:15,[MN.DCF]:20,[MN.FCFE2]:15,[MN.MTGT]:15 }],
+  'REIT - Office':                [{ [MN.DCF]:30,[MN.ADCF]:20,[MN.FCFE2]:20,[MN.MTGT]:20,[MN.GN]:10 },{ [MN.DDM2]:35,[MN.DDM3]:15,[MN.DCF]:20,[MN.FCFE2]:15,[MN.MTGT]:15 }],
+  'REIT - Retail':                [{ [MN.DCF]:30,[MN.ADCF]:20,[MN.FCFE2]:20,[MN.MTGT]:20,[MN.GN]:10 },{ [MN.DDM2]:35,[MN.DDM3]:15,[MN.DCF]:20,[MN.FCFE2]:15,[MN.MTGT]:15 }],
+  'REIT - Residential':           [{ [MN.DCF]:30,[MN.ADCF]:20,[MN.FCFE2]:20,[MN.MTGT]:20,[MN.GN]:10 },{ [MN.DDM2]:35,[MN.DDM3]:15,[MN.DCF]:20,[MN.FCFE2]:15,[MN.MTGT]:15 }],
+  // ── Energy ──
+  'Oil & Gas E&P':                [{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.MCDCF]:15,[MN.MTGT]:10,[MN.OE]:10 },{ [MN.DDM2]:10,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.MCDCF]:15,[MN.MTGT]:10,[MN.OE]:10 }],
+  'Oil & Gas Integrated':         [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.MCDCF]:15,[MN.MTGT]:15,[MN.OE]:10 },{ [MN.DDM2]:20,[MN.DDM3]:10,[MN.DCF]:15,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.MCDCF]:10,[MN.MTGT]:10 }],
+  'Oil & Gas Midstream':          [{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.MTGT]:20,[MN.OE]:15 },{ [MN.DDM2]:25,[MN.DDM3]:10,[MN.DCF]:20,[MN.FCFF2]:20,[MN.MTGT]:15,[MN.OE]:10 }],
+  'Oil & Gas Refining & Marketing':[{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.EPS]:15,[MN.MTGT]:20 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.EPS]:10,[MN.MTGT]:15 }],
+  'Utilities - Regulated Electric':[{ [MN.DCF]:30,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.MTGT]:20,[MN.DSGE]:10 },{ [MN.DDM2]:35,[MN.DDM3]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.MTGT]:15 }],
+  'Utilities - Regulated Gas':    [{ [MN.DCF]:30,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.MTGT]:20,[MN.DSGE]:10 },{ [MN.DDM2]:35,[MN.DDM3]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.MTGT]:15 }],
+  'Utilities - Regulated Water':  [{ [MN.DCF]:30,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.MTGT]:20,[MN.DSGE]:10 },{ [MN.DDM2]:35,[MN.DDM3]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.MTGT]:15 }],
+  'Utilities - Diversified':      [{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.MTGT]:20,[MN.DSGE]:15 },{ [MN.DDM2]:30,[MN.DDM3]:10,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:15,[MN.MTGT]:10 }],
+  'Utilities - Independent Power Producers':[{ [MN.DCF]:30,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.MCDCF]:15,[MN.MTGT]:15 },{ [MN.DDM2]:25,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.MCDCF]:10,[MN.MTGT]:10 }],
+  // ── Consumer Staples ──
+  'Grocery Stores':               [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:15,[MN.OE]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:25,[MN.DCF]:15,[MN.ADCF]:15,[MN.FCF2]:15,[MN.OE]:15,[MN.MTGT]:15 }],
+  'Beverages - Non-Alcoholic':    [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.OE]:20,[MN.FCF2]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:25,[MN.DDM3]:10,[MN.DCF]:15,[MN.OE]:20,[MN.FCF2]:15,[MN.MTGT]:15 }],
+  'Beverages - Alcoholic':        [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.OE]:20,[MN.FCF2]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:20,[MN.DDM3]:10,[MN.DCF]:15,[MN.OE]:20,[MN.FCF2]:15,[MN.MTGT]:20 }],
+  'Packaged Foods':               [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.OE]:20,[MN.FCF2]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:25,[MN.DDM3]:10,[MN.DCF]:15,[MN.OE]:15,[MN.FCF2]:15,[MN.MTGT]:20 }],
+  'Household & Personal Products':[{ [MN.DCF]:20,[MN.ADCF]:20,[MN.OE]:15,[MN.FCF2]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:25,[MN.DDM3]:10,[MN.DCF]:15,[MN.OE]:15,[MN.FCF2]:15,[MN.MTGT]:20 }],
+  'Tobacco':                      [{ [MN.DCF]:15,[MN.ADCF]:15,[MN.OE]:20,[MN.FCF2]:20,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:30,[MN.DDM3]:15,[MN.DCF]:15,[MN.OE]:20,[MN.FCF2]:10,[MN.MTGT]:10 }],
+  // ── Consumer Discretionary ──
+  'Auto Manufacturers':           [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.EPS]:20,[MN.GRM]:10,[MN.MTGT]:15 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.EPS]:15,[MN.MTGT]:15 }],
+  'Auto Parts':                   [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:20,[MN.EPS]:20,[MN.GRM]:10,[MN.MTGT]:15 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:20,[MN.EPS]:15,[MN.MTGT]:15 }],
+  'Restaurants':                  [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:20,[MN.EPS]:20,[MN.MTGT]:20 },{ [MN.DDM2]:15,[MN.DDM3]:5,[MN.DCF]:20,[MN.FCF2]:20,[MN.EPS]:20,[MN.MTGT]:20 }],
+  'Specialty Retail':             [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:20,[MN.OE]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:20,[MN.OE]:10,[MN.EPS]:10,[MN.MTGT]:10 }],
+  'Department Stores':            [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:20,[MN.GN]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:20,[MN.GN]:10,[MN.EPS]:10,[MN.MTGT]:10 }],
+  'Luxury Goods':                 [{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:15,[MN.OE]:15,[MN.EPS]:15,[MN.MTGT]:10 },{ [MN.DDM2]:15,[MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:15,[MN.OE]:15,[MN.MTGT]:15 }],
+  'Internet Retail':              [{ [MN.DCF]:30,[MN.ADCF]:25,[MN.FCF2]:20,[MN.MCDCF]:15,[MN.MTGT]:10 },{ [MN.DDM2]:10,[MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:20,[MN.MCDCF]:15,[MN.MTGT]:10 }],
+  'Home Improvement Retail':      [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:20,[MN.OE]:15,[MN.EPS]:15,[MN.MTGT]:10 },{ [MN.DDM2]:20,[MN.DCF]:15,[MN.ADCF]:15,[MN.FCF2]:20,[MN.OE]:15,[MN.MTGT]:15 }],
+  // ── Industrial ──
+  'Aerospace & Defense':          [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:15,[MN.OE]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:15,[MN.DDM3]:5,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.OE]:15,[MN.MTGT]:15 }],
+  'Industrial Machinery':         [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:15,[MN.FCFF2]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.FCFF2]:10,[MN.EPS]:10,[MN.MTGT]:10 }],
+  'Specialty Industrial Machinery':[{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:15,[MN.FCFF2]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.FCFF2]:10,[MN.EPS]:10,[MN.MTGT]:10 }],
+  'Airlines':                     [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:25,[MN.MCDCF]:15,[MN.EPS]:15,[MN.MTGT]:10 },{ [MN.DDM2]:10,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:25,[MN.MCDCF]:15,[MN.EPS]:10,[MN.MTGT]:5 }],
+  'Trucking':                     [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:20,[MN.EPS]:20,[MN.MTGT]:20 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.EPS]:15,[MN.MTGT]:15 }],
+  'Railroads':                    [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.OE]:20,[MN.MTGT]:20 },{ [MN.DDM2]:25,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:15,[MN.OE]:15,[MN.MTGT]:10 }],
+  // ── Telecom ──
+  'Telecom Services':             [{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.EPS]:15,[MN.MTGT]:20 },{ [MN.DDM2]:30,[MN.DDM3]:10,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:15,[MN.MTGT]:10 }],
+  'Communication Services':       [{ [MN.DCF]:25,[MN.ADCF]:20,[MN.FCF2]:20,[MN.MTGT]:20,[MN.MCDCF]:15 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:20,[MN.MTGT]:15,[MN.MCDCF]:10 }],
+  // ── Materials ──
+  'Gold':                         [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.MCDCF]:25,[MN.MTGT]:20 },{ [MN.DDM2]:10,[MN.DCF]:15,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.MCDCF]:25,[MN.MTGT]:15 }],
+  'Silver':                       [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.MCDCF]:25,[MN.MTGT]:20 },{ [MN.DDM2]:10,[MN.DCF]:15,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.MCDCF]:25,[MN.MTGT]:15 }],
+  'Steel':                        [{ [MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:20,[MN.EPS]:20,[MN.GN]:10,[MN.MTGT]:15 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:15,[MN.EPS]:15,[MN.MTGT]:15 }],
+  'Chemicals':                    [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.EPS]:20,[MN.MTGT]:20 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:15,[MN.EPS]:15,[MN.MTGT]:15 }],
+  'Specialty Chemicals':          [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCFF2]:20,[MN.EPS]:20,[MN.MTGT]:20 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCFF2]:15,[MN.EPS]:15,[MN.MTGT]:15 }],
+  'Building Materials':           [{ [MN.DCF]:20,[MN.ADCF]:20,[MN.FCFF2]:15,[MN.GN]:15,[MN.EPS]:15,[MN.MTGT]:15 },{ [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.GN]:10,[MN.EPS]:10,[MN.MTGT]:10 }],
+};
+
+const DEFAULT_WEIGHTS: [WeightSet, WeightSet] = [
+  { [MN.DCF]:20,[MN.ADCF]:20,[MN.FCF2]:15,[MN.MCDCF]:10,[MN.OE]:10,[MN.EPS]:10,[MN.MTGT]:15 },
+  { [MN.DDM2]:20,[MN.DCF]:20,[MN.ADCF]:15,[MN.FCF2]:15,[MN.OE]:10,[MN.EPS]:10,[MN.MTGT]:10 },
+];
+
+function getOptimalWeights(industry: string | undefined, paysDividends: boolean): Record<string, number> {
+  const entry = (industry && INDUSTRY_WEIGHTS[industry]) ? INDUSTRY_WEIGHTS[industry] : DEFAULT_WEIGHTS;
+  const partial: WeightSet = paysDividends ? entry[1] : entry[0];
+  const result: Record<string, number> = {};
+  ALL_MODEL_NAMES.forEach(name => { result[name] = partial[name] ?? 0; });
+  return result;
+}
+
 export default function ValuacionesTab({
   ticker,
   income,
@@ -246,6 +372,32 @@ export default function ValuacionesTab({
   dcfFromCalculos,
 }: Props) {
   const { t } = useLanguage();
+
+  // ────────────────────────────────────────────────
+  // WEIGHTED AVERAGE STATE
+  // ────────────────────────────────────────────────
+  const paysDividends = Boolean(
+    (dividends && dividends.length > 0 && dividends.some((d: any) => d.dividend > 0)) ||
+    (profile?.lastDiv && profile.lastDiv > 0)
+  );
+  const [modelWeights, setModelWeights] = useState<Record<string, number>>(() =>
+    getOptimalWeights(profile?.industry, paysDividends)
+  );
+  const [weightsCustomized, setWeightsCustomized] = useState(false);
+
+  // Auto-reset weights when industry or dividend status changes (only if not customized)
+  useEffect(() => {
+    if (!weightsCustomized) {
+      setModelWeights(getOptimalWeights(profile?.industry, paysDividends));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.industry, paysDividends]);
+
+  const resetToOptimalWeights = () => {
+    setModelWeights(getOptimalWeights(profile?.industry, paysDividends));
+    setWeightsCustomized(false);
+  };
+
   // ────────────────────────────────────────────────
   // Estados para parámetros del modelo
   // ────────────────────────────────────────────────
@@ -1544,14 +1696,28 @@ export default function ValuacionesTab({
     );
   };
 
-  // Calcular promedio solo de métodos habilitados con valores válidos
+  // Calcular promedio ponderado de métodos habilitados con valores válidos
   const enabledMethods = methods.filter(m => m.enabled && m.value !== null && m.value > 0 && isFinite(m.value));
   const averageVal = (() => {
-    const vals = enabledMethods.map(m => m.value || 0);
+    // Build weighted items: each enabled model + optional Prismo
+    const items: Array<{ value: number; weight: number }> = [];
+    enabledMethods.forEach(m => {
+      const w = modelWeights[m.name] ?? 0;
+      if (w > 0) items.push({ value: m.value!, weight: w });
+    });
     if (includePrismoValue && advanceValueNet?.fair_value && advanceValueNet.fair_value > 0) {
-      vals.push(advanceValueNet.fair_value);
+      // Prismo uses the same weight as Advance DCF (API) or a minimum of 10
+      const prismoW = Math.max(modelWeights[MN.ADCF] ?? 0, 10);
+      items.push({ value: advanceValueNet.fair_value, weight: prismoW });
     }
-    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    if (items.length === 0) {
+      // Fallback: if all weights are 0, use equal-weight arithmetic mean
+      const vals = enabledMethods.map(m => m.value!);
+      if (includePrismoValue && advanceValueNet?.fair_value && advanceValueNet.fair_value > 0) vals.push(advanceValueNet.fair_value);
+      return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    }
+    const totalW = items.reduce((s, i) => s + i.weight, 0);
+    return totalW > 0 ? items.reduce((s, i) => s + i.value * i.weight, 0) / totalW : null;
   })();
 
   // Notificar al padre cuando cambie el averageVal
@@ -2322,6 +2488,98 @@ export default function ValuacionesTab({
         </div>
       </CollapsibleSection>
 
+      {/* ═══════════════════════════════════════════════════
+          WEIGHTS CONFIG PANEL — Dynamic weighted average
+          ═══════════════════════════════════════════════════ */}
+      <CollapsibleSection
+        title="Pesos del Promedio Ponderado"
+        icon="⚖️"
+        defaultOpen={false}
+        badge={
+          <span className={`px-2 py-1 text-xs rounded-full ${weightsCustomized ? 'bg-amber-600/30 text-amber-400' : 'bg-blue-600/30 text-blue-400'}`}>
+            {weightsCustomized ? 'Personalizado' : `Óptimo · ${profile?.industry ?? 'General'}`}
+          </span>
+        }
+      >
+        <div className="space-y-4">
+          {/* Info bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs text-gray-400">
+              <span className="text-gray-300 font-medium">Industria detectada: </span>
+              <span className="text-blue-400">{profile?.industry ?? 'Desconocida'}</span>
+              <span className="mx-2 text-gray-600">·</span>
+              <span className={paysDividends ? 'text-green-400' : 'text-gray-500'}>
+                {paysDividends ? '✓ Paga dividendos' : '✗ Sin dividendos'}
+              </span>
+              <span className="mx-2 text-gray-600">·</span>
+              <span className="text-gray-400">Peso 0 = excluido del promedio</span>
+            </div>
+            <button
+              onClick={resetToOptimalWeights}
+              className="px-3 py-1.5 text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-600/40 rounded-lg hover:bg-blue-600/30 transition-all"
+            >
+              ↺ Restaurar Óptimos
+            </button>
+          </div>
+
+          {/* Model weights grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {ALL_MODEL_NAMES.map(modelName => {
+              const w = modelWeights[modelName] ?? 0;
+              const isActive = w > 0;
+              const method = methods.find(m => m.name === modelName);
+              const hasValue = method ? (method.value !== null && method.value > 0) : false;
+              return (
+                <div
+                  key={modelName}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+                    isActive
+                      ? 'bg-gray-800/80 border-green-600/40'
+                      : 'bg-gray-900/40 border-gray-700/40 opacity-60'
+                  }`}
+                >
+                  <span className={`flex-1 text-xs truncate ${hasValue ? 'text-gray-200' : 'text-gray-500'}`} title={modelName}>
+                    {modelName}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-16 h-1 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-green-500 rounded-full transition-all"
+                        style={{ width: `${Math.min(w, 100)}%` }}
+                      />
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={w}
+                      onChange={e => {
+                        const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                        setModelWeights(prev => ({ ...prev, [modelName]: val }));
+                        setWeightsCustomized(true);
+                      }}
+                      className="w-12 px-1.5 py-0.5 text-xs text-center bg-gray-900 border border-white/[0.08] rounded text-gray-100 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Total weight & active models summary */}
+          <div className="flex items-center justify-between text-xs text-gray-500 pt-1 border-t border-white/[0.06]">
+            <span>
+              Modelos activos (peso &gt; 0): <span className="text-green-400 font-medium">{ALL_MODEL_NAMES.filter(n => (modelWeights[n] ?? 0) > 0).length}</span>
+            </span>
+            <span>
+              Peso total: <span className="text-blue-400 font-medium">{ALL_MODEL_NAMES.reduce((s, n) => s + (modelWeights[n] ?? 0), 0)}</span>
+              <span className="text-gray-600 ml-1">(normalizado automáticamente)</span>
+            </span>
+          </div>
+        </div>
+      </CollapsibleSection>
+
       {/* Peer P/E for benchmarking */}
       {peerPE.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-800/50 rounded-xl border border-white/[0.06]">
@@ -2564,7 +2822,7 @@ export default function ValuacionesTab({
               {averageVal !== null ? `$${averageVal.toFixed(2)}` : '—'}
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              Basado en {enabledMethods.length} de {methods.length} modelos activos
+              Promedio ponderado · {enabledMethods.filter(m => (modelWeights[m.name] ?? 0) > 0).length} modelos con peso &gt; 0
             </p>
           </div>
 

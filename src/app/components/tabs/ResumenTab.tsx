@@ -62,6 +62,9 @@ interface ResumenData {
   dataQuality: DataQuality;
   spectralCycles?: SpectralCycleData | null;
   companyType?: 'growth' | 'value' | 'dividend' | 'blend';
+  typeConfidence?: number;
+  moatScore?: number;
+  growthPremium?: boolean;
   scoreHistory?: { ts: string; finalScore: number; recommendation: string; targetPrice: number; upsidePct: number }[];
   scoreDelta?: number | null;
   scoreTrend?: 'improving' | 'deteriorating' | 'stable';
@@ -721,6 +724,19 @@ export default function ResumenTab({
         {resumen?.companyType && (
           <span className="px-2 py-0.5 text-xs font-medium bg-cyan-900/40 text-cyan-400 border border-cyan-700/30 rounded-full">
             {COMPANY_TYPE_LABEL[resumen.companyType] ?? resumen.companyType}
+            {resumen.typeConfidence != null && (
+              <span className="ml-1 text-cyan-600">({Math.round(resumen.typeConfidence * 100)}%)</span>
+            )}
+          </span>
+        )}
+        {resumen?.moatScore != null && resumen.moatScore > 0.50 && (
+          <span className="px-2 py-0.5 text-xs font-medium bg-emerald-900/40 text-emerald-400 border border-emerald-700/30 rounded-full">
+            🏰 Moat {Math.round(resumen.moatScore * 100)}%
+          </span>
+        )}
+        {resumen?.growthPremium && (
+          <span className="px-2 py-0.5 text-xs font-medium bg-amber-900/40 text-amber-300 border border-amber-700/30 rounded-full" title="Premium de valoración justificado por moat + crecimiento">
+            Growth Premium
           </span>
         )}
       </div>

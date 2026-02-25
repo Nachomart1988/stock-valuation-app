@@ -1606,27 +1606,66 @@ class NeuralResumenEngine:
             ticker, current_price, data.get('fmp_api_key')
         )
 
-        # Layer 5: Valuation (blends neural model with average of all frontend methods)
-        valuation_result = self._layer5_valuation(
-            data.get('advanceValueNet'), current_price, data.get('averageValuation')
-        )
-
-        # Infer stock style for weighted quality scoring
+        # ── [Layer 0] Early company type classification (before Layer 5 for type-aware analysis) ──
         _sgr = data.get('sustainableGrowthRate', 0) or 0
         _sgr_pct = _sgr * 100 if _sgr < 1 else _sgr
         _avn = data.get('advanceValueNet') or {}
         _pe = _avn.get('pe_ratio', 999) or 999
         _div_yield = _avn.get('dividend_yield', 0) or 0
         _div_yield_pct = _div_yield * 100 if _div_yield < 1 else _div_yield
+        _pb = _avn.get('pb_ratio', 3.0) or 3.0
 
-        stock_style = 'blend'
-        if _sgr_pct > 15:
-            stock_style = 'growth'
-        elif _div_yield_pct > 3:
-            stock_style = 'dividend'
-        elif _pe < 15:
-            stock_style = 'value'
-        self._company_type = stock_style
+        # Pull quality dimensions for richer classification (if available)
+        _quality_raw = data.get('companyQualityNet') or {}
+        _moat_raw   = _quality_raw.get('moat',   0) or 0
+        _growth_dim = _quality_raw.get('growth', 0) or 0
+        # Normalize: quality scores may be 0-100 or 0-1
+        _moat_score      = (_moat_raw   / 100.0) if _moat_raw   > 1 else float(_moat_raw)
+        _growth_dim_norm = (_growth_dim / 100.0) if _growth_dim > 1 else float(_growth_dim)
+
+        # Multi-factor composite scores
+        # Growth score: quality growth dimension (0.4) + relative SGR vs 25% ceiling (0.35) + moat (0.25)
+        _score_growth = (
+            _growth_dim_norm * 0.40 +
+            min(1.0, _sgr_pct / 25.0) * 0.35 +
+            _moat_score * 0.25
+        )
+        # Value score: low P/E (0.50) + dividend yield proxy (0.30) + low P/B (0.20)
+        _score_value = (
+            max(0.0, (15.0 - min(_pe,  30.0)) / 15.0) * 0.50 +
+            min(1.0, _div_yield_pct / 4.0)             * 0.30 +
+            max(0.0, (2.0  - min(_pb,  4.0)) /  2.0)  * 0.20
+        )
+
+        if _score_growth > 0.55 and _sgr_pct > 8:
+            stock_style     = 'growth'
+            _type_confidence = min(0.95, _score_growth + 0.05)
+        elif _div_yield_pct > 3 and _score_value > 0.30:
+            stock_style     = 'dividend'
+            _type_confidence = min(0.90, 0.55 + (_div_yield_pct - 3.0) * 0.05)
+        elif _score_value > 0.55 and _pe < 18:
+            stock_style     = 'value'
+            _type_confidence = min(0.88, _score_value)
+        elif _sgr_pct > 8:
+            stock_style     = 'growth'
+            _type_confidence = 0.52
+        else:
+            stock_style     = 'blend'
+            _type_confidence = 0.45
+
+        self._company_type    = stock_style
+        self._type_confidence = _type_confidence
+        self._moat_score      = _moat_score
+        logger.info(
+            f"[Layer 0] Type detected: {stock_style.upper()} "
+            f"(conf={_type_confidence:.2f}, growth_score={_score_growth:.2f}, "
+            f"value_score={_score_value:.2f}, moat={_moat_score:.2f}, SGR={_sgr_pct:.1f}%)"
+        )
+
+        # Layer 5: Valuation (blends neural model with average of all frontend methods)
+        valuation_result = self._layer5_valuation(
+            data.get('advanceValueNet'), current_price, data.get('averageValuation')
+        )
 
         # Layer 6: Quality
         quality_result = self._layer6_quality(data.get('companyQualityNet'), stock_style=stock_style)
@@ -1648,6 +1687,9 @@ class NeuralResumenEngine:
         # Layer 10: Cross-Signal Correlation
         correlation_result = self._layer10_correlate()
 
+        # Layer 2b: Type-specific weight adjustment (before synthesis, after all layers)
+        self._pre_synthesis_type_adjust()
+
         # Layer 11: Synthesis
         synthesis_result = self._layer11_synthesize()
 
@@ -1655,6 +1697,72 @@ class NeuralResumenEngine:
         final_result = self._layer12_recommend(ticker, current_price)
 
         return final_result
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # LAYER 2b: Type-Specific Pre-Synthesis Weight Adjustment
+    # ─────────────────────────────────────────────────────────────────────────
+    def _pre_synthesis_type_adjust(self) -> None:
+        """
+        Adjusts layer weights in self.layer_results based on detected company_type
+        before _layer11_synthesize() runs its weighted sum.
+
+        Growth  → reduce valuation penalty, boost growth/forecasts
+        Value   → boost valuation, reduce growth
+        Dividend→ boost quality/valuation, reduce news/growth
+        Blend   → no change
+        """
+        ctype  = getattr(self, '_company_type',    'blend')
+        moat   = getattr(self, '_moat_score',      0.0)
+        conf   = getattr(self, '_type_confidence', 0.5)
+
+        # Weight multipliers keyed by layer_name
+        if ctype == 'growth':
+            # Growth stocks: overvaluation is less penalizing if moat is strong.
+            # Boost growth/forecasts; dampen raw valuation weight.
+            val_mult    = max(0.50, 0.72 - moat * 0.18)  # 0.50–0.72
+            growth_mult = min(1.60, 1.28 + moat * 0.22)  # 1.28–1.50
+            mults = {
+                'Valuation Ensemble':           val_mult,
+                'Growth Analysis':              growth_mult,
+                'Quality Analysis':             1.10,
+                'Analyst Forecasts':            1.15,
+                'Spectral Cycle Analysis (FFT)':1.05,
+            }
+            logger.info(
+                f"[Layer 2b] Growth weights: valuation×{val_mult:.2f} "
+                f"growth×{growth_mult:.2f} (moat={moat:.2f})"
+            )
+        elif ctype == 'value':
+            mults = {
+                'Valuation Ensemble':  1.30,
+                'Growth Analysis':     0.80,
+                'Quality Analysis':    1.10,
+                'Technical Analysis':  0.90,
+            }
+            logger.info("[Layer 2b] Value weights: valuation×1.30 growth×0.80")
+        elif ctype == 'dividend':
+            mults = {
+                'Valuation Ensemble':  1.15,
+                'Quality Analysis':    1.20,
+                'Growth Analysis':     0.85,
+                'News Sentiment':      0.85,
+            }
+            logger.info("[Layer 2b] Dividend weights: quality×1.20 valuation×1.15 growth×0.85")
+        else:
+            return  # Blend: no adjustments
+
+        # Apply multipliers blended by type confidence (partial adjustment when conf is low)
+        for layer in self.layer_results:
+            mult = mults.get(layer.layer_name)
+            if mult is not None:
+                # Blend: full adjustment × conf + original × (1 - conf)
+                blended_mult = mult * conf + 1.0 * (1.0 - conf)
+                old_w = layer.weight
+                layer.weight = layer.weight * blended_mult
+                logger.debug(
+                    f"[Layer 2b] {layer.layer_name}: weight {old_w:.4f} → {layer.weight:.4f} "
+                    f"(mult={blended_mult:.2f})"
+                )
 
     def _layer1_ingest(self, data: Dict) -> LayerResult:
         """Layer 1: Data Ingestion & Validation with freshness decay"""
@@ -2318,22 +2426,70 @@ class NeuralResumenEngine:
             confidence_used  = 0.85 if valuation_data else 0.0
             data_used_str    = f"{analysis.get('experts_used', 0)} valuation models"
 
+        # ── Type-specific signal post-processing ──
+        # For Growth companies with strong moat, replace "Overvalued" BEARISH signals
+        # with a contextual GROWTH_PREMIUM cautionary signal instead.
+        ctype = getattr(self, '_company_type', 'blend')
+        moat  = getattr(self, '_moat_score',   0.0)
+        processed_signals = []
+        growth_premium_added = False
+        for sig in analysis['signals']:
+            if (ctype == 'growth'
+                    and sig.signal_type == SignalType.BEARISH
+                    and ('overvalued' in sig.description.lower() or 'downside' in sig.description.lower())):
+                if moat >= 0.55 and not growth_premium_added:
+                    # Replace with GROWTH_PREMIUM — still warns but contextualizes
+                    processed_signals.append(Signal(
+                        source="Valuation",
+                        signal_type=SignalType.CAUTIONARY,
+                        strength=sig.strength * 0.55,
+                        description=(
+                            f"GROWTH_PREMIUM: Valuación tradicional sugiere descuento "
+                            f"({abs(upside_used):.0f}%), pero moat sólido ({moat*100:.0f}%) "
+                            "justifica múltiplos elevados en empresa de crecimiento."
+                        ),
+                        data_point=sig.data_point,
+                    ))
+                    growth_premium_added = True
+                    # Also partially recover the score (overvaluation penalty reduced by moat)
+                    score_used = max(score_used, score_used + moat * 12)
+                    score_used = min(100, score_used)
+                    logger.info(
+                        f"[Layer 5] GROWTH_PREMIUM applied: moat={moat:.2f}, "
+                        f"score adjusted → {score_used:.1f}"
+                    )
+                elif moat < 0.55:
+                    # Growth but low moat — keep bearish signal, just soften it
+                    processed_signals.append(Signal(
+                        source=sig.source,
+                        signal_type=SignalType.CAUTIONARY,
+                        strength=sig.strength * 0.75,
+                        description=f"[Growth/low-moat] {sig.description}",
+                        data_point=sig.data_point,
+                    ))
+                # else: growth + high moat, already added GROWTH_PREMIUM once
+            else:
+                processed_signals.append(sig)
+
         result = LayerResult(
             layer_name="Valuation Ensemble",
             layer_number=5,
             score=score_used,
             confidence=confidence_used,
             weight=self.base_weights.get('valuation', 0.20),
-            signals=analysis['signals'],
+            signals=processed_signals,
             sub_scores={
-                'fair_value':   fair_value_used,
-                'upside_pct':   upside_used,
-                'neural_value': neural_fair_value,
-                'avg_value':    average_valuation or neural_fair_value,
+                'fair_value':        fair_value_used,
+                'upside_pct':        upside_used,
+                'neural_value':      neural_fair_value,
+                'avg_value':         average_valuation or neural_fair_value,
+                'growth_premium':    growth_premium_added,
             },
             reasoning=(
                 f"Fair value: ${fair_value_used:.2f}. Upside: {upside_used:.1f}%. "
                 f"Agreement: {analysis['model_agreement']}. "
+                + (f"[{ctype.upper()}] " if ctype != 'blend' else "")
+                + (f"GROWTH_PREMIUM applied (moat={moat*100:.0f}%). " if growth_premium_added else "")
                 + (f"Blended with avg ${average_valuation:.2f}." if has_avg else "Neural only.")
             ),
             data_used=[data_used_str] if (valuation_data or has_avg) else []
@@ -2664,6 +2820,25 @@ class NeuralResumenEngine:
             final_score *= freshness
             logger.info(f"Applied freshness decay {freshness:.3f} to synthesis score")
 
+        # ── Type-specific moat bonus in synthesis ──
+        # For Growth + high moat: overvaluation is less penalizing; add a modest bonus
+        # For Value + high moat: also reward (durable competitive advantage at low valuation)
+        ctype_s  = getattr(self, '_company_type',    'blend')
+        moat_s   = getattr(self, '_moat_score',      0.0)
+        conf_s   = getattr(self, '_type_confidence', 0.5)
+        pre_bonus_score = final_score
+        if ctype_s == 'growth' and moat_s > 0.55:
+            moat_bonus = moat_s * 10.0 * conf_s  # max ~9.5 pts at moat=1, conf=1
+            final_score = min(100.0, final_score + moat_bonus)
+            logger.info(
+                f"[Synthesis] Growth+moat bonus: +{moat_bonus:.1f} pts "
+                f"({pre_bonus_score:.1f} → {final_score:.1f})"
+            )
+        elif ctype_s == 'value' and moat_s > 0.60:
+            moat_bonus = moat_s * 5.0 * conf_s  # smaller bonus for value
+            final_score = min(100.0, final_score + moat_bonus)
+            logger.info(f"[Synthesis] Value+moat bonus: +{moat_bonus:.1f} pts")
+
         result = LayerResult(
             layer_name="Dynamic Synthesis",
             layer_number=11,
@@ -2792,13 +2967,35 @@ class NeuralResumenEngine:
             next((l.score for l in self.layer_results if l.layer_name == "Institutional Flow"), 50)
         )
 
-        # Generate narrative
-        quality_desc = "excepcional" if final_score >= 75 else "sólida" if final_score >= 60 else "aceptable" if final_score >= 45 else "débil"
+        # Generate narrative (type-aware)
+        quality_desc = (
+            "excepcional" if final_score >= 75 else
+            "sólida"      if final_score >= 60 else
+            "aceptable"   if final_score >= 45 else
+            "débil"
+        )
+        ctype_label = {
+            'growth':   'Growth (Crecimiento)',
+            'value':    'Value (Valor)',
+            'dividend': 'Dividendo',
+            'blend':    'Blend (Mixta)',
+        }.get(ctype, 'Blend')
+        moat_context = (
+            f" Con {moat_str}," if moat_str else ""
+        )
 
         summary_text = (
-            f"{ticker} presenta una oportunidad de inversión {quality_desc} con un score integrado de {final_score:.0f}/100, "
-            f"basado en un análisis de 12 capas neuronales que procesó {sum(1 for l in self.layer_results if l.confidence > 0)} fuentes de datos activas. "
+            f"{ticker} [{ctype_label}]{moat_context} presenta una oportunidad de inversión {quality_desc} "
+            f"con un score integrado de {final_score:.0f}/100, "
+            f"basado en un análisis de 12 capas neuronales que procesó "
+            f"{sum(1 for l in self.layer_results if l.confidence > 0)} fuentes de datos activas. "
         )
+
+        if growth_premium:
+            summary_text += (
+                "Nota: empresa Growth con prima de valoración sobre métricas tradicionales — "
+                f"el moat ({moat*100:.0f}%) y el SGR sostenido contextualizan el premium. "
+            )
 
         if bullish_signals:
             top_bullish = sorted(bullish_signals, key=lambda s: s.strength, reverse=True)[:2]
@@ -2807,52 +3004,137 @@ class NeuralResumenEngine:
         if cautionary_signals:
             summary_text += f"Precaución: {cautionary_signals[0].description}. "
 
-        summary_text += f"El precio objetivo de ${target_price:.2f} implica un {'potencial alcista' if upside_pct > 0 else 'riesgo de caída'} del {abs(upside_pct):.1f}%."
+        summary_text += (
+            f"El precio objetivo de ${target_price:.2f} implica un "
+            f"{'potencial alcista' if upside_pct > 0 else 'riesgo de caída'} "
+            f"del {abs(upside_pct):.1f}%."
+        )
 
-        # Actionable advice — personalized by company type + pivot S1 stop-loss
-        ctype = getattr(self, '_company_type', 'blend')
-        s1 = getattr(self, '_pivot_s1', None)
+        # Actionable advice — personalized by company type + pivot S1 stop-loss + moat
+        ctype = getattr(self, '_company_type',    'blend')
+        moat  = getattr(self, '_moat_score',      0.0)
+        conf  = getattr(self, '_type_confidence', 0.5)
+        s1    = getattr(self, '_pivot_s1',        None)
+        growth_premium = False
+        for lr in self.layer_results:
+            if lr.layer_name == "Valuation Ensemble":
+                growth_premium = lr.sub_scores.get('growth_premium', False)
+                break
+
         effective_stop = s1 if (s1 and s1 < current_price * 0.98) else current_price * 0.88
-        stop_reason = f"S1 ${effective_stop:.2f}" if (s1 and s1 < current_price * 0.98) else f"-12% (${effective_stop:.2f})"
+        stop_reason    = (
+            f"S1 ${effective_stop:.2f}" if (s1 and s1 < current_price * 0.98)
+            else f"-12% (${effective_stop:.2f})"
+        )
+        moat_str = (
+            f"moat excepcional ({moat*100:.0f}%)" if moat > 0.75
+            else f"moat sólido ({moat*100:.0f}%)"   if moat > 0.55
+            else None
+        )
 
+        # Horizon and type-specific context note
         if ctype == 'growth':
-            horizon = "6-12 meses"
-            type_note = "Empresa de crecimiento: priorizar momentum y revisiones al alza de EPS."
+            horizon  = "6-18 meses"
+            if moat_str:
+                type_note = (
+                    f"Empresa Growth con {moat_str}: "
+                    "valoración tradicional puede subestimar el valor del moat y el SGR sostenido. "
+                    "Priorizar momentum de revisiones EPS y expansión de TAM."
+                )
+            else:
+                type_note = (
+                    "Empresa de crecimiento sin moat defensivo evidente: "
+                    "seguir de cerca la evolución del SGR y márgenes operativos."
+                )
         elif ctype == 'dividend':
-            horizon = "12-24 meses"
-            type_note = "Empresa dividendera: verificar sostenibilidad del pago y cobertura de FCF."
+            horizon  = "12-24 meses"
+            type_note = (
+                "Empresa dividendera: verificar sostenibilidad del payout (FCF payout ratio), "
+                "cobertura de deuda y historial de mantenimiento/crecimiento del dividendo."
+            )
         elif ctype == 'value':
-            horizon = "12-24 meses"
-            type_note = "Empresa de valor: esperar catalizador de re-rating múltiplo antes de ampliar posición."
+            horizon  = "12-24 meses"
+            if moat_str:
+                type_note = (
+                    f"Empresa Value con {moat_str}: "
+                    "esperar catalizador de re-rating (mejora operativa o cambio de narrativa). "
+                    "El moat protege el downside mientras se espera la convergencia al valor intrínseco."
+                )
+            else:
+                type_note = (
+                    "Empresa de valor sin moat diferenciado: "
+                    "esperar catalizador concreto de re-rating múltiplo antes de ampliar posición; "
+                    "riesgo de value trap si el negocio no genera FCF creciente."
+                )
         else:
-            horizon = "12-18 meses"
-            type_note = "Perfil mixto: diversificar entre crecimiento y generación de valor."
+            horizon  = "12-18 meses"
+            type_note = "Perfil mixto (Blend): diversificar entre crecimiento y generación de valor."
+
+        # Build actionable advice by recommendation + type
+        entry = current_price * 0.97
+        upside_str = f"+{upside_pct:.0f}%" if upside_pct > 0 else f"{upside_pct:.0f}%"
 
         if recommendation in ["Strong Buy", "Buy"]:
-            entry = current_price * 0.97
-            upside_str = f"+{upside_pct:.0f}%" if upside_pct > 0 else f"{upside_pct:.0f}%"
-            actionable = (
-                f"ACUMULAR: Entrada óptima en ${entry:.2f} (3% descuento). "
-                f"Objetivo: ${target_price:.2f} ({upside_str}). "
-                f"Stop-loss: {stop_reason}. "
-                f"Horizonte: {horizon}. "
-                f"{type_note}"
-            )
+            if ctype == 'growth' and growth_premium:
+                # Growth stock appearing "overvalued" by traditional metrics but moat justifies it
+                actionable = (
+                    f"ACUMULAR con consciencia del premium: "
+                    f"Entrada escalonada — 50% en ${entry:.2f}, resto si confirma soporte. "
+                    f"Objetivo: ${target_price:.2f} ({upside_str}). "
+                    f"Stop disciplinado: {stop_reason}. "
+                    f"Horizonte: {horizon}. "
+                    f"{type_note}"
+                )
+            elif ctype == 'dividend':
+                actionable = (
+                    f"ACUMULAR / REINVERSIÓN DE DIVIDENDOS: "
+                    f"Entrada en ${entry:.2f}. Objetivo: ${target_price:.2f} ({upside_str}) + rendimiento por dividendo. "
+                    f"Stop: {stop_reason}. "
+                    f"Horizonte: {horizon}. "
+                    f"{type_note}"
+                )
+            else:
+                actionable = (
+                    f"ACUMULAR: Entrada óptima en ${entry:.2f} (3% descuento al spot). "
+                    f"Objetivo: ${target_price:.2f} ({upside_str}). "
+                    f"Stop-loss: {stop_reason}. "
+                    f"Horizonte: {horizon}. "
+                    f"{type_note}"
+                )
         elif recommendation == "Hold":
-            actionable = (
-                f"MANTENER: Posición justificada con sesgo neutral. "
-                f"Tomar ganancias parciales si supera ${target_high:.2f}. "
-                f"Re-evaluar si rompe soporte en {stop_reason}. "
-                f"{type_note}"
-            )
+            if ctype == 'growth' and moat > 0.55:
+                actionable = (
+                    f"MANTENER + monitoreo activo: "
+                    f"Pese a valoración ajustada, {moat_str or 'el moat'} justifica la posición. "
+                    f"Tomar ganancias parciales si supera ${target_high:.2f} sin aceleración de EPS. "
+                    f"Re-evaluar urgente si rompe {stop_reason}. "
+                    f"Horizonte: {horizon}."
+                )
+            else:
+                actionable = (
+                    f"MANTENER: Posición justificada con sesgo neutral. "
+                    f"Tomar ganancias parciales si supera ${target_high:.2f}. "
+                    f"Re-evaluar si rompe soporte en {stop_reason}. "
+                    f"{type_note}"
+                )
         else:
             sell_pct = min(70, max(30, int(abs(upside_pct) * 2)))
-            actionable = (
-                f"REDUCIR: Vender ~{sell_pct}% de posición progresivamente. "
-                f"Conservar resto en rebotes hacia ${current_price * 1.05:.2f}. "
-                f"Stop duro en {stop_reason}. "
-                f"No promediar a la baja."
-            )
+            if ctype == 'growth' and moat > 0.65:
+                # Even sell-rated growth + high moat: suggest partial reduction, not full exit
+                actionable = (
+                    f"REDUCIR GRADUALMENTE (~{min(sell_pct, 40)}%): "
+                    f"Pese a señales bajistas, {moat_str or 'moat elevado'} limita el downside. "
+                    f"Conservar núcleo de posición; stop duro en {stop_reason}. "
+                    f"Re-evaluar si próximo trimestre muestra aceleración de ingresos. "
+                    f"{type_note}"
+                )
+            else:
+                actionable = (
+                    f"REDUCIR: Vender ~{sell_pct}% de posición progresivamente. "
+                    f"Conservar resto en rebotes hacia ${current_price * 1.05:.2f}. "
+                    f"Stop duro en {stop_reason}. "
+                    f"No promediar a la baja. {type_note}"
+                )
 
         # Build chain of thought
         chain_of_thought = []
@@ -2983,10 +3265,13 @@ class NeuralResumenEngine:
                 "bayesian_confidence": round(synthesis.confidence, 3),
                 "score_dispersion": synthesis.sub_scores.get('score_dispersion_std', 0),
             },
-            "companyType": getattr(self, '_company_type', 'blend'),
-            "scoreHistory": history_runs[:5],
-            "scoreDelta": score_delta,
-            "scoreTrend": score_trend,
+            "companyType":     getattr(self, '_company_type',    'blend'),
+            "typeConfidence":  round(getattr(self, '_type_confidence', 0.5), 2),
+            "moatScore":       round(getattr(self, '_moat_score',      0.0), 2),
+            "growthPremium":   growth_premium,
+            "scoreHistory":    history_runs[:5],
+            "scoreDelta":      score_delta,
+            "scoreTrend":      score_trend,
         }
 
 
