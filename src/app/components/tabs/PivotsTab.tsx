@@ -259,7 +259,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       { name: 'S3', value: S3, type: 'support' },
       { name: 'S4', value: S4, type: 'support' },
     ];
-  }, [aggregatedData]);
+  }, [pivotBaseBar]);
 
   // Calculate Fibonacci Pivot Points
   const fibonacciPivots = useMemo((): PivotLevel[] | null => {
@@ -279,7 +279,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       { name: 'S2 (61.8%)', value: PP - range * 0.618, type: 'support' },
       { name: 'S3 (100%)', value: PP - range, type: 'support' },
     ];
-  }, [aggregatedData]);
+  }, [pivotBaseBar]);
 
   // Calculate Camarilla Pivot Points
   const camarillaPivots = useMemo((): PivotLevel[] | null => {
@@ -308,7 +308,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       { name: 'L3 (Buy)', value: L3, type: 'support' },
       { name: 'L4 (Breakout)', value: L4, type: 'support' },
     ];
-  }, [aggregatedData]);
+  }, [pivotBaseBar]);
 
   // Calculate Woodie Pivot Points
   const woodiePivots = useMemo((): PivotLevel[] | null => {
@@ -335,7 +335,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       { name: 'S2', value: S2, type: 'support' },
       { name: 'S3', value: S3, type: 'support' },
     ];
-  }, [aggregatedData]);
+  }, [pivotBaseBar, aggregatedData]);
 
   // Calculate DeMark Pivot Points
   const demarkPivots = useMemo((): PivotLevel[] | null => {
@@ -361,7 +361,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       { name: 'PP', value: PP, type: 'pivot' },
       { name: 'S1', value: S1, type: 'support' },
     ];
-  }, [aggregatedData]);
+  }, [pivotBaseBar]);
 
   // Get current pivot method
   const currentPivots = useMemo(() => {

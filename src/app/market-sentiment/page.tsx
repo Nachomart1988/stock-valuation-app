@@ -26,6 +26,17 @@ interface MacroAnalysis {
   vixRegime?: string;
 }
 
+interface SentimentTrends {
+  daily_delta: number | null;
+  weekly_mean: number | null;
+  monthly_delta: number | null;
+  weekly_trend: 'mejorando' | 'deteriorando' | 'estable' | null;
+  ema_score: number;
+  momentum_streak: number;
+  anomaly: boolean;
+  note?: string;
+}
+
 interface MarketSentimentData {
   version: string;
   timestamp: string;
@@ -56,6 +67,7 @@ interface MarketSentimentData {
   signals: MarketSignal[];
   reasoningChain?: string[];
   briefing: string;
+  trends?: SentimentTrends;
 }
 
 function ScoreBar({ score, label }: { score: number; label: string }) {
@@ -365,7 +377,10 @@ export default function MarketSentimentPage() {
             <div className="flex items-center gap-2 sm:gap-4">
               <Logo size="sm" />
               <div>
-                <div className="text-base sm:text-xl font-bold text-white">Market Pulse</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base sm:text-xl font-bold text-white">Market Pulse</span>
+                  <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-900/60 text-cyan-400 border border-cyan-700/50 uppercase tracking-wider">Beta</span>
+                </div>
                 <div className="text-[9px] sm:text-[10px] text-emerald-400 font-mono tracking-[2px] sm:tracking-[3px] uppercase">
                   NEURAL v{data.version}
                 </div>
@@ -454,6 +469,64 @@ export default function MarketSentimentPage() {
           </h3>
           <p className="text-sm sm:text-lg leading-relaxed text-gray-200">{tl(data.briefing)}</p>
         </div>
+
+        {/* ── TEMPORAL TRENDS ── */}
+        {data.trends && !data.trends.note && (
+          <div className="bg-gray-900/60 border border-cyan-800/30 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+            <h3 className="text-base sm:text-lg font-bold text-cyan-400 mb-4 flex items-center gap-2">
+              📈 {locale === 'es' ? 'Tendencia Histórica' : 'Historical Trend'}
+              {data.trends.anomaly && (
+                <span className="ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-900/60 text-red-400 border border-red-700/50 uppercase">⚠️ Anomalía</span>
+              )}
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* EMA Score */}
+              <div className="bg-gray-800/50 rounded-xl p-3 sm:p-4 text-center border border-cyan-800/20">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                  {locale === 'es' ? 'Score EMA' : 'EMA Score'}
+                </div>
+                <div className={`text-2xl sm:text-3xl font-black ${data.trends.ema_score >= 60 ? 'text-emerald-400' : data.trends.ema_score >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {data.trends.ema_score.toFixed(1)}
+                </div>
+                <div className="text-[9px] text-gray-600 mt-0.5">α=0.3 EMA</div>
+              </div>
+              {/* Daily delta */}
+              <div className="bg-gray-800/50 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                  {locale === 'es' ? 'Δ Día' : 'Δ Day'}
+                </div>
+                <div className={`text-2xl sm:text-3xl font-black ${data.trends.daily_delta === null ? 'text-gray-500' : data.trends.daily_delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {data.trends.daily_delta === null ? '—' : `${data.trends.daily_delta > 0 ? '+' : ''}${data.trends.daily_delta.toFixed(1)}`}
+                </div>
+                <div className="text-[9px] text-gray-600 mt-0.5">{locale === 'es' ? 'vs ayer' : 'vs yesterday'}</div>
+              </div>
+              {/* Weekly mean */}
+              <div className="bg-gray-800/50 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                  {locale === 'es' ? 'Media 7d' : '7d Mean'}
+                </div>
+                <div className={`text-2xl sm:text-3xl font-black ${data.trends.weekly_mean === null ? 'text-gray-500' : data.trends.weekly_mean >= 60 ? 'text-green-400' : data.trends.weekly_mean >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {data.trends.weekly_mean === null ? '—' : data.trends.weekly_mean.toFixed(1)}
+                </div>
+                <div className={`text-[9px] mt-0.5 ${data.trends.weekly_trend === 'mejorando' ? 'text-green-500' : data.trends.weekly_trend === 'deteriorando' ? 'text-red-500' : 'text-gray-500'}`}>
+                  {data.trends.weekly_trend ?? ''}
+                </div>
+              </div>
+              {/* Monthly delta */}
+              <div className="bg-gray-800/50 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                  {locale === 'es' ? 'Δ 30d' : 'Δ 30d'}
+                </div>
+                <div className={`text-2xl sm:text-3xl font-black ${data.trends.monthly_delta === null ? 'text-gray-500' : data.trends.monthly_delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {data.trends.monthly_delta === null ? '—' : `${data.trends.monthly_delta > 0 ? '+' : ''}${data.trends.monthly_delta.toFixed(1)}`}
+                </div>
+                <div className="text-[9px] text-gray-600 mt-0.5">
+                  {data.trends.momentum_streak > 0 ? `${data.trends.momentum_streak}d ${locale === 'es' ? 'racha' : 'streak'}` : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── ACTIONABLE ADVICE ── */}
         {data.actionableAdvice && (

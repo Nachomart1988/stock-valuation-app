@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import logging
 import numpy as np
+import sqlite3
+import os
 from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass, field
 from enum import Enum
 import re
-import os
 from collections import defaultdict
 import math
+from datetime import datetime
 from scipy.stats import linregress
 from spectral_cycle_analyzer import SpectralCycleAnalyzer, HistoricalDataFetcher
 
@@ -605,6 +607,8 @@ class TechnicalAnalysisEngine:
         if 'support' in pivot_data and isinstance(pivot_data['support'], dict):
             supp = pivot_data['support']
             support_levels.extend([supp.get('S1'), supp.get('S2'), supp.get('S3')])
+            if supp.get('S1'):
+                self._pivot_s1 = supp['S1']  # store for advice personalization
         if 'resistance' in pivot_data and isinstance(pivot_data['resistance'], dict):
             res = pivot_data['resistance']
             resistance_levels.extend([res.get('R1'), res.get('R2'), res.get('R3')])
@@ -982,12 +986,14 @@ class ValuationEnsemble:
                 ))
             elif spread > 0.4:
                 model_agreement = 'weak'
-                signals.append(Signal(
-                    source="Valuation",
-                    signal_type=SignalType.CAUTIONARY,
-                    strength=0.5,
-                    description="High valuation uncertainty (wide confidence interval)"
-                ))
+                # Only flag uncertainty when enough models contributed (1-2 models always diverge)
+                if experts_used >= 3:
+                    signals.append(Signal(
+                        source="Valuation",
+                        signal_type=SignalType.CAUTIONARY,
+                        strength=0.5,
+                        description="High valuation uncertainty (wide confidence interval)"
+                    ))
             else:
                 model_agreement = 'moderate'
         else:
@@ -1406,6 +1412,61 @@ class ForecastAnalyzer:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# SQLITE HISTORY STORE (per-ticker snapshots)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_DB_PATH = os.path.join(os.path.dirname(__file__), 'resumen_history.db')
+
+def _init_resumen_db():
+    try:
+        with sqlite3.connect(_DB_PATH) as conn:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS resumen_snapshots (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticker          TEXT NOT NULL,
+                    ts              TEXT NOT NULL,
+                    final_score     REAL,
+                    recommendation  TEXT,
+                    target_price    REAL,
+                    upside_pct      REAL
+                )
+            ''')
+            conn.commit()
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"[Resumen DB] init failed: {e}")
+
+_init_resumen_db()
+
+def _save_resumen_snapshot(ticker: str, score: float, recommendation: str,
+                            target_price: float, upside_pct: float):
+    try:
+        with sqlite3.connect(_DB_PATH) as conn:
+            conn.execute(
+                'INSERT INTO resumen_snapshots (ticker,ts,final_score,recommendation,target_price,upside_pct) VALUES (?,?,?,?,?,?)',
+                (ticker.upper(), datetime.utcnow().isoformat(),
+                 round(score, 2), recommendation, round(target_price, 2), round(upside_pct, 2))
+            )
+            conn.commit()
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"[Resumen DB] save failed: {e}")
+
+def _load_resumen_history(ticker: str, limit: int = 6) -> list:
+    try:
+        with sqlite3.connect(_DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                'SELECT ts,final_score,recommendation,target_price,upside_pct FROM resumen_snapshots WHERE ticker=? ORDER BY ts DESC LIMIT ?',
+                (ticker.upper(), limit)
+            ).fetchall()
+        return [{'ts': r['ts'], 'finalScore': r['final_score'],
+                 'recommendation': r['recommendation'],
+                 'targetPrice': r['target_price'], 'upsidePct': r['upside_pct']} for r in rows]
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"[Resumen DB] load failed: {e}")
+        return []
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MAIN NEURAL REASONING ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1452,6 +1513,8 @@ class NeuralResumenEngine:
         self.data_fetcher = None  # Initialized when API key is available
 
         self.layer_results: List[LayerResult] = []
+        self._company_type: str = 'blend'
+        self._pivot_s1: Optional[float] = None
 
         # ── Configurable layer weights (default values, can be tuned) ──
         self.base_weights: Dict[str, float] = base_weights or {
@@ -1549,14 +1612,21 @@ class NeuralResumenEngine:
         )
 
         # Infer stock style for weighted quality scoring
-        # Heuristic: if SGR > 15% -> growth, if P/E < 15 or dividend > 2% -> value
         _sgr = data.get('sustainableGrowthRate', 0) or 0
         _sgr_pct = _sgr * 100 if _sgr < 1 else _sgr
+        _avn = data.get('advanceValueNet') or {}
+        _pe = _avn.get('pe_ratio', 999) or 999
+        _div_yield = _avn.get('dividend_yield', 0) or 0
+        _div_yield_pct = _div_yield * 100 if _div_yield < 1 else _div_yield
+
         stock_style = 'blend'
         if _sgr_pct > 15:
             stock_style = 'growth'
-        elif data.get('advanceValueNet', {}).get('pe_ratio', 999) < 15:
+        elif _div_yield_pct > 3:
+            stock_style = 'dividend'
+        elif _pe < 15:
             stock_style = 'value'
+        self._company_type = stock_style
 
         # Layer 6: Quality
         quality_result = self._layer6_quality(data.get('companyQualityNet'), stock_style=stock_style)
@@ -2739,26 +2809,48 @@ class NeuralResumenEngine:
 
         summary_text += f"El precio objetivo de ${target_price:.2f} implica un {'potencial alcista' if upside_pct > 0 else 'riesgo de caída'} del {abs(upside_pct):.1f}%."
 
-        # Actionable advice
+        # Actionable advice — personalized by company type + pivot S1 stop-loss
+        ctype = getattr(self, '_company_type', 'blend')
+        s1 = getattr(self, '_pivot_s1', None)
+        effective_stop = s1 if (s1 and s1 < current_price * 0.98) else current_price * 0.88
+        stop_reason = f"S1 ${effective_stop:.2f}" if (s1 and s1 < current_price * 0.98) else f"-12% (${effective_stop:.2f})"
+
+        if ctype == 'growth':
+            horizon = "6-12 meses"
+            type_note = "Empresa de crecimiento: priorizar momentum y revisiones al alza de EPS."
+        elif ctype == 'dividend':
+            horizon = "12-24 meses"
+            type_note = "Empresa dividendera: verificar sostenibilidad del pago y cobertura de FCF."
+        elif ctype == 'value':
+            horizon = "12-24 meses"
+            type_note = "Empresa de valor: esperar catalizador de re-rating múltiplo antes de ampliar posición."
+        else:
+            horizon = "12-18 meses"
+            type_note = "Perfil mixto: diversificar entre crecimiento y generación de valor."
+
         if recommendation in ["Strong Buy", "Buy"]:
             entry = current_price * 0.97
-            stop_loss = current_price * 0.88
+            upside_str = f"+{upside_pct:.0f}%" if upside_pct > 0 else f"{upside_pct:.0f}%"
             actionable = (
                 f"ACUMULAR: Entrada óptima en ${entry:.2f} (3% descuento). "
-                f"Objetivo: ${target_price:.2f} (+{upside_pct:.0f}%). "
-                f"Stop-loss: ${stop_loss:.2f} (-12%). "
-                f"Horizonte: 12-18 meses."
+                f"Objetivo: ${target_price:.2f} ({upside_str}). "
+                f"Stop-loss: {stop_reason}. "
+                f"Horizonte: {horizon}. "
+                f"{type_note}"
             )
         elif recommendation == "Hold":
             actionable = (
-                f"MANTENER: Posición actual justificada. "
-                f"Monitorear catalizadores. Tomar ganancias parciales si supera ${target_high:.2f}. "
-                f"Re-evaluar si rompe ${current_price * 0.92:.2f}."
+                f"MANTENER: Posición justificada con sesgo neutral. "
+                f"Tomar ganancias parciales si supera ${target_high:.2f}. "
+                f"Re-evaluar si rompe soporte en {stop_reason}. "
+                f"{type_note}"
             )
         else:
+            sell_pct = min(70, max(30, int(abs(upside_pct) * 2)))
             actionable = (
-                f"REDUCIR: Vender {abs(upside_pct):.0f}% de posición inmediatamente. "
-                f"Resto en rebotes técnicos hacia ${current_price * 1.05:.2f}. "
+                f"REDUCIR: Vender ~{sell_pct}% de posición progresivamente. "
+                f"Conservar resto en rebotes hacia ${current_price * 1.05:.2f}. "
+                f"Stop duro en {stop_reason}. "
                 f"No promediar a la baja."
             )
 
@@ -2848,6 +2940,17 @@ class NeuralResumenEngine:
         if synthesis.sub_scores and 'sensitivity' in synthesis.sub_scores:
             sensitivity_data = synthesis.sub_scores['sensitivity']
 
+        # ── History: save snapshot + compute delta ──
+        _ticker = data.get('ticker', 'UNKNOWN')
+        _save_resumen_snapshot(_ticker, final_score, recommendation, target_price, upside_pct)
+        history_runs = _load_resumen_history(_ticker, limit=6)
+        score_delta = None
+        score_trend = 'stable'
+        if len(history_runs) >= 2:
+            prev_score = history_runs[1]['finalScore']
+            score_delta = round(final_score - prev_score, 1)
+            score_trend = 'improving' if score_delta > 1 else 'deteriorating' if score_delta < -1 else 'stable'
+
         return {
             "finalRecommendation": recommendation,
             "conviction": conviction,
@@ -2879,7 +2982,11 @@ class NeuralResumenEngine:
                 "combined_risk_score": round(combined_risk, 1),
                 "bayesian_confidence": round(synthesis.confidence, 3),
                 "score_dispersion": synthesis.sub_scores.get('score_dispersion_std', 0),
-            }
+            },
+            "companyType": getattr(self, '_company_type', 'blend'),
+            "scoreHistory": history_runs[:5],
+            "scoreDelta": score_delta,
+            "scoreTrend": score_trend,
         }
 
 

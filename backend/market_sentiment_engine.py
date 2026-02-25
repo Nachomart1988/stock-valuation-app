@@ -11,6 +11,7 @@ import logging
 import math
 import numpy as np
 import os
+import sqlite3
 import requests
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
@@ -294,12 +295,177 @@ class NeuralReasoningMarketSentimentEngine:
         'default': 300,    # Fallback
     }
 
-    def __init__(self):
+    def __init__(self, db_path: str = 'sentiment.db'):
         self.version = "6.0"
         self.news_analyzer = AdvancedNewsSentimentAnalyzer()
         self._cache: Dict[str, Any] = {}
         self._cache_ttl = 300  # default 5 min cache (used by _fetch_stable/_fetch_v3)
         self._session = requests.Session()
+        self._db_path = db_path
+        self._init_db()
+
+    def _init_db(self):
+        """Initialize SQLite DB for historical snapshot persistence."""
+        try:
+            with sqlite3.connect(self._db_path) as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS sentiment_snapshots (
+                        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ts        TEXT NOT NULL,
+                        composite REAL NOT NULL,
+                        news      REAL,
+                        movers    REAL,
+                        sectors   REAL,
+                        indices   REAL,
+                        vix       REAL,
+                        fg        REAL,
+                        ema       REAL
+                    )
+                """)
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"[MSE] DB init failed: {e}")
+
+    def _store_snapshot(self, composite: float, scores: Dict[str, float], ema: float):
+        """Persist a sentiment snapshot to SQLite."""
+        try:
+            ts = datetime.now().isoformat()
+            with sqlite3.connect(self._db_path) as conn:
+                conn.execute(
+                    """INSERT INTO sentiment_snapshots
+                       (ts, composite, news, movers, sectors, indices, vix, fg, ema)
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (
+                        ts,
+                        round(composite, 2),
+                        round(scores.get('news', 50), 2),
+                        round(scores.get('movers', 50), 2),
+                        round(scores.get('sectors', 50), 2),
+                        round(scores.get('indices', 50), 2),
+                        round(scores.get('vix', 50), 2),
+                        round(scores.get('fearGreed', 50), 2),
+                        round(ema, 2),
+                    )
+                )
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"[MSE] Snapshot store failed: {e}")
+
+    def _load_history(self, days: int = 30) -> List[Dict]:
+        """Load recent snapshots from SQLite (last N days)."""
+        try:
+            cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+            with sqlite3.connect(self._db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    """SELECT ts, composite, ema FROM sentiment_snapshots
+                       WHERE ts >= ? ORDER BY ts DESC LIMIT 720""",
+                    (cutoff,)
+                ).fetchall()
+            return [{"ts": r["ts"], "composite": r["composite"], "ema": r["ema"]} for r in rows]
+        except Exception as e:
+            logger.warning(f"[MSE] History load failed: {e}")
+            return []
+
+    def _compute_trends(self, history: List[Dict], current: float) -> Dict:
+        """
+        Compute temporal trends from historical snapshots.
+        Returns daily_delta, weekly_mean, monthly_delta, weekly_trend, ema_score.
+        """
+        if not history:
+            return {
+                "daily_delta": None,
+                "weekly_mean": None,
+                "monthly_delta": None,
+                "weekly_trend": None,
+                "ema_score": current,
+                "momentum_streak": 0,
+                "anomaly": False,
+                "note": "Inicial — trends disponibles post 2+ runs",
+            }
+
+        now = datetime.now()
+        snapshots = []
+        for h in history:
+            try:
+                ts = datetime.fromisoformat(h["ts"])
+                snapshots.append({"ts": ts, "composite": h["composite"], "ema": h.get("ema", h["composite"])})
+            except Exception:
+                continue
+
+        if not snapshots:
+            return {"daily_delta": None, "weekly_mean": None, "monthly_delta": None,
+                    "weekly_trend": None, "ema_score": current, "momentum_streak": 0,
+                    "anomaly": False, "note": "Sin historial válido"}
+
+        # Sort newest first (already from DB ORDER BY ts DESC)
+        snapshots.sort(key=lambda x: x["ts"], reverse=True)
+
+        # EMA smoothing: alpha=0.3
+        prev_ema = snapshots[0]["ema"] if snapshots[0]["ema"] else snapshots[0]["composite"]
+        ema_score = round(0.3 * current + 0.7 * prev_ema, 1)
+
+        # Daily delta: vs the most recent snapshot before now
+        daily_delta = None
+        one_day_ago = now - timedelta(hours=20)  # flexible: within 20h–28h
+        day_old = [s for s in snapshots if s["ts"] < one_day_ago]
+        if day_old:
+            daily_delta = round(current - day_old[0]["composite"], 1)
+
+        # Anomaly: sudden large change within last 2 hours
+        two_hours_ago = now - timedelta(hours=2)
+        recent = [s for s in snapshots if s["ts"] >= two_hours_ago]
+        anomaly = False
+        if recent:
+            delta_1h = abs(current - recent[-1]["composite"])
+            if delta_1h > 30:
+                anomaly = True
+                logger.warning(f"[MSE] ANOMALY: composite changed {delta_1h:.1f} pts in <2h")
+
+        # Weekly mean: snapshots in last 7 days
+        seven_days_ago = now - timedelta(days=7)
+        week_snaps = [s["composite"] for s in snapshots if s["ts"] >= seven_days_ago]
+        weekly_mean = round(float(np.mean(week_snaps)), 1) if len(week_snaps) >= 2 else None
+
+        # Weekly trend label
+        weekly_trend = None
+        if weekly_mean is not None:
+            diff = current - weekly_mean
+            if diff > 5:
+                weekly_trend = "mejorando"
+            elif diff < -5:
+                weekly_trend = "deteriorando"
+            else:
+                weekly_trend = "estable"
+
+        # Monthly delta: vs oldest snapshot within last 30 days
+        thirty_days_ago = now - timedelta(days=30)
+        month_snaps = [s for s in snapshots if s["ts"] >= thirty_days_ago]
+        monthly_delta = None
+        if month_snaps:
+            oldest_month = min(month_snaps, key=lambda x: x["ts"])
+            monthly_delta = round(current - oldest_month["composite"], 1)
+
+        # Momentum streak: consecutive sessions moving same direction
+        streak = 0
+        if len(snapshots) >= 2:
+            direction = 1 if current > snapshots[0]["composite"] else -1
+            for i in range(len(snapshots) - 1):
+                d = 1 if snapshots[i]["composite"] > snapshots[i+1]["composite"] else -1
+                if d == direction:
+                    streak += 1
+                else:
+                    break
+
+        return {
+            "daily_delta": daily_delta,
+            "weekly_mean": weekly_mean,
+            "monthly_delta": monthly_delta,
+            "weekly_trend": weekly_trend,
+            "ema_score": ema_score,
+            "momentum_streak": streak,
+            "anomaly": anomaly,
+        }
 
     # ====================== FMP FETCH HELPERS ======================
 
@@ -760,6 +926,15 @@ class NeuralReasoningMarketSentimentEngine:
         process_time = (datetime.now() - start).total_seconds()
         logger.info(f"Done in {process_time:.3f}s → {rec} (score: {composite:.1f})")
 
+        # TEMPORAL ANALYSIS + EMA LEARNING
+        scores_dict = {
+            "news": news_score, "movers": movers_score, "sectors": sector_score,
+            "indices": index_score, "vix": vix_score, "fearGreed": fg_score,
+        }
+        history = self._load_history(days=30)
+        trends = self._compute_trends(history, composite)
+        self._store_snapshot(composite, scores_dict, trends["ema_score"])
+
         return {
             "version": self.version,
             "timestamp": datetime.now().isoformat(),
@@ -817,6 +992,7 @@ class NeuralReasoningMarketSentimentEngine:
                 hot_sectors, cold_sectors, action, vix_value, fg_score, fg_label,
                 language=language
             ),
+            "trends": trends,
         }
 
     # ====================== LAYER IMPLEMENTATIONS ======================

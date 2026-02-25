@@ -422,7 +422,7 @@ function getArrow(curr: string, prev: string) {
 
 function AnalizarContent() {
   const searchParams = useSearchParams();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const { user, isSignedIn } = useUser();
 
   // Force-refresh user data on mount so publicMetadata is never stale after a plan change
@@ -1066,7 +1066,7 @@ function AnalizarContent() {
     t('analysis.categories.valuations'),
     t('analysis.categories.probability'),
     t('analysis.categories.options'),
-    t('analysis.categories.summary'),
+    `${t('analysis.categories.summary')} (Beta)`,
     t('analysis.categories.investorJournal'),
   ];
 
@@ -1503,7 +1503,7 @@ function InicioTab({
   const [loading, setLoading] = useState(true);
   const [technicalIndicators, setTechnicalIndicators] = useState<any>({});
 
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
 
   // Sincronizar inputTicker cuando cambia el ticker activo
   useEffect(() => {
@@ -1781,8 +1781,8 @@ function InicioTab({
             </div>
           </div>
           <div className="flex flex-wrap gap-2 sm:gap-3">
-            {profile?.sector && <span className="px-2 sm:px-4 py-1 sm:py-2 bg-green-600/30 text-green-400 rounded-full text-xs sm:text-sm">{profile.sector}</span>}
-            {profile?.industry && <span className="px-2 sm:px-4 py-1 sm:py-2 bg-emerald-600/30 text-emerald-400 rounded-full text-xs sm:text-sm">{profile.industry}</span>}
+            {profile?.sector && <span className="px-2 sm:px-4 py-1 sm:py-2 bg-green-600/30 text-green-400 rounded-full text-xs sm:text-sm">{(locale === 'es' && SECTOR_ES[profile.sector]) ? SECTOR_ES[profile.sector] : profile.sector}</span>}
+            {profile?.industry && <span className="px-2 sm:px-4 py-1 sm:py-2 bg-emerald-600/30 text-emerald-400 rounded-full text-xs sm:text-sm">{(locale === 'es' && INDUSTRY_ES[profile.industry]) ? INDUSTRY_ES[profile.industry] : profile.industry}</span>}
             {profile?.exchangeShortName && <span className="px-2 sm:px-4 py-1 sm:py-2 bg-green-600/30 text-green-400 rounded-full text-xs sm:text-sm">{profile.exchangeShortName}</span>}
             {currencyInfo && (
               <span className="px-2 sm:px-4 py-1 sm:py-2 bg-amber-600/30 text-amber-400 rounded-full text-xs sm:text-sm" title={`Original: ${currencyInfo.original} → USD (rate: ${currencyInfo.rate.toFixed(4)})`}>
@@ -2012,6 +2012,128 @@ const SECTOR_ES: Record<string, string> = {
   'Communication Services': 'Servicios de Comunicación',
 };
 
+const INDUSTRY_ES: Record<string, string> = {
+  'Software - Application': 'Software - Aplicaciones',
+  'Software - Infrastructure': 'Software - Infraestructura',
+  'Semiconductors': 'Semiconductores',
+  'Semiconductor Equipment & Materials': 'Equipos y Materiales Semiconductores',
+  'Consumer Electronics': 'Electrónica de Consumo',
+  'Computer Hardware': 'Hardware Informático',
+  'Internet Content & Information': 'Contenido e Información en Internet',
+  'Electronic Components': 'Componentes Electrónicos',
+  'Communication Equipment': 'Equipos de Comunicación',
+  'Drug Manufacturers - General': 'Fabricantes de Medicamentos',
+  'Biotechnology': 'Biotecnología',
+  'Medical Devices': 'Dispositivos Médicos',
+  'Diagnostics & Research': 'Diagnóstico e Investigación',
+  'Health Care Plans': 'Planes de Salud',
+  'Medical Instruments & Supplies': 'Instrumentos Médicos',
+  'Banks - Regional': 'Bancos Regionales',
+  'Banks - Diversified': 'Bancos Diversificados',
+  'Asset Management': 'Gestión de Activos',
+  'Insurance - Diversified': 'Seguros Diversificados',
+  'Capital Markets': 'Mercados de Capitales',
+  'Credit Services': 'Servicios de Crédito',
+  'Insurance - Property & Casualty': 'Seguros - Propiedad y Accidentes',
+  'Oil & Gas Integrated': 'Petróleo y Gas Integrado',
+  'Oil & Gas E&P': 'Exploración y Producción de Petróleo',
+  'Oil & Gas Midstream': 'Midstream de Petróleo y Gas',
+  'Oil & Gas Equipment & Services': 'Equipos y Servicios de Petróleo',
+  'Specialty Retail': 'Comercio Minorista Especializado',
+  'Internet Retail': 'Comercio en Línea',
+  'Discount Stores': 'Tiendas de Descuento',
+  'Grocery Stores': 'Supermercados',
+  'Restaurants': 'Restaurantes',
+  'Auto Manufacturers': 'Fabricantes de Automóviles',
+  'Auto Parts': 'Refacciones Automotrices',
+  'Airlines': 'Aerolíneas',
+  'Trucking': 'Transporte de Carga',
+  'Railroads': 'Ferrocarriles',
+  'Real Estate - Diversified': 'Bienes Raíces Diversificados',
+  'REIT - Retail': 'REIT - Comercio',
+  'REIT - Residential': 'REIT - Residencial',
+  'REIT - Office': 'REIT - Oficinas',
+  'REIT - Industrial': 'REIT - Industrial',
+  'Utilities - Regulated Electric': 'Eléctricas Reguladas',
+  'Utilities - Diversified': 'Servicios Públicos Diversificados',
+  'Agricultural Inputs': 'Insumos Agrícolas',
+  'Specialty Chemicals': 'Químicos Especializados',
+  'Steel': 'Acero',
+  'Gold': 'Oro',
+  'Telecom Services': 'Servicios de Telecomunicaciones',
+  'Entertainment': 'Entretenimiento',
+  'Electronic Gaming & Multimedia': 'Videojuegos y Multimedia',
+  'Advertising Agencies': 'Agencias de Publicidad',
+  'Aerospace & Defense': 'Aeroespacial y Defensa',
+  'Industrial Machinery': 'Maquinaria Industrial',
+  'Electrical Equipment & Parts': 'Equipos Eléctricos',
+  'Engineering & Construction': 'Ingeniería y Construcción',
+  'Farm & Construction Equipment': 'Equipos Agrícolas e Industriales',
+  'Packaging & Containers': 'Envases y Embalajes',
+  'Paper & Paper Products': 'Papel y Productos de Papel',
+  'Staffing & Employment Services': 'Servicios de Empleo',
+};
+
+const COUNTRY_ES: Record<string, string> = {
+  'US': 'Estados Unidos', 'United States': 'Estados Unidos',
+  'GB': 'Reino Unido', 'United Kingdom': 'Reino Unido',
+  'DE': 'Alemania', 'Germany': 'Alemania',
+  'FR': 'Francia', 'France': 'Francia',
+  'JP': 'Japón', 'Japan': 'Japón',
+  'CN': 'China', 'China': 'China',
+  'CA': 'Canadá', 'Canada': 'Canadá',
+  'AU': 'Australia', 'Australia': 'Australia',
+  'CH': 'Suiza', 'Switzerland': 'Suiza',
+  'NL': 'Países Bajos', 'Netherlands': 'Países Bajos',
+  'SE': 'Suecia', 'Sweden': 'Suecia',
+  'KR': 'Corea del Sur', 'South Korea': 'Corea del Sur',
+  'IN': 'India', 'India': 'India',
+  'BR': 'Brasil', 'Brazil': 'Brasil',
+  'MX': 'México', 'Mexico': 'México',
+  'IL': 'Israel', 'Israel': 'Israel',
+  'IE': 'Irlanda', 'Ireland': 'Irlanda',
+  'SG': 'Singapur', 'Singapore': 'Singapur',
+  'HK': 'Hong Kong', 'Hong Kong': 'Hong Kong',
+  'TW': 'Taiwán', 'Taiwan': 'Taiwán',
+  'ES': 'España', 'Spain': 'España',
+  'IT': 'Italia', 'Italy': 'Italia',
+  'NO': 'Noruega', 'Norway': 'Noruega',
+  'DK': 'Dinamarca', 'Denmark': 'Dinamarca',
+  'FI': 'Finlandia', 'Finland': 'Finlandia',
+  'NZ': 'Nueva Zelanda', 'New Zealand': 'Nueva Zelanda',
+  'ZA': 'Sudáfrica', 'South Africa': 'Sudáfrica',
+  'AR': 'Argentina', 'Argentina': 'Argentina',
+  'CL': 'Chile', 'Chile': 'Chile',
+  'CO': 'Colombia', 'Colombia': 'Colombia',
+  'PT': 'Portugal', 'Portugal': 'Portugal',
+  'BE': 'Bélgica', 'Belgium': 'Bélgica',
+};
+
+const EXEC_TITLE_ES: Record<string, string> = {
+  'Chief Executive Officer': 'Director Ejecutivo (CEO)',
+  'Chief Financial Officer': 'Director Financiero (CFO)',
+  'Chief Operating Officer': 'Director de Operaciones (COO)',
+  'Chief Technology Officer': 'Director de Tecnología (CTO)',
+  'Chief Marketing Officer': 'Director de Marketing (CMO)',
+  'Chief Information Officer': 'Director de Información (CIO)',
+  'Chief Revenue Officer': 'Director de Ingresos (CRO)',
+  'Chief Product Officer': 'Director de Producto (CPO)',
+  'Chief Legal Officer': 'Director Legal (CLO)',
+  'Chief Human Resources Officer': 'Director de RRHH (CHRO)',
+  'President': 'Presidente',
+  'Chairman': 'Presidente del Consejo',
+  'General Counsel': 'Asesor General',
+  'Secretary': 'Secretario',
+  'Vice President': 'Vicepresidente',
+  'Director': 'Director',
+  'Senior Vice President': 'Vicepresidente Senior',
+  'Executive Vice President': 'Vicepresidente Ejecutivo',
+  'Founder': 'Fundador',
+  'Co-Founder': 'Co-Fundador',
+  'Managing Director': 'Director General',
+  'Interim Chief Executive Officer': 'Director Ejecutivo Interino',
+};
+
 function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; ticker: string }) {
   const { locale } = useLanguage();
   const es = locale === 'es';
@@ -2068,14 +2190,17 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
         <h3 className="text-xl sm:text-3xl font-bold text-gray-100 mb-4 sm:mb-8">
           {es ? 'Información Básica' : 'Basic Information'}
         </h3>
+        {es && profile.description && (
+          <p className="text-xs text-gray-500 italic mb-1">Descripción disponible solo en inglés (fuente: API financiera)</p>
+        )}
         <p className="text-sm sm:text-xl text-gray-300 leading-relaxed mb-4 sm:mb-8">
           {profile.description || (es ? 'No hay descripción disponible.' : 'No description available.')}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 text-sm sm:text-xl">
           <p><strong className="text-gray-200">{es ? 'Sector' : 'Sector'}:</strong> {(es && profile.sector && SECTOR_ES[profile.sector]) ? SECTOR_ES[profile.sector] : profile.sector || 'N/A'}</p>
-          <p><strong className="text-gray-200">{es ? 'Industria' : 'Industry'}:</strong> {profile.industry || 'N/A'}</p>
+          <p><strong className="text-gray-200">{es ? 'Industria' : 'Industry'}:</strong> {(es && profile.industry && INDUSTRY_ES[profile.industry]) ? INDUSTRY_ES[profile.industry] : profile.industry || 'N/A'}</p>
           <p><strong className="text-gray-200">CEO:</strong> {profile.ceo || 'N/A'}</p>
-          <p><strong className="text-gray-200">{es ? 'País' : 'Country'}:</strong> {profile.country || 'N/A'}</p>
+          <p><strong className="text-gray-200">{es ? 'País' : 'Country'}:</strong> {(es && profile.country && COUNTRY_ES[profile.country]) ? COUNTRY_ES[profile.country] : profile.country || 'N/A'}</p>
           <p><strong className="text-gray-200">{es ? 'Empleados' : 'Employees'}:</strong> {profile.fullTimeEmployees ? Number(profile.fullTimeEmployees).toLocaleString() : 'N/A'}</p>
           <p><strong className="text-gray-200">{es ? 'IPO' : 'IPO Date'}:</strong> {profile.ipoDate || 'N/A'}</p>
           <p>
@@ -2170,7 +2295,7 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
                 </div>
                 <div className="flex-1">
                   <p className="text-lg font-semibold text-gray-100">{exec.name || 'N/A'}</p>
-                  <p className="text-sm text-gray-400">{exec.title || 'N/A'}</p>
+                  <p className="text-sm text-gray-400">{(es && exec.title && EXEC_TITLE_ES[exec.title]) ? EXEC_TITLE_ES[exec.title] : exec.title || 'N/A'}</p>
                   {exec.pay && (
                     <p className="text-sm text-green-400">{es ? 'Compensación' : 'Compensation'}: ${formatNumber(exec.pay)}</p>
                   )}

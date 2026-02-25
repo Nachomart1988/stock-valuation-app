@@ -61,6 +61,10 @@ interface ResumenData {
   synthesisDetails: SynthesisDetails;
   dataQuality: DataQuality;
   spectralCycles?: SpectralCycleData | null;
+  companyType?: 'growth' | 'value' | 'dividend' | 'blend';
+  scoreHistory?: { ts: string; finalScore: number; recommendation: string; targetPrice: number; upsidePct: number }[];
+  scoreDelta?: number | null;
+  scoreTrend?: 'improving' | 'deteriorating' | 'stable';
 }
 
 interface ResumenTabProps {
@@ -119,6 +123,57 @@ export default function ResumenTab({
     };
     return map[r] || r;
   };
+
+  const tlSignal = (s: string): string => {
+    if (!es) return s;
+    return s
+      .replace('Significantly undervalued', 'Significativamente subvalorado')
+      .replace('Undervalued', 'Subvalorado')
+      .replace('Mildly undervalued', 'Ligeramente subvalorado')
+      .replace('Overvalued', 'Sobrevalorado')
+      .replace('Slightly overvalued', 'Ligeramente sobrevalorado')
+      .replace('upside', 'potencial alcista')
+      .replace('downside risk', 'riesgo de caída')
+      .replace('High model agreement', 'Alta coincidencia de modelos')
+      .replace('High valuation uncertainty', 'Alta incertidumbre de valuación')
+      .replace('wide confidence interval', 'intervalo de confianza amplio')
+      .replace('tight confidence interval', 'intervalo de confianza estrecho')
+      .replace('Robust analysis', 'Análisis robusto')
+      .replace('valuation models used', 'modelos de valuación usados')
+      .replace('Strong Q/Q accumulation', 'Fuerte acumulación trimestral')
+      .replace('Q/Q accumulation', 'Acumulación trimestral')
+      .replace('Institutional distribution', 'Distribución institucional')
+      .replace('High insider selling', 'Alta venta de insiders')
+      .replace('Insider buying detected', 'Compra de insiders detectada')
+      .replace('High volatility', 'Alta volatilidad')
+      .replace('Strong technical setup', 'Configuración técnica fuerte')
+      .replace('Bearish technical setup', 'Configuración técnica bajista')
+      .replace('Positive news momentum', 'Impulso noticioso positivo')
+      .replace('Negative news sentiment', 'Sentimiento negativo en noticias')
+      .replace('improving', 'mejorando')
+      .replace('deteriorating', 'deteriorando')
+      .replace('stable', 'estable')
+      .replace('premium', 'prima');
+  };
+
+  const tlCatalyst = (c: string): string => {
+    if (!es) return c;
+    return c
+      .replace('Potential earnings beat', 'Posible superación de estimaciones')
+      .replace('Multiple expansion', 'Expansión de múltiplos')
+      .replace('Operational improvement', 'Mejora operativa')
+      .replace('Blended fair value', 'Valor justo combinado')
+      .replace('above current price', 'por encima del precio actual')
+      .replace('analyst consensus', 'consenso de analistas');
+  };
+
+  const COMPANY_TYPE_LABEL: Record<string, string> = {
+    growth: es ? 'Crecimiento' : 'Growth',
+    value: es ? 'Valor' : 'Value',
+    dividend: es ? 'Dividendos' : 'Dividend',
+    blend: es ? 'Mixto' : 'Blend',
+  };
+
   const [resumen, setResumen] = useState<ResumenData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -659,9 +714,20 @@ export default function ResumenTab({
 
   return (
     <div className="space-y-8">
+      {/* Header with (Beta) badge */}
+      <div className="flex items-center gap-3">
+        <h2 className="text-lg font-bold text-gray-100">{es ? 'Resumen Maestro' : 'Master Summary'}</h2>
+        <span className="px-2 py-0.5 text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-full">Beta</span>
+        {resumen?.companyType && (
+          <span className="px-2 py-0.5 text-xs font-medium bg-cyan-900/40 text-cyan-400 border border-cyan-700/30 rounded-full">
+            {COMPANY_TYPE_LABEL[resumen.companyType] ?? resumen.companyType}
+          </span>
+        )}
+      </div>
+
       {/* Data Quality Indicator + Refresh Button */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-900/50 rounded-xl border border-gray-800">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           {dataQuality && (
             <>
               <span className="text-xs text-gray-500 uppercase tracking-wider">{es ? 'Calidad de Datos' : 'Data Quality'}</span>
@@ -683,6 +749,27 @@ export default function ResumenTab({
             <span className="text-xs text-violet-400 bg-violet-900/30 px-2 py-0.5 rounded-lg border border-violet-700/40">
               Avg Valuaciones: ${averageValuation.toFixed(2)}
             </span>
+          )}
+          {/* Score history minibar */}
+          {resumen?.scoreHistory && resumen.scoreHistory.length > 1 && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-500">{es ? 'Historial' : 'History'}:</span>
+              {resumen.scoreHistory.slice(0, 5).map((h, i) => (
+                <span key={i} className={`font-mono ${h.finalScore >= 60 ? 'text-emerald-400' : h.finalScore >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {h.finalScore?.toFixed(0)}
+                </span>
+              ))}
+              {resumen.scoreDelta !== null && resumen.scoreDelta !== undefined && (
+                <span className={`font-semibold ${resumen.scoreDelta > 0 ? 'text-emerald-400' : resumen.scoreDelta < 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                  ({resumen.scoreDelta > 0 ? '+' : ''}{resumen.scoreDelta})
+                </span>
+              )}
+              {resumen.scoreTrend && resumen.scoreTrend !== 'stable' && (
+                <span className={resumen.scoreTrend === 'improving' ? 'text-emerald-400' : 'text-red-400'}>
+                  {resumen.scoreTrend === 'improving' ? '↑' : '↓'}
+                </span>
+              )}
+            </div>
           )}
         </div>
         <button
@@ -978,7 +1065,7 @@ export default function ResumenTab({
               {keyRisks.map((risk: string, i: number) => (
                 <li key={i} className="flex gap-3 text-gray-300 text-sm">
                   <span className="text-red-500 mt-0.5">•</span>
-                  <span>{risk}</span>
+                  <span>{tlSignal(risk)}</span>
                 </li>
               ))}
             </ul>
@@ -994,7 +1081,7 @@ export default function ResumenTab({
               {catalysts.map((cat: string, i: number) => (
                 <li key={i} className="flex gap-3 text-gray-300 text-sm">
                   <span className="text-emerald-500 mt-0.5">•</span>
-                  <span>{cat}</span>
+                  <span>{tlCatalyst(cat)}</span>
                 </li>
               ))}
             </ul>
