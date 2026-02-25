@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import Header from './components/Header';
 import Logo from './components/Logo';
 
@@ -194,7 +195,7 @@ export default function Home() {
 
           {loadingMarket ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
+              <LogoLoader size="md" />
             </div>
           ) : (
             <div className="grid lg:grid-cols-3 gap-8">

@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 
 function SubscriptionSuccessContent() {
   const searchParams = useSearchParams();
@@ -22,7 +23,7 @@ function SubscriptionSuccessContent() {
     <div className="max-w-md w-full text-center">
       {loading ? (
         <div className="space-y-6">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-green-500 border-t-transparent mx-auto"></div>
+          <LogoLoader size="lg" />
           <h1 className="text-2xl font-bold">Procesando tu suscripción...</h1>
           <p className="text-gray-400">Por favor espera un momento</p>
         </div>
@@ -97,7 +98,7 @@ function SubscriptionSuccessContent() {
 function LoadingFallback() {
   return (
     <div className="max-w-md w-full text-center space-y-6">
-      <div className="animate-spin rounded-full h-16 w-16 border-4 border-green-500 border-t-transparent mx-auto"></div>
+      <LogoLoader size="lg" />
       <h1 className="text-2xl font-bold">Cargando...</h1>
     </div>
   );

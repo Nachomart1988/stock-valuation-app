@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 
 interface KeyMetricsTabProps {
   ticker: string;
@@ -1494,14 +1495,8 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <div className="relative">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-emerald-500 border-t-transparent"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-lg font-bold text-emerald-400">📈</span>
-          </div>
-        </div>
-        <p className="text-xl text-gray-300">{t('keyMetricsTab.loading')}</p>
+      <div className="flex flex-col items-center justify-center py-20">
+        <LogoLoader size="lg" message={t('keyMetricsTab.loading')} />
       </div>
     );
   }
@@ -1601,7 +1596,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
         <div className="bg-gradient-to-br from-green-950 via-emerald-950 to-gray-900 p-8 rounded-3xl border-2 border-emerald-500/50 shadow-2xl">
           {qualityLoading && (
             <div className="flex items-center justify-center py-8 gap-3">
-              <div className="animate-spin rounded-full h-10 w-10 border-4 border-emerald-500 border-t-transparent"></div>
+              <LogoLoader size="sm" />
               <p className="text-emerald-400 text-lg">Analizando calidad con IA...</p>
             </div>
           )}

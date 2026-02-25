@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 
 // ────────────────────────────────────────────────
 // HELPER FUNCTIONS FOR MULTI-STAGE VALUATION MODELS
@@ -1833,14 +1834,8 @@ export default function ValuacionesTab({
   }, [methods, loading, quote, income, balance, profile, sustainableGrowthRate, avgCAPMFromBeta, ticker]);
 
   if (loading) return (
-    <div className="flex flex-col items-center justify-center py-20 gap-4">
-      <div className="relative">
-        <div className="animate-spin rounded-full h-16 w-16 border-4 border-green-500 border-t-transparent"></div>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-lg font-bold text-green-400">$</span>
-        </div>
-      </div>
-      <p className="text-xl text-gray-300">{t('valuacionesTab.loading')}</p>
+    <div className="flex flex-col items-center justify-center py-20">
+      <LogoLoader size="lg" message={t('valuacionesTab.loading')} />
     </div>
   );
 
@@ -2745,7 +2740,7 @@ export default function ValuacionesTab({
             <div className="bg-gradient-to-br from-gray-950 via-gray-800 to-emerald-900/30 p-5 rounded-2xl border-2 border-emerald-500/40 shadow-lg">
               {advanceValueNetLoading && !advanceValueNet && (
                 <div className="flex items-center justify-center py-6 gap-3">
-                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-500 border-t-transparent"></div>
+                  <LogoLoader size="sm" />
                   <p className="text-emerald-400">Consultando Neural Ensemble...</p>
                 </div>
               )}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -264,8 +265,7 @@ export default function AnalisisFinalTab({
       {/* Chart Section */}
       {loading ? (
         <div className="text-center py-16">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
-          <p className="mt-4 text-gray-400 text-lg">{t('analisisFinalTab.loading')}</p>
+          <LogoLoader size="md" message={t('analisisFinalTab.loading')} />
         </div>
       ) : historical.length === 0 ? (
         <div className="text-center py-16 text-gray-400">

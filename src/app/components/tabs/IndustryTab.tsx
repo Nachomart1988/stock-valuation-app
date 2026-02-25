@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 
 interface IndustryTabProps {
   ticker: string;
@@ -192,7 +193,7 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
+        <LogoLoader size="md" />
       </div>
     );
   }

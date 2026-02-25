@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import Header from '@/app/components/Header';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -1866,8 +1867,7 @@ function InicioTab({
       {loading ? (
         <div className="h-[260px] sm:h-[400px] md:h-[550px] bg-gray-700/50 rounded-2xl flex items-center justify-center">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-4 border-green-500 border-t-transparent mb-4 sm:mb-6"></div>
-            <p className="text-gray-400 text-base sm:text-xl">Cargando grafico...</p>
+            <LogoLoader size="lg" message="Cargando grafico..." />
           </div>
         </div>
       ) : historical.length === 0 ? (
@@ -2246,8 +2246,8 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
           {es ? 'Float y Liquidez' : 'Float & Liquidity'}
         </h3>
         {loading ? (
-          <div className="text-center py-8">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-green-500 border-t-transparent"></div>
+          <div className="flex justify-center py-8">
+            <LogoLoader size="sm" />
           </div>
         ) : floatData ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
@@ -2283,8 +2283,8 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
           {es ? 'Ejecutivos Clave' : 'Key Executives'}
         </h3>
         {loading ? (
-          <div className="text-center py-8">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
+          <div className="flex justify-center py-8">
+            <LogoLoader size="sm" />
           </div>
         ) : executives.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3468,8 +3468,7 @@ function AnalistasTab({ priceTarget, ticker }: { priceTarget: any; ticker: strin
 
         {loadingGrades ? (
           <div className="text-center py-10">
-            <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-green-500 border-t-transparent"></div>
-            <p className="mt-4 text-gray-400">Cargando calificaciones...</p>
+            <LogoLoader size="md" message="Cargando calificaciones..." />
           </div>
         ) : grades.length === 0 ? (
           <p className="text-xl text-gray-400 text-center py-10">No hay calificaciones disponibles</p>

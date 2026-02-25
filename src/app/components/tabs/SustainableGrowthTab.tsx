@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 
 interface SGRMethod {
   name: string;
@@ -507,14 +508,8 @@ export default function SustainableGrowthTab({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <div className="relative">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-green-500 border-t-transparent"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-lg font-bold text-green-400">📈</span>
-          </div>
-        </div>
-        <p className="text-xl text-gray-300">{t('sgrTab.loading')}</p>
+      <div className="flex flex-col items-center justify-center py-20">
+        <LogoLoader size="lg" message={t('sgrTab.loading')} />
       </div>
     );
   }

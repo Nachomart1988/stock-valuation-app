@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 
 interface ProbabilityTabProps {
   ticker: string;
@@ -20,6 +21,7 @@ interface ProbabilityResult {
   upProbability: number;
   downProbability: number;
   historicalVolatility: number | null;
+  
   impliedVolatility: number | null;
   volatilityUsed: number;
   volatilitySource: string;
@@ -347,7 +349,7 @@ export default function ProbabilityTab({
       {/* ── Loading ── */}
       {loading && (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-400"></div>
+          <LogoLoader size="md" />
         </div>
       )}
 

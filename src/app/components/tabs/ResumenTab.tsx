@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 
 interface ChainOfThoughtStep {
   step: number;
@@ -364,14 +365,7 @@ export default function ResumenTab({
   if (loading) {
     return (
       <div className="min-h-[600px] flex flex-col items-center justify-center">
-        <div className="relative w-24 h-24">
-          {/* Multi-layer animation */}
-          <div className="absolute inset-0 border-4 border-emerald-500/20 rounded-full animate-ping"></div>
-          <div className="absolute inset-2 border-4 border-emerald-500/30 rounded-full animate-ping" style={{ animationDelay: '0.2s' }}></div>
-          <div className="absolute inset-4 border-4 border-emerald-500/40 rounded-full animate-ping" style={{ animationDelay: '0.4s' }}></div>
-          <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-          <div className="absolute inset-4 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }}></div>
-        </div>
+        <LogoLoader size="xl" />
         <p className="mt-8 text-2xl font-light text-emerald-400">Ejecutando Motor de Razonamiento...</p>
         <div className="flex flex-col items-center gap-2 mt-4 text-gray-500 text-sm">
           <p className="animate-pulse">Layer 1: Ingesta de Datos</p>

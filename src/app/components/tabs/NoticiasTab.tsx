@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { LogoLoader } from '@/app/components/ui/LogoLoader';
 
 interface NoticiasTabProps {
   ticker: string;
@@ -111,8 +112,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
       <div className="space-y-6">
         {loadingNews ? (
           <div className="text-center py-16">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
-            <p className="mt-4 text-gray-400 text-lg">{t('noticiasTab.loading')}</p>
+            <LogoLoader size="md" message={t('noticiasTab.loading')} />
           </div>
         ) : companyNews.length === 0 ? (
           <div className="text-center py-16 text-gray-400">

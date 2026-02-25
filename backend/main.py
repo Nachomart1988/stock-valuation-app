@@ -31,7 +31,7 @@ app = FastAPI(
 # CORS - allow requests from Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:\d+|http://127\.0\.0\.1:\d+",
+    allow_origin_regex=r"https://.*\.vercel\.app|https://(www\.)?prismo\.us|http://localhost:\d+|http://127\.0\.0\.1:\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
