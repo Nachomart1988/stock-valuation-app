@@ -2967,6 +2967,28 @@ class NeuralResumenEngine:
             next((l.score for l in self.layer_results if l.layer_name == "Institutional Flow"), 50)
         )
 
+        # ── Type/moat context vars (used in both narrative and advice) ──
+        ctype = getattr(self, '_company_type',    'blend')
+        moat  = getattr(self, '_moat_score',      0.0)
+        conf  = getattr(self, '_type_confidence', 0.5)
+        s1    = getattr(self, '_pivot_s1',        None)
+        growth_premium = False
+        for lr in self.layer_results:
+            if lr.layer_name == "Valuation Ensemble":
+                growth_premium = lr.sub_scores.get('growth_premium', False)
+                break
+
+        effective_stop = s1 if (s1 and s1 < current_price * 0.98) else current_price * 0.88
+        stop_reason    = (
+            f"S1 ${effective_stop:.2f}" if (s1 and s1 < current_price * 0.98)
+            else f"-12% (${effective_stop:.2f})"
+        )
+        moat_str = (
+            f"moat excepcional ({moat*100:.0f}%)" if moat > 0.75
+            else f"moat sólido ({moat*100:.0f}%)"   if moat > 0.55
+            else None
+        )
+
         # Generate narrative (type-aware)
         quality_desc = (
             "excepcional" if final_score >= 75 else
@@ -3011,26 +3033,6 @@ class NeuralResumenEngine:
         )
 
         # Actionable advice — personalized by company type + pivot S1 stop-loss + moat
-        ctype = getattr(self, '_company_type',    'blend')
-        moat  = getattr(self, '_moat_score',      0.0)
-        conf  = getattr(self, '_type_confidence', 0.5)
-        s1    = getattr(self, '_pivot_s1',        None)
-        growth_premium = False
-        for lr in self.layer_results:
-            if lr.layer_name == "Valuation Ensemble":
-                growth_premium = lr.sub_scores.get('growth_premium', False)
-                break
-
-        effective_stop = s1 if (s1 and s1 < current_price * 0.98) else current_price * 0.88
-        stop_reason    = (
-            f"S1 ${effective_stop:.2f}" if (s1 and s1 < current_price * 0.98)
-            else f"-12% (${effective_stop:.2f})"
-        )
-        moat_str = (
-            f"moat excepcional ({moat*100:.0f}%)" if moat > 0.75
-            else f"moat sólido ({moat*100:.0f}%)"   if moat > 0.55
-            else None
-        )
 
         # Horizon and type-specific context note
         if ctype == 'growth':
