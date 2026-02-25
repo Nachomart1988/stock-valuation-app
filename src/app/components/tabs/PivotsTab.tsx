@@ -102,6 +102,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [lookbackPeriods, setLookbackPeriods] = useState<number>(252); // 1 year default
   const [lookbackInput, setLookbackInput] = useState<string>('252');
+  const [periodOffset, setPeriodOffset] = useState<number>(0); // 0 = last completed, 1 = period before, etc.
   const [pivotMethod, setPivotMethod] = useState<'standard' | 'fibonacci' | 'camarilla' | 'woodie' | 'demark'>('standard');
   const [showHistoricalLevels, setShowHistoricalLevels] = useState(true);
   const [volumeWeighted, setVolumeWeighted] = useState(false);
@@ -215,18 +216,21 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
     return result.slice(0, periodsToReturn);
   }, [priceData, timeframe, lookbackPeriods]);
 
-  // Build pivot base bar from the PREVIOUS completed period only (standard pivot point methodology)
-  // Pivot PP = (H + L + C) / 3 uses the single prior period's OHLC — NOT the aggregate of all periods
+  // Build pivot base bar — uses periodOffset to navigate back in time
+  // periodOffset=0 → last completed period, periodOffset=1 → period before that, etc.
   const pivotBaseBar = useMemo(() => {
-    if (aggregatedData.length < 2) return null;
-    const prev = aggregatedData[1]; // index 0 = current in-progress period, index 1 = last completed
+    // aggregatedData[0] = current in-progress, aggregatedData[1+offset] = target completed period
+    const targetIndex = 1 + periodOffset;
+    if (aggregatedData.length <= targetIndex) return null;
+    const prev = aggregatedData[targetIndex];
     return {
       high: prev.high,
       low: prev.low,
       close: prev.close,
       open: prev.open,
+      date: prev.date,
     };
-  }, [aggregatedData]);
+  }, [aggregatedData, periodOffset]);
 
   // Calculate Standard Pivot Points (Classic)
   const standardPivots = useMemo((): PivotLevel[] | null => {
@@ -668,38 +672,85 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
           </div>
           <div>
             <label className="block text-sm text-gray-300 mb-2">{t('pivotsTab.historicalPeriods')}</label>
-            <input
-              type="number"
-              min="20"
-              max="756"
-              value={lookbackInput}
-              onChange={(e) => {
-                setLookbackInput(e.target.value);
-                const parsed = parseInt(e.target.value);
-                if (!isNaN(parsed) && parsed >= 20 && parsed <= 756) {
-                  setLookbackPeriods(parsed);
-                }
-              }}
-              onBlur={() => {
-                const parsed = parseInt(lookbackInput);
-                if (isNaN(parsed) || parsed < 20) {
-                  setLookbackPeriods(20);
-                  setLookbackInput('20');
-                } else if (parsed > 756) {
-                  setLookbackPeriods(756);
-                  setLookbackInput('756');
-                } else {
-                  setLookbackPeriods(parsed);
-                  setLookbackInput(String(parsed));
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  (e.target as HTMLInputElement).blur();
-                }
-              }}
-              className="w-full px-3 py-2 bg-gray-800 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
-            />
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  const v = Math.max(20, lookbackPeriods - 1);
+                  setLookbackPeriods(v);
+                  setLookbackInput(String(v));
+                }}
+                className="w-8 h-9 flex items-center justify-center bg-gray-700 hover:bg-gray-600 border border-emerald-500/40 rounded-l-lg text-gray-200 font-bold transition select-none"
+              >−</button>
+              <input
+                type="number"
+                min="20"
+                max="756"
+                step="1"
+                value={lookbackInput}
+                onChange={(e) => {
+                  setLookbackInput(e.target.value);
+                  const parsed = parseInt(e.target.value);
+                  if (!isNaN(parsed) && parsed >= 20 && parsed <= 756) {
+                    setLookbackPeriods(parsed);
+                  }
+                }}
+                onBlur={() => {
+                  const parsed = parseInt(lookbackInput);
+                  if (isNaN(parsed) || parsed < 20) {
+                    setLookbackPeriods(20);
+                    setLookbackInput('20');
+                  } else if (parsed > 756) {
+                    setLookbackPeriods(756);
+                    setLookbackInput('756');
+                  } else {
+                    setLookbackPeriods(parsed);
+                    setLookbackInput(String(parsed));
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  if (e.key === 'ArrowUp') { e.preventDefault(); const v = Math.min(756, lookbackPeriods + 1); setLookbackPeriods(v); setLookbackInput(String(v)); }
+                  if (e.key === 'ArrowDown') { e.preventDefault(); const v = Math.max(20, lookbackPeriods - 1); setLookbackPeriods(v); setLookbackInput(String(v)); }
+                }}
+                className="flex-1 px-3 py-2 bg-gray-800 border-y border-emerald-500/50 text-gray-100 focus:outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <button
+                onClick={() => {
+                  const v = Math.min(756, lookbackPeriods + 1);
+                  setLookbackPeriods(v);
+                  setLookbackInput(String(v));
+                }}
+                className="w-8 h-9 flex items-center justify-center bg-gray-700 hover:bg-gray-600 border border-emerald-500/40 rounded-r-lg text-gray-200 font-bold transition select-none"
+              >+</button>
+            </div>
+          </div>
+          {/* Period navigation — navigate back to previous completed periods */}
+          <div>
+            <label className="block text-sm text-gray-300 mb-2">
+              {t('pivotsTab.periodOffset') ?? 'Período'}
+              {periodOffset > 0 && pivotBaseBar && (
+                <span className="ml-2 text-emerald-400 text-xs">({(pivotBaseBar as any).date ?? ''})</span>
+              )}
+            </label>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPeriodOffset(p => Math.max(0, p - 1))}
+                disabled={periodOffset === 0}
+                className="w-8 h-9 flex items-center justify-center bg-gray-700 hover:bg-gray-600 border border-emerald-500/40 rounded-l-lg text-gray-200 font-bold transition disabled:opacity-30 disabled:cursor-not-allowed select-none"
+                title="Período más reciente"
+              >‹</button>
+              <div className="flex-1 px-3 py-2 bg-gray-800 border-y border-emerald-500/50 text-gray-100 text-center text-sm">
+                {periodOffset === 0
+                  ? (t('pivotsTab.currentPeriod') ?? 'Último período')
+                  : `-${periodOffset}`}
+              </div>
+              <button
+                onClick={() => setPeriodOffset(p => Math.min(aggregatedData.length - 2, p + 1))}
+                disabled={periodOffset >= aggregatedData.length - 2}
+                className="w-8 h-9 flex items-center justify-center bg-gray-700 hover:bg-gray-600 border border-emerald-500/40 rounded-r-lg text-gray-200 font-bold transition disabled:opacity-30 disabled:cursor-not-allowed select-none"
+                title="Período anterior"
+              >›</button>
+            </div>
           </div>
           <div>
             <label className="block text-sm text-gray-300 mb-2">{t('pivotsTab.tolerance')}</label>

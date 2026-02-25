@@ -678,9 +678,9 @@ export default function Home() {
               <h4 className="font-semibold mb-4">{t('footer.company')}</h4>
               <ul className="space-y-2">
                 <li><a href="#about" className="text-gray-400 hover:text-white transition">{t('footer.aboutUs')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.blog')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.careers')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.press')}</a></li>
+                <li><Link href="/blog" className="text-gray-400 hover:text-white transition">{t('footer.blog')}</Link></li>
+                <li><Link href="/careers" className="text-gray-400 hover:text-white transition">{t('footer.careers')}</Link></li>
+                <li><Link href="/press" className="text-gray-400 hover:text-white transition">{t('footer.press')}</Link></li>
               </ul>
             </div>
 
@@ -689,9 +689,9 @@ export default function Home() {
               <h4 className="font-semibold mb-4">{t('footer.product')}</h4>
               <ul className="space-y-2">
                 <li><a href="#features" className="text-gray-400 hover:text-white transition">{t('footer.features')}</a></li>
-                <li><a href="#pricing" className="text-gray-400 hover:text-white transition">{t('footer.pricing')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.api')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.integrations')}</a></li>
+                <li><Link href="/pricing" className="text-gray-400 hover:text-white transition">{t('footer.pricing')}</Link></li>
+                <li><Link href="/api-info" className="text-gray-400 hover:text-white transition">{t('footer.api')}</Link></li>
+                <li><Link href="/api-info" className="text-gray-400 hover:text-white transition">{t('footer.integrations')}</Link></li>
               </ul>
             </div>
 
@@ -699,10 +699,10 @@ export default function Home() {
             <div>
               <h4 className="font-semibold mb-4">{t('footer.resources')}</h4>
               <ul className="space-y-2">
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.documentation')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.guides')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.faq')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.support')}</a></li>
+                <li><Link href="/docs" className="text-gray-400 hover:text-white transition">{t('footer.documentation')}</Link></li>
+                <li><Link href="/guides" className="text-gray-400 hover:text-white transition">{t('footer.guides')}</Link></li>
+                <li><Link href="/faq" className="text-gray-400 hover:text-white transition">{t('footer.faq')}</Link></li>
+                <li><Link href="/support" className="text-gray-400 hover:text-white transition">{t('footer.support')}</Link></li>
               </ul>
             </div>
 
@@ -710,10 +710,10 @@ export default function Home() {
             <div>
               <h4 className="font-semibold mb-4">{t('footer.legal')}</h4>
               <ul className="space-y-2">
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.privacy')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.terms')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.cookies')}</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition">{t('footer.licenses')}</a></li>
+                <li><Link href="/privacy" className="text-gray-400 hover:text-white transition">{t('footer.privacy')}</Link></li>
+                <li><Link href="/terms" className="text-gray-400 hover:text-white transition">{t('footer.terms')}</Link></li>
+                <li><Link href="/cookies" className="text-gray-400 hover:text-white transition">{t('footer.cookies')}</Link></li>
+                <li><Link href="/licenses" className="text-gray-400 hover:text-white transition">{t('footer.licenses')}</Link></li>
               </ul>
             </div>
           </div>

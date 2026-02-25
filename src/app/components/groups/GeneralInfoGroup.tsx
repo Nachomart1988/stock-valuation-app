@@ -4,6 +4,7 @@
 import { Tab } from '@headlessui/react';
 import { LockedSubTab } from '@/app/components/LockedTab';
 import type { PlanTier } from '@/lib/plans';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface GeneralInfoGroupProps {
   AnalisisGeneralTab: React.ReactNode;
@@ -24,11 +25,21 @@ export default function GeneralInfoGroup({
   requiredPlan = 'pro',
   currentPlan = 'free',
 }: GeneralInfoGroupProps) {
-  const subtabs = ['Análisis General', 'Key Metrics', 'Analistas', 'DuPont Analysis'];
+  const { locale } = useLanguage();
+  const es = locale === 'es';
+
+  const subtabs = [
+    es ? 'Análisis General' : 'General Analysis',
+    'Key Metrics',
+    es ? 'Analistas' : 'Analysts',
+    'DuPont Analysis',
+  ];
 
   return (
     <div className="space-y-4">
-      <h3 className="text-2xl font-bold text-emerald-400">Información General</h3>
+      <h3 className="text-2xl font-bold text-emerald-400">
+        {es ? 'Información General' : 'General Information'}
+      </h3>
 
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg">

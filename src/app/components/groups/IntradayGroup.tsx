@@ -14,12 +14,12 @@ export default function IntradayGroup({
   GapsTab,
   MomentumTab,
 }: IntradayGroupProps) {
-  const subtabs = ['Pivots', 'Gaps', 'Momentum'];
+  const subtabs = ['Pivots', 'Gaps', 'Momentum (Beta)'];
 
   const tabColor = (tab: string, selected: boolean) => {
     if (!selected) return 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white';
     if (tab === 'Gaps')     return 'bg-purple-600 text-white shadow-lg';
-    if (tab === 'Momentum') return 'bg-emerald-600 text-white shadow-lg';
+    if (tab === 'Momentum (Beta)') return 'bg-emerald-600 text-white shadow-lg';
     return 'bg-emerald-600 text-white shadow-lg';
   };
 

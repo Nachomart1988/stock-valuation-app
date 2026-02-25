@@ -1239,6 +1239,7 @@ function AnalizarContent() {
           cashFlowAsReported={cashFlowAsReported}
           estimates={estimates}
           dcfCustom={dcfCustom}
+          calculatedWacc={sharedWACC !== null ? sharedWACC * 100 : undefined}
           onSGRChange={setSharedSGR}
         />
       }
@@ -1835,15 +1836,18 @@ function InicioTab({
             <p className={`text-lg sm:text-2xl md:text-3xl font-bold ${color}`}>{value}</p>
           </div>
         ))}
-        <div className="bg-gray-800 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center border border-white/[0.08] flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
-          <p className="text-gray-400 text-[10px] sm:text-xs mb-1">{t('analysis.precio.margenSeguridad')}</p>
-          <input
-            type="number"
-            value={margenSeguridad}
-            onChange={(e) => setMargenSeguridad(e.target.value)}
-            className="w-full text-center text-lg sm:text-2xl md:text-3xl font-bold text-amber-400 bg-transparent border-none focus:outline-none focus:ring-0"
-          />
-          <p className="text-gray-500 text-xs">%</p>
+        <div className="bg-gray-800 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center border border-amber-600/30 hover:border-amber-500/50 transition flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px] relative group">
+          <p className="text-gray-400 text-[10px] sm:text-xs mb-1 leading-tight">{t('analysis.precio.margenSeguridad')}</p>
+          <div className="flex items-center justify-center gap-1">
+            <input
+              type="number"
+              value={margenSeguridad}
+              onChange={(e) => setMargenSeguridad(e.target.value)}
+              className="w-16 sm:w-20 text-center text-lg sm:text-2xl md:text-3xl font-bold text-amber-400 bg-transparent border-b border-amber-600/40 focus:outline-none focus:border-amber-400 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            <span className="text-sm sm:text-xl md:text-2xl font-bold text-amber-400">%</span>
+          </div>
+          <p className="text-gray-500 text-[9px] sm:text-[10px] mt-1">✏️ editable</p>
         </div>
       </div>
 
@@ -1994,6 +1998,20 @@ function InicioTab({
   );
 }
 
+const SECTOR_ES: Record<string, string> = {
+  'Technology': 'Tecnología',
+  'Healthcare': 'Salud',
+  'Financial Services': 'Servicios Financieros',
+  'Consumer Cyclical': 'Consumo Cíclico',
+  'Consumer Defensive': 'Consumo Defensivo',
+  'Industrials': 'Industriales',
+  'Energy': 'Energía',
+  'Real Estate': 'Bienes Raíces',
+  'Utilities': 'Servicios Públicos',
+  'Basic Materials': 'Materiales Básicos',
+  'Communication Services': 'Servicios de Comunicación',
+};
+
 function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; ticker: string }) {
   const { locale } = useLanguage();
   const es = locale === 'es';
@@ -2054,9 +2072,12 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
           {profile.description || (es ? 'No hay descripción disponible.' : 'No description available.')}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 text-sm sm:text-xl">
-          <p><strong className="text-gray-200">{es ? 'Sector' : 'Sector'}:</strong> {profile.sector || 'N/A'}</p>
+          <p><strong className="text-gray-200">{es ? 'Sector' : 'Sector'}:</strong> {(es && profile.sector && SECTOR_ES[profile.sector]) ? SECTOR_ES[profile.sector] : profile.sector || 'N/A'}</p>
           <p><strong className="text-gray-200">{es ? 'Industria' : 'Industry'}:</strong> {profile.industry || 'N/A'}</p>
           <p><strong className="text-gray-200">CEO:</strong> {profile.ceo || 'N/A'}</p>
+          <p><strong className="text-gray-200">{es ? 'País' : 'Country'}:</strong> {profile.country || 'N/A'}</p>
+          <p><strong className="text-gray-200">{es ? 'Empleados' : 'Employees'}:</strong> {profile.fullTimeEmployees ? Number(profile.fullTimeEmployees).toLocaleString() : 'N/A'}</p>
+          <p><strong className="text-gray-200">{es ? 'IPO' : 'IPO Date'}:</strong> {profile.ipoDate || 'N/A'}</p>
           <p>
             <strong className="text-gray-200">{es ? 'Sitio web' : 'Website'}:</strong>{' '}
             {profile.website ? (

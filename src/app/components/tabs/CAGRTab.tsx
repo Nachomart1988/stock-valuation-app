@@ -22,8 +22,8 @@ interface CAGRTabProps {
 export default function CAGRTab({ ticker, onCagrStatsChange }: CAGRTabProps) {
   const { t } = useLanguage();
   // Estados para inputs del usuario
-  const [minCagr, setMinCagr] = useState<number>(-50);
-  const [maxCagr, setMaxCagr] = useState<number>(100);
+  const [minCagr, setMinCagr] = useState<number>(-10);
+  const [maxCagr, setMaxCagr] = useState<number>(10);
   const [yearsToAnalyze, setYearsToAnalyze] = useState<number>(5);
 
   // Estados para datos
