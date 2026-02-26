@@ -2,7 +2,7 @@
 
 import { useUser, useClerk } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
 import Logo, { PrismoIcon } from './components/Logo';
 
@@ -10,10 +10,6 @@ export default function ComingSoonPage() {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
   const plan = (user?.publicMetadata?.plan as string) ?? 'free';
   const hasAccess = plan !== 'free';
 
@@ -25,23 +21,6 @@ export default function ComingSoonPage() {
   }, [isLoaded, user, hasAccess, router]);
 
   const isWaitlisted = isLoaded && user && !hasAccess;
-
-  const handleWaitlist = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) return;
-    setSubmitting(true);
-    try {
-      await fetch('/api/waitlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-    } catch {
-      // silent — show success regardless
-    }
-    setSubmitted(true);
-    setSubmitting(false);
-  };
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
@@ -121,50 +100,25 @@ export default function ComingSoonPage() {
               </button>
             </div>
           ) : (
-            <>
-              {/* Waitlist email capture */}
-              {!submitted ? (
-                <form onSubmit={handleWaitlist} className="flex gap-2 mb-6 max-w-sm mx-auto">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="tu@email.com"
-                    required
-                    className="flex-1 px-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                  />
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl transition text-sm disabled:opacity-50"
-                  >
-                    {submitting ? '...' : 'Unirse'}
-                  </button>
-                </form>
-              ) : (
-                <p className="text-emerald-400 text-sm mb-6 font-medium">
-                  Listo, te avisamos cuando abra el acceso.
-                </p>
-              )}
+            <div className="flex flex-col items-center gap-4">
+              {/* Primary CTA */}
+              <Link
+                href="/register"
+                className="px-8 py-3.5 bg-linear-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-semibold rounded-xl transition text-sm shadow-lg shadow-emerald-500/20"
+              >
+                Unirse a la lista de espera
+              </Link>
 
-              {/* Auth CTAs */}
+              {/* Secondary: already have account */}
               {isLoaded && !user && (
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Link
-                    href="/register"
-                    className="px-6 py-3 bg-linear-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-semibold rounded-xl transition text-sm"
-                  >
-                    Crear cuenta
-                  </Link>
-                  <Link
-                    href="/login"
-                    className="px-6 py-3 border border-gray-700 hover:border-gray-600 text-gray-300 hover:text-white rounded-xl transition text-sm"
-                  >
-                    Ya tengo cuenta
-                  </Link>
-                </div>
+                <Link
+                  href="/login"
+                  className="text-sm text-gray-500 hover:text-gray-300 transition"
+                >
+                  Ya tengo cuenta
+                </Link>
               )}
-            </>
+            </div>
           )}
 
           {/* Bottom dots */}
@@ -183,6 +137,8 @@ export default function ComingSoonPage() {
           <Link href="/privacy" className="hover:text-gray-500 transition">Privacidad</Link>
           {' &middot; '}
           <Link href="/terms" className="hover:text-gray-500 transition">Terminos</Link>
+          {' &middot; '}
+          <Link href="/admin" className="hover:text-gray-500 transition">Admin</Link>
         </p>
       </footer>
     </div>
