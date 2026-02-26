@@ -1,20 +1,40 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-const isPublicRoute = createRouteMatcher([
+// Public paths — always accessible
+const isPublicPath = createRouteMatcher([
   '/',
   '/login(.*)',
   '/register(.*)',
   '/admin(.*)',
-  '/pricing(.*)',
   '/sso-callback(.*)',
-  '/api/stripe/webhook(.*)',
-  '/market-sentiment(.*)',
-  '/analizar(.*)',
+  '/marketing(.*)',
+  '/privacy(.*)',
+  '/terms(.*)',
+  '/cookies(.*)',
+  '/api/(.*)',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
-  // All routes are public — we handle access control in the components
-  // No routes are force-protected here
+  // Public paths: always allow
+  if (isPublicPath(req)) return NextResponse.next();
+
+  // Everything else requires login + plan > free
+  const { userId, sessionClaims } = await auth();
+
+  if (!userId) {
+    return NextResponse.redirect(new URL('/', req.url));
+  }
+
+  // Clerk exposes publicMetadata in session claims
+  const meta = (sessionClaims as any)?.metadata ?? (sessionClaims as any)?.publicMetadata ?? {};
+  const plan = (meta?.plan as string) ?? 'free';
+
+  if (plan === 'free') {
+    return NextResponse.redirect(new URL('/', req.url));
+  }
+
+  return NextResponse.next();
 });
 
 export const config = {

@@ -24,7 +24,7 @@ export default function LoginPage() {
       const result = await signIn.create({ identifier: email, password });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        router.push('/analizar');
+        router.push('/');
       } else {
         setError('Verificación adicional requerida. Revisa tu email.');
       }
@@ -42,7 +42,7 @@ export default function LoginPage() {
       await signIn.authenticateWithRedirect({
         strategy: provider,
         redirectUrl: '/sso-callback',
-        redirectUrlComplete: '/analizar',
+        redirectUrlComplete: '/',
       });
     } catch (err: any) {
       setError('Error al conectar con proveedor externo');
@@ -148,8 +148,8 @@ export default function LoginPage() {
           </div>
 
           <div className="mt-6 text-center">
-            <Link href="/analizar" className="text-gray-500 hover:text-gray-300 text-sm">
-              Explorar sin registrarse (plan Free) →
+            <Link href="/" className="text-gray-500 hover:text-gray-300 text-sm">
+              &larr; Volver al inicio
             </Link>
           </div>
         </div>

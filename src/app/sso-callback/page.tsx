@@ -11,8 +11,8 @@ export default function SSOCallbackPage() {
 
   useEffect(() => {
     handleRedirectCallback({
-      afterSignInUrl: '/analizar',
-      afterSignUpUrl: '/analizar',
+      afterSignInUrl: '/',
+      afterSignUpUrl: '/',
     }).catch(() => {
       router.push('/login');
     });
