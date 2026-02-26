@@ -1,4 +1,4 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 // Public paths — always accessible
@@ -20,15 +20,16 @@ export default clerkMiddleware(async (auth, req) => {
   if (isPublicPath(req)) return NextResponse.next();
 
   // Everything else requires login + plan > free
-  const { userId, sessionClaims } = await auth();
+  const { userId } = await auth();
 
   if (!userId) {
     return NextResponse.redirect(new URL('/', req.url));
   }
 
-  // Clerk exposes publicMetadata in session claims
-  const meta = (sessionClaims as any)?.metadata ?? (sessionClaims as any)?.publicMetadata ?? {};
-  const plan = (meta?.plan as string) ?? 'free';
+  // Fetch user directly from Clerk API to get fresh publicMetadata
+  const client = await clerkClient();
+  const user = await client.users.getUser(userId);
+  const plan = (user.publicMetadata?.plan as string) ?? 'free';
 
   if (plan === 'free') {
     return NextResponse.redirect(new URL('/', req.url));
