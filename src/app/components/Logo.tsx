@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
@@ -11,10 +10,10 @@ interface LogoProps {
 }
 
 const sizes = {
-  sm: { icon: 'w-8 h-8', text: 'text-lg', px: 32 },
-  md: { icon: 'w-10 h-10', text: 'text-xl', px: 40 },
-  lg: { icon: 'w-12 h-12', text: 'text-2xl', px: 48 },
-  xl: { icon: 'w-16 h-16', text: 'text-3xl', px: 64 },
+  sm: { icon: 'w-8 h-8', text: 'text-lg', iconInner: 'text-xs' },
+  md: { icon: 'w-10 h-10', text: 'text-xl', iconInner: 'text-sm' },
+  lg: { icon: 'w-12 h-12', text: 'text-2xl', iconInner: 'text-base' },
+  xl: { icon: 'w-16 h-16', text: 'text-3xl', iconInner: 'text-lg' },
 };
 
 export default function Logo({
@@ -23,17 +22,11 @@ export default function Logo({
   linkTo = '/',
   className = ''
 }: LogoProps) {
-  const { icon, text, px } = sizes[size];
+  const { icon, text, iconInner } = sizes[size];
 
   const LogoContent = () => (
     <div className={`flex items-center gap-3 ${className}`}>
-      <Image
-        src="/Logo P.png"
-        alt="Prismo"
-        width={px}
-        height={px}
-        className={`${icon} object-contain`}
-      />
+      <PrismoIcon className={icon} innerClassName={iconInner} />
       {showText && (
         <span className={`${text} font-black bg-linear-to-r from-green-600 via-green-500 to-emerald-400 bg-clip-text text-transparent tracking-tight`}>
           Prismo
@@ -53,15 +46,28 @@ export default function Logo({
   return <LogoContent />;
 }
 
+// The P icon — black bg, green P
+export function PrismoIcon({
+  className = 'w-10 h-10',
+  innerClassName = 'text-sm',
+}: {
+  className?: string;
+  innerClassName?: string;
+}) {
+  return (
+    <div className={`${className} rounded-xl bg-black flex items-center justify-center shadow-lg shadow-emerald-500/20 border border-emerald-500/30`}>
+      <span className={`${innerClassName} font-black bg-linear-to-b from-green-400 to-emerald-500 bg-clip-text text-transparent tracking-tighter`}>
+        P
+      </span>
+    </div>
+  );
+}
+
 // Compact version for tight spaces
 export function LogoCompact({ className = '' }: { className?: string }) {
   return (
-    <Image
-      src="/Logo P.png"
-      alt="Prismo"
-      width={32}
-      height={32}
-      className={`w-8 h-8 object-contain ${className}`}
-    />
+    <div className={`w-8 h-8 rounded-lg bg-black flex items-center justify-center border border-emerald-500/30 ${className}`}>
+      <span className="text-xs font-black bg-linear-to-b from-green-400 to-emerald-500 bg-clip-text text-transparent">P</span>
+    </div>
   );
 }
