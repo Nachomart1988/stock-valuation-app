@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 const FMP_BASE = 'https://financialmodelingprep.com';
 
 export async function GET(req: NextRequest) {
-  const apiKey = process.env.FMP_API_KEY;
+  // Try FMP_API_KEY first (server-only), fall back to NEXT_PUBLIC_ for backwards compat
+  const apiKey = process.env.FMP_API_KEY ?? process.env.NEXT_PUBLIC_FMP_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'FMP_API_KEY not configured' }, { status: 500 });
   }
