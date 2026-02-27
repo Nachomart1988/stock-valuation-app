@@ -3,23 +3,20 @@ import { NextRequest, NextResponse } from 'next/server';
 const FMP_BASE = 'https://financialmodelingprep.com';
 
 export async function GET(req: NextRequest) {
-  // Try FMP_API_KEY first (server-only), fall back to NEXT_PUBLIC_ for backwards compat
   const apiKey = process.env.FMP_API_KEY ?? process.env.NEXT_PUBLIC_FMP_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'FMP_API_KEY not configured' }, { status: 500 });
   }
 
-  const { searchParams } = req.nextUrl;
-  const path = searchParams.get('path');
+  const incoming = new URL(req.url).searchParams;
+  const path = incoming.get('path');
   if (!path) {
     return NextResponse.json({ error: 'Missing path param' }, { status: 400 });
   }
 
-  // Forward all params except 'path', add apikey server-side
-  const forwardParams = new URLSearchParams();
-  searchParams.forEach((value, key) => {
-    if (key !== 'path') forwardParams.set(key, value);
-  });
+  // Forward all params except 'path', inject apikey server-side
+  const forwardParams = new URLSearchParams(incoming);
+  forwardParams.delete('path');
   forwardParams.set('apikey', apiKey);
 
   const url = `${FMP_BASE}/${path}?${forwardParams.toString()}`;
