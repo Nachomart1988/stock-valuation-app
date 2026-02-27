@@ -539,6 +539,47 @@ class PortfolioOptimizeRequest(BaseModel):
     riskFreeRate: float = 0.042
 
 
+class FactorRegressionRequest(BaseModel):
+    tickers: List[str]
+    benchmark: str = 'SPY'
+    period_days: int = 756
+    risk_free_rate: float = 0.042
+
+
+class PCARequest(BaseModel):
+    tickers: List[str]
+    period_days: int = 756
+    n_components: int = 5
+
+
+class MatchExposuresRequest(BaseModel):
+    tickers: List[str]
+    target_beta: float = 1.0
+    benchmark: str = 'SPY'
+    period_days: int = 756
+    max_weight: float = 0.40
+    risk_free_rate: float = 0.042
+
+
+class BlackLittermanRequest(BaseModel):
+    tickers: List[str]
+    views: List[dict]
+    view_confidence: float = 0.5
+    period_days: int = 756
+    risk_aversion: float = 2.5
+    risk_free_rate: float = 0.042
+
+
+class RollingOptimizationRequest(BaseModel):
+    tickers: List[str]
+    objective: str = 'max_sharpe'
+    window_days: int = 252
+    step_days: int = 21
+    period_days: int = 756
+    max_weight: float = 0.40
+    risk_free_rate: float = 0.042
+
+
 @app.post("/portfolio/optimize")
 async def portfolio_optimize(req: PortfolioOptimizeRequest):
     """
@@ -600,6 +641,492 @@ async def portfolio_optimize(req: PortfolioOptimizeRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"[PortfolioOpt] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/factor-regression")
+async def portfolio_factor_regression(req: FactorRegressionRequest):
+    """
+    Run OLS factor regression for each ticker vs a benchmark (default SPY).
+    Returns alpha, beta, R², residual vol, information ratio, and risk decomposition.
+    """
+    try:
+        import traceback
+
+        engine = PortfolioOptimizer(
+            api_key=os.environ.get('FMP_API_KEY'),
+            risk_free_rate=req.risk_free_rate,
+        )
+
+        all_tickers = list(dict.fromkeys(req.tickers + [req.benchmark]))
+        prices = engine._fetch_prices(all_tickers, req.period_days)
+
+        if req.benchmark not in prices:
+            raise HTTPException(status_code=400, detail=f"Could not fetch benchmark data for {req.benchmark}")
+
+        valid_tickers = [t for t in req.tickers if t in prices]
+        if not valid_tickers:
+            raise HTTPException(status_code=400, detail="Could not fetch price data for any ticker")
+
+        # Align all tickers + benchmark
+        all_valid = [t for t in all_tickers if t in prices]
+        aligned = engine._align_prices(prices, all_valid)
+        log_returns = np.diff(np.log(aligned), axis=0)
+
+        ticker_idx = {t: i for i, t in enumerate(all_valid)}
+        bench_idx = ticker_idx[req.benchmark]
+        r_bench = log_returns[:, bench_idx]
+
+        var_bench = float(np.var(r_bench, ddof=1))
+        mean_bench_annual = float(np.mean(r_bench) * 252)
+        vol_bench_annual = float(np.std(r_bench, ddof=1) * np.sqrt(252))
+        sharpe_bench = (mean_bench_annual - req.risk_free_rate) / vol_bench_annual if vol_bench_annual > 0 else 0.0
+
+        regressions = []
+        for ticker in valid_tickers:
+            idx = ticker_idx[ticker]
+            r_i = log_returns[:, idx]
+
+            # OLS regression: r_i = alpha + beta * r_bench + epsilon
+            cov_matrix = np.cov(r_i, r_bench, ddof=1)
+            beta = cov_matrix[0, 1] / var_bench if var_bench > 1e-12 else 0.0
+            alpha = float(np.mean(r_i)) - beta * float(np.mean(r_bench))
+            alpha_annualized = alpha * 252
+
+            # Residuals
+            predicted = alpha + beta * r_bench
+            residuals = r_i - predicted
+            residual_vol_annual = float(np.std(residuals, ddof=1) * np.sqrt(252))
+
+            # R-squared = correlation^2
+            corr = float(np.corrcoef(r_i, r_bench)[0, 1])
+            r_squared = corr ** 2
+
+            # Information ratio
+            information_ratio = alpha_annualized / residual_vol_annual if residual_vol_annual > 1e-12 else 0.0
+
+            # Risk decomposition
+            var_ticker = float(np.var(r_i, ddof=1))
+            market_risk_pct = (beta ** 2 * var_bench) / var_ticker * 100 if var_ticker > 1e-12 else 0.0
+            idio_risk_pct = max(0.0, 100.0 - market_risk_pct)
+
+            total_vol_annual = float(np.std(r_i, ddof=1) * np.sqrt(252))
+
+            regressions.append({
+                "ticker": ticker,
+                "alpha_annual": round(alpha_annualized, 6),
+                "beta": round(beta, 4),
+                "r_squared": round(r_squared, 4),
+                "residual_vol_annual": round(residual_vol_annual, 6),
+                "information_ratio": round(information_ratio, 4),
+                "market_risk_pct": round(market_risk_pct, 2),
+                "idio_risk_pct": round(idio_risk_pct, 2),
+                "total_vol_annual": round(total_vol_annual, 6),
+                "correlation_to_market": round(corr, 4),
+            })
+
+        return {
+            "benchmark": req.benchmark,
+            "period_days": req.period_days,
+            "factor_stats": {
+                "market_return_annual": round(mean_bench_annual, 6),
+                "market_vol_annual": round(vol_bench_annual, 6),
+                "market_sharpe": round(sharpe_bench, 4),
+            },
+            "regressions": regressions,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/pca")
+async def portfolio_pca(req: PCARequest):
+    """
+    Perform PCA on the returns matrix. Returns top n_components principal components
+    with variance explained, eigenvalues, and loadings per ticker.
+    """
+    try:
+        engine = PortfolioOptimizer(api_key=os.environ.get('FMP_API_KEY'))
+        prices = engine._fetch_prices(req.tickers, req.period_days)
+        valid_tickers = [t for t in req.tickers if t in prices]
+        if len(valid_tickers) < 2:
+            raise HTTPException(status_code=400, detail="Need at least 2 tickers with price data")
+
+        aligned = engine._align_prices(prices, valid_tickers)
+        log_returns = np.diff(np.log(aligned), axis=0)  # (T-1, n)
+
+        # Standardize
+        means = np.mean(log_returns, axis=0)
+        stds = np.std(log_returns, axis=0, ddof=1)
+        stds = np.where(stds < 1e-12, 1.0, stds)
+        standardized = (log_returns - means) / stds
+
+        # Covariance matrix of standardized returns
+        cov = np.cov(standardized, rowvar=False)
+
+        # Eigendecomposition
+        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+
+        # Sort by descending eigenvalue
+        sort_idx = np.argsort(eigenvalues)[::-1]
+        eigenvalues = eigenvalues[sort_idx]
+        eigenvectors = eigenvectors[:, sort_idx]
+
+        n_components = min(req.n_components, len(valid_tickers))
+        total_variance = float(np.sum(eigenvalues))
+
+        components = []
+        cumulative_pct = 0.0
+        for i in range(n_components):
+            variance_pct = float(eigenvalues[i]) / total_variance * 100 if total_variance > 0 else 0.0
+            cumulative_pct += variance_pct
+            loadings = {valid_tickers[j]: round(float(eigenvectors[j, i]), 4) for j in range(len(valid_tickers))}
+            components.append({
+                "pc": i + 1,
+                "variance_explained_pct": round(variance_pct, 4),
+                "cumulative_variance_pct": round(cumulative_pct, 4),
+                "eigenvalue": round(float(eigenvalues[i]), 6),
+                "loadings": loadings,
+            })
+
+        return {
+            "tickers": valid_tickers,
+            "n_components": n_components,
+            "components": components,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/match-exposures")
+async def portfolio_match_exposures(req: MatchExposuresRequest):
+    """
+    Find portfolio weights that minimize deviation from a target beta while maximizing Sharpe.
+    """
+    try:
+        from scipy.optimize import minimize as sp_minimize
+
+        engine = PortfolioOptimizer(
+            api_key=os.environ.get('FMP_API_KEY'),
+            risk_free_rate=req.risk_free_rate,
+        )
+
+        all_tickers = list(dict.fromkeys(req.tickers + [req.benchmark]))
+        prices = engine._fetch_prices(all_tickers, req.period_days)
+
+        if req.benchmark not in prices:
+            raise HTTPException(status_code=400, detail=f"Could not fetch benchmark data for {req.benchmark}")
+
+        valid_tickers = [t for t in req.tickers if t in prices]
+        if len(valid_tickers) < 2:
+            raise HTTPException(status_code=400, detail="Need at least 2 tickers with price data")
+
+        all_valid = [t for t in all_tickers if t in prices]
+        aligned = engine._align_prices(prices, all_valid)
+        log_returns = np.diff(np.log(aligned), axis=0)
+
+        ticker_idx = {t: i for i, t in enumerate(all_valid)}
+        bench_idx = ticker_idx[req.benchmark]
+        r_bench = log_returns[:, bench_idx]
+        var_bench = float(np.var(r_bench, ddof=1))
+
+        # Compute individual betas
+        n = len(valid_tickers)
+        individual_betas = []
+        for ticker in valid_tickers:
+            idx = ticker_idx[ticker]
+            r_i = log_returns[:, idx]
+            cov_ib = np.cov(r_i, r_bench, ddof=1)[0, 1]
+            beta_i = cov_ib / var_bench if var_bench > 1e-12 else 1.0
+            individual_betas.append(float(beta_i))
+        betas_arr = np.array(individual_betas)
+
+        # Returns matrix for portfolio tickers only
+        port_returns = log_returns[:, [ticker_idx[t] for t in valid_tickers]]
+        mean_annual = np.mean(port_returns, axis=0) * 252
+        cov_annual = np.cov(port_returns, rowvar=False) * 252
+
+        def objective_fn(w):
+            port_beta = float(np.dot(w, betas_arr))
+            port_ret = float(np.dot(w, mean_annual))
+            port_vol = float(np.sqrt(np.maximum(w @ cov_annual @ w, 1e-12)))
+            sharpe = (port_ret - req.risk_free_rate) / port_vol
+            return (port_beta - req.target_beta) ** 2 * 10 - sharpe
+
+        w0 = np.ones(n) / n
+        bounds = [(0.0, req.max_weight)] * n
+        constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0}]
+
+        res = sp_minimize(
+            objective_fn, w0,
+            method='SLSQP',
+            bounds=bounds,
+            constraints=constraints,
+            options={'maxiter': 1000, 'ftol': 1e-10},
+        )
+
+        weights = np.maximum(res.x, 0.0)
+        weights /= weights.sum()
+
+        achieved_beta = float(np.dot(weights, betas_arr))
+        port_ret = float(np.dot(weights, mean_annual))
+        port_vol = float(np.sqrt(weights @ cov_annual @ weights))
+        sharpe = (port_ret - req.risk_free_rate) / port_vol if port_vol > 1e-10 else 0.0
+
+        return {
+            "tickers": valid_tickers,
+            "target_beta": req.target_beta,
+            "achieved_beta": round(achieved_beta, 4),
+            "weights": {valid_tickers[i]: round(float(weights[i]), 6) for i in range(n)},
+            "individual_betas": {valid_tickers[i]: round(individual_betas[i], 4) for i in range(n)},
+            "portfolio_metrics": {
+                "annual_return": round(port_ret, 6),
+                "annual_vol": round(port_vol, 6),
+                "sharpe": round(sharpe, 4),
+            },
+            "converged": bool(res.success),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/black-litterman")
+async def portfolio_black_litterman(req: BlackLittermanRequest):
+    """
+    Black-Litterman portfolio optimization. Combines market equilibrium returns
+    with investor views to produce posterior expected returns and optimal weights.
+    """
+    try:
+        import requests as req_lib
+
+        engine = PortfolioOptimizer(
+            api_key=os.environ.get('FMP_API_KEY'),
+            risk_free_rate=req.risk_free_rate,
+        )
+        api_key = os.environ.get('FMP_API_KEY')
+
+        prices = engine._fetch_prices(req.tickers, req.period_days)
+        valid_tickers = [t for t in req.tickers if t in prices]
+        if len(valid_tickers) < 2:
+            raise HTTPException(status_code=400, detail="Need at least 2 tickers with price data")
+
+        aligned = engine._align_prices(prices, valid_tickers)
+        log_returns = np.diff(np.log(aligned), axis=0)
+        n = len(valid_tickers)
+
+        mean_annual = np.mean(log_returns, axis=0) * 252
+        cov_annual = np.cov(log_returns, rowvar=False) * 252
+
+        # Fetch market caps for prior weights
+        market_caps = {}
+        for ticker in valid_tickers:
+            try:
+                url = f"https://financialmodelingprep.com/stable/profile"
+                params = {'symbol': ticker, 'apikey': api_key}
+                resp = engine._session.get(url, params=params, timeout=10)
+                data = resp.json()
+                if isinstance(data, list) and data:
+                    mc = data[0].get('mktCap') or data[0].get('marketCap', 0)
+                    market_caps[ticker] = float(mc) if mc else 1e9
+                elif isinstance(data, dict):
+                    mc = data.get('mktCap') or data.get('marketCap', 0)
+                    market_caps[ticker] = float(mc) if mc else 1e9
+                else:
+                    market_caps[ticker] = 1e9
+            except Exception:
+                market_caps[ticker] = 1e9
+
+        total_mc = sum(market_caps[t] for t in valid_tickers)
+        w_mkt = np.array([market_caps[t] / total_mc for t in valid_tickers])
+
+        # Implied equilibrium returns: pi = delta * Sigma * w_mkt
+        delta = req.risk_aversion
+        pi = delta * cov_annual @ w_mkt
+
+        # Filter views to valid tickers
+        valid_views = [v for v in req.views if v.get('asset') in valid_tickers]
+
+        tau = 1.0 / req.period_days
+
+        if valid_views:
+            k = len(valid_views)
+            P = np.zeros((k, n))
+            q = np.zeros(k)
+
+            ticker_to_idx = {t: i for i, t in enumerate(valid_tickers)}
+            for vi, view in enumerate(valid_views):
+                asset_idx = ticker_to_idx[view['asset']]
+                P[vi, asset_idx] = 1.0
+                q[vi] = float(view.get('return_view', 0.0))
+
+            # Omega: uncertainty matrix
+            Omega = req.view_confidence * (P @ cov_annual @ P.T)
+            # Add small diagonal to avoid singularity
+            Omega += np.eye(k) * 1e-8
+
+            # Posterior BL returns
+            try:
+                tau_sigma_inv = np.linalg.inv(tau * cov_annual)
+                omega_inv = np.linalg.inv(Omega)
+
+                M_inv = tau_sigma_inv + P.T @ omega_inv @ P
+                M = np.linalg.inv(M_inv)
+                mu_bl = M @ (tau_sigma_inv @ pi + P.T @ omega_inv @ q)
+            except np.linalg.LinAlgError:
+                # Fallback: use implied returns
+                mu_bl = pi.copy()
+        else:
+            mu_bl = pi.copy()
+
+        # BL optimal weights: w_bl = inv(delta * Sigma) @ mu_bl, normalize
+        try:
+            cov_inv = np.linalg.inv(delta * cov_annual)
+            w_bl_raw = cov_inv @ mu_bl
+            # Handle negative weights by clipping
+            w_bl_raw = np.maximum(w_bl_raw, 0.0)
+            w_sum = w_bl_raw.sum()
+            w_bl = w_bl_raw / w_sum if w_sum > 1e-10 else w_mkt.copy()
+        except np.linalg.LinAlgError:
+            w_bl = w_mkt.copy()
+
+        # Portfolio metrics
+        def port_metrics(w, returns, cov, rfr):
+            r = float(np.dot(w, returns))
+            v = float(np.sqrt(np.maximum(w @ cov @ w, 1e-12)))
+            s = (r - rfr) / v if v > 1e-10 else 0.0
+            return round(r, 6), round(v, 6), round(s, 4)
+
+        bl_ret, bl_vol, bl_sharpe = port_metrics(w_bl, mu_bl, cov_annual, req.risk_free_rate)
+        mkt_ret, mkt_vol, mkt_sharpe = port_metrics(w_mkt, mean_annual, cov_annual, req.risk_free_rate)
+
+        return {
+            "tickers": valid_tickers,
+            "bl_weights": {valid_tickers[i]: round(float(w_bl[i]), 6) for i in range(n)},
+            "market_weights": {valid_tickers[i]: round(float(w_mkt[i]), 6) for i in range(n)},
+            "bl_expected_returns": {valid_tickers[i]: round(float(mu_bl[i]), 6) for i in range(n)},
+            "implied_returns": {valid_tickers[i]: round(float(pi[i]), 6) for i in range(n)},
+            "market_caps": {valid_tickers[i]: round(market_caps[valid_tickers[i]] / 1e9, 3) for i in range(n)},
+            "views_applied": len(valid_views),
+            "bl_portfolio_metrics": {
+                "annual_return": bl_ret,
+                "annual_vol": bl_vol,
+                "sharpe": bl_sharpe,
+            },
+            "market_portfolio_metrics": {
+                "annual_return": mkt_ret,
+                "annual_vol": mkt_vol,
+                "sharpe": mkt_sharpe,
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/portfolio/rolling")
+async def portfolio_rolling(req: RollingOptimizationRequest):
+    """
+    Rolling window portfolio optimization. Slides a window over historical data,
+    running the optimization at each step. Returns weight evolution over time.
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        engine = PortfolioOptimizer(
+            api_key=os.environ.get('FMP_API_KEY'),
+            risk_free_rate=req.risk_free_rate,
+        )
+
+        prices = engine._fetch_prices(req.tickers, req.period_days)
+        valid_tickers = [t for t in req.tickers if t in prices]
+        if len(valid_tickers) < 2:
+            raise HTTPException(status_code=400, detail="Need at least 2 tickers with price data")
+
+        aligned = engine._align_prices(prices, valid_tickers)
+        log_returns = np.diff(np.log(aligned), axis=0)
+
+        # Build date index using aligned common dates
+        all_valid = list(dict.fromkeys(valid_tickers))
+        date_sets = [set(d for d, _ in prices[t]) for t in all_valid]
+        common_dates = sorted(date_sets[0].intersection(*date_sets[1:]))
+        # returns correspond to dates[1:]
+        return_dates = common_dates[1:]
+
+        T = log_returns.shape[0]
+        n = len(valid_tickers)
+
+        windows = []
+        start = 0
+        window_count = 0
+        MAX_WINDOWS = 36
+
+        while start + req.window_days <= T and window_count < MAX_WINDOWS:
+            end = start + req.window_days
+            window_returns = log_returns[start:end, :]
+
+            mean_annual = np.mean(window_returns, axis=0) * 252
+            cov_annual = np.cov(window_returns, rowvar=False) * 252
+
+            try:
+                opt_weights = engine._optimize_weights(
+                    mean_annual, cov_annual, req.objective,
+                    max_weight=req.max_weight,
+                    min_weight=0.0,
+                )
+            except Exception:
+                opt_weights = np.ones(n) / n
+
+            port_ret = float(np.dot(opt_weights, mean_annual))
+            port_vol = float(np.sqrt(np.maximum(opt_weights @ cov_annual @ opt_weights, 1e-12)))
+            sharpe = (port_ret - req.risk_free_rate) / port_vol if port_vol > 1e-10 else 0.0
+
+            # Use the last date of the window as the snapshot date
+            date_idx = min(end - 1, len(return_dates) - 1)
+            window_date = return_dates[date_idx] if date_idx >= 0 else f"window_{window_count}"
+
+            windows.append({
+                "date": window_date,
+                "weights": {valid_tickers[i]: round(float(opt_weights[i]), 4) for i in range(n)},
+                "sharpe": round(sharpe, 4),
+                "annual_return": round(port_ret, 6),
+                "annual_vol": round(port_vol, 6),
+            })
+
+            start += req.step_days
+            window_count += 1
+
+        return {
+            "tickers": valid_tickers,
+            "objective": req.objective,
+            "window_days": req.window_days,
+            "step_days": req.step_days,
+            "windows": windows,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
