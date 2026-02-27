@@ -7,6 +7,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import Header from '@/app/components/Header';
 import Logo from '@/app/components/Logo';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface NewsItem {
   title: string;
@@ -38,32 +39,18 @@ export default function Home() {
 
   useEffect(() => {
     const fetchMarketData = async () => {
-      const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-      if (!apiKey) return;
-
       setLoadingMarket(true);
 
       try {
-        const [newsRes, gainersRes, losersRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/stable/news/general-latest?page=0&limit=6&apikey=${apiKey}`),
-          fetch(`https://financialmodelingprep.com/stable/biggest-gainers?apikey=${apiKey}`),
-          fetch(`https://financialmodelingprep.com/stable/biggest-losers?apikey=${apiKey}`),
+        const [newsData, gainersData, losersData] = await Promise.all([
+          fetchFmp('stable/news/general-latest', { page: 0, limit: 6 }).catch(() => []),
+          fetchFmp('stable/biggest-gainers').catch(() => []),
+          fetchFmp('stable/biggest-losers').catch(() => []),
         ]);
 
-        if (newsRes.ok) {
-          const data = await newsRes.json();
-          setNews(Array.isArray(data) ? data.slice(0, 6) : []);
-        }
-
-        if (gainersRes.ok) {
-          const data = await gainersRes.json();
-          setGainers(Array.isArray(data) ? data.slice(0, 5) : []);
-        }
-
-        if (losersRes.ok) {
-          const data = await losersRes.json();
-          setLosers(Array.isArray(data) ? data.slice(0, 5) : []);
-        }
+        setNews(Array.isArray(newsData) ? newsData.slice(0, 6) : []);
+        setGainers(Array.isArray(gainersData) ? gainersData.slice(0, 5) : []);
+        setLosers(Array.isArray(losersData) ? losersData.slice(0, 5) : []);
       } catch (err) {
         console.error('Error fetching market data:', err);
       } finally {

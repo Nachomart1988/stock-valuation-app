@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Tab } from '@headlessui/react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useUser } from '@clerk/nextjs';
+import { fetchFmp } from '@/lib/fmpClient';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES - Estructura principal según especificaciones
@@ -522,24 +523,18 @@ export default function DiarioInversorTab() {
     setPriceError(null);
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-
       // Hacer una llamada por cada símbolo (el endpoint stable no soporta múltiples)
       const priceMap: Record<string, number> = {};
 
       await Promise.all(
         symbols.map(async (symbol) => {
           try {
-            const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${apiKey}`;
-            const response = await fetch(url, { cache: 'no-store' });
+            const data = await fetchFmp('stable/quote', { symbol });
 
-            if (response.ok) {
-              const data = await response.json();
-              const quote = Array.isArray(data) ? data[0] : data;
-              if (quote?.price) {
-                priceMap[symbol.toUpperCase()] = quote.price;
-                console.log(`[DiarioInversor] ✓ ${symbol}: $${quote.price}`);
-              }
+            const quote = Array.isArray(data) ? data[0] : data;
+            if (quote?.price) {
+              priceMap[symbol.toUpperCase()] = quote.price;
+              console.log(`[DiarioInversor] ✓ ${symbol}: $${quote.price}`);
             }
           } catch (err) {
             console.error(`[DiarioInversor] Error fetching ${symbol}:`, err);
@@ -1832,21 +1827,17 @@ function TradeFormModal({
       setQuoteError(null);
 
       try {
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) throw new Error('API key not found');
-
         // Fetch quote for current price and profile for company info
-        const [quoteRes, profileRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/profile?symbol=${symbol}&apikey=${apiKey}`, { cache: 'no-store' }),
+        const [quoteData, profileData] = await Promise.all([
+          fetchFmp('stable/quote', { symbol }),
+          fetchFmp('stable/profile', { symbol }),
         ]);
 
         let currentPrice = null;
         let companyName = '';
         let industry = '';
 
-        if (quoteRes.ok) {
-          const quoteData = await quoteRes.json();
+        {
           const quote = Array.isArray(quoteData) ? quoteData[0] : quoteData;
           if (quote?.price) {
             currentPrice = quote.price;
@@ -1854,8 +1845,7 @@ function TradeFormModal({
           }
         }
 
-        if (profileRes.ok) {
-          const profileData = await profileRes.json();
+        {
           const profile = Array.isArray(profileData) ? profileData[0] : profileData;
           if (profile) {
             companyName = profile.companyName || profile.name || '';

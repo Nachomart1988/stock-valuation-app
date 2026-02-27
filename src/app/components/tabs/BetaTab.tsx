@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface BetaTabProps {
   ticker: string;
@@ -26,30 +27,22 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
       try {
         setLoading(true);
         setError(null);
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) throw new Error(t('betaTab.apiKeyError'));
 
         // 1. Beta oficial (de profile)
-        const profileRes = await fetch(
-          `https://financialmodelingprep.com/stable/profile?symbol=${ticker}&apikey=${apiKey}`
-        );
-        if (profileRes.ok) {
-          const json = await profileRes.json();
-          if (Array.isArray(json) && json[0]?.beta !== undefined) {
-            setBetaApi(json[0].beta);
+        try {
+          const profileJson = await fetchFmp('stable/profile', { symbol: ticker });
+          if (Array.isArray(profileJson) && profileJson[0]?.beta !== undefined) {
+            setBetaApi(profileJson[0].beta);
           }
-        }
+        } catch {}
 
         // 2. Beta calculado manual
-        const calculated = await calculateManualBeta(ticker, apiKey);
+        const calculated = await calculateManualBeta(ticker);
         setBetaCalculated(calculated);
 
         // 3. Risk Free Rate (10Y Treasury)
-        const treasuryRes = await fetch(
-          `https://financialmodelingprep.com/stable/treasury-rates?apikey=${apiKey}`
-        );
-        if (treasuryRes.ok) {
-          const treasuryJson = await treasuryRes.json();
+        try {
+          const treasuryJson = await fetchFmp('stable/treasury-rates');
           let rfrValue = null;
           if (Array.isArray(treasuryJson) && treasuryJson.length > 0) {
             const latest = treasuryJson[0];
@@ -60,16 +53,13 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
           } else {
             setRiskFreeRate(4.2);
           }
-        } else {
+        } catch {
           setRiskFreeRate(4.2);
         }
 
         // 4. Market Risk Premium
-        const mrpRes = await fetch(
-          `https://financialmodelingprep.com/stable/market-risk-premium?apikey=${apiKey}`
-        );
-        if (mrpRes.ok) {
-          const mrpJson = await mrpRes.json();
+        try {
+          const mrpJson = await fetchFmp('stable/market-risk-premium');
           let mrpValue = null;
           if (Array.isArray(mrpJson)) {
             const usEntry = mrpJson.find((item: any) =>
@@ -91,7 +81,7 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
           } else {
             setMarketRiskPremium(5.5);
           }
-        } else {
+        } catch {
           setMarketRiskPremium(5.5);
         }
 
@@ -106,22 +96,17 @@ export default function BetaTab({ ticker, onAvgCAPMChange }: BetaTabProps) {
     fetchBetaData();
   }, [ticker]);
 
-  const calculateManualBeta = async (symbol: string, apiKey: string): Promise<number | null> => {
+  const calculateManualBeta = async (symbol: string): Promise<number | null> => {
     try {
       const today = new Date();
       const fiveYearsAgo = new Date(today.getFullYear() - 5, today.getMonth(), today.getDate());
       const fromDate = fiveYearsAgo.toISOString().split('T')[0];
       const toDate = today.toISOString().split('T')[0];
 
-      const [stockRes, marketRes] = await Promise.all([
-        fetch(`https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${symbol}&from=${fromDate}&to=${toDate}&apikey=${apiKey}`),
-        fetch(`https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=SPY&from=${fromDate}&to=${toDate}&apikey=${apiKey}`),
+      const [stockData, marketData] = await Promise.all([
+        fetchFmp('stable/historical-price-eod/light', { symbol, from: fromDate, to: toDate }),
+        fetchFmp('stable/historical-price-eod/light', { symbol: 'SPY', from: fromDate, to: toDate }),
       ]);
-
-      if (!stockRes.ok || !marketRes.ok) return null;
-
-      const stockData = await stockRes.json();
-      const marketData = await marketRes.json();
 
       const normalizeDate = (date: any): string | null => {
         if (!date || typeof date !== 'string') return null;

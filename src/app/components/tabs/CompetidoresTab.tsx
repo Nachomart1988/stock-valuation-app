@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface PeerData {
   symbol: string;
@@ -41,20 +42,13 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
       try {
         setLoading(true);
         setError(null);
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) throw new Error('FMP_API_KEY no configurada');
 
         let peerSymbols: string[] = [];
 
         try {
-          const peersRes = await fetch(
-            `https://financialmodelingprep.com/stable/stock-peers?symbol=${ticker}&apikey=${apiKey}`
-          );
-          if (peersRes.ok) {
-            const peersJson = await peersRes.json();
-            if (Array.isArray(peersJson)) {
-              peerSymbols = peersJson.map((p: any) => p.symbol).filter(Boolean).slice(0, 8);
-            }
+          const peersJson = await fetchFmp('stable/stock-peers', { symbol: ticker });
+          if (Array.isArray(peersJson)) {
+            peerSymbols = peersJson.map((p: any) => p.symbol).filter(Boolean).slice(0, 8);
           }
         } catch (e) {
           console.warn('Peers falló, usando fallback');
@@ -70,11 +64,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
         // Quote (marketCap)
         const quotesPromises = uniqueSymbols.map(async (symbol) => {
           try {
-            const res = await fetch(
-              `https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${apiKey}`
-            );
-            if (!res.ok) return { symbol, name: symbol, marketCap: null };
-            const json = await res.json();
+            const json = await fetchFmp('stable/quote', { symbol });
             return Array.isArray(json) && json[0] ? json[0] : { symbol, name: symbol, marketCap: null };
           } catch {
             return { symbol, name: symbol, marketCap: null };
@@ -87,11 +77,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
         // Profile (beta + companyName)
         const profilePromises = uniqueSymbols.map(async (symbol) => {
           try {
-            const res = await fetch(
-              `https://financialmodelingprep.com/stable/profile?symbol=${symbol}&apikey=${apiKey}`
-            );
-            if (!res.ok) return { symbol, beta: null };
-            const json = await res.json();
+            const json = await fetchFmp('stable/profile', { symbol });
             return Array.isArray(json) && json[0] ? json[0] : { symbol, beta: null };
           } catch {
             return { symbol, beta: null };
@@ -104,11 +90,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
         // Balance sheet (totalDebt)
         const balancePromises = uniqueSymbols.map(async (symbol) => {
           try {
-            const res = await fetch(
-              `https://financialmodelingprep.com/stable/balance-sheet-statement?symbol=${symbol}&limit=1&apikey=${apiKey}`
-            );
-            if (!res.ok) return { symbol };
-            const json = await res.json();
+            const json = await fetchFmp('stable/balance-sheet-statement', { symbol, limit: 1 });
             return Array.isArray(json) && json[0] ? json[0] : {};
           } catch {
             return {};

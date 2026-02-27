@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
+import { fetchFmp } from '@/lib/fmpClient';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -68,11 +69,6 @@ export default function AnalisisFinalTab({
     async function fetchHistory() {
       try {
         setLoading(true)
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY
-        if (!apiKey) {
-          console.error('[AnalisisFinal] No API key found')
-          return
-        }
 
         // Calcular fechas según años seleccionados
         const today = new Date()
@@ -80,16 +76,9 @@ export default function AnalisisFinalTab({
         const fromDate = yearsAgo.toISOString().split('T')[0]
         const toDate = today.toISOString().split('T')[0]
 
-        const url = `https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${ticker}&from=${fromDate}&to=${toDate}&apikey=${apiKey}`
         console.log('[AnalisisFinal] Fetching historical data...')
 
-        const res = await fetch(url)
-        if (!res.ok) {
-          console.error('[AnalisisFinal] API error:', res.status)
-          return
-        }
-
-        const json = await res.json()
+        const json = await fetchFmp('stable/historical-price-eod/light', { symbol: ticker, from: fromDate, to: toDate })
         console.log('[AnalisisFinal] Data received:', json.length, 'records')
 
         if (Array.isArray(json) && json.length > 0) {

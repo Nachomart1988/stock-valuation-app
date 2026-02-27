@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface HoldersTabProps {
   ticker: string;
@@ -166,125 +167,107 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
       setError(null);
 
       try {
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) throw new Error('API key not found');
-
         // Get last 4 quarters for historical data
         const quarters = getLast4Quarters();
         const latestQuarter = quarters[0];
 
         // Parallel fetch all data
-        const [instRes, fundRes, summaryRes, insiderStatsRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/stable/institutional-holder?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/mutual-fund-holder?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/institutional-ownership/symbol-ownership-percent?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/insider-trading/statistics?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
+        const [instData, fundData, summaryData, insiderStatsData] = await Promise.all([
+          fetchFmp('stable/institutional-holder', { symbol: ticker }).catch(() => []),
+          fetchFmp('stable/mutual-fund-holder', { symbol: ticker }).catch(() => []),
+          fetchFmp('stable/institutional-ownership/symbol-ownership-percent', { symbol: ticker }).catch(() => []),
+          fetchFmp('stable/insider-trading/statistics', { symbol: ticker }).catch(() => []),
         ]);
 
         // Fetch positions summary for all 4 quarters in parallel
-        const positionsPromises = quarters.map(q =>
-          fetch(`https://financialmodelingprep.com/stable/institutional-ownership/symbol-positions-summary?symbol=${ticker}&year=${q.year}&quarter=${q.quarter}&apikey=${apiKey}`, { cache: 'no-store' })
+        const positionsDataArrays = await Promise.all(
+          quarters.map(q =>
+            fetchFmp('stable/institutional-ownership/symbol-positions-summary', { symbol: ticker, year: q.year, quarter: q.quarter }).catch(() => [])
+          )
         );
 
         // Fetch analytics for latest quarter
-        const analyticsRes = await fetch(
-          `https://financialmodelingprep.com/stable/institutional-ownership/extract-analytics/holder?symbol=${ticker}&year=${latestQuarter.year}&quarter=${latestQuarter.quarter}&page=0&limit=25&apikey=${apiKey}`,
-          { cache: 'no-store' }
-        );
-
-        const positionsResponses = await Promise.all(positionsPromises);
+        const analyticsData = await fetchFmp(
+          'stable/institutional-ownership/extract-analytics/holder',
+          { symbol: ticker, year: latestQuarter.year, quarter: latestQuarter.quarter, page: 0, limit: 25 }
+        ).catch(() => []);
 
         // Handle institutional holders
         let instCount = 0;
-        if (instRes.ok) {
-          try {
-            const data = await instRes.json();
-            const arr = Array.isArray(data) ? data.slice(0, 25) : [];
-            instCount = arr.length;
-            console.log('[HoldersTab] Institutional holders:', instCount);
-            setInstitutionalHolders(arr);
-          } catch {
-            console.log('[HoldersTab] Institutional holders parse error');
-          }
+        try {
+          const arr = Array.isArray(instData) ? instData.slice(0, 25) : [];
+          instCount = arr.length;
+          console.log('[HoldersTab] Institutional holders:', instCount);
+          setInstitutionalHolders(arr);
+        } catch {
+          console.log('[HoldersTab] Institutional holders parse error');
         }
 
         // Handle mutual fund holders
         let fundCount = 0;
-        if (fundRes.ok) {
-          try {
-            const data = await fundRes.json();
-            const arr = Array.isArray(data) ? data.slice(0, 25) : [];
-            fundCount = arr.length;
-            console.log('[HoldersTab] Mutual fund holders:', fundCount);
-            setMutualFundHolders(arr);
-          } catch {
-            console.log('[HoldersTab] Mutual fund holders parse error');
-          }
+        try {
+          const arr = Array.isArray(fundData) ? fundData.slice(0, 25) : [];
+          fundCount = arr.length;
+          console.log('[HoldersTab] Mutual fund holders:', fundCount);
+          setMutualFundHolders(arr);
+        } catch {
+          console.log('[HoldersTab] Mutual fund holders parse error');
         }
 
         // Handle ownership summary
-        if (summaryRes.ok) {
-          try {
-            const data = await summaryRes.json();
-            console.log('[HoldersTab] Ownership summary:', data);
-            if (Array.isArray(data) && data.length > 0) {
-              const latest = data[0];
-              setOwnershipSummary({
-                institutionalOwnership: latest.institutionalOwnershipPercentage || latest.ownershipPercent || 0,
-                insiderOwnership: 0,
-                institutionalHolders: latest.investorsHolding || 0,
-                institutionalSharesHeld: latest.totalInvested || 0,
-              });
-            }
-          } catch {
-            console.log('[HoldersTab] Ownership summary parse error');
+        try {
+          console.log('[HoldersTab] Ownership summary:', summaryData);
+          if (Array.isArray(summaryData) && summaryData.length > 0) {
+            const latest = summaryData[0];
+            setOwnershipSummary({
+              institutionalOwnership: latest.institutionalOwnershipPercentage || latest.ownershipPercent || 0,
+              insiderOwnership: 0,
+              institutionalHolders: latest.investorsHolding || 0,
+              institutionalSharesHeld: latest.totalInvested || 0,
+            });
           }
+        } catch {
+          console.log('[HoldersTab] Ownership summary parse error');
         }
 
         // Handle insider trading statistics
-        if (insiderStatsRes.ok) {
-          try {
-            const data = await insiderStatsRes.json();
-            console.log('[HoldersTab] Insider trading stats:', data);
-            if (Array.isArray(data) && data.length > 0) {
-              const sorted = data.sort((a: InsiderTradingStats, b: InsiderTradingStats) => {
-                if (b.year !== a.year) return b.year - a.year;
-                return b.quarter - a.quarter;
-              });
-              setInsiderStats(sorted[0]);
-            } else if (data && typeof data === 'object' && !Array.isArray(data)) {
-              setInsiderStats(data);
-            }
-          } catch {
-            console.log('[HoldersTab] Insider stats parse error');
+        try {
+          console.log('[HoldersTab] Insider trading stats:', insiderStatsData);
+          if (Array.isArray(insiderStatsData) && insiderStatsData.length > 0) {
+            const sorted = insiderStatsData.sort((a: InsiderTradingStats, b: InsiderTradingStats) => {
+              if (b.year !== a.year) return b.year - a.year;
+              return b.quarter - a.quarter;
+            });
+            setInsiderStats(sorted[0]);
+          } else if (insiderStatsData && typeof insiderStatsData === 'object' && !Array.isArray(insiderStatsData)) {
+            setInsiderStats(insiderStatsData as any);
           }
+        } catch {
+          console.log('[HoldersTab] Insider stats parse error');
         }
 
         // Handle positions summary (all quarters) — inject year/quarter from query params
         const positionsData: PositionsSummary[] = [];
-        for (let i = 0; i < positionsResponses.length; i++) {
-          const res = positionsResponses[i];
+        for (let i = 0; i < positionsDataArrays.length; i++) {
+          const data = positionsDataArrays[i];
           const qInfo = quarters[i]; // matches the fetch order
-          if (res.ok) {
-            try {
-              const data = await res.json();
-              let record: PositionsSummary | null = null;
-              if (Array.isArray(data) && data.length > 0) {
-                record = data[0];
-              } else if (data && typeof data === 'object' && !Array.isArray(data) && data.symbol) {
-                record = data;
-              }
-              if (record) {
-                // Ensure year/quarter are set from query params if API doesn't return them
-                positionsData.push({
-                  ...record,
-                  year: record.year || qInfo.year,
-                  quarter: record.quarter || qInfo.quarter,
-                });
-              }
-            } catch {
-              console.log('[HoldersTab] Positions summary parse error');
+          try {
+            let record: PositionsSummary | null = null;
+            if (Array.isArray(data) && data.length > 0) {
+              record = data[0];
+            } else if (data && typeof data === 'object' && !Array.isArray(data) && (data as any).symbol) {
+              record = data as any;
             }
+            if (record) {
+              // Ensure year/quarter are set from query params if API doesn't return them
+              positionsData.push({
+                ...record,
+                year: record.year || qInfo.year,
+                quarter: record.quarter || qInfo.quarter,
+              });
+            }
+          } catch {
+            console.log('[HoldersTab] Positions summary parse error');
           }
         }
 
@@ -296,17 +279,14 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
 
         // Handle institutional analytics
         let analyticsCount = 0;
-        if (analyticsRes.ok) {
-          try {
-            const data = await analyticsRes.json();
-            console.log('[HoldersTab] Institutional analytics:', data?.length || 0);
-            if (Array.isArray(data) && data.length > 0) {
-              setInstitutionalAnalytics(data.slice(0, 25));
-              analyticsCount = data.length;
-            }
-          } catch {
-            console.log('[HoldersTab] Analytics parse error');
+        try {
+          console.log('[HoldersTab] Institutional analytics:', analyticsData?.length || 0);
+          if (Array.isArray(analyticsData) && analyticsData.length > 0) {
+            setInstitutionalAnalytics(analyticsData.slice(0, 25));
+            analyticsCount = analyticsData.length;
           }
+        } catch {
+          console.log('[HoldersTab] Analytics parse error');
         }
 
         // Auto-switch: if institutional and mutual fund data are both empty, show analytics

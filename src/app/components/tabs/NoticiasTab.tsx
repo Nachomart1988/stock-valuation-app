@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface NoticiasTabProps {
   ticker: string;
@@ -37,28 +38,11 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
         setLoadingNews(true);
         setCompanyNews([]);
 
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) {
-          setLoadingNews(false);
-          return;
-        }
-
-        const url = `https://financialmodelingprep.com/stable/news/stock?symbols=${ticker}&limit=20&apikey=${apiKey}`;
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
+        const data = await fetchFmp('stable/news/stock', { symbols: ticker, limit: 20 });
 
         if (!isMounted) return;
 
-        if (res.ok) {
-          const data = await res.json();
-          setCompanyNews(Array.isArray(data) ? data : []);
-        } else {
-          setCompanyNews([]);
-        }
+        setCompanyNews(Array.isArray(data) ? data : []);
       } catch (err: any) {
         if (err?.name !== 'AbortError' && isMounted) {
           console.warn('[NoticiasTab] Error fetching company news:', err?.message || 'Unknown error');

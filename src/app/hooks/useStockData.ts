@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface StockData {
   quote: any;
@@ -31,25 +32,6 @@ export function useStockData(ticker: string): UseStockDataReturn {
     setError(null);
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-      if (!apiKey) throw new Error('FMP_API_KEY no está configurada');
-
-      const base = 'https://financialmodelingprep.com/stable';
-      const params = `?symbol=${ticker}&apikey=${apiKey}`;
-
-      const fetchJson = async (endpoint: string, extra = '') => {
-        const res = await fetch(`${base}/${endpoint}${params}${extra}`, { 
-          cache: 'no-store' 
-        });
-        
-        if (!res.ok) {
-          throw new Error(`${endpoint} falló: ${res.status}`);
-        }
-        
-        const json = await res.json();
-        return Array.isArray(json) ? json : [json];
-      };
-
       const [
         quoteData,
         profileData,
@@ -59,36 +41,26 @@ export function useStockData(ticker: string): UseStockDataReturn {
         priceTargetData,
         estimatesData,
       ] = await Promise.all([
-        fetchJson('quote'),
-        fetchJson('profile'),
-        fetchJson('income-statement', '&limit=10'),
-        fetchJson('balance-sheet-statement', '&limit=10'),
-        fetchJson('cash-flow-statement', '&limit=10'),
-        fetchJson('price-target-summary'),
-        fetchJson('analyst-estimates', '&period=annual&limit=10'),
+        fetchFmp('stable/quote', { symbol: ticker }),
+        fetchFmp('stable/profile', { symbol: ticker }),
+        fetchFmp('stable/income-statement', { symbol: ticker, limit: 10 }),
+        fetchFmp('stable/balance-sheet-statement', { symbol: ticker, limit: 10 }),
+        fetchFmp('stable/cash-flow-statement', { symbol: ticker, limit: 10 }),
+        fetchFmp('stable/price-target-summary', { symbol: ticker }),
+        fetchFmp('stable/analyst-estimates', { symbol: ticker, period: 'annual', limit: 10 }),
       ]);
 
       let dcfStandardData: any = [];
       let dcfCustomData: any = [];
 
       try {
-        const dcfStandardRes = await fetch(`${base}/discounted-cash-flow${params}`, { 
-          cache: 'no-store' 
-        });
-        if (dcfStandardRes.ok) {
-          dcfStandardData = await dcfStandardRes.json();
-        }
+        dcfStandardData = await fetchFmp('stable/discounted-cash-flow', { symbol: ticker });
       } catch (err) {
         console.warn('DCF Standard data unavailable:', err);
       }
 
       try {
-        const dcfCustomRes = await fetch(`${base}/custom-discounted-cash-flow${params}`, { 
-          cache: 'no-store' 
-        });
-        if (dcfCustomRes.ok) {
-          dcfCustomData = await dcfCustomRes.json();
-        }
+        dcfCustomData = await fetchFmp('stable/custom-discounted-cash-flow', { symbol: ticker });
       } catch (err) {
         console.warn('DCF Custom data unavailable:', err);
       }

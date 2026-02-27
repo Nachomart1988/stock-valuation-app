@@ -44,6 +44,7 @@ import MLPredictionTab from '@/app/components/tabs/MLPredictionTab';
 import PortfolioOptimizerTab from '@/app/components/tabs/PortfolioOptimizerTab';
 import OptionsTab from '@/app/components/tabs/OptionsTab';
 import PDFConfigModal, { PDFConfig } from '@/app/components/PDFConfigModal';
+import { fetchFmp } from '@/lib/fmpClient';
 
 // Group components for reorganized layout
 import FinancialStatementsGroup from '@/app/components/groups/FinancialStatementsGroup';
@@ -508,14 +509,15 @@ function AnalizarContent() {
       console.log('[AnalizarContent] Fetching data for ticker:', activeTicker);
 
       try {
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) throw new Error('FMP_API_KEY no está configurada');
-
-        const base = 'https://financialmodelingprep.com/stable';
-        const params = `?symbol=${activeTicker}&apikey=${apiKey}`;
-
         const fetchJson = async (endpoint: string, extra = '') => {
-          const res = await fetch(`${base}/${endpoint}${params}${extra}`, { cache: 'no-store' });
+          const extraParams: Record<string, string> = {};
+          if (extra) {
+            extra.replace(/^&/, '').split('&').forEach(pair => {
+              const [k, v] = pair.split('=');
+              if (k && v) extraParams[k] = decodeURIComponent(v);
+            });
+          }
+          const res = await fetch(`/api/fmp?path=stable/${endpoint}&symbol=${activeTicker}&${new URLSearchParams(extraParams)}`, { cache: 'no-store' });
           if (!res.ok) throw new Error(`${endpoint} falló: ${res.status}`);
           const json = await res.json();
           return Array.isArray(json) ? json : [json];
@@ -589,24 +591,18 @@ function AnalizarContent() {
           fetchJson('owner-earnings', '&limit=10').catch(() => []),
         ]);
 
-        const dcfStandardRes = await fetch(`${base}/discounted-cash-flow${params}`, { cache: 'no-store' });
         let dcfStandardData: any = [];
-        if (dcfStandardRes.ok) {
-          try {
-            dcfStandardData = await dcfStandardRes.json();
-          } catch (parseErr) {
-            console.error('Error parsing DCF Standard:', parseErr);
-          }
+        try {
+          dcfStandardData = await fetchFmp('stable/discounted-cash-flow', { symbol: activeTicker });
+        } catch (parseErr) {
+          console.error('Error parsing DCF Standard:', parseErr);
         }
 
-        const dcfCustomRes = await fetch(`${base}/custom-discounted-cash-flow${params}`, { cache: 'no-store' });
         let dcfCustomData: any = [];
-        if (dcfCustomRes.ok) {
-          try {
-            dcfCustomData = await dcfCustomRes.json();
-          } catch (parseErr) {
-            console.error('Error parsing DCF Custom:', parseErr);
-          }
+        try {
+          dcfCustomData = await fetchFmp('stable/custom-discounted-cash-flow', { symbol: activeTicker });
+        } catch (parseErr) {
+          console.error('Error parsing DCF Custom:', parseErr);
         }
 
         // Fetch SEC Financial Reports for additional data (dividends per share, leases, etc.)
@@ -615,11 +611,9 @@ function AnalizarContent() {
         console.log(`[SEC Fetch] Fetching SEC data for ticker: ${activeTicker}, years: ${currentYear} to ${currentYear - 5}`);
         const secReportsPromises = [];
         for (let year = currentYear; year >= currentYear - 5; year--) {
-          const secUrl = `${base}/financial-reports-json?symbol=${activeTicker}&year=${year}&period=FY&apikey=${apiKey}`;
-          console.log(`[SEC Fetch] URL: ${secUrl.replace(apiKey, 'API_KEY_HIDDEN')}`);
           secReportsPromises.push(
-            fetch(secUrl, { cache: 'no-store' })
-              .then(res => res.ok ? res.json() : null)
+            fetchFmp('stable/financial-reports-json', { symbol: activeTicker, year, period: 'FY' })
+              .then(data => data[0] ?? null)
               .catch(() => null)
           );
         }
@@ -658,14 +652,14 @@ function AnalizarContent() {
 
         if (profileCurrency !== 'USD') {
           console.log(`[Currency] Profile currency: ${profileCurrency}, fetching rate...`);
-          profileFxRate = await fetchExchangeRate(profileCurrency, apiKey);
+          profileFxRate = await fetchExchangeRate(profileCurrency, '');
         }
         if (statementCurrency !== 'USD') {
           if (statementCurrency === profileCurrency) {
             stmtFxRate = profileFxRate;
           } else {
             console.log(`[Currency] Statement currency: ${statementCurrency} (differs from profile ${profileCurrency}), fetching rate...`);
-            stmtFxRate = await fetchExchangeRate(statementCurrency, apiKey);
+            stmtFxRate = await fetchExchangeRate(statementCurrency, '');
           }
         }
 
@@ -733,19 +727,10 @@ function AnalizarContent() {
     if (!activeTicker) return;
 
     const fetchResumenData = async () => {
-      const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-      if (!apiKey) return;
-
       try {
         // Fetch news
-        const newsRes = await fetch(
-          `https://financialmodelingprep.com/stable/news/stock?symbols=${activeTicker}&limit=20&apikey=${apiKey}`,
-          { cache: 'no-store' }
-        );
-        if (newsRes.ok) {
-          const newsData = await newsRes.json();
-          setSharedNews(Array.isArray(newsData) ? newsData : []);
-        }
+        const newsData = await fetchFmp('stable/news/stock', { symbols: activeTicker, limit: 20 }).catch(() => []);
+        setSharedNews(Array.isArray(newsData) ? newsData : []);
 
         // Fetch comprehensive institutional holders data for Neural Resumen Engine
         // Including new endpoints: positions-summary, insider-stats, ownership-analytics
@@ -762,13 +747,13 @@ function AnalizarContent() {
         };
 
         const quarters = getLast4Quarters();
-        const [instRes, summaryRes, insiderStatsRes, analyticsRes, ...positionsResponses] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/stable/institutional-holder?symbol=${activeTicker}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/institutional-ownership/symbol-ownership-percent?symbol=${activeTicker}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/insider-trading/statistics?symbol=${activeTicker}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/institutional-ownership/extract-analytics/holder?symbol=${activeTicker}&apikey=${apiKey}`, { cache: 'no-store' }),
+        const [instData, summaryData, insiderData, analyticsData, ...positionsDataArr] = await Promise.all([
+          fetchFmp('stable/institutional-holder', { symbol: activeTicker }).catch(() => []),
+          fetchFmp('stable/institutional-ownership/symbol-ownership-percent', { symbol: activeTicker }).catch(() => []),
+          fetchFmp('stable/insider-trading/statistics', { symbol: activeTicker }).catch(() => []),
+          fetchFmp('stable/institutional-ownership/extract-analytics/holder', { symbol: activeTicker }).catch(() => []),
           ...quarters.map(q =>
-            fetch(`https://financialmodelingprep.com/stable/symbol-positions-summary?symbol=${activeTicker}&quarter=${q}&apikey=${apiKey}`, { cache: 'no-store' })
+            fetchFmp('stable/symbol-positions-summary', { symbol: activeTicker, quarter: q }).catch(() => [])
           )
         ]);
 
@@ -780,39 +765,24 @@ function AnalizarContent() {
           ownershipAnalytics: null
         };
 
-        if (instRes.ok) {
-          const instData = await instRes.json();
-          holdersData.institutionalHolders = Array.isArray(instData) ? instData.slice(0, 25) : [];
-        }
-        if (summaryRes.ok) {
-          const summaryData = await summaryRes.json();
-          holdersData.ownershipSummary = Array.isArray(summaryData) && summaryData.length > 0 ? summaryData[0] : null;
-        }
-        if (insiderStatsRes.ok) {
-          const insiderData = await insiderStatsRes.json();
-          holdersData.insiderStats = Array.isArray(insiderData) && insiderData.length > 0 ? insiderData[0] : insiderData;
-        }
-        if (analyticsRes.ok) {
-          const analyticsData = await analyticsRes.json();
-          holdersData.ownershipAnalytics = Array.isArray(analyticsData) && analyticsData.length > 0 ? analyticsData[0] : analyticsData;
-        }
+        holdersData.institutionalHolders = Array.isArray(instData) ? instData.slice(0, 25) : [];
+        holdersData.ownershipSummary = Array.isArray(summaryData) && summaryData.length > 0 ? summaryData[0] : null;
+        holdersData.insiderStats = Array.isArray(insiderData) && insiderData.length > 0 ? insiderData[0] : insiderData;
+        holdersData.ownershipAnalytics = Array.isArray(analyticsData) && analyticsData.length > 0 ? analyticsData[0] : analyticsData;
 
         // Process quarterly positions data
-        for (let i = 0; i < positionsResponses.length; i++) {
-          const res = positionsResponses[i];
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-              holdersData.positionsSummary.push({
-                quarter: quarters[i],
-                ...data[0]
-              });
-            } else if (data && typeof data === 'object' && !Array.isArray(data)) {
-              holdersData.positionsSummary.push({
-                quarter: quarters[i],
-                ...data
-              });
-            }
+        for (let i = 0; i < positionsDataArr.length; i++) {
+          const data = positionsDataArr[i];
+          if (Array.isArray(data) && data.length > 0) {
+            holdersData.positionsSummary.push({
+              quarter: quarters[i],
+              ...data[0]
+            });
+          } else if (data && typeof data === 'object' && !Array.isArray(data)) {
+            holdersData.positionsSummary.push({
+              quarter: quarters[i],
+              ...(data as any)
+            });
           }
         }
 
@@ -826,12 +796,8 @@ function AnalizarContent() {
         setSharedHoldersData(holdersData);
 
         // Fetch analyst forecasts
-        const forecastRes = await fetch(
-          `https://financialmodelingprep.com/stable/analyst-estimates?symbol=${activeTicker}&period=annual&limit=10&apikey=${apiKey}`,
-          { cache: 'no-store' }
-        );
-        if (forecastRes.ok) {
-          const forecastData = await forecastRes.json();
+        const forecastData = await fetchFmp('stable/analyst-estimates', { symbol: activeTicker, period: 'annual', limit: 10 }).catch(() => []);
+        {
           // Filter for future estimates
           const futureEstimates = (forecastData || [])
             .filter((est: any) => new Date(est.date) > new Date())
@@ -840,13 +806,9 @@ function AnalizarContent() {
         }
 
         // Fetch historical prices for pivot analysis
-        const priceRes = await fetch(
-          `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${activeTicker}&apikey=${apiKey}`,
-          { cache: 'no-store' }
-        );
-        if (priceRes.ok) {
-          const priceData = await priceRes.json();
-          const historical = priceData?.historical || priceData || [];
+        const priceData = await fetchFmp('stable/historical-price-eod/full', { symbol: activeTicker }).catch(() => []);
+        {
+          const historical = (priceData as any)?.historical || priceData || [];
           if (historical.length > 0) {
             // Calculate pivot points from recent data
             const recent = historical.slice(0, 252); // Last year
@@ -1519,11 +1481,6 @@ function InicioTab({
     async function fetchHistory() {
       try {
         setLoading(true);
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) {
-          console.error('[InicioTab] No API key found');
-          return;
-        }
 
         // Calcular fechas para el ultimo ano
         const today = new Date();
@@ -1531,15 +1488,10 @@ function InicioTab({
         const fromDate = oneYearAgo.toISOString().split('T')[0];
         const toDate = today.toISOString().split('T')[0];
 
-        const url = `https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${ticker}&from=${fromDate}&to=${toDate}&apikey=${apiKey}`;
-
-        const res = await fetch(url);
-        if (!res.ok) {
-          console.error('[InicioTab] API error:', res.status);
-          return;
-        }
-
-        const json = await res.json();
+        const json = await fetchFmp('stable/historical-price-eod/light', { symbol: ticker, from: fromDate, to: toDate }).catch((err: any) => {
+          console.error('[InicioTab] API error:', err);
+          return [];
+        });
 
         if (Array.isArray(json) && json.length > 0) {
           const fxRate = currencyInfo?.rate || 1;
@@ -1565,45 +1517,42 @@ function InicioTab({
   useEffect(() => {
     async function fetchIndicators() {
       try {
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) return;
-
         // Fetch RSI, Williams %R, and ADX indicators with correct FMP API parameters
-        const [rsiRes, williamsRes, adxRes, stddevRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/stable/technical-indicators/rsi?symbol=${ticker}&periodLength=14&timeframe=1day&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/technical-indicators/williams?symbol=${ticker}&periodLength=14&timeframe=1day&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/technical-indicators/adx?symbol=${ticker}&periodLength=14&timeframe=1day&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/technical-indicators/standardDeviation?symbol=${ticker}&periodLength=20&timeframe=1day&apikey=${apiKey}`, { cache: 'no-store' }),
+        const [rsiData, williamsData, adxData, stddevData] = await Promise.all([
+          fetchFmp('stable/technical-indicators/rsi', { symbol: ticker, periodLength: 14, timeframe: '1day' }).catch(() => []),
+          fetchFmp('stable/technical-indicators/williams', { symbol: ticker, periodLength: 14, timeframe: '1day' }).catch(() => []),
+          fetchFmp('stable/technical-indicators/adx', { symbol: ticker, periodLength: 14, timeframe: '1day' }).catch(() => []),
+          fetchFmp('stable/technical-indicators/standardDeviation', { symbol: ticker, periodLength: 20, timeframe: '1day' }).catch(() => []),
         ]);
 
         const indicators: any = {};
 
-        if (rsiRes.ok) {
-          const data = await rsiRes.json();
+        {
+          const data = rsiData;
           console.log('[InicioTab] RSI response:', data);
           if (Array.isArray(data) && data.length > 0) {
             indicators.rsi = data[0].rsi;
           }
         }
 
-        if (williamsRes.ok) {
-          const data = await williamsRes.json();
+        {
+          const data = williamsData;
           console.log('[InicioTab] Williams response:', data);
           if (Array.isArray(data) && data.length > 0) {
             indicators.williamsR = data[0].williams;
           }
         }
 
-        if (adxRes.ok) {
-          const data = await adxRes.json();
+        {
+          const data = adxData;
           console.log('[InicioTab] ADX response:', data);
           if (Array.isArray(data) && data.length > 0) {
             indicators.adx = data[0].adx;
           }
         }
 
-        if (stddevRes.ok) {
-          const data = await stddevRes.json();
+        {
+          const data = stddevData;
           console.log('[InicioTab] StdDev response:', data);
           if (Array.isArray(data) && data.length > 0) {
             indicators.stdDev = data[0].standardDeviation;
@@ -2147,25 +2096,16 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
       setLoading(true);
 
       try {
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) return;
-
-        const [floatRes, execRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/stable/shares-float?symbol=${ticker}&apikey=${apiKey}`),
-          fetch(`https://financialmodelingprep.com/stable/key-executives?symbol=${ticker}&apikey=${apiKey}`),
+        const [floatData, execData] = await Promise.all([
+          fetchFmp('stable/shares-float', { symbol: ticker }).catch(() => []),
+          fetchFmp('stable/key-executives', { symbol: ticker }).catch(() => []),
         ]);
 
-        if (floatRes.ok) {
-          const data = await floatRes.json();
-          console.log('[GeneralTab] Float data:', data);
-          setFloatData(Array.isArray(data) ? data[0] : data);
-        }
+        console.log('[GeneralTab] Float data:', floatData);
+        setFloatData(Array.isArray(floatData) ? floatData[0] : floatData);
 
-        if (execRes.ok) {
-          const data = await execRes.json();
-          console.log('[GeneralTab] Executives data:', data);
-          setExecutives(Array.isArray(data) ? data.slice(0, 10) : []);
-        }
+        console.log('[GeneralTab] Executives data:', execData);
+        setExecutives(Array.isArray(execData) ? execData.slice(0, 10) : []);
       } catch (err) {
         console.error('[GeneralTab] Error fetching data:', err);
       } finally {
@@ -3370,17 +3310,9 @@ function AnalistasTab({ priceTarget, ticker }: { priceTarget: any; ticker: strin
 
       try {
         setLoadingGrades(true);
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) return;
 
-        const res = await fetch(
-          `https://financialmodelingprep.com/stable/grades?symbol=${ticker}&apikey=${apiKey}`
-        );
-
-        if (res.ok) {
-          const data = await res.json();
-          setGrades(Array.isArray(data) ? data.slice(0, 20) : []);
-        }
+        const data = await fetchFmp('stable/grades', { symbol: ticker });
+        setGrades(Array.isArray(data) ? data.slice(0, 20) : []);
       } catch (err) {
         console.error('Error fetching grades:', err);
       } finally {

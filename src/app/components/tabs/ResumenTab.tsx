@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface ChainOfThoughtStep {
   step: number;
@@ -317,15 +318,14 @@ export default function ResumenTab({
           return;
         }
         // 2) Fallback: compute DFT client-side via FMP prices
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) return;
         const today = new Date();
         const twoYearsAgo = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate());
-        const fmpRes = await fetch(
-          `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${ticker}&from=${twoYearsAgo.toISOString().split('T')[0]}&to=${today.toISOString().split('T')[0]}&apikey=${apiKey}`
-        );
-        if (!fmpRes.ok) return;
-        const fmpData = await fmpRes.json();
+        const fmpData = await fetchFmp('stable/historical-price-eod/full', {
+          symbol: ticker,
+          from: twoYearsAgo.toISOString().split('T')[0],
+          to: today.toISOString().split('T')[0],
+        }).catch(() => null);
+        if (!fmpData) return;
         if (!Array.isArray(fmpData) || fmpData.length < 300) return;
         const sorted = [...fmpData].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
         const allCloses: number[] = sorted.map((d: any) => Number(d.close ?? d.price));

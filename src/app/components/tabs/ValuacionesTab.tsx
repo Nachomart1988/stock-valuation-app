@@ -4,6 +4,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
+import { fetchFmp } from '@/lib/fmpClient';
 
 // ────────────────────────────────────────────────
 // HELPER FUNCTIONS FOR MULTI-STAGE VALUATION MODELS
@@ -745,20 +746,16 @@ export default function ValuacionesTab({
 
       try {
         setLoadingPeers(true);
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) return;
 
         // Obtener peers
-        const peersRes = await fetch(
-          `https://financialmodelingprep.com/stable/stock-peers?symbol=${ticker}&apikey=${apiKey}`
-        );
-
         let peerSymbols: string[] = [];
-        if (peersRes.ok) {
-          const peersJson = await peersRes.json();
+        try {
+          const peersJson = await fetchFmp('stable/stock-peers', { symbol: ticker });
           if (Array.isArray(peersJson)) {
             peerSymbols = peersJson.map((p: any) => p.symbol).filter(Boolean).slice(0, 8);
           }
+        } catch {
+          // ignore, fall through to defaults
         }
 
         if (peerSymbols.length === 0) {
@@ -769,15 +766,10 @@ export default function ValuacionesTab({
         const peData: PeerData[] = [];
         for (const symbol of peerSymbols) {
           try {
-            const quoteRes = await fetch(
-              `https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${apiKey}`
-            );
-            if (quoteRes.ok) {
-              const quoteJson = await quoteRes.json();
-              const q = Array.isArray(quoteJson) ? quoteJson[0] : quoteJson;
-              if (q && q.pe && q.pe > 0 && q.pe < 100) { // Filtrar P/E razonables
-                peData.push({ symbol, pe: q.pe });
-              }
+            const quoteJson = await fetchFmp('stable/quote', { symbol });
+            const q = Array.isArray(quoteJson) ? quoteJson[0] : quoteJson;
+            if (q && q.pe && q.pe > 0 && q.pe < 100) { // Filtrar P/E razonables
+              peData.push({ symbol, pe: q.pe });
             }
           } catch {
             // Skip this peer

@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface IndustryTabProps {
   ticker: string;
@@ -73,16 +74,13 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
   };
 
   // Helper: fetch with date fallback (tries multiple dates until data is found)
-  const fetchWithDateFallback = async (baseUrl: string, dates: string[], apiKey: string): Promise<any[]> => {
+  const fetchWithDateFallback = async (path: string, dates: string[]): Promise<any[]> => {
     for (const date of dates) {
       try {
-        const res = await fetch(`${baseUrl}?date=${date}&apikey=${apiKey}`, { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            console.log(`[IndustryTab] Found data for ${baseUrl} on ${date}`);
-            return data;
-          }
+        const data = await fetchFmp(path, { date });
+        if (Array.isArray(data) && data.length > 0) {
+          console.log(`[IndustryTab] Found data for ${path} on ${date}`);
+          return data;
         }
       } catch {
         continue;
@@ -101,38 +99,30 @@ export default function IndustryTab({ ticker }: IndustryTabProps) {
       setError(null);
 
       try {
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) throw new Error('API key not found');
-
         const dates = getRecentDates();
 
         // Fetch profile and market indices (no date needed)
-        const [marketRes, profileRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/api/v3/quote/%5EGSPC,%5EDJI,%5EIXIC,%5ERUT,%5EVIX?apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/profile?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
+        const [marketData, profileData] = await Promise.all([
+          fetchFmp('api/v3/quote/%5EGSPC,%5EDJI,%5EIXIC,%5ERUT,%5EVIX', {}).catch(() => []),
+          fetchFmp('stable/profile', { symbol: ticker }).catch(() => []),
         ]);
 
-        if (marketRes.ok) {
-          const data = await marketRes.json();
-          console.log('[IndustryTab] Market indexes:', data);
-          setMarketSummary(Array.isArray(data) ? data : []);
-        }
+        const marketArr = Array.isArray(marketData) ? marketData : [];
+        console.log('[IndustryTab] Market indexes:', marketArr);
+        setMarketSummary(marketArr);
 
-        if (profileRes.ok) {
-          const data = await profileRes.json();
-          const profile = Array.isArray(data) ? data[0] : data;
-          console.log('[IndustryTab] Company Profile:', profile);
-          console.log('[IndustryTab] Profile sector:', profile?.sector);
-          console.log('[IndustryTab] Profile industry:', profile?.industry);
-          setCompanyProfile(profile);
-        }
+        const profile = Array.isArray(profileData) ? profileData[0] : profileData;
+        console.log('[IndustryTab] Company Profile:', profile);
+        console.log('[IndustryTab] Profile sector:', profile?.sector);
+        console.log('[IndustryTab] Profile industry:', profile?.industry);
+        setCompanyProfile(profile);
 
         // Fetch date-dependent data with fallback (using /stable/ for premium snapshot endpoints)
         const [sectorPerfData, sectorPEData, industryPerfData, industryPEData] = await Promise.all([
-          fetchWithDateFallback('https://financialmodelingprep.com/stable/sector-performance-snapshot', dates, apiKey),
-          fetchWithDateFallback('https://financialmodelingprep.com/stable/sector-pe-snapshot', dates, apiKey),
-          fetchWithDateFallback('https://financialmodelingprep.com/stable/industry-performance-snapshot', dates, apiKey),
-          fetchWithDateFallback('https://financialmodelingprep.com/stable/industry-pe-snapshot', dates, apiKey),
+          fetchWithDateFallback('stable/sector-performance-snapshot', dates),
+          fetchWithDateFallback('stable/sector-pe-snapshot', dates),
+          fetchWithDateFallback('stable/industry-performance-snapshot', dates),
+          fetchWithDateFallback('stable/industry-pe-snapshot', dates),
         ]);
 
         console.log('[IndustryTab] Sector performance:', sectorPerfData.length);

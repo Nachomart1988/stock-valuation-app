@@ -6,6 +6,7 @@ import Logo from '../components/Logo';
 import Header from '../components/Header';
 import { LogoLoader } from '../components/ui/LogoLoader';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface MarketSignal {
   source: string;
@@ -188,31 +189,15 @@ export default function MarketSentimentPage() {
     try {
       setLoading(true);
       setError(null);
-      const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-      if (!apiKey) throw new Error('API key not found');
-
-      const FMP = 'https://financialmodelingprep.com/stable';
-
-      const [newsRes, gainersRes, losersRes, sectorsRes, industriesRes, forexRes, sp500ConsRes, dowConsRes] = await Promise.all([
-        fetch(`${FMP}/news/general-latest?page=0&limit=30&apikey=${apiKey}`),
-        fetch(`${FMP}/biggest-gainers?apikey=${apiKey}`),
-        fetch(`${FMP}/biggest-losers?apikey=${apiKey}`),
-        fetch(`${FMP}/sector-performance-snapshot?apikey=${apiKey}`).catch(() => null),
-        fetch(`${FMP}/industry-performance-snapshot?apikey=${apiKey}`).catch(() => null),
-        fetch(`${FMP}/fx?apikey=${apiKey}`).catch(() => null),
-        fetch(`${FMP}/sp500-constituent?apikey=${apiKey}`).catch(() => null),
-        fetch(`${FMP}/dowjones-constituent?apikey=${apiKey}`).catch(() => null),
-      ]);
-
       const [newsData, gainersData, losersData, sectorsData, industriesData, forexData, sp500Cons, dowCons] = await Promise.all([
-        newsRes.ok ? newsRes.json() : [],
-        gainersRes.ok ? gainersRes.json() : [],
-        losersRes.ok ? losersRes.json() : [],
-        sectorsRes?.ok ? sectorsRes.json() : [],
-        industriesRes?.ok ? industriesRes.json() : [],
-        forexRes?.ok ? forexRes.json() : [],
-        sp500ConsRes?.ok ? sp500ConsRes.json() : [],
-        dowConsRes?.ok ? dowConsRes.json() : [],
+        fetchFmp('stable/news/general-latest', { page: 0, limit: 30 }).catch(() => []),
+        fetchFmp('stable/biggest-gainers').catch(() => []),
+        fetchFmp('stable/biggest-losers').catch(() => []),
+        fetchFmp('stable/sector-performance-snapshot').catch(() => []),
+        fetchFmp('stable/industry-performance-snapshot').catch(() => []),
+        fetchFmp('stable/fx').catch(() => []),
+        fetchFmp('stable/sp500-constituent').catch(() => []),
+        fetchFmp('stable/dowjones-constituent').catch(() => []),
       ]);
 
       // Helper: fetch batch-quote-short for a list of constituent symbols → compute breadth counts
@@ -227,8 +212,7 @@ export default function MarketSentimentPage() {
         const batchResults = await Promise.all(
           Array.from({ length: Math.ceil(symbols.length / batchSize) }, (_, i) => {
             const batch = symbols.slice(i * batchSize, (i + 1) * batchSize).join(',');
-            return fetch(`${FMP}/batch-quote-short?symbols=${batch}&apikey=${apiKey}`)
-              .then(r => r.ok ? r.json() : [])
+            return fetchFmp('stable/batch-quote-short', { symbols: batch })
               .catch(() => []);
           })
         );

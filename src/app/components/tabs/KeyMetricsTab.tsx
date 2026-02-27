@@ -4,6 +4,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface KeyMetricsTabProps {
   ticker: string;
@@ -1161,29 +1162,15 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
       setError(null);
 
       try {
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) throw new Error('API key not found');
-
-        const [metricsRes, ratiosRes, scoresRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/ratios-ttm?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/financial-scores?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
+        const [metricsData, ratiosData, scoresData] = await Promise.all([
+          fetchFmp('stable/key-metrics-ttm', { symbol: ticker }),
+          fetchFmp('stable/ratios-ttm', { symbol: ticker }),
+          fetchFmp('stable/financial-scores', { symbol: ticker }),
         ]);
 
-        if (metricsRes.ok) {
-          const data = await metricsRes.json();
-          setKeyMetrics(Array.isArray(data) ? data[0] : data);
-        }
-
-        if (ratiosRes.ok) {
-          const data = await ratiosRes.json();
-          setRatios(Array.isArray(data) ? data[0] : data);
-        }
-
-        if (scoresRes.ok) {
-          const data = await scoresRes.json();
-          setScores(Array.isArray(data) ? data[0] : data);
-        }
+        setKeyMetrics(Array.isArray(metricsData) ? metricsData[0] : metricsData);
+        setRatios(Array.isArray(ratiosData) ? ratiosData[0] : ratiosData);
+        setScores(Array.isArray(scoresData) ? scoresData[0] : scoresData);
       } catch (err: any) {
         setError(err.message || 'Error loading data');
       } finally {

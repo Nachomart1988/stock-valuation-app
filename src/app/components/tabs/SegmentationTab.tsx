@@ -5,6 +5,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import { Pie, Bar } from 'react-chartjs-2';
+import { fetchFmp } from '@/lib/fmpClient';
 import {
   Chart as ChartJS,
   ArcElement,
@@ -49,16 +50,13 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
       setError(null);
 
       try {
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) throw new Error('API key not found');
-
-        const [productRes, geoRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/stable/revenue-product-segmentation?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
-          fetch(`https://financialmodelingprep.com/stable/revenue-geographic-segmentation?symbol=${ticker}&apikey=${apiKey}`, { cache: 'no-store' }),
+        const [productData, geoData] = await Promise.all([
+          fetchFmp('stable/revenue-product-segmentation', { symbol: ticker }),
+          fetchFmp('stable/revenue-geographic-segmentation', { symbol: ticker }),
         ]);
 
-        if (productRes.ok) {
-          const data = await productRes.json();
+        {
+          const data = productData;
           console.log('[SegmentationTab] Product segments:', data);
           // FMP returns array with { symbol, fiscalYear, date, data: { segment: value } }
           const processedSegments: ProductSegment[] = [];
@@ -83,8 +81,8 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
           setProductSegments(processedSegments);
         }
 
-        if (geoRes.ok) {
-          const data = await geoRes.json();
+        {
+          const data = geoData;
           console.log('[SegmentationTab] Geographic segments:', data);
           // FMP returns array with { symbol, fiscalYear, date, data: { region: value } }
           const processedSegments: GeoSegment[] = [];

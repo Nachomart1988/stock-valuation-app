@@ -4,6 +4,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Line, Bar } from 'react-chartjs-2';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { fetchFmp } from '@/lib/fmpClient';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -118,24 +119,13 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
         setLoading(true);
         setError(null);
 
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) {
-          setError('API key not configured');
-          return;
-        }
-
         // Fetch 3 years of data
         const today = new Date();
         const threeYearsAgo = new Date(today.getFullYear() - 3, today.getMonth(), today.getDate());
         const fromDate = threeYearsAgo.toISOString().split('T')[0];
         const toDate = today.toISOString().split('T')[0];
 
-        const url = `https://financialmodelingprep.com/stable/historical-price-eod/full?symbol=${ticker}&from=${fromDate}&to=${toDate}&apikey=${apiKey}`;
-
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`API error: ${res.status}`);
-
-        const json = await res.json();
+        const json = await fetchFmp('stable/historical-price-eod/full', { symbol: ticker, from: fromDate, to: toDate });
         if (!Array.isArray(json) || json.length === 0) {
           setError('No historical data available');
           return;

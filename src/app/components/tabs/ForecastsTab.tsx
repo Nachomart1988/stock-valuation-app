@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface Estimate {
   date: string;
@@ -39,17 +40,7 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
       try {
         setLoading(true);
         setError(null);
-        const apiKey = process.env.NEXT_PUBLIC_FMP_API_KEY;
-        if (!apiKey) throw new Error('FMP_API_KEY no configurada');
-
-        const url = `https://financialmodelingprep.com/stable/analyst-estimates?symbol=${ticker}&period=annual&limit=10&apikey=${apiKey}`;
-        const res = await fetch(url);
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Error ${res.status}: ${errText}`);
-        }
-
-        const json = await res.json();
+        const json = await fetchFmp('stable/analyst-estimates', { symbol: ticker, period: 'annual', limit: 10 });
 
         const futureEstimates = json
           .filter((est: any) => new Date(est.date) > new Date())
