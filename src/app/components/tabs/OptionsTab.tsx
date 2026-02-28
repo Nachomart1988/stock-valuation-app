@@ -526,12 +526,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
     return scaled >= 0 ? `+$${scaled.toFixed(2)}` : `-$${Math.abs(scaled).toFixed(2)}`;
   };
 
-  // Format custom analysis values: qty is already baked in → multiply by 100 only (not contracts×100)
+  // Format custom analysis values: qty already baked in by backend → no extra scaling
   const fmtCustom = (v: number | string | null) => {
     if (v === null || v === undefined) return '—';
     if (typeof v === 'string') return v;
-    const scaled = v * 100;
-    return scaled >= 0 ? `+$${scaled.toFixed(0)}` : `-$${Math.abs(scaled).toFixed(0)}`;
+    return v >= 0 ? `+$${v.toFixed(0)}` : `-$${Math.abs(v).toFixed(0)}`;
   };
 
   // Format scan table values: backend returns per-share amounts → multiply by 100 for 1 contract
@@ -1235,8 +1234,8 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                           const pnlMaturity = leg.type === 'stock'
                             ? (currentPrice - leg.entryPremium) * sign * legQty * 100
                             : leg.type === 'call'
-                              ? (Math.max(0, currentPrice - leg.strike) * 100 - leg.entryPremium) * sign * legQty
-                              : (Math.max(0, leg.strike - currentPrice) * 100 - leg.entryPremium) * sign * legQty;
+                              ? (Math.max(0, currentPrice - leg.strike) - leg.entryPremium) * sign * legQty
+                              : (Math.max(0, leg.strike - currentPrice) - leg.entryPremium) * sign * legQty;
                           const tc = leg.type === 'call' ? 'text-green-400' : leg.type === 'put' ? 'text-red-400' : 'text-blue-400';
                           return (
                             <tr key={leg.id} className="border-t border-gray-700/40">
@@ -1348,8 +1347,8 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                       const sign = leg.side === 'long' ? 1 : -1;
                       const legQty = leg.qty || 1;
                       if (leg.type === 'stock') return sum + (currentPrice - leg.entryPremium) * sign * legQty * 100;
-                      if (leg.type === 'call') return sum + (Math.max(0, currentPrice - leg.strike) * 100 - leg.entryPremium) * sign * legQty;
-                      return sum + (Math.max(0, leg.strike - currentPrice) * 100 - leg.entryPremium) * sign * legQty;
+                      if (leg.type === 'call') return sum + (Math.max(0, currentPrice - leg.strike) - leg.entryPremium) * sign * legQty;
+                      return sum + (Math.max(0, leg.strike - currentPrice) - leg.entryPremium) * sign * legQty;
                     }, 0);
                     const hasChain = customLegs.some(l => l.type === 'stock' || getChainPremium(l) !== null);
                     return (
@@ -1450,7 +1449,10 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     <div className="bg-gray-800/60 rounded-lg p-3">
                       <div className="text-xs text-gray-500 mb-2">{es ? 'Diagrama de Payoff' : 'Payoff Diagram'}</div>
                       {/* contracts=1 since qty is already baked into backend quantities */}
-                      <PayoffSVG diagram={customAnalysis.payoffDiagram} contracts={1} />
+                      <PayoffSVG
+                        diagram={customAnalysis.payoffDiagram.map((p: any) => ({ ...p, pnl: p.pnl / 100 }))}
+                        contracts={1}
+                      />
                     </div>
                   )}
 
