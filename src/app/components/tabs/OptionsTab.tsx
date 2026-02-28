@@ -1231,7 +1231,10 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                             : chainPrem !== null
                               ? (chainPrem - leg.entryPremium) * sign * legQty
                               : null;
-                          const pnlMaturity = leg.type === 'stock'
+                          // pnlMaturity: null when currentPrice not loaded yet (avoids showing
+                          // wrong negative value while quote is still 0 during initial render)
+                          const pnlMaturity = currentPrice <= 0 ? null
+                            : leg.type === 'stock'
                             ? (currentPrice - leg.entryPremium) * sign * legQty * 100
                             : leg.type === 'call'
                               ? (Math.max(0, currentPrice - leg.strike) - leg.entryPremium) * sign * legQty
@@ -1319,9 +1322,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                 ) : <span className="text-gray-600 text-xs">—</span>}
                               </td>
                               <td className="py-2 text-right">
-                                <span className={`font-semibold text-xs ${pnlMaturity >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
-                                  {pnlMaturity >= 0 ? '+' : '-'}${Math.abs(pnlMaturity).toFixed(0)}
-                                </span>
+                                {pnlMaturity !== null ? (
+                                  <span className={`font-semibold text-xs ${pnlMaturity >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                                    {pnlMaturity >= 0 ? '+' : '-'}${Math.abs(pnlMaturity).toFixed(0)}
+                                  </span>
+                                ) : <span className="text-gray-600 text-xs">—</span>}
                               </td>
                               <td className="py-2 pl-2">
                                 <button onClick={() => setCustomLegs(prev => prev.filter(l => l.id !== leg.id))}
@@ -1343,13 +1348,13 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                       const cp = getChainPremium(leg);
                       return cp !== null ? sum + (cp - leg.entryPremium) * sign * legQty : sum;
                     }, 0);
-                    const totalMaturity = customLegs.reduce((sum, leg) => {
+                    const totalMaturity = currentPrice > 0 ? customLegs.reduce((sum, leg) => {
                       const sign = leg.side === 'long' ? 1 : -1;
                       const legQty = leg.qty || 1;
                       if (leg.type === 'stock') return sum + (currentPrice - leg.entryPremium) * sign * legQty * 100;
                       if (leg.type === 'call') return sum + (Math.max(0, currentPrice - leg.strike) - leg.entryPremium) * sign * legQty;
                       return sum + (Math.max(0, leg.strike - currentPrice) - leg.entryPremium) * sign * legQty;
-                    }, 0);
+                    }, 0) : null;
                     const hasChain = customLegs.some(l => l.type === 'stock' || getChainPremium(l) !== null);
                     return (
                       <div className="pt-2 border-t border-gray-700/50 space-y-1.5">
@@ -1361,14 +1366,16 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                             </span>
                           </div>
                         )}
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-400">
-                            {es ? `P&L al vencimiento (si acciones = $${currentPrice.toFixed(0)}):` : `P&L at expiry (if stock = $${currentPrice.toFixed(0)}):`}
-                          </span>
-                          <span className={`font-bold text-base ${totalMaturity >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
-                            {totalMaturity >= 0 ? '+' : '-'}${Math.abs(totalMaturity).toFixed(2)}
-                          </span>
-                        </div>
+                        {totalMaturity !== null && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-400">
+                              {es ? `P&L al vencimiento (si acciones = $${currentPrice.toFixed(2)}):` : `P&L at expiry (if stock = $${currentPrice.toFixed(2)}):`}
+                            </span>
+                            <span className={`font-bold text-base ${totalMaturity >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                              {totalMaturity >= 0 ? '+' : '-'}${Math.abs(totalMaturity).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
