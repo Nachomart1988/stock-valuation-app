@@ -71,9 +71,13 @@ interface ResumenData {
   scoreDelta?: number | null;
   scoreTrend?: 'improving' | 'deteriorating' | 'stable';
   causalInsight?: string;
+  causalInsightEs?: string;
   rfType?: string;
+  rfConf?: number;
   kmType?: string;
   gnnScores?: Record<string, number>;
+  rfImportances?: Record<string, number>;
+  graphCentrality?: Record<string, number>;
 }
 
 interface ResumenTabProps {
@@ -297,6 +301,24 @@ export default function ResumenTab({
     value: es ? 'Valor' : 'Value',
     dividend: es ? 'Dividendos' : 'Dividend',
     blend: es ? 'Mixto' : 'Blend',
+  };
+
+  const TYPE_COLOR: Record<string, string> = {
+    growth: 'bg-emerald-500', value: 'bg-blue-500', dividend: 'bg-amber-500', blend: 'bg-violet-500',
+  };
+  const TYPE_TEXT_COLOR: Record<string, string> = {
+    growth: 'text-emerald-400', value: 'text-blue-400', dividend: 'text-amber-400', blend: 'text-violet-400',
+  };
+
+  const FEATURE_LABEL: Record<string, string> = {
+    pe_z: 'P/E vs Sector',
+    gr_z: es ? 'Crecimiento vs Sector' : 'Growth vs Sector',
+    yield_z: es ? 'Dividendo vs Sector' : 'Yield vs Sector',
+    pb_z: 'P/B vs Sector',
+    cap_log_norm: es ? 'Cap. de Mercado' : 'Market Cap',
+    moat: 'Moat',
+    growth_dim: es ? 'Calidad de Crecimiento' : 'Growth Quality',
+    quality_dim: es ? 'Rentabilidad' : 'Profitability',
   };
 
   const [resumen, setResumen] = useState<ResumenData | null>(null);
@@ -851,46 +873,180 @@ export default function ResumenTab({
           </span>
         )}
         {resumen?.growthPremium && (
-          <span className="px-2 py-0.5 text-xs font-medium bg-amber-900/40 text-amber-300 border border-amber-700/30 rounded-full" title="Premium de valoración justificado por moat + crecimiento">
-            Growth Premium
+          <span className="px-2 py-0.5 text-xs font-medium bg-amber-900/40 text-amber-300 border border-amber-700/30 rounded-full" title={es ? 'Premium de valoración justificado por moat + crecimiento' : 'Valuation premium justified by moat + growth'}>
+            {es ? 'Prima de Crecimiento' : 'Growth Premium'}
           </span>
         )}
       </div>
 
-      {/* Causal Insight + Ensemble Consensus (Hybrid Classifier) */}
-      {resumen?.causalInsight && (
-        <div className="px-4 py-2.5 bg-cyan-950/20 border border-cyan-800/30 rounded-xl flex items-start gap-3">
-          <span className="text-cyan-500 text-xs mt-0.5 shrink-0">⚡</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-cyan-300/80 leading-relaxed">{resumen.causalInsight}</p>
-            {(resumen.rfType || resumen.kmType || resumen.gnnScores) && (
-              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                {resumen.rfType && (
-                  <span className="text-[10px] text-gray-500">
-                    RF: <span className={`font-medium ${resumen.rfType === resumen.companyType ? 'text-emerald-400' : 'text-yellow-400'}`}>
-                      {COMPANY_TYPE_LABEL[resumen.rfType] ?? resumen.rfType}
-                    </span>
-                  </span>
-                )}
-                {resumen.kmType && (
-                  <span className="text-[10px] text-gray-500">
-                    KMeans: <span className={`font-medium ${resumen.kmType === resumen.companyType ? 'text-emerald-400' : 'text-yellow-400'}`}>
-                      {COMPANY_TYPE_LABEL[resumen.kmType] ?? resumen.kmType}
-                    </span>
-                  </span>
-                )}
-                {resumen.gnnScores && Object.keys(resumen.gnnScores).length > 0 && (
-                  <div className="flex items-center gap-2">
-                    {Object.entries(resumen.gnnScores)
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([cls, score]) => (
-                        <span key={cls} className="text-[10px]">
-                          <span className="text-gray-600">{COMPANY_TYPE_LABEL[cls] ?? cls}: </span>
-                          <span className={score > 0.35 ? 'text-cyan-400 font-medium' : 'text-gray-500'}>
-                            {(score * 100).toFixed(0)}%
+      {/* ── Hybrid Classifier Panel ──────────────────────────────────────── */}
+      {(resumen?.causalInsight || resumen?.gnnScores) && (
+        <div className="bg-gray-900/60 border border-gray-700/50 rounded-xl overflow-hidden">
+          {/* Panel header */}
+          <div className="px-4 py-2.5 border-b border-gray-700/40 flex items-center gap-2">
+            <span className="text-cyan-400 text-sm">⚡</span>
+            <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+              {es ? 'Clasificador Híbrido' : 'Hybrid Classifier'}
+            </h3>
+            <span className="text-[10px] text-gray-600 ml-auto">RF + KMeans + PageRank + QUBO</span>
+          </div>
+
+          <div className="p-4 space-y-4">
+            {/* Causal Insight */}
+            {(resumen.causalInsight || resumen.causalInsightEs) && (
+              <p className="text-xs text-cyan-300/80 leading-relaxed bg-cyan-950/20 border border-cyan-900/30 rounded-lg px-3 py-2">
+                {es ? (resumen.causalInsightEs || resumen.causalInsight) : resumen.causalInsight}
+              </p>
+            )}
+
+            {/* Ensemble Scores — horizontal bar chart */}
+            {resumen.gnnScores && Object.keys(resumen.gnnScores).length > 0 && (
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  {es ? 'Puntuación del Ensemble' : 'Ensemble Scores'}
+                </p>
+                <div className="space-y-1.5">
+                  {Object.entries(resumen.gnnScores)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([cls, score]) => {
+                      const pct = Math.round(score * 100);
+                      const isWinner = cls === resumen.companyType;
+                      return (
+                        <div key={cls} className="flex items-center gap-2">
+                          <span className={`text-[11px] w-24 text-right ${isWinner ? (TYPE_TEXT_COLOR[cls] || 'text-gray-300') + ' font-semibold' : 'text-gray-500'}`}>
+                            {COMPANY_TYPE_LABEL[cls] ?? cls}
                           </span>
-                        </span>
-                      ))}
+                          <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${isWinner ? (TYPE_COLOR[cls] || 'bg-gray-500') : 'bg-gray-600'}`}
+                              style={{ width: `${Math.max(pct, 2)}%`, opacity: isWinner ? 1 : 0.5 }}
+                            />
+                          </div>
+                          <span className={`text-[11px] w-10 font-mono ${isWinner ? 'text-gray-200 font-semibold' : 'text-gray-600'}`}>
+                            {pct}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Model Consensus */}
+            {(resumen.rfType || resumen.kmType) && (
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  {es ? 'Consenso de Modelos' : 'Model Consensus'}
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {resumen.rfType && (
+                    <div className="flex items-center gap-1.5 bg-gray-800/80 rounded-lg px-2.5 py-1.5 border border-gray-700/50">
+                      <span className="text-[10px] text-gray-500">RF</span>
+                      <span className={`text-xs font-medium ${TYPE_TEXT_COLOR[resumen.rfType] || 'text-gray-300'}`}>
+                        {COMPANY_TYPE_LABEL[resumen.rfType] ?? resumen.rfType}
+                      </span>
+                      {resumen.rfConf != null && (
+                        <span className="text-[10px] text-gray-600">{Math.round(resumen.rfConf * 100)}%</span>
+                      )}
+                    </div>
+                  )}
+                  <span className="text-gray-600 text-xs">→</span>
+                  {resumen.kmType && (
+                    <div className="flex items-center gap-1.5 bg-gray-800/80 rounded-lg px-2.5 py-1.5 border border-gray-700/50">
+                      <span className="text-[10px] text-gray-500">KMeans</span>
+                      <span className={`text-xs font-medium ${TYPE_TEXT_COLOR[resumen.kmType] || 'text-gray-300'}`}>
+                        {COMPANY_TYPE_LABEL[resumen.kmType] ?? resumen.kmType}
+                      </span>
+                    </div>
+                  )}
+                  <span className="text-gray-600 text-xs">→</span>
+                  {resumen.companyType && (
+                    <div className="flex items-center gap-1.5 bg-gray-800/60 rounded-lg px-2.5 py-1.5 border-2 border-cyan-700/50">
+                      <span className="text-[10px] text-cyan-500">{es ? 'Final' : 'Final'}</span>
+                      <span className={`text-xs font-bold ${TYPE_TEXT_COLOR[resumen.companyType] || 'text-gray-300'}`}>
+                        {COMPANY_TYPE_LABEL[resumen.companyType] ?? resumen.companyType}
+                      </span>
+                      {resumen.typeConfidence != null && (
+                        <span className="text-[10px] text-cyan-600">{Math.round(resumen.typeConfidence * 100)}%</span>
+                      )}
+                    </div>
+                  )}
+                  {/* Consensus indicator */}
+                  {resumen.rfType && resumen.kmType && (
+                    <span className={`text-[10px] ml-1 ${
+                      resumen.rfType === resumen.kmType && resumen.rfType === resumen.companyType
+                        ? 'text-emerald-400' : 'text-yellow-400'
+                    }`}>
+                      {resumen.rfType === resumen.kmType && resumen.rfType === resumen.companyType
+                        ? (es ? '(consenso unánime)' : '(unanimous consensus)')
+                        : (es ? '(consenso parcial)' : '(partial consensus)')
+                      }
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Feature Importance + Graph Centrality — side by side */}
+            {(resumen.rfImportances || resumen.graphCentrality) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* RF Feature Importance */}
+                {resumen.rfImportances && Object.keys(resumen.rfImportances).length > 0 && (
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                      {es ? 'Importancia de Features (RF)' : 'Feature Importance (RF)'}
+                    </p>
+                    <div className="space-y-1">
+                      {Object.entries(resumen.rfImportances)
+                        .sort(([, a], [, b]) => b - a)
+                        .slice(0, 6)
+                        .map(([feat, imp]) => {
+                          const pct = Math.round(imp * 100);
+                          const maxImp = Math.max(...Object.values(resumen.rfImportances!));
+                          const barW = maxImp > 0 ? Math.round((imp / maxImp) * 100) : 0;
+                          return (
+                            <div key={feat} className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-gray-500 w-28 text-right truncate" title={feat}>
+                                {FEATURE_LABEL[feat] ?? feat}
+                              </span>
+                              <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-cyan-600/70 rounded-full" style={{ width: `${Math.max(barW, 2)}%` }} />
+                              </div>
+                              <span className="text-[10px] text-gray-600 w-8 font-mono">{pct}%</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Graph Centrality (PageRank) */}
+                {resumen.graphCentrality && Object.keys(resumen.graphCentrality).length > 0 && (
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                      {es ? 'Centralidad Causal (PageRank)' : 'Causal Centrality (PageRank)'}
+                    </p>
+                    <div className="space-y-1">
+                      {Object.entries(resumen.graphCentrality)
+                        .sort(([, a], [, b]) => b - a)
+                        .slice(0, 6)
+                        .map(([feat, cent]) => {
+                          const pct = Math.round(cent * 100);
+                          const maxC = Math.max(...Object.values(resumen.graphCentrality!));
+                          const barW = maxC > 0 ? Math.round((cent / maxC) * 100) : 0;
+                          return (
+                            <div key={feat} className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-gray-500 w-28 text-right truncate" title={feat}>
+                                {FEATURE_LABEL[feat] ?? feat}
+                              </span>
+                              <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-violet-600/70 rounded-full" style={{ width: `${Math.max(barW, 2)}%` }} />
+                              </div>
+                              <span className="text-[10px] text-gray-600 w-8 font-mono">{pct}%</span>
+                            </div>
+                          );
+                        })}
+                    </div>
                   </div>
                 )}
               </div>

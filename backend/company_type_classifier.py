@@ -197,55 +197,59 @@ class HybridCompanyClassifier:
 
     # ── Causal insight text ────────────────────────────────────────────────────
 
-    def _causal_insight(self, feat: np.ndarray, company_type: str) -> str:
-        """Generate a short causal-chain explanation without any LLM."""
+    def _causal_insight(self, feat: np.ndarray, company_type: str) -> Dict[str, str]:
+        """Generate causal-chain explanations in EN + ES (no LLM)."""
         pe_z, gr_z, yield_z, pb_z, _, moat, growth_dim, quality_dim = feat
-        lines = []
+        en_lines: List[str] = []
+        es_lines: List[str] = []
 
         if company_type == 'growth':
-            gr_desc = (
-                f"SGR z-score {gr_z:+.2f}σ above sector average"
-                if gr_z > 0 else f"SGR z-score {gr_z:+.2f}σ"
-            )
-            pe_desc = (
-                f"P/E premium {pe_z:+.2f}σ vs sector"
-                if pe_z > 0 else "P/E near sector median"
-            )
-            lines.append(f"Growth classification driven by {gr_desc} and {pe_desc}.")
+            gr_en = f"SGR z-score {gr_z:+.2f}σ above sector average" if gr_z > 0 else f"SGR z-score {gr_z:+.2f}σ"
+            pe_en = f"P/E premium {pe_z:+.2f}σ vs sector" if pe_z > 0 else "P/E near sector median"
+            en_lines.append(f"Growth classification driven by {gr_en} and {pe_en}.")
+
+            gr_es = f"z-score de SGR {gr_z:+.2f}σ sobre el promedio del sector" if gr_z > 0 else f"z-score de SGR {gr_z:+.2f}σ"
+            pe_es = f"prima de P/E {pe_z:+.2f}σ vs sector" if pe_z > 0 else "P/E cercano a la mediana del sector"
+            es_lines.append(f"Clasificación de crecimiento impulsada por {gr_es} y {pe_es}.")
+
             if moat > 0.60:
-                lines.append(
-                    f"High moat score ({moat:.2f}) supports sustained premium valuation."
-                )
+                en_lines.append(f"High moat score ({moat:.2f}) supports sustained premium valuation.")
+                es_lines.append(f"Alto moat ({moat:.2f}) respalda una valoración premium sostenida.")
 
         elif company_type == 'value':
-            lines.append(
-                f"Value classification: P/E z-score {pe_z:+.2f}σ below sector average."
-            )
+            en_lines.append(f"Value classification: P/E z-score {pe_z:+.2f}σ below sector average.")
+            es_lines.append(f"Clasificación valor: z-score de P/E {pe_z:+.2f}σ debajo del promedio del sector.")
             if yield_z > 0:
-                lines.append(
-                    f"Above-sector dividend yield (z={yield_z:+.2f}σ) reinforces value signal."
-                )
+                en_lines.append(f"Above-sector dividend yield (z={yield_z:+.2f}σ) reinforces value signal.")
+                es_lines.append(f"Dividendo por encima del sector (z={yield_z:+.2f}σ) refuerza la señal de valor.")
             if pb_z < -0.5:
-                lines.append(f"Below-average P/B ratio (z={pb_z:+.2f}σ) confirms value characteristics.")
+                en_lines.append(f"Below-average P/B ratio (z={pb_z:+.2f}σ) confirms value characteristics.")
+                es_lines.append(f"P/B bajo (z={pb_z:+.2f}σ) confirma características de valor.")
 
         elif company_type == 'dividend':
-            lines.append(
-                f"Dividend classification: high yield (z={yield_z:+.2f}σ above sector average)."
-            )
+            en_lines.append(f"Dividend classification: high yield (z={yield_z:+.2f}σ above sector average).")
+            es_lines.append(f"Clasificación dividendo: alto rendimiento (z={yield_z:+.2f}σ sobre el promedio del sector).")
             if gr_z < 0:
-                lines.append(
-                    f"Below-sector growth (z={gr_z:+.2f}σ) consistent with income-oriented profile."
-                )
+                en_lines.append(f"Below-sector growth (z={gr_z:+.2f}σ) consistent with income-oriented profile.")
+                es_lines.append(f"Crecimiento bajo (z={gr_z:+.2f}σ) consistente con perfil orientado a ingresos.")
 
         else:  # blend
-            lines.append(
+            en_lines.append(
                 f"Blend classification: balanced signals "
                 f"(gr_z={gr_z:+.2f}, pe_z={pe_z:+.2f}, moat={moat:.2f})."
             )
+            es_lines.append(
+                f"Clasificación mixta: señales equilibradas "
+                f"(gr_z={gr_z:+.2f}, pe_z={pe_z:+.2f}, moat={moat:.2f})."
+            )
             if quality_dim > 0.60:
-                lines.append("Above-average quality metrics suggest a quality compounder.")
+                en_lines.append("Above-average quality metrics suggest a quality compounder.")
+                es_lines.append("Métricas de calidad superiores sugieren un compounder de calidad.")
 
-        return " ".join(lines)
+        return {
+            'en': " ".join(en_lines),
+            'es': " ".join(es_lines),
+        }
 
     # ── Public classify method ─────────────────────────────────────────────────
 
@@ -317,7 +321,11 @@ class HybridCompanyClassifier:
             rf_type  = CLASSES[rf_best]
             rf_conf  = float(rf_probs[rf_best])
 
-            gnn_scores = {c: round(float(final_scores[i]), 4) for i, c in enumerate(CLASSES)}
+            # Normalise gnnScores to proper 0-1 probabilities for display
+            gnn_raw  = np.maximum(final_scores, 0.0)
+            gnn_sum  = gnn_raw.sum()
+            gnn_norm = gnn_raw / gnn_sum if gnn_sum > 0 else np.ones(4) / 4.0
+            gnn_scores = {c: round(float(gnn_norm[i]), 4) for i, c in enumerate(CLASSES)}
 
             rf_importances = {
                 f: round(float(v), 4)
@@ -327,6 +335,8 @@ class HybridCompanyClassifier:
                 f: round(float(self._pagerank.get(f, 0.0)), 4) for f in FEATURES
             }
 
+            insight = self._causal_insight(feat, company_type)
+
             return {
                 'companyType':     company_type,
                 'typeConf':        round(type_conf, 3),
@@ -334,7 +344,8 @@ class HybridCompanyClassifier:
                 'rfConf':          round(rf_conf, 3),
                 'kmType':          km_type,
                 'gnnScores':       gnn_scores,
-                'causalInsight':   self._causal_insight(feat, company_type),
+                'causalInsight':   insight['en'],
+                'causalInsightEs': insight['es'],
                 'rfImportances':   rf_importances,
                 'graphCentrality': graph_centrality,
             }
@@ -361,6 +372,7 @@ class HybridCompanyClassifier:
 
         uniform = (1.0 - conf) / 3.0
         gnn_scores = {c: (conf if c == company_type else uniform) for c in CLASSES}
+        insight = self._causal_insight(feat, company_type)
 
         return {
             'companyType':     company_type,
@@ -369,7 +381,8 @@ class HybridCompanyClassifier:
             'rfConf':          conf,
             'kmType':          company_type,
             'gnnScores':       gnn_scores,
-            'causalInsight':   self._causal_insight(feat, company_type),
+            'causalInsight':   insight['en'],
+            'causalInsightEs': insight['es'],
             'rfImportances':   {f: round(1.0 / len(FEATURES), 4) for f in FEATURES},
             'graphCentrality': {f: 0.0 for f in FEATURES},
         }

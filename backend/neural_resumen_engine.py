@@ -1745,10 +1745,14 @@ class NeuralResumenEngine:
         self._company_type    = stock_style
         self._type_confidence = _type_confidence
         self._moat_score      = _moat_score
-        self._causal_insight  = _clf_result.get('causalInsight', '')
-        self._rf_type         = _clf_result.get('rfType', stock_style)
-        self._km_type         = _clf_result.get('kmType', stock_style)
-        self._gnn_scores      = _clf_result.get('gnnScores', {})
+        self._causal_insight    = _clf_result.get('causalInsight', '')
+        self._causal_insight_es = _clf_result.get('causalInsightEs', '')
+        self._rf_type           = _clf_result.get('rfType', stock_style)
+        self._rf_conf           = _clf_result.get('rfConf', 0.0)
+        self._km_type           = _clf_result.get('kmType', stock_style)
+        self._gnn_scores        = _clf_result.get('gnnScores', {})
+        self._rf_importances    = _clf_result.get('rfImportances', {})
+        self._graph_centrality  = _clf_result.get('graphCentrality', {})
         logger.info(
             f"[Layer 0] Type detected: {stock_style.upper()} "
             f"(conf={_type_confidence:.2f}, RF={self._rf_type}, KM={self._km_type}, "
@@ -3370,10 +3374,14 @@ class NeuralResumenEngine:
             "scoreHistory":    history_runs[:5],
             "scoreDelta":      score_delta,
             "scoreTrend":      score_trend,
-            "causalInsight":   getattr(self, '_causal_insight',  ''),
-            "rfType":          getattr(self, '_rf_type',         ''),
-            "kmType":          getattr(self, '_km_type',         ''),
-            "gnnScores":       getattr(self, '_gnn_scores',      {}),
+            "causalInsight":   getattr(self, '_causal_insight',    ''),
+            "causalInsightEs": getattr(self, '_causal_insight_es',''),
+            "rfType":          getattr(self, '_rf_type',          ''),
+            "rfConf":          round(getattr(self, '_rf_conf',   0.0), 3),
+            "kmType":          getattr(self, '_km_type',          ''),
+            "gnnScores":       getattr(self, '_gnn_scores',       {}),
+            "rfImportances":   getattr(self, '_rf_importances',   {}),
+            "graphCentrality": getattr(self, '_graph_centrality', {}),
         }
 
 
