@@ -70,6 +70,10 @@ interface ResumenData {
   scoreHistory?: { ts: string; finalScore: number; recommendation: string; targetPrice: number; upsidePct: number }[];
   scoreDelta?: number | null;
   scoreTrend?: 'improving' | 'deteriorating' | 'stable';
+  causalInsight?: string;
+  rfType?: string;
+  kmType?: string;
+  gnnScores?: Record<string, number>;
 }
 
 interface ResumenTabProps {
@@ -852,6 +856,48 @@ export default function ResumenTab({
           </span>
         )}
       </div>
+
+      {/* Causal Insight + Ensemble Consensus (Hybrid Classifier) */}
+      {resumen?.causalInsight && (
+        <div className="px-4 py-2.5 bg-cyan-950/20 border border-cyan-800/30 rounded-xl flex items-start gap-3">
+          <span className="text-cyan-500 text-xs mt-0.5 shrink-0">⚡</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-cyan-300/80 leading-relaxed">{resumen.causalInsight}</p>
+            {(resumen.rfType || resumen.kmType || resumen.gnnScores) && (
+              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                {resumen.rfType && (
+                  <span className="text-[10px] text-gray-500">
+                    RF: <span className={`font-medium ${resumen.rfType === resumen.companyType ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                      {COMPANY_TYPE_LABEL[resumen.rfType] ?? resumen.rfType}
+                    </span>
+                  </span>
+                )}
+                {resumen.kmType && (
+                  <span className="text-[10px] text-gray-500">
+                    KMeans: <span className={`font-medium ${resumen.kmType === resumen.companyType ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                      {COMPANY_TYPE_LABEL[resumen.kmType] ?? resumen.kmType}
+                    </span>
+                  </span>
+                )}
+                {resumen.gnnScores && Object.keys(resumen.gnnScores).length > 0 && (
+                  <div className="flex items-center gap-2">
+                    {Object.entries(resumen.gnnScores)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([cls, score]) => (
+                        <span key={cls} className="text-[10px]">
+                          <span className="text-gray-600">{COMPANY_TYPE_LABEL[cls] ?? cls}: </span>
+                          <span className={score > 0.35 ? 'text-cyan-400 font-medium' : 'text-gray-500'}>
+                            {(score * 100).toFixed(0)}%
+                          </span>
+                        </span>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Data Quality Indicator + Refresh Button */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-900/50 rounded-xl border border-gray-800">

@@ -18,6 +18,7 @@ import math
 from datetime import datetime
 from scipy.stats import linregress
 from spectral_cycle_analyzer import SpectralCycleAnalyzer, HistoricalDataFetcher
+from company_type_classifier import get_classifier
 
 logger = logging.getLogger(__name__)
 
@@ -26,20 +27,20 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 # Per-sector: pe_avg, pe_std, growth_avg (% SGR), growth_std, yield_avg (%)
 SECTOR_BENCHMARKS: Dict[str, Dict[str, float]] = {
-    'Technology':             {'pe_avg': 28.0, 'pe_std': 10.0, 'growth_avg': 15.0, 'growth_std': 8.0, 'yield_avg': 0.8},
-    'Health Care':            {'pe_avg': 22.0, 'pe_std':  8.0, 'growth_avg':  8.0, 'growth_std': 5.0, 'yield_avg': 1.2},
-    'Healthcare':             {'pe_avg': 22.0, 'pe_std':  8.0, 'growth_avg':  8.0, 'growth_std': 5.0, 'yield_avg': 1.2},
-    'Financials':             {'pe_avg': 13.0, 'pe_std':  5.0, 'growth_avg':  7.0, 'growth_std': 4.0, 'yield_avg': 2.5},
-    'Financial Services':     {'pe_avg': 13.0, 'pe_std':  5.0, 'growth_avg':  7.0, 'growth_std': 4.0, 'yield_avg': 2.5},
-    'Consumer Discretionary': {'pe_avg': 24.0, 'pe_std': 10.0, 'growth_avg': 10.0, 'growth_std': 6.0, 'yield_avg': 1.2},
-    'Consumer Staples':       {'pe_avg': 19.0, 'pe_std':  5.0, 'growth_avg':  4.0, 'growth_std': 3.0, 'yield_avg': 2.8},
-    'Industrials':            {'pe_avg': 20.0, 'pe_std':  8.0, 'growth_avg':  7.0, 'growth_std': 4.0, 'yield_avg': 1.8},
-    'Energy':                 {'pe_avg': 14.0, 'pe_std':  6.0, 'growth_avg':  5.0, 'growth_std': 8.0, 'yield_avg': 3.5},
-    'Utilities':              {'pe_avg': 17.0, 'pe_std':  4.0, 'growth_avg':  3.0, 'growth_std': 2.0, 'yield_avg': 3.8},
-    'Real Estate':            {'pe_avg': 40.0, 'pe_std': 15.0, 'growth_avg':  5.0, 'growth_std': 3.0, 'yield_avg': 4.0},
-    'Materials':              {'pe_avg': 18.0, 'pe_std':  7.0, 'growth_avg':  6.0, 'growth_std': 5.0, 'yield_avg': 2.0},
-    'Communication Services': {'pe_avg': 22.0, 'pe_std': 10.0, 'growth_avg': 10.0, 'growth_std': 7.0, 'yield_avg': 0.9},
-    'default':                {'pe_avg': 20.0, 'pe_std':  8.0, 'growth_avg':  8.0, 'growth_std': 5.0, 'yield_avg': 2.0},
+    'Technology':             {'pe_avg': 28.0, 'pe_std': 10.0, 'growth_avg': 15.0, 'growth_std': 8.0, 'yield_avg': 0.8, 'yield_std': 0.5, 'pb_avg':  8.0, 'pb_std': 4.0},
+    'Health Care':            {'pe_avg': 22.0, 'pe_std':  8.0, 'growth_avg':  8.0, 'growth_std': 5.0, 'yield_avg': 1.2, 'yield_std': 0.8, 'pb_avg':  5.0, 'pb_std': 3.0},
+    'Healthcare':             {'pe_avg': 22.0, 'pe_std':  8.0, 'growth_avg':  8.0, 'growth_std': 5.0, 'yield_avg': 1.2, 'yield_std': 0.8, 'pb_avg':  5.0, 'pb_std': 3.0},
+    'Financials':             {'pe_avg': 13.0, 'pe_std':  5.0, 'growth_avg':  7.0, 'growth_std': 4.0, 'yield_avg': 2.5, 'yield_std': 1.2, 'pb_avg':  1.5, 'pb_std': 0.7},
+    'Financial Services':     {'pe_avg': 13.0, 'pe_std':  5.0, 'growth_avg':  7.0, 'growth_std': 4.0, 'yield_avg': 2.5, 'yield_std': 1.2, 'pb_avg':  1.5, 'pb_std': 0.7},
+    'Consumer Discretionary': {'pe_avg': 24.0, 'pe_std': 10.0, 'growth_avg': 10.0, 'growth_std': 6.0, 'yield_avg': 1.2, 'yield_std': 0.8, 'pb_avg':  6.0, 'pb_std': 4.0},
+    'Consumer Staples':       {'pe_avg': 19.0, 'pe_std':  5.0, 'growth_avg':  4.0, 'growth_std': 3.0, 'yield_avg': 2.8, 'yield_std': 1.0, 'pb_avg':  5.0, 'pb_std': 2.0},
+    'Industrials':            {'pe_avg': 20.0, 'pe_std':  8.0, 'growth_avg':  7.0, 'growth_std': 4.0, 'yield_avg': 1.8, 'yield_std': 0.9, 'pb_avg':  4.0, 'pb_std': 2.0},
+    'Energy':                 {'pe_avg': 14.0, 'pe_std':  6.0, 'growth_avg':  5.0, 'growth_std': 8.0, 'yield_avg': 3.5, 'yield_std': 2.0, 'pb_avg':  2.0, 'pb_std': 1.0},
+    'Utilities':              {'pe_avg': 17.0, 'pe_std':  4.0, 'growth_avg':  3.0, 'growth_std': 2.0, 'yield_avg': 3.8, 'yield_std': 0.8, 'pb_avg':  1.8, 'pb_std': 0.6},
+    'Real Estate':            {'pe_avg': 40.0, 'pe_std': 15.0, 'growth_avg':  5.0, 'growth_std': 3.0, 'yield_avg': 4.0, 'yield_std': 1.2, 'pb_avg':  2.5, 'pb_std': 1.0},
+    'Materials':              {'pe_avg': 18.0, 'pe_std':  7.0, 'growth_avg':  6.0, 'growth_std': 5.0, 'yield_avg': 2.0, 'yield_std': 0.9, 'pb_avg':  2.5, 'pb_std': 1.0},
+    'Communication Services': {'pe_avg': 22.0, 'pe_std': 10.0, 'growth_avg': 10.0, 'growth_std': 7.0, 'yield_avg': 0.9, 'yield_std': 0.7, 'pb_avg':  3.5, 'pb_std': 2.0},
+    'default':                {'pe_avg': 20.0, 'pe_std':  8.0, 'growth_avg':  8.0, 'growth_std': 5.0, 'yield_avg': 2.0, 'yield_std': 1.0, 'pb_avg':  3.5, 'pb_std': 2.0},
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1702,33 +1703,59 @@ class NeuralResumenEngine:
         # Dividend composite
         _score_div = min(1.0, _div_yield_pct / 3.0) * 0.70 + _score_value * 0.30
 
-        # ── Classification ──
-        # GROWTH: clearly growing faster than sector peers AND trading at a premium
-        if _score_growth > 0.52 and _gr_z > 0.5:
-            stock_style      = 'growth'
-            _type_confidence = min(0.93, _score_growth + 0.05)
-        # DIVIDEND: meaningful yield with value characteristics
-        elif _div_yield_pct > 2.5 and _score_div > 0.45:
-            stock_style      = 'dividend'
-            _type_confidence = min(0.90, 0.55 + (_div_yield_pct - 2.5) * 0.05)
-        # VALUE: significantly cheaper than sector peers
-        elif _score_value > 0.50 and _pe_z < -0.5:
-            stock_style      = 'value'
-            _type_confidence = min(0.87, _score_value)
-        # BLEND: growing, but not enough above peers or premium not justified
-        else:
-            stock_style      = 'blend'
-            _type_confidence = 0.52 if (_gr_z > 0 or _score_growth > 0.44) else 0.45
+        # Additional features for the hybrid ensemble classifier
+        _yield_std = bench.get('yield_std', 1.0)
+        _yield_z   = ((_div_yield_pct - bench['yield_avg']) / _yield_std
+                      if _yield_std > 0 else 0.0)
+        _yield_z   = max(-3.0, min(3.0, _yield_z))
+
+        _pb_avg = bench.get('pb_avg', 3.5)
+        _pb_std = bench.get('pb_std', 2.0)
+        _pb_z   = ((_pb - _pb_avg) / _pb_std if _pb_std > 0 else 0.0)
+        _pb_z   = max(-3.0, min(3.0, _pb_z))
+
+        # Market-cap log-normalised to [0, 1]  (log10: 1M→0, ~100T→1)
+        _cap_log_norm = (math.log10(max(_mkt_cap, 1e6)) - 6.0) / 8.0
+        _cap_log_norm = max(0.0, min(1.0, _cap_log_norm))
+
+        # Quality dimension from CompanyQualityNet (profitability sub-score)
+        _profitability_raw = _quality_raw.get('profitability', 0) or 0
+        _quality_dim = (
+            (_profitability_raw / 100.0) if _profitability_raw > 1
+            else float(_profitability_raw)
+        )
+
+        # ── Classification via Hybrid Ensemble (RF + KMeans + networkx + QUBO) ──
+        _clf_result = get_classifier().classify(
+            {
+                'pe_z':        _pe_z,
+                'gr_z':        _gr_z,
+                'yield_z':     _yield_z,
+                'pb_z':        _pb_z,
+                'cap_log_norm': _cap_log_norm,
+                'moat':        _moat_score,
+                'growth_dim':  _growth_dim_norm,
+                'quality_dim': _quality_dim,
+            },
+            mkt_cap=_mkt_cap,
+        )
+        stock_style      = _clf_result['companyType']
+        _type_confidence = _clf_result['typeConf']
 
         self._company_type    = stock_style
         self._type_confidence = _type_confidence
         self._moat_score      = _moat_score
+        self._causal_insight  = _clf_result.get('causalInsight', '')
+        self._rf_type         = _clf_result.get('rfType', stock_style)
+        self._km_type         = _clf_result.get('kmType', stock_style)
+        self._gnn_scores      = _clf_result.get('gnnScores', {})
         logger.info(
             f"[Layer 0] Type detected: {stock_style.upper()} "
-            f"(conf={_type_confidence:.2f}, growth_score={_score_growth:.2f}, "
-            f"value_score={_score_value:.2f}, moat={_moat_score:.2f}, "
-            f"SGR={_sgr_pct:.1f}%, PE={_pe:.1f}, pe_z={_pe_z:.2f}, gr_z={_gr_z:.2f}, "
-            f"sector='{_sector}', mkt_cap={_mkt_cap/1e9:.0f}B, size_factor={_size_factor:.2f})"
+            f"(conf={_type_confidence:.2f}, RF={self._rf_type}, KM={self._km_type}, "
+            f"growth_score={_score_growth:.2f}, value_score={_score_value:.2f}, "
+            f"moat={_moat_score:.2f}, SGR={_sgr_pct:.1f}%, PE={_pe:.1f}, "
+            f"pe_z={_pe_z:.2f}, gr_z={_gr_z:.2f}, "
+            f"sector='{_sector}', mkt_cap={_mkt_cap/1e9:.0f}B)"
         )
 
         # Layer 5: Valuation (blends neural model with average of all frontend methods)
@@ -3343,6 +3370,10 @@ class NeuralResumenEngine:
             "scoreHistory":    history_runs[:5],
             "scoreDelta":      score_delta,
             "scoreTrend":      score_trend,
+            "causalInsight":   getattr(self, '_causal_insight',  ''),
+            "rfType":          getattr(self, '_rf_type',         ''),
+            "kmType":          getattr(self, '_km_type',         ''),
+            "gnnScores":       getattr(self, '_gnn_scores',      {}),
         }
 
 
