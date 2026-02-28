@@ -2,6 +2,7 @@
 'use client';
 
 import { Tab } from '@headlessui/react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface ForecastsGroupProps {
   ForecastsTab: React.ReactNode;
@@ -14,11 +15,20 @@ export default function ForecastsGroup({
   RevenueForecastTab,
   MLPredictionTab,
 }: ForecastsGroupProps) {
-  const subtabs = ['Analyst Forecasts', 'Revenue Forecast', 'ML Prediction (Beta)'];
+  const { locale } = useLanguage();
+  const es = locale === 'es';
+
+  const subtabs = [
+    es ? 'Predicciones Analistas' : 'Analyst Forecasts',
+    es ? 'Forecast de Ingresos' : 'Revenue Forecast',
+    'ML Prediction (Beta)',
+  ];
 
   return (
     <div className="space-y-4">
-      <h3 className="text-2xl font-bold text-green-400">Forecasts & Estimates</h3>
+      <h3 className="text-2xl font-bold text-green-400">
+        {es ? 'Predicciones & Estimaciones' : 'Forecasts & Estimates'}
+      </h3>
 
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg">

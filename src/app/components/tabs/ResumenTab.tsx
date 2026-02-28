@@ -88,6 +88,8 @@ interface ResumenTabProps {
   diarioStats?: any;
   news?: any[];  // News articles for sentiment analysis
   averageValuation?: number | null;  // Average of all frontend valuation methods
+  profile?: any;      // FMP company profile (sector, mktCap, …)
+  ratiosTTM?: any;    // FMP ratios-ttm (priceEarningsRatio, dividendYield, priceToBookRatio, …)
 }
 
 export default function ResumenTab({
@@ -106,6 +108,8 @@ export default function ResumenTab({
   diarioStats,
   news,
   averageValuation,
+  profile,
+  ratiosTTM,
 }: ResumenTabProps) {
   const { t, locale } = useLanguage();
   const es = locale === 'es';
@@ -132,33 +136,124 @@ export default function ResumenTab({
   const tlSignal = (s: string): string => {
     if (!es) return s;
     return s
+      // ── Valuation ──
       .replace('Significantly undervalued', 'Significativamente subvalorado')
+      .replace('Mildly undervalued', 'Levemente subvalorado')
       .replace('Undervalued', 'Subvalorado')
-      .replace('Mildly undervalued', 'Ligeramente subvalorado')
+      .replace('Slightly overvalued', 'Levemente sobrevalorado')
       .replace('Overvalued', 'Sobrevalorado')
-      .replace('Slightly overvalued', 'Ligeramente sobrevalorado')
-      .replace('upside', 'potencial alcista')
-      .replace('downside risk', 'riesgo de caída')
-      .replace('High model agreement', 'Alta coincidencia de modelos')
       .replace('High valuation uncertainty', 'Alta incertidumbre de valuación')
       .replace('wide confidence interval', 'intervalo de confianza amplio')
       .replace('tight confidence interval', 'intervalo de confianza estrecho')
       .replace('Robust analysis', 'Análisis robusto')
-      .replace('valuation models used', 'modelos de valuación usados')
+      .replace('valuation models used', 'modelos de valuación utilizados')
+      .replace('upside', 'potencial alcista')
+      .replace('downside risk', 'riesgo de caída')
+      .replace('premium', 'prima')
+      // ── Growth / WACC ──
+      .replace('Strong value creator', 'Fuerte creador de valor')
+      .replace('Value creator', 'Creador de valor')
+      .replace('Marginal value destroyer', 'Destructor marginal de valor')
+      .replace('Value destroyer', 'Destructor de valor')
+      .replace('SGR exceeds WACC by', 'SGR supera WACC por')
+      .replace('WACC exceeds SGR by', 'WACC supera SGR por')
+      // ── Forecasts ──
+      .replace('Strong revenue growth forecast', 'Fuerte proyección de ingresos')
+      .replace('Healthy revenue growth expected', 'Crecimiento saludable de ingresos esperado')
+      .replace('Revenue decline expected', 'Declive de ingresos esperado')
+      .replace('Strong revenue growth trend', 'Fuerte tendencia de crecimiento de ingresos')
+      .replace('Revenue declining trend', 'Tendencia de declive de ingresos')
+      .replace('Strong earnings growth forecast', 'Fuerte proyección de ganancias')
+      .replace('Earnings decline expected', 'Declive de ganancias esperado')
+      .replace('Well-covered by analysts', 'Bien cubierto por analistas')
+      .replace('slope:', 'pendiente:')
+      .replace('/yr,', '/año,')
+      // ── Institutional ──
       .replace('Strong Q/Q accumulation', 'Fuerte acumulación trimestral')
       .replace('Q/Q accumulation', 'Acumulación trimestral')
+      .replace('Strong Q/Q distribution', 'Fuerte distribución trimestral')
+      .replace('Q/Q distribution', 'Distribución trimestral')
       .replace('Institutional distribution', 'Distribución institucional')
+      .replace('Bullish options positioning', 'Posicionamiento alcista en opciones')
+      .replace('Bearish options positioning', 'Posicionamiento bajista en opciones')
+      .replace('Strong YoY institutional growth', 'Fuerte crecimiento institucional anual')
+      .replace('more investors', 'más inversores')
+      .replace('Significant YoY institutional exodus', 'Éxodo institucional significativo anual')
+      .replace('Net insider buying', 'Compras netas de insiders')
+      .replace('Net insider selling', 'Ventas netas de insiders')
       .replace('High insider selling', 'Alta venta de insiders')
       .replace('Insider buying detected', 'Compra de insiders detectada')
-      .replace('High volatility', 'Alta volatilidad')
+      .replace('bought)', 'comprado)')
+      .replace('sold)', 'vendido)')
+      .replace('Very high institutional ownership', 'Propiedad institucional muy alta')
+      .replace('Strong institutional backing', 'Fuerte respaldo institucional')
+      .replace('Low institutional interest', 'Bajo interés institucional')
+      .replace('Long-term institutional commitment', 'Compromiso institucional a largo plazo')
+      .replace('year holding)', 'año de tenencia)')
+      .replace('Net accumulation', 'Acumulación neta')
+      .replace('Net distribution', 'Distribución neta')
+      // ── Technical ──
+      .replace('Trading near support', 'Operando cerca del soporte')
+      .replace('Testing resistance at', 'Probando resistencia en')
+      .replace('Excellent risk/reward ratio', 'Excelente relación riesgo/beneficio')
+      .replace('Favorable risk/reward', 'Relación riesgo/beneficio favorable')
+      .replace('Poor risk/reward', 'Pobre relación riesgo/beneficio')
       .replace('Strong technical setup', 'Configuración técnica fuerte')
       .replace('Bearish technical setup', 'Configuración técnica bajista')
+      .replace('High model agreement', 'Alta coincidencia de modelos')
+      .replace('High volatility', 'Alta volatilidad')
+      // ── Monte Carlo ──
+      .replace('High probability', 'Alta probabilidad')
+      .replace('Favorable odds', 'Probabilidades favorables')
+      .replace('Low probability', 'Baja probabilidad')
+      .replace('of reaching target', 'de alcanzar objetivo')
+      .replace('High downside risk', 'Alto riesgo bajista')
+      // ── Quality dimensions ──
+      .replace('Excellent financial strength', 'Excelente solidez financiera')
+      .replace('Weak financial strength', 'Débil solidez financiera')
+      .replace('Poor financial strength', 'Pobre solidez financiera')
+      .replace('Excellent profitability', 'Excelente rentabilidad')
+      .replace('Weak profitability', 'Débil rentabilidad')
+      .replace('Poor profitability', 'Pobre rentabilidad')
+      .replace('Excellent growth', 'Excelente crecimiento')
+      .replace('Weak growth', 'Débil crecimiento')
+      .replace('Poor growth', 'Pobre crecimiento')
+      .replace('Excellent efficiency', 'Excelente eficiencia')
+      .replace('Weak efficiency', 'Débil eficiencia')
+      .replace('Poor efficiency', 'Pobre eficiencia')
+      .replace('Excellent moat', 'Excelente ventaja competitiva')
+      .replace('Weak moat', 'Débil ventaja competitiva')
+      .replace('Poor moat', 'Pobre ventaja competitiva')
+      // ── Sector / Industry ──
+      .replace("Company's sector", 'El sector de la empresa')
+      .replace("Company's industry", 'La industria de la empresa')
+      .replace('is rallying', 'está en alza')
+      .replace('is declining', 'está en declive')
+      .replace('is surging', 'está subiendo fuerte')
+      .replace('is falling', 'está cayendo')
+      .replace("is among today's top performers", 'es uno de los mejores del día')
+      .replace("is among today's worst performers", 'es uno de los peores del día')
+      // ── News ──
       .replace('Positive news momentum', 'Impulso noticioso positivo')
+      .replace('Positive news sentiment', 'Sentimiento positivo en noticias')
       .replace('Negative news sentiment', 'Sentimiento negativo en noticias')
+      // ── Spectral / Cycle ──
+      .replace('At cycle TROUGH', 'En MÍNIMO de ciclo')
+      .replace('At cycle PEAK', 'En MÁXIMO de ciclo')
+      .replace('potential entry point', 'posible punto de entrada')
+      .replace('consider reducing exposure', 'considerar reducir exposición')
+      // ── Data quality ──
+      .replace('Comprehensive data available', 'Datos completos disponibles')
+      .replace('Limited data', 'Datos limitados')
+      .replace('Data freshness decay applied', 'Decaimiento por antigüedad de datos aplicado')
+      .replace('sources)', 'fuentes)')
+      // ── Common ──
+      .replace('investors,', 'inversores,')
+      .replace('investors', 'inversores')
+      .replace('shares', 'acciones')
       .replace('improving', 'mejorando')
       .replace('deteriorating', 'deteriorando')
-      .replace('stable', 'estable')
-      .replace('premium', 'prima');
+      .replace('stable', 'estable');
   };
 
   const tlCatalyst = (c: string): string => {
@@ -171,6 +266,27 @@ export default function ResumenTab({
       .replace('above current price', 'por encima del precio actual')
       .replace('analyst consensus', 'consenso de analistas');
   };
+
+  const DIM_ES: Record<string, string> = {
+    'Valuation':         'Valuación',
+    'Quality':           'Calidad',
+    'Growth':            'Crecimiento',
+    'Technical':         'Técnico',
+    'Institutional':     'Institucional',
+    'Momentum':          'Momentum',
+    'Forecasts':         'Proyecciones',
+    'Financial Strength':'Solidez Financiera',
+    'Profitability':     'Rentabilidad',
+    'Efficiency':        'Eficiencia',
+    'Moat':              'Ventaja Comp.',
+    'Spectral':          'Espectral',
+    'MonteCarlo':        'Monte Carlo',
+    'Sector':            'Sector',
+    'News':              'Noticias',
+    'Correlation':       'Correlación',
+  };
+
+  const tlDim = (dim: string) => (es && DIM_ES[dim]) ? DIM_ES[dim] : dim;
 
   const COMPANY_TYPE_LABEL: Record<string, string> = {
     growth: es ? 'Crecimiento' : 'Growth',
@@ -215,6 +331,8 @@ export default function ResumenTab({
         diarioStats,
         news,
         averageValuation,
+        profile,
+        ratiosTTM,
       };
 
       console.log('[ResumenTab] Sending payload to multi-layer engine:', payload);
@@ -963,7 +1081,7 @@ export default function ResumenTab({
       {dimensionScores && Object.keys(dimensionScores).length > 0 && (
         <div>
           <h4 className="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
-            <span className="text-emerald-400">📊</span> Puntuación por Dimensión
+            <span className="text-emerald-400">📊</span> {es ? 'Puntuación por Dimensión' : 'Dimension Scores'}
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
             {Object.entries(dimensionScores).map(([dim, score]) => {
@@ -974,7 +1092,7 @@ export default function ResumenTab({
                   className="bg-gray-900/80 p-4 rounded-2xl border border-white/[0.06]/50 hover:border-emerald-500/50 transition-all group"
                 >
                   <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 truncate">
-                    {dim.replace(/([A-Z])/g, ' $1').trim()}
+                    {tlDim(dim.replace(/([A-Z])/g, ' $1').trim())}
                   </p>
                   <p className={`text-3xl font-bold ${getScoreColor(numScore)} group-hover:scale-110 transition-transform`}>
                     {numScore}
@@ -995,14 +1113,14 @@ export default function ResumenTab({
       {/* Summary Narrative */}
       <div className="bg-gray-900/80 p-8 rounded-3xl border border-white/[0.06]/50">
         <h4 className="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
-          <span className="text-emerald-400">📝</span> Análisis Narrativo
+          <span className="text-emerald-400">📝</span> {es ? 'Análisis Narrativo' : 'Narrative Analysis'}
         </h4>
         <p className="text-lg leading-relaxed text-gray-200">{summaryText}</p>
 
         {actionableAdvice && (
           <div className="mt-8 bg-gradient-to-r from-gray-950 via-emerald-900/40 to-emerald-900/40 p-6 rounded-2xl border border-emerald-500/30">
             <p className="uppercase text-emerald-400 text-xs tracking-[3px] mb-2 flex items-center gap-2">
-              <span>🎯</span> PLAN DE ACCIÓN
+              <span>🎯</span> {es ? 'PLAN DE ACCIÓN' : 'ACTION PLAN'}
             </p>
             <p className="text-xl font-medium text-white leading-relaxed">{actionableAdvice}</p>
           </div>
@@ -1012,12 +1130,12 @@ export default function ResumenTab({
         {(fftData || fftLoading) && (
           <div className="mt-6 bg-violet-950/20 border border-violet-800/30 p-5 rounded-2xl">
             <p className="uppercase text-violet-400 text-xs tracking-[3px] mb-3 flex items-center gap-2">
-              <span>〜</span> TIMING ESPECTRAL (FFT)
+              <span>〜</span> {es ? 'TIMING ESPECTRAL (FFT)' : 'SPECTRAL TIMING (FFT)'}
             </p>
             {fftLoading ? (
               <div className="flex items-center gap-3 text-gray-500 text-sm">
                 <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-                <span>Calculando ciclos espectrales...</span>
+                <span>{es ? 'Calculando ciclos espectrales...' : 'Computing spectral cycles...'}</span>
               </div>
             ) : fftData ? (
               <>
@@ -1033,14 +1151,16 @@ export default function ResumenTab({
                       : fftData.currentSignal === 'bearish' ? 'text-red-400'
                       : 'text-yellow-400'
                     }`}>
-                      Señal: {fftData.currentSignal === 'bullish' ? 'Alcista'
-                        : fftData.currentSignal === 'bearish' ? 'Bajista'
+                      {es ? 'Señal' : 'Signal'}: {fftData.currentSignal === 'bullish'
+                        ? (es ? 'Alcista' : 'Bullish')
+                        : fftData.currentSignal === 'bearish'
+                        ? (es ? 'Bajista' : 'Bearish')
                         : 'Neutral'}
                     </span>
                   </div>
                   {fftData.complexComponents && fftData.complexComponents.length > 0 && (
                     <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>Ciclos dominantes:</span>
+                      <span>{es ? 'Ciclos dominantes:' : 'Dominant cycles:'}</span>
                       {fftData.complexComponents.slice(0, 3).map((c, i) => (
                         <span key={i} className="bg-violet-900/30 border border-violet-800/30 rounded px-2 py-0.5">
                           <span className="text-violet-300 font-mono">{c.period_days}d</span>
@@ -1053,10 +1173,16 @@ export default function ResumenTab({
                 </div>
                 <p className="text-sm text-gray-300 leading-relaxed">
                   {fftData.currentSignal === 'bullish'
-                    ? 'El precio se encuentra por encima de la curva espectral reconstruida, confirmando momentum alcista en los ciclos detectados. El timing es favorable para posiciones largas.'
+                    ? (es
+                      ? 'El precio se encuentra por encima de la curva espectral reconstruida, confirmando momentum alcista en los ciclos detectados. El timing es favorable para posiciones largas.'
+                      : 'Price is above the reconstructed spectral curve, confirming bullish momentum in detected cycles. Timing is favorable for long positions.')
                     : fftData.currentSignal === 'bearish'
-                    ? 'El precio se encuentra por debajo de la curva espectral reconstruida, indicando presión vendedora en los ciclos dominantes. Se recomienda cautela en el timing de entrada.'
-                    : 'El precio se sitúa en zona neutral respecto a los ciclos espectrales, sin señal de timing definida. Esperar confirmación de ruptura.'}
+                    ? (es
+                      ? 'El precio se encuentra por debajo de la curva espectral reconstruida, indicando presión vendedora en los ciclos dominantes. Se recomienda cautela en el timing de entrada.'
+                      : 'Price is below the reconstructed spectral curve, indicating selling pressure in dominant cycles. Caution is advised on entry timing.')
+                    : (es
+                      ? 'El precio se sitúa en zona neutral respecto a los ciclos espectrales, sin señal de timing definida. Esperar confirmación de ruptura.'
+                      : 'Price is in a neutral zone relative to spectral cycles, with no defined timing signal. Wait for breakout confirmation.')}
                 </p>
               </>
             ) : null}
@@ -1069,7 +1195,7 @@ export default function ResumenTab({
         {keyRisks && keyRisks.length > 0 && (
           <div className="bg-gradient-to-br from-red-950/30 to-red-950/40 border border-red-900/40 p-6 rounded-2xl">
             <h5 className="text-red-400 font-semibold mb-4 flex items-center gap-2">
-              <span>⚠️</span> Riesgos Identificados
+              <span>⚠️</span> {es ? 'Riesgos Identificados' : 'Identified Risks'}
             </h5>
             <ul className="space-y-3">
               {keyRisks.map((risk: string, i: number) => (
@@ -1085,7 +1211,7 @@ export default function ResumenTab({
         {catalysts && catalysts.length > 0 && (
           <div className="bg-gradient-to-br from-emerald-950/30 to-emerald-950/20 border border-emerald-900/40 p-6 rounded-2xl">
             <h5 className="text-emerald-400 font-semibold mb-4 flex items-center gap-2">
-              <span>🚀</span> Catalizadores
+              <span>🚀</span> {es ? 'Catalizadores' : 'Catalysts'}
             </h5>
             <ul className="space-y-3">
               {catalysts.map((cat: string, i: number) => (

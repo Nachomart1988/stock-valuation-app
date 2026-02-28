@@ -103,7 +103,16 @@ const OBJECTIVES = [
   { value: 'max_return', label: 'Max Return', labelEs: 'Max Retorno' },
 ];
 
-const SUB_TABS = ['Optimización', 'Frontera Eficiente', 'Factores', 'PCA', 'Black-Litterman', 'Rolling'];
+const SUB_TAB_KEYS = ['optimization', 'frontier', 'factors', 'pca', 'bl', 'rolling'] as const;
+type SubTabKey = typeof SUB_TAB_KEYS[number];
+const SUB_TAB_LABELS: Record<SubTabKey, { es: string; en: string }> = {
+  optimization: { es: 'Optimización', en: 'Optimization' },
+  frontier:     { es: 'Frontera Eficiente', en: 'Efficient Frontier' },
+  factors:      { es: 'Factores', en: 'Factors' },
+  pca:          { es: 'PCA', en: 'PCA' },
+  bl:           { es: 'Black-Litterman', en: 'Black-Litterman' },
+  rolling:      { es: 'Rolling', en: 'Rolling' },
+};
 
 const TICKER_COLORS = [
   '#a855f7', '#22c55e', '#3b82f6', '#f59e0b', '#ec4899',
@@ -130,10 +139,12 @@ function sharpeToColor(sharpe: number): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EfficientFrontierTab({ result }: { result: OptimizationResult | null }) {
+  const { locale } = useLanguage();
+  const es = locale === 'es';
   if (!result) {
     return (
       <div className="flex items-center justify-center h-48 text-gray-500 text-sm">
-        Ejecuta la optimización primero (pestaña Optimización)
+        {es ? 'Ejecuta la optimización primero (pestaña Optimización)' : 'Run optimization first (Optimization tab)'}
       </div>
     );
   }
@@ -160,8 +171,8 @@ function EfficientFrontierTab({ result }: { result: OptimizationResult | null })
   return (
     <div className="space-y-5">
       <div>
-        <h4 className="text-sm font-semibold text-gray-300 mb-1">Frontera Eficiente + Nube Monte Carlo</h4>
-        <p className="text-xs text-gray-500">Color = Sharpe ratio (verde=alto, rojo=bajo). Estrella = portafolio óptimo.</p>
+        <h4 className="text-sm font-semibold text-gray-300 mb-1">{es ? 'Frontera Eficiente + Nube Monte Carlo' : 'Efficient Frontier + Monte Carlo Cloud'}</h4>
+        <p className="text-xs text-gray-500">{es ? 'Color = Sharpe ratio (verde=alto, rojo=bajo). Estrella = portafolio óptimo.' : 'Color = Sharpe ratio (green=high, red=low). Star = optimal portfolio.'}</p>
       </div>
 
       <div className="bg-gray-900/60 rounded-xl p-3">
@@ -172,14 +183,14 @@ function EfficientFrontierTab({ result }: { result: OptimizationResult | null })
               dataKey="risk"
               name="Volatilidad"
               unit="%"
-              label={{ value: 'Volatilidad Anual (%)', position: 'insideBottom', offset: -15, fill: '#9ca3af', fontSize: 12 }}
+              label={{ value: es ? 'Volatilidad Anual (%)' : 'Annual Volatility (%)', position: 'insideBottom', offset: -15, fill: '#9ca3af', fontSize: 12 }}
               tick={{ fill: '#9ca3af', fontSize: 11 }}
             />
             <YAxis
               dataKey="return"
               name="Retorno"
               unit="%"
-              label={{ value: 'Retorno Anual (%)', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 12 }}
+              label={{ value: es ? 'Retorno Anual (%)' : 'Annual Return (%)', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 12 }}
               tick={{ fill: '#9ca3af', fontSize: 11 }}
             />
             <Tooltip
@@ -195,32 +206,32 @@ function EfficientFrontierTab({ result }: { result: OptimizationResult | null })
               ))}
             </Scatter>
             {/* Efficient frontier */}
-            <Scatter name="Frontera Eficiente" data={frontierData} fill="#a855f7" opacity={0.9} line={{ stroke: '#a855f7', strokeWidth: 2 }} lineType="joint" shape="circle" />
+            <Scatter name={es ? 'Frontera Eficiente' : 'Efficient Frontier'} data={frontierData} fill="#a855f7" opacity={0.9} line={{ stroke: '#a855f7', strokeWidth: 2 }} lineType="joint" shape="circle" />
             {/* Optimal portfolio */}
-            <Scatter name="Óptimo" data={optimalPoint} fill="#fbbf24" shape="star" />
+            <Scatter name={es ? 'Óptimo' : 'Optimal'} data={optimalPoint} fill="#fbbf24" shape="star" />
           </ScatterChart>
         </ResponsiveContainer>
       </div>
 
       {/* Legend */}
       <div className="flex flex-wrap gap-4 text-xs text-gray-400">
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500 inline-block" /> Alto Sharpe (&gt;1.5)</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-400 inline-block" /> Sharpe medio</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> Bajo Sharpe</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-violet-500 inline-block" /> Frontera eficiente</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-300 inline-block" /> Portafolio óptimo</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500 inline-block" /> {es ? 'Alto Sharpe (>1.5)' : 'High Sharpe (>1.5)'}</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-400 inline-block" /> {es ? 'Sharpe medio' : 'Mid Sharpe'}</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> {es ? 'Bajo Sharpe' : 'Low Sharpe'}</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-violet-500 inline-block" /> {es ? 'Frontera eficiente' : 'Efficient frontier'}</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-300 inline-block" /> {es ? 'Portafolio óptimo' : 'Optimal portfolio'}</span>
       </div>
 
       {/* Frontier table */}
       {frontierData.length > 0 && (
         <div className="bg-gray-700/30 rounded-xl p-4">
-          <h5 className="text-xs font-semibold text-gray-400 mb-2 uppercase">Puntos de Frontera Eficiente</h5>
+          <h5 className="text-xs font-semibold text-gray-400 mb-2 uppercase">{es ? 'Puntos de Frontera Eficiente' : 'Efficient Frontier Points'}</h5>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-gray-500 border-b border-gray-700">
-                  <th className="text-right py-1 pr-3">Retorno</th>
-                  <th className="text-right py-1 pr-3">Volatilidad</th>
+                  <th className="text-right py-1 pr-3">{es ? 'Retorno' : 'Return'}</th>
+                  <th className="text-right py-1 pr-3">{es ? 'Volatilidad' : 'Volatility'}</th>
                   <th className="text-right py-1">Sharpe</th>
                 </tr>
               </thead>
@@ -245,13 +256,15 @@ function FactorAnalysisTab({
   tickers,
   backendUrl,
 }: { tickers: string[]; backendUrl: string }) {
+  const { locale } = useLanguage();
+  const es = locale === 'es';
   const [benchmark, setBenchmark] = useState('SPY');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FactorRegressionResult | null>(null);
 
   const runAnalysis = useCallback(async () => {
-    if (tickers.length < 1) { setError('Necesitas al menos 1 ticker'); return; }
+    if (tickers.length < 1) { setError(es ? 'Necesitas al menos 1 ticker' : 'Need at least 1 ticker'); return; }
     setLoading(true);
     setError(null);
     try {
@@ -294,7 +307,7 @@ function FactorAnalysisTab({
           disabled={loading}
           className="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg text-sm transition-all disabled:opacity-50"
         >
-          {loading ? 'Analizando...' : 'Ejecutar Análisis'}
+          {loading ? (es ? 'Analizando...' : 'Analyzing...') : (es ? 'Ejecutar Análisis' : 'Run Analysis')}
         </button>
       </div>
 
@@ -305,8 +318,8 @@ function FactorAnalysisTab({
           {/* Benchmark stats */}
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: 'Retorno Anual', value: fmtPct(result.factor_stats.market_return_annual), color: 'text-green-400' },
-              { label: 'Volatilidad Anual', value: fmtPctRaw(result.factor_stats.market_vol_annual), color: 'text-yellow-400' },
+              { label: es ? 'Retorno Anual' : 'Annual Return', value: fmtPct(result.factor_stats.market_return_annual), color: 'text-green-400' },
+              { label: es ? 'Volatilidad Anual' : 'Annual Volatility', value: fmtPctRaw(result.factor_stats.market_vol_annual), color: 'text-yellow-400' },
               { label: `Sharpe (${result.benchmark})`, value: result.factor_stats.market_sharpe.toFixed(3), color: 'text-violet-400' },
             ].map((m) => (
               <div key={m.label} className="bg-gray-700/30 rounded-lg p-3 text-center">
@@ -318,7 +331,7 @@ function FactorAnalysisTab({
 
           {/* Regressions table */}
           <div className="bg-gray-700/30 rounded-xl p-4">
-            <h4 className="text-sm font-semibold text-gray-300 mb-3">Resultados de Regresión OLS</h4>
+            <h4 className="text-sm font-semibold text-gray-300 mb-3">{es ? 'Resultados de Regresión OLS' : 'OLS Regression Results'}</h4>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -329,8 +342,8 @@ function FactorAnalysisTab({
                     <th className="py-2 pr-2">R²</th>
                     <th className="py-2 pr-2">Vol Residual</th>
                     <th className="py-2 pr-2">Info Ratio</th>
-                    <th className="py-2 pr-2">Riesgo Mkt %</th>
-                    <th className="py-2 pr-2">Riesgo Idio %</th>
+                    <th className="py-2 pr-2">{es ? 'Riesgo Mkt %' : 'Mkt Risk %'}</th>
+                    <th className="py-2 pr-2">{es ? 'Riesgo Idio %' : 'Idio Risk %'}</th>
                     <th className="py-2">Corr Mkt</th>
                   </tr>
                 </thead>
@@ -355,7 +368,7 @@ function FactorAnalysisTab({
 
           {/* Risk decomposition bar chart */}
           <div className="bg-gray-700/30 rounded-xl p-4">
-            <h4 className="text-sm font-semibold text-gray-300 mb-3">Descomposición de Riesgo (Mercado vs Idiosincrático)</h4>
+            <h4 className="text-sm font-semibold text-gray-300 mb-3">{es ? 'Descomposición de Riesgo (Mercado vs Idiosincrático)' : 'Risk Decomposition (Market vs Idiosyncratic)'}</h4>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={riskBarData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -366,8 +379,8 @@ function FactorAnalysisTab({
                   formatter={(v: any) => [`${Number(v).toFixed(1)}%`]}
                 />
                 <Legend wrapperStyle={{ color: '#9ca3af', fontSize: 12 }} />
-                <Bar dataKey="market" name="Riesgo Mercado %" fill="#3b82f6" stackId="a" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="idio" name="Riesgo Idiosincrático %" fill="#f97316" stackId="a" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="market" name={es ? 'Riesgo Mercado %' : 'Market Risk %'} fill="#3b82f6" stackId="a" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="idio" name={es ? 'Riesgo Idiosincrático %' : 'Idiosyncratic Risk %'} fill="#f97316" stackId="a" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -381,13 +394,15 @@ function PCATab({
   tickers,
   backendUrl,
 }: { tickers: string[]; backendUrl: string }) {
+  const { locale } = useLanguage();
+  const es = locale === 'es';
   const [nComponents, setNComponents] = useState(5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PCAResult | null>(null);
 
   const runPCA = useCallback(async () => {
-    if (tickers.length < 2) { setError('Necesitas al menos 2 tickers'); return; }
+    if (tickers.length < 2) { setError(es ? 'Necesitas al menos 2 tickers' : 'Need at least 2 tickers'); return; }
     setLoading(true);
     setError(null);
     try {
@@ -425,7 +440,7 @@ function PCATab({
       {/* Controls */}
       <div className="flex flex-wrap items-end gap-4">
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Componentes: {nComponents}</label>
+          <label className="block text-xs text-gray-400 mb-1">{es ? 'Componentes' : 'Components'}: {nComponents}</label>
           <input
             type="range"
             min={2}
@@ -440,7 +455,7 @@ function PCATab({
           disabled={loading}
           className="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg text-sm transition-all disabled:opacity-50"
         >
-          {loading ? 'Calculando...' : 'Ejecutar PCA'}
+          {loading ? (es ? 'Calculando...' : 'Calculating...') : (es ? 'Ejecutar PCA' : 'Run PCA')}
         </button>
       </div>
 
@@ -450,7 +465,7 @@ function PCATab({
         <>
           {/* Scree plot */}
           <div className="bg-gray-700/30 rounded-xl p-4">
-            <h4 className="text-sm font-semibold text-gray-300 mb-3">Scree Plot — Varianza Explicada por Componente</h4>
+            <h4 className="text-sm font-semibold text-gray-300 mb-3">{es ? 'Scree Plot — Varianza Explicada por Componente' : 'Scree Plot — Variance Explained per Component'}</h4>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={screePlotData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -461,8 +476,8 @@ function PCATab({
                   formatter={(v: any) => [`${Number(v).toFixed(2)}%`]}
                 />
                 <Legend wrapperStyle={{ color: '#9ca3af', fontSize: 12 }} />
-                <Bar dataKey="variance" name="Varianza %" fill="#a855f7" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="cumulative" name="Acumulada %" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="variance" name={es ? 'Varianza %' : 'Variance %'} fill="#a855f7" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="cumulative" name={es ? 'Acumulada %' : 'Cumulative %'} fill="#22c55e" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -470,7 +485,7 @@ function PCATab({
           {/* Loadings table */}
           <div className="bg-gray-700/30 rounded-xl p-4">
             <h4 className="text-sm font-semibold text-gray-300 mb-3">
-              Matriz de Cargas (Loadings) — verde=positivo, rojo=negativo
+              {es ? 'Matriz de Cargas (Loadings) — verde=positivo, rojo=negativo' : 'Loadings Matrix — green=positive, red=negative'}
             </h4>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -510,7 +525,7 @@ function PCATab({
               <div key={c.pc} className="bg-gray-800/60 rounded-lg p-3">
                 <div className="text-xs text-gray-500 mb-1">PC{c.pc} (λ={c.eigenvalue.toFixed(3)})</div>
                 <div className="text-sm font-bold text-violet-400">{c.variance_explained_pct.toFixed(2)}%</div>
-                <div className="text-xs text-gray-500">Acum: {c.cumulative_variance_pct.toFixed(2)}%</div>
+                <div className="text-xs text-gray-500">{es ? 'Acum' : 'Cum'}: {c.cumulative_variance_pct.toFixed(2)}%</div>
                 <div className="mt-1 h-1.5 bg-gray-600 rounded-full overflow-hidden">
                   <div className="h-full bg-violet-500 rounded-full" style={{ width: `${Math.min(c.variance_explained_pct, 100)}%` }} />
                 </div>
@@ -528,6 +543,8 @@ function BlackLittermanTab({
   backendUrl,
   optimizationResult,
 }: { tickers: string[]; backendUrl: string; optimizationResult: OptimizationResult | null }) {
+  const { locale } = useLanguage();
+  const es = locale === 'es';
   const [views, setViews] = useState<Record<string, string>>({});
   const [viewConfidence, setViewConfidence] = useState(0.5);
   const [loading, setLoading] = useState(false);
@@ -542,7 +559,7 @@ function BlackLittermanTab({
   }, [tickers]);
 
   const runBL = useCallback(async () => {
-    if (tickers.length < 2) { setError('Necesitas al menos 2 tickers'); return; }
+    if (tickers.length < 2) { setError(es ? 'Necesitas al menos 2 tickers' : 'Need at least 2 tickers'); return; }
     const viewsList = Object.entries(views)
       .filter(([, v]) => v !== '')
       .map(([asset, v]) => ({ asset, return_view: parseFloat(v) / 100 }))
@@ -571,12 +588,12 @@ function BlackLittermanTab({
       {/* Views input */}
       <div className="bg-gray-700/30 rounded-xl p-4">
         <h4 className="text-sm font-semibold text-gray-300 mb-3">
-          Vistas del Inversor (opcional — deja en blanco para usar solo equilibrio)
+          {es ? 'Vistas del Inversor (opcional — deja en blanco para usar solo equilibrio)' : 'Investor Views (optional — leave blank to use equilibrium only)'}
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
           {tickers.map((ticker) => (
             <div key={ticker}>
-              <label className="block text-xs text-gray-400 mb-1">{ticker} retorno esperado (%)</label>
+              <label className="block text-xs text-gray-400 mb-1">{ticker} {es ? 'retorno esperado (%)' : 'expected return (%)'}</label>
               <input
                 type="number"
                 step="0.1"
@@ -591,7 +608,7 @@ function BlackLittermanTab({
 
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Confianza en Vistas: {(viewConfidence * 100).toFixed(0)}%</label>
+            <label className="block text-xs text-gray-400 mb-1">{es ? 'Confianza en Vistas' : 'View Confidence'}: {(viewConfidence * 100).toFixed(0)}%</label>
             <input
               type="range"
               min={5}
@@ -607,7 +624,7 @@ function BlackLittermanTab({
             disabled={loading}
             className="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg text-sm transition-all disabled:opacity-50"
           >
-            {loading ? 'Calculando...' : 'Ejecutar Black-Litterman'}
+            {loading ? (es ? 'Calculando...' : 'Calculating...') : (es ? 'Ejecutar Black-Litterman' : 'Run Black-Litterman')}
           </button>
         </div>
       </div>
@@ -619,14 +636,14 @@ function BlackLittermanTab({
           {/* Portfolio metrics comparison */}
           <div className="grid grid-cols-2 gap-4">
             {[
-              { label: 'Portafolio BL', m: result.bl_portfolio_metrics, color: 'violet' },
-              { label: 'Portafolio Mkt (Cap)', m: result.market_portfolio_metrics, color: 'blue' },
+              { label: es ? 'Portafolio BL' : 'BL Portfolio', m: result.bl_portfolio_metrics, color: 'violet' },
+              { label: es ? 'Portafolio Mkt (Cap)' : 'Mkt Cap Portfolio', m: result.market_portfolio_metrics, color: 'blue' },
             ].map(({ label, m, color }) => (
               <div key={label} className="bg-gray-700/30 rounded-xl p-4">
                 <h5 className={`text-sm font-semibold text-${color}-400 mb-3`}>{label}</h5>
                 <div className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-400">Retorno Anual</span><span className={m.annual_return >= 0 ? 'text-green-400' : 'text-red-400'}>{fmtPct(m.annual_return)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">Volatilidad</span><span className="text-yellow-400">{fmtPctRaw(m.annual_vol)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">{es ? 'Retorno Anual' : 'Annual Return'}</span><span className={m.annual_return >= 0 ? 'text-green-400' : 'text-red-400'}>{fmtPct(m.annual_return)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">{es ? 'Volatilidad' : 'Volatility'}</span><span className="text-yellow-400">{fmtPctRaw(m.annual_vol)}</span></div>
                   <div className="flex justify-between"><span className="text-gray-400">Sharpe</span><span className="text-violet-400">{m.sharpe.toFixed(3)}</span></div>
                 </div>
               </div>
@@ -636,18 +653,18 @@ function BlackLittermanTab({
           {/* Weights comparison table */}
           <div className="bg-gray-700/30 rounded-xl p-4">
             <h4 className="text-sm font-semibold text-gray-300 mb-3">
-              Comparación de Pesos ({result.views_applied} vista(s) aplicada(s))
+              {es ? 'Comparación de Pesos' : 'Weights Comparison'} ({result.views_applied} {es ? 'vista(s) aplicada(s)' : 'view(s) applied'})
             </h4>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-gray-500 border-b border-gray-700 text-right">
                     <th className="text-left py-2">Ticker</th>
-                    <th className="py-2 pr-3">Peso BL</th>
-                    <th className="py-2 pr-3">Peso Mkt Cap</th>
-                    {optimizationResult && <th className="py-2 pr-3">Peso Optimizer</th>}
-                    <th className="py-2 pr-3">Retorno BL</th>
-                    <th className="py-2">Retorno Implícito</th>
+                    <th className="py-2 pr-3">{es ? 'Peso BL' : 'BL Weight'}</th>
+                    <th className="py-2 pr-3">{es ? 'Peso Mkt Cap' : 'Mkt Cap Weight'}</th>
+                    {optimizationResult && <th className="py-2 pr-3">{es ? 'Peso Optimizer' : 'Optimizer Weight'}</th>}
+                    <th className="py-2 pr-3">{es ? 'Retorno BL' : 'BL Return'}</th>
+                    <th className="py-2">{es ? 'Retorno Implícito' : 'Implied Return'}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -676,7 +693,7 @@ function BlackLittermanTab({
 
           {/* Market caps */}
           <div className="bg-gray-700/30 rounded-xl p-4">
-            <h5 className="text-xs font-semibold text-gray-400 mb-2 uppercase">Cap. de Mercado Usada para Prior (USD B)</h5>
+            <h5 className="text-xs font-semibold text-gray-400 mb-2 uppercase">{es ? 'Cap. de Mercado Usada para Prior (USD B)' : 'Market Cap Used for Prior (USD B)'}</h5>
             <div className="flex flex-wrap gap-2">
               {result.tickers.map((t) => (
                 <div key={t} className="bg-gray-800/60 rounded-lg px-3 py-2 text-xs">
@@ -696,6 +713,8 @@ function RollingTab({
   tickers,
   backendUrl,
 }: { tickers: string[]; backendUrl: string }) {
+  const { locale } = useLanguage();
+  const es = locale === 'es';
   const [objective, setObjective] = useState('max_sharpe');
   const [windowDays, setWindowDays] = useState(252);
   const [stepDays, setStepDays] = useState(21);
@@ -704,7 +723,7 @@ function RollingTab({
   const [result, setResult] = useState<RollingResult | null>(null);
 
   const runRolling = useCallback(async () => {
-    if (tickers.length < 2) { setError('Necesitas al menos 2 tickers'); return; }
+    if (tickers.length < 2) { setError(es ? 'Necesitas al menos 2 tickers' : 'Need at least 2 tickers'); return; }
     setLoading(true);
     setError(null);
     try {
@@ -739,36 +758,36 @@ function RollingTab({
       {/* Controls */}
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Objetivo</label>
+          <label className="block text-xs text-gray-400 mb-1">{es ? 'Objetivo' : 'Objective'}</label>
           <select
             value={objective}
             onChange={(e) => setObjective(e.target.value)}
             className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
           >
-            {OBJECTIVES.map((o) => <option key={o.value} value={o.value}>{o.labelEs}</option>)}
+            {OBJECTIVES.map((o) => <option key={o.value} value={o.value}>{es ? o.labelEs : o.label}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Ventana</label>
+          <label className="block text-xs text-gray-400 mb-1">{es ? 'Ventana' : 'Window'}</label>
           <select
             value={windowDays}
             onChange={(e) => setWindowDays(parseInt(e.target.value))}
             className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
           >
-            <option value={63}>3M (63d)</option>
-            <option value={126}>6M (126d)</option>
-            <option value={252}>1A (252d)</option>
+            <option value={63}>{es ? '3M (63d)' : '3M (63d)'}</option>
+            <option value={126}>{es ? '6M (126d)' : '6M (126d)'}</option>
+            <option value={252}>{es ? '1A (252d)' : '1Y (252d)'}</option>
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-400 mb-1">Paso</label>
+          <label className="block text-xs text-gray-400 mb-1">{es ? 'Paso' : 'Step'}</label>
           <select
             value={stepDays}
             onChange={(e) => setStepDays(parseInt(e.target.value))}
             className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
           >
-            <option value={5}>Semanal (5d)</option>
-            <option value={21}>Mensual (21d)</option>
+            <option value={5}>{es ? 'Semanal (5d)' : 'Weekly (5d)'}</option>
+            <option value={21}>{es ? 'Mensual (21d)' : 'Monthly (21d)'}</option>
           </select>
         </div>
         <button
@@ -776,7 +795,7 @@ function RollingTab({
           disabled={loading}
           className="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg text-sm transition-all disabled:opacity-50"
         >
-          {loading ? 'Calculando...' : 'Ejecutar Rolling'}
+          {loading ? (es ? 'Calculando...' : 'Calculating...') : (es ? 'Ejecutar Rolling' : 'Run Rolling')}
         </button>
       </div>
 
@@ -787,7 +806,7 @@ function RollingTab({
           {/* Weight evolution chart */}
           <div className="bg-gray-700/30 rounded-xl p-4">
             <h4 className="text-sm font-semibold text-gray-300 mb-3">
-              Evolución de Pesos por Ventana ({result.windows.length} ventanas)
+              {es ? 'Evolución de Pesos por Ventana' : 'Weight Evolution per Window'} ({result.windows.length} {es ? 'ventanas' : 'windows'})
             </h4>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={lineData} margin={{ top: 5, right: 20, left: 0, bottom: 20 }}>
@@ -822,7 +841,7 @@ function RollingTab({
 
           {/* Sharpe evolution */}
           <div className="bg-gray-700/30 rounded-xl p-4">
-            <h4 className="text-sm font-semibold text-gray-300 mb-3">Evolución del Sharpe</h4>
+            <h4 className="text-sm font-semibold text-gray-300 mb-3">{es ? 'Evolución del Sharpe' : 'Sharpe Evolution'}</h4>
             <ResponsiveContainer width="100%" height={160}>
               <LineChart data={lineData} margin={{ top: 5, right: 20, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -837,18 +856,18 @@ function RollingTab({
           {/* Last window stats */}
           {lastWindow && (
             <div className="bg-gray-700/30 rounded-xl p-4">
-              <h4 className="text-sm font-semibold text-gray-300 mb-3">Última Ventana ({lastWindow.date.slice(0, 10)})</h4>
+              <h4 className="text-sm font-semibold text-gray-300 mb-3">{es ? 'Última Ventana' : 'Last Window'} ({lastWindow.date.slice(0, 10)})</h4>
               <div className="grid grid-cols-3 gap-3 mb-4">
                 <div className="bg-gray-800/60 rounded-lg p-3 text-center">
                   <div className="text-xs text-gray-500">Sharpe</div>
                   <div className="text-lg font-bold text-green-400">{lastWindow.sharpe.toFixed(3)}</div>
                 </div>
                 <div className="bg-gray-800/60 rounded-lg p-3 text-center">
-                  <div className="text-xs text-gray-500">Retorno Anual</div>
+                  <div className="text-xs text-gray-500">{es ? 'Retorno Anual' : 'Annual Return'}</div>
                   <div className={`text-lg font-bold ${lastWindow.annual_return >= 0 ? 'text-green-400' : 'text-red-400'}`}>{fmtPct(lastWindow.annual_return)}</div>
                 </div>
                 <div className="bg-gray-800/60 rounded-lg p-3 text-center">
-                  <div className="text-xs text-gray-500">Volatilidad Anual</div>
+                  <div className="text-xs text-gray-500">{es ? 'Volatilidad Anual' : 'Annual Volatility'}</div>
                   <div className="text-lg font-bold text-yellow-400">{fmtPctRaw(lastWindow.annual_vol)}</div>
                 </div>
               </div>
@@ -931,7 +950,7 @@ export default function PortfolioOptimizerTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<OptimizationResult | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState('Optimización');
+  const [activeSubTab, setActiveSubTab] = useState<SubTabKey>('optimization');
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -955,7 +974,7 @@ export default function PortfolioOptimizerTab() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setResult(data);
-      setActiveSubTab('Optimización');
+      setActiveSubTab('optimization');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -1033,17 +1052,17 @@ export default function PortfolioOptimizerTab() {
 
       {/* Sub-tab Navigation */}
       <div className="flex flex-wrap gap-1 border-b border-gray-800 pb-0">
-        {SUB_TABS.map((tab) => (
+        {SUB_TAB_KEYS.map((key) => (
           <button
-            key={tab}
-            onClick={() => setActiveSubTab(tab)}
+            key={key}
+            onClick={() => setActiveSubTab(key)}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all border-b-2 ${
-              activeSubTab === tab
+              activeSubTab === key
                 ? 'text-violet-400 border-violet-500 bg-gray-800/60'
                 : 'text-gray-400 border-transparent hover:text-gray-200 hover:bg-gray-800/30'
             }`}
           >
-            {tab}
+            {es ? SUB_TAB_LABELS[key].es : SUB_TAB_LABELS[key].en}
           </button>
         ))}
       </div>
@@ -1051,7 +1070,7 @@ export default function PortfolioOptimizerTab() {
       {/* Sub-tab Content */}
       <div className="min-h-75">
         {/* ── Optimización ─────────────────────────────────────────── */}
-        {activeSubTab === 'Optimización' && result && (
+        {activeSubTab === 'optimization' && result && (
           <>
             {/* Optimal Weights */}
             <div className="bg-gray-700/30 rounded-xl p-5 mb-4">
@@ -1168,30 +1187,30 @@ export default function PortfolioOptimizerTab() {
           </>
         )}
 
-        {activeSubTab === 'Optimización' && !result && (
+        {activeSubTab === 'optimization' && !result && (
           <div className="flex flex-col items-center justify-center h-48 text-gray-500 text-sm gap-2">
             <div className="text-4xl opacity-30">∑</div>
-            <p>Ingresa tickers y haz clic en "Optimizar" para ver los resultados</p>
+            <p>{es ? 'Ingresa tickers y haz clic en "Optimizar" para ver los resultados' : 'Enter tickers and click "Optimize" to see results'}</p>
           </div>
         )}
 
         {/* ── Frontera Eficiente ────────────────────────────────────── */}
-        {activeSubTab === 'Frontera Eficiente' && (
+        {activeSubTab === 'frontier' && (
           <EfficientFrontierTab result={result} />
         )}
 
         {/* ── Factores ─────────────────────────────────────────────── */}
-        {activeSubTab === 'Factores' && (
+        {activeSubTab === 'factors' && (
           <FactorAnalysisTab tickers={parsedTickers} backendUrl={backendUrl} />
         )}
 
         {/* ── PCA ──────────────────────────────────────────────────── */}
-        {activeSubTab === 'PCA' && (
+        {activeSubTab === 'pca' && (
           <PCATab tickers={parsedTickers} backendUrl={backendUrl} />
         )}
 
         {/* ── Black-Litterman ──────────────────────────────────────── */}
-        {activeSubTab === 'Black-Litterman' && (
+        {activeSubTab === 'bl' && (
           <BlackLittermanTab
             tickers={parsedTickers}
             backendUrl={backendUrl}
@@ -1200,7 +1219,7 @@ export default function PortfolioOptimizerTab() {
         )}
 
         {/* ── Rolling ──────────────────────────────────────────────── */}
-        {activeSubTab === 'Rolling' && (
+        {activeSubTab === 'rolling' && (
           <RollingTab tickers={parsedTickers} backendUrl={backendUrl} />
         )}
       </div>

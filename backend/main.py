@@ -208,6 +208,8 @@ class ResumenRequest(BaseModel):
     diarioStats: Optional[Dict[str, Any]] = None
     news: Optional[List[Dict[str, Any]]] = None  # News articles for sentiment analysis
     averageValuation: Optional[float] = None  # Average of all frontend valuation methods
+    profile: Optional[Dict[str, Any]] = None      # FMP company profile (sector, mktCap, …)
+    ratiosTTM: Optional[Dict[str, Any]] = None    # FMP ratios-ttm (PE, dividend yield, P/B, …)
 
 
 @app.post("/resumen/predict")

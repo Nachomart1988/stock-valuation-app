@@ -461,7 +461,7 @@ export default function MarketSentimentPage() {
             <h3 className="text-base sm:text-lg font-bold text-cyan-400 mb-4 flex items-center gap-2">
               📈 {locale === 'es' ? 'Tendencia Histórica' : 'Historical Trend'}
               {data.trends.anomaly && (
-                <span className="ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-900/60 text-red-400 border border-red-700/50 uppercase">⚠️ Anomalía</span>
+                <span className="ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-900/60 text-red-400 border border-red-700/50 uppercase">⚠️ {locale === 'es' ? 'Anomalía' : 'Anomaly'}</span>
               )}
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -494,7 +494,13 @@ export default function MarketSentimentPage() {
                   {data.trends.weekly_mean === null ? '—' : data.trends.weekly_mean.toFixed(1)}
                 </div>
                 <div className={`text-[9px] mt-0.5 ${data.trends.weekly_trend === 'mejorando' ? 'text-green-500' : data.trends.weekly_trend === 'deteriorando' ? 'text-red-500' : 'text-gray-500'}`}>
-                  {data.trends.weekly_trend ?? ''}
+                  {data.trends.weekly_trend
+                    ? locale === 'es'
+                      ? data.trends.weekly_trend
+                      : data.trends.weekly_trend === 'mejorando' ? 'improving'
+                        : data.trends.weekly_trend === 'deteriorando' ? 'deteriorating'
+                        : 'stable'
+                    : ''}
                 </div>
               </div>
               {/* Monthly delta */}

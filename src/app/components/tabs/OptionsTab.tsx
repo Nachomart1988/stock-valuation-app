@@ -397,7 +397,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
           Math.abs(b.strike - currentPrice) < Math.abs(a.strike - currentPrice) ? b : a
         );
         strike = atm.strike;
-        prem = +((((atm.bid ?? 0) + (atm.ask ?? atm.lastPrice ?? 0)) / 2)).toFixed(2);
+        prem = +(((atm.bid ?? 0) + (atm.ask ?? atm.lastPrice ?? 0)) / 2).toFixed(2);
         iv = atm.iv ?? 0;
       }
     }
@@ -413,7 +413,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
         const opts: any[] = (updated.type === 'call' ? chain.calls[updated.expiration] : chain.puts[updated.expiration]) ?? [];
         const match = opts.find((o: any) => o.strike === +updated.strike);
         if (match) {
-          updated.entryPremium = +((((match.bid ?? 0) + (match.ask ?? match.lastPrice ?? 0)) / 2)).toFixed(2);
+          updated.entryPremium = +(((match.bid ?? 0) + (match.ask ?? match.lastPrice ?? 0)) / 2).toFixed(2);
           updated.iv = match.iv ?? 0;
         }
       }
@@ -524,6 +524,14 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
     if (typeof v === 'string') return v;
     const scaled = v * contracts * 100;
     return scaled >= 0 ? `+$${scaled.toFixed(2)}` : `-$${Math.abs(scaled).toFixed(2)}`;
+  };
+
+  // Format custom analysis values: qty is already baked in → multiply by 100 only (not contracts×100)
+  const fmtCustom = (v: number | string | null) => {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'string') return v;
+    const scaled = v * 100;
+    return scaled >= 0 ? `+$${scaled.toFixed(0)}` : `-$${Math.abs(scaled).toFixed(0)}`;
   };
 
   // Format scan table values: backend returns per-share amounts → multiply by 100 for 1 contract
@@ -1203,6 +1211,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                           <th className="py-1 text-right">{es ? 'Entrada ✎' : 'Entry ✎'}</th>
                           <th className="py-1 text-right">{es ? 'Precio hoy' : 'Today'}</th>
                           <th className="py-1 text-right">P&amp;L {es ? 'hoy' : 'today'}</th>
+                          <th className="py-1 text-right">{es ? 'P&L al vto.' : 'P&L at exp.'}</th>
                           <th className="py-1 w-6"></th>
                         </tr>
                       </thead>
@@ -1214,12 +1223,20 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                           const chainPrem = getChainPremium(leg);
                           const sign = leg.side === 'long' ? 1 : -1;
                           const legQty = leg.qty || 1;
-                          // P&L = price_diff × sign × qty × 100 (for both options and stock: 1 contract = 100 shares)
+                          // For stock: entryPremium = per-share price → P&L × 100 shares/contract
+                          // For options: entryPremium = per-share premium
+                          //   - P&L today  = (current_per_share - entry_per_share) × qty
+                          //   - P&L expiry = (intrinsic × 100 - entry_per_share) × qty
                           const pnlToday = leg.type === 'stock'
                             ? (currentPrice - leg.entryPremium) * sign * legQty * 100
                             : chainPrem !== null
-                              ? (chainPrem - leg.entryPremium) * sign * legQty * 100
+                              ? (chainPrem - leg.entryPremium) * sign * legQty
                               : null;
+                          const pnlMaturity = leg.type === 'stock'
+                            ? (currentPrice - leg.entryPremium) * sign * legQty * 100
+                            : leg.type === 'call'
+                              ? (Math.max(0, currentPrice - leg.strike) * 100 - leg.entryPremium) * sign * legQty
+                              : (Math.max(0, leg.strike - currentPrice) * 100 - leg.entryPremium) * sign * legQty;
                           const tc = leg.type === 'call' ? 'text-green-400' : leg.type === 'put' ? 'text-red-400' : 'text-blue-400';
                           return (
                             <tr key={leg.id} className="border-t border-gray-700/40">
@@ -1281,16 +1298,12 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                     <span className="text-xs text-gray-500">/sh</span>
                                   </div>
                                 ) : (
-                                  <div>
-                                    <div className="flex items-center justify-end gap-1">
-                                      <input type="number" value={leg.entryPremium} step="0.01"
-                                        onChange={e => updateCustomLeg(leg.id, 'entryPremium', +e.target.value)}
-                                        className="w-16 bg-gray-800 text-yellow-300 rounded px-2 py-0.5 text-xs border border-gray-600 text-right" />
-                                      <span className="text-xs text-gray-500">/sh</span>
-                                    </div>
-                                    <div className="text-xs text-gray-500 text-right mt-0.5">
-                                      ${(leg.entryPremium * 100).toFixed(0)}/ct
-                                    </div>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <span className="text-xs text-gray-500">$</span>
+                                    <input type="number" value={leg.entryPremium} step="0.01" min="0"
+                                      onChange={e => updateCustomLeg(leg.id, 'entryPremium', +e.target.value)}
+                                      className="w-20 bg-gray-800 text-yellow-300 rounded px-2 py-0.5 text-xs border border-gray-600 text-right" />
+                                    <span className="text-xs text-gray-500">/sh</span>
                                   </div>
                                 )}
                               </td>
@@ -1306,6 +1319,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                   </span>
                                 ) : <span className="text-gray-600 text-xs">—</span>}
                               </td>
+                              <td className="py-2 text-right">
+                                <span className={`font-semibold text-xs ${pnlMaturity >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                                  {pnlMaturity >= 0 ? '+' : '-'}${Math.abs(pnlMaturity).toFixed(0)}
+                                </span>
+                              </td>
                               <td className="py-2 pl-2">
                                 <button onClick={() => setCustomLegs(prev => prev.filter(l => l.id !== leg.id))}
                                   className="text-gray-600 hover:text-red-400 font-bold text-base leading-none transition-all">×</button>
@@ -1317,23 +1335,41 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     </table>
                   </div>
 
-                  {/* Net P&L today */}
+                  {/* Net P&L summary: today + at maturity */}
                   {(() => {
-                    const totalPnl = customLegs.reduce((sum, leg) => {
+                    const totalToday = customLegs.reduce((sum, leg) => {
                       const sign = leg.side === 'long' ? 1 : -1;
                       const legQty = leg.qty || 1;
                       if (leg.type === 'stock') return sum + (currentPrice - leg.entryPremium) * sign * legQty * 100;
                       const cp = getChainPremium(leg);
-                      return cp !== null ? sum + (cp - leg.entryPremium) * sign * legQty * 100 : sum;
+                      return cp !== null ? sum + (cp - leg.entryPremium) * sign * legQty : sum;
                     }, 0);
-                    const hasAny = customLegs.some(l => l.type === 'stock' || getChainPremium(l) !== null);
-                    if (!hasAny) return null;
+                    const totalMaturity = customLegs.reduce((sum, leg) => {
+                      const sign = leg.side === 'long' ? 1 : -1;
+                      const legQty = leg.qty || 1;
+                      if (leg.type === 'stock') return sum + (currentPrice - leg.entryPremium) * sign * legQty * 100;
+                      if (leg.type === 'call') return sum + (Math.max(0, currentPrice - leg.strike) * 100 - leg.entryPremium) * sign * legQty;
+                      return sum + (Math.max(0, leg.strike - currentPrice) * 100 - leg.entryPremium) * sign * legQty;
+                    }, 0);
+                    const hasChain = customLegs.some(l => l.type === 'stock' || getChainPremium(l) !== null);
                     return (
-                      <div className="flex items-center justify-between pt-2 border-t border-gray-700/50 text-sm">
-                        <span className="text-gray-400">{es ? 'P&L neto si cierras hoy:' : 'Net P&L if closed today:'}</span>
-                        <span className={`font-bold text-base ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {totalPnl >= 0 ? '+' : '-'}${Math.abs(totalPnl).toFixed(2)}
-                        </span>
+                      <div className="pt-2 border-t border-gray-700/50 space-y-1.5">
+                        {hasChain && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-400">{es ? 'P&L neto si cierras hoy:' : 'Net P&L if closed today:'}</span>
+                            <span className={`font-bold text-base ${totalToday >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {totalToday >= 0 ? '+' : '-'}${Math.abs(totalToday).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-400">
+                            {es ? `P&L al vencimiento (si acciones = $${currentPrice.toFixed(0)}):` : `P&L at expiry (if stock = $${currentPrice.toFixed(0)}):`}
+                          </span>
+                          <span className={`font-bold text-base ${totalMaturity >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                            {totalMaturity >= 0 ? '+' : '-'}${Math.abs(totalMaturity).toFixed(2)}
+                          </span>
+                        </div>
                       </div>
                     );
                   })()}
@@ -1393,10 +1429,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     ].map(({ label, val, cls }) => (
                       <div key={label}>
                         <div className="text-xs text-gray-500 uppercase">{label}</div>
-                        <div className={`text-lg font-semibold ${cls}`}>{fmtDollar(val)}</div>
-                        {typeof val === 'number' && (
-                          <div className="text-xs text-gray-500 mt-0.5">{val >= 0 ? '+' : '-'}${(Math.abs(val) * 100).toFixed(0)}/ct</div>
-                        )}
+                        <div className={`text-lg font-semibold ${cls}`}>{fmtCustom(val)}</div>
                       </div>
                     ))}
                     <div>
@@ -1464,7 +1497,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                         <p className="text-xs text-gray-300 bg-gray-800/50 rounded-lg px-3 py-2 leading-relaxed">{aiEval.summary}</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                           <div className="bg-gray-800/40 rounded-lg p-3">
-                            <div className="text-purple-400 font-medium mb-1">⚡ Greeks</div>
+                            <div className="text-purple-400 font-medium mb-1">⚡ {es ? 'Análisis de Greeks' : 'Greeks Analysis'}</div>
                             <p className="text-gray-400 leading-relaxed">{aiEval.greeksAnalysis}</p>
                           </div>
                           <div className="bg-gray-800/40 rounded-lg p-3">

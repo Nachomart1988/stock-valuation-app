@@ -92,6 +92,7 @@ function ModelCard({
   highlight = false,
   inputs,
   onInputChange,
+  outlierSigma,
 }: {
   name: string;
   value: number | null;
@@ -102,22 +103,33 @@ function ModelCard({
   highlight?: boolean;
   inputs?: { label: string; key: string; value: number; step?: number; min?: number; max?: number }[];
   onInputChange?: (key: string, value: number) => void;
+  outlierSigma?: number;
 }) {
   const [showInputs, setShowInputs] = useState(false);
   // Local string state for each input to handle decimal typing without value being reset
   const [localInputs, setLocalInputs] = useState<Record<string, string>>({});
   const isValidValue = value !== null && value > 0 && isFinite(value);
+  const isOutlier = outlierSigma !== undefined && outlierSigma >= 2;
 
   return (
     <div
       className={`relative p-5 rounded-2xl border-2 transition-all duration-200 ${
         enabled
-          ? highlight
+          ? isOutlier
+            ? 'bg-red-950/20 border-red-500/60 shadow-lg shadow-red-900/20'
+            : highlight
             ? 'bg-gray-950 border-green-500 shadow-lg shadow-green-500/20'
             : 'bg-gray-900 border-white/[0.08] hover:border-gray-500'
           : 'bg-gray-900/50 border-gray-800 opacity-60'
       }`}
     >
+      {/* Outlier badge */}
+      {isOutlier && outlierSigma !== undefined && (
+        <div className="absolute top-3 left-3 bg-red-500/20 border border-red-500/50 rounded-full px-2 py-0.5 text-[10px] text-red-400 font-bold leading-tight">
+          ⚠ {outlierSigma.toFixed(1)}σ
+        </div>
+      )}
+
       {/* Toggle checkbox */}
       <div className="absolute top-3 right-3 flex items-center gap-2">
         {inputs && inputs.length > 0 && (
@@ -1691,6 +1703,20 @@ export default function ValuacionesTab({
 
   // Calcular promedio ponderado de métodos habilitados con valores válidos
   const enabledMethods = methods.filter(m => m.enabled && m.value !== null && m.value > 0 && isFinite(m.value));
+
+  // Outlier detection: compute mean + std across all enabled methods
+  const outlierValues = enabledMethods.map(m => m.value!);
+  const outlierMean = outlierValues.length > 1
+    ? outlierValues.reduce((a, b) => a + b, 0) / outlierValues.length
+    : null;
+  const outlierStd = outlierMean !== null && outlierValues.length > 1
+    ? Math.sqrt(outlierValues.reduce((a, b) => a + (b - outlierMean) ** 2, 0) / outlierValues.length)
+    : null;
+  const getOutlierSigma = (value: number | null): number | undefined => {
+    if (!value || !outlierMean || !outlierStd || outlierStd < 0.01) return undefined;
+    return Math.abs(value - outlierMean) / outlierStd;
+  };
+
   const averageVal = (() => {
     // Build weighted items: each enabled model + optional Prismo
     const items: Array<{ value: number; weight: number }> = [];
@@ -2605,6 +2631,7 @@ export default function ValuacionesTab({
                   nullReason={getNullReason(method.name)}
                   inputs={getModelInputs(method.name)}
                   onInputChange={handleModelInputChange}
+                  outlierSigma={getOutlierSigma(method.value)}
                 />
               ))}
             </div>
@@ -2630,6 +2657,7 @@ export default function ValuacionesTab({
                   nullReason={getNullReason(method.name)}
                   inputs={getModelInputs(method.name)}
                   onInputChange={handleModelInputChange}
+                  outlierSigma={getOutlierSigma(method.value)}
                 />
               ))}
             </div>
@@ -2655,6 +2683,7 @@ export default function ValuacionesTab({
                   nullReason={getNullReason(method.name)}
                   inputs={getModelInputs(method.name)}
                   onInputChange={handleModelInputChange}
+                  outlierSigma={getOutlierSigma(method.value)}
                 />
               ))}
             </div>
@@ -2680,6 +2709,7 @@ export default function ValuacionesTab({
                   nullReason={getNullReason(method.name)}
                   inputs={getModelInputs(method.name)}
                   onInputChange={handleModelInputChange}
+                  outlierSigma={getOutlierSigma(method.value)}
                 />
               ))}
             </div>
@@ -2705,6 +2735,7 @@ export default function ValuacionesTab({
                   nullReason={getNullReason(method.name)}
                   inputs={getModelInputs(method.name)}
                   onInputChange={handleModelInputChange}
+                  outlierSigma={getOutlierSigma(method.value)}
                 />
               ))}
             </div>

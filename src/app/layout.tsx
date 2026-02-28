@@ -4,6 +4,8 @@ import "./globals.css";
 import { LanguageProvider } from "@/i18n/LanguageContext";
 import { ClerkProvider } from "@clerk/nextjs";
 import ServiceWorkerRegistrar from "./components/ServiceWorkerRegistrar";
+import { Analytics } from "@vercel/analytics/next";
+import Script from "next/script";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -69,6 +71,25 @@ export default function RootLayout({
             {children}
           </LanguageProvider>
           <ServiceWorkerRegistrar />
+          {/* Vercel Analytics */}
+          <Analytics />
+          {/* Google Analytics 4 */}
+          {process.env.NEXT_PUBLIC_GA_ID && (
+            <>
+              <Script
+                src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`}
+                strategy="afterInteractive"
+              />
+              <Script id="ga4-init" strategy="afterInteractive">
+                {`
+                  window.dataLayer = window.dataLayer || [];
+                  function gtag(){dataLayer.push(arguments);}
+                  gtag('js', new Date());
+                  gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}', { page_path: window.location.pathname });
+                `}
+              </Script>
+            </>
+          )}
         </body>
       </html>
     </ClerkProvider>

@@ -2,6 +2,7 @@
 'use client';
 
 import { Tab } from '@headlessui/react';
+import { useLanguage } from '@/i18n/LanguageContext';
 
 interface IntradayGroupProps {
   PivotsTab:   React.ReactNode;
@@ -14,7 +15,14 @@ export default function IntradayGroup({
   GapsTab,
   MomentumTab,
 }: IntradayGroupProps) {
-  const subtabs = ['Pivots', 'Gaps', 'Momentum (Beta)'];
+  const { locale } = useLanguage();
+  const es = locale === 'es';
+
+  const subtabs = [
+    'Pivots',
+    'Gaps',
+    es ? 'Momentum (Beta)' : 'Momentum (Beta)',
+  ];
 
   const tabColor = (tab: string, selected: boolean) => {
     if (!selected) return 'bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-white';
@@ -25,7 +33,9 @@ export default function IntradayGroup({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-2xl font-bold text-purple-400">⚡ Intraday & Análisis Técnico</h3>
+      <h3 className="text-2xl font-bold text-purple-400">
+        {es ? '⚡ Intradiario & Análisis Técnico' : '⚡ Intraday & Technical Analysis'}
+      </h3>
 
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg">

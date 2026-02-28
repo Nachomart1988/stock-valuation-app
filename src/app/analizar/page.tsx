@@ -458,7 +458,7 @@ function AnalizarContent() {
   const [sharedKeyMetricsSummary, setSharedKeyMetricsSummary] = useState<any>(null);
   const [sharedMonteCarlo, setSharedMonteCarlo] = useState<any>(null);
   const [selectedTabIndex, setSelectedTabIndex] = useState(0);
-  const [currencyInfo, setCurrencyInfo] = useState<{ original: string; rate: number } | null>(null);
+  const [currencyInfo, setCurrencyInfo] = useState<{ original: string; rate: number; marketRate: number } | null>(null);
 
   // Cargar ticker desde URL solo al inicio
   useEffect(() => {
@@ -666,7 +666,8 @@ function AnalizarContent() {
         if (statementCurrency !== 'USD' || profileCurrency !== 'USD') {
           const displayCurrency = statementCurrency !== 'USD' ? statementCurrency : profileCurrency;
           const displayRate = statementCurrency !== 'USD' ? stmtFxRate : profileFxRate;
-          setCurrencyInfo({ original: displayCurrency, rate: displayRate });
+          // marketRate: rate for market prices (quote/historical) — always profileFxRate
+          setCurrencyInfo({ original: displayCurrency, rate: displayRate, marketRate: profileFxRate });
         } else {
           setCurrencyInfo(null);
         }
@@ -1335,6 +1336,8 @@ function AnalizarContent() {
         forecasts={sharedForecasts}
         news={sharedNews}
         averageValuation={sharedAverageVal}
+        profile={profile}
+        ratiosTTM={ratiosTTM}
       />
     ) : (
       <LockedTab requiredPlan={TAB_MIN_PLAN[12]} currentPlan={userPlan} tabName="Resumen Maestro" />
@@ -1458,7 +1461,7 @@ function InicioTab({
   dividends: any[];
   sharedAverageVal: number | null;
   onAnalizar: (ticker: string) => void;
-  currencyInfo?: { original: string; rate: number } | null;
+  currencyInfo?: { original: string; rate: number; marketRate?: number } | null;
 }) {
   const [inputTicker, setInputTicker] = useState(ticker);
   const [margenSeguridad, setMargenSeguridad] = useState('15');
@@ -1494,7 +1497,8 @@ function InicioTab({
         });
 
         if (Array.isArray(json) && json.length > 0) {
-          const fxRate = currencyInfo?.rate || 1;
+          // Use marketRate (profileFxRate) for market prices — stmtFxRate is for financial statements
+          const fxRate = currencyInfo?.marketRate ?? currencyInfo?.rate ?? 1;
           const sorted = json
             .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
             .map((item: any) => ({
@@ -1511,7 +1515,7 @@ function InicioTab({
     }
 
     if (ticker) fetchHistory();
-  }, [ticker, currencyInfo?.rate]);
+  }, [ticker, currencyInfo?.marketRate, currencyInfo?.rate]);
 
   // Fetch technical indicators
   useEffect(() => {
@@ -2290,7 +2294,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
   ratiosTTM?: any;
   enterpriseValue?: any[];
   ownerEarnings?: any[];
-  currencyInfo?: { original: string; rate: number } | null;
+  currencyInfo?: { original: string; rate: number; marketRate?: number } | null;
 }) {
   const [showSecDetails, setShowSecDetails] = useState(false);
   const [showKeyMetrics, setShowKeyMetrics] = useState(false);

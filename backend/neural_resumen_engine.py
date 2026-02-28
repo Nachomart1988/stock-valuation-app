@@ -22,6 +22,27 @@ from spectral_cycle_analyzer import SpectralCycleAnalyzer, HistoricalDataFetcher
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# SECTOR BENCHMARKS FOR COMPANY TYPE CLASSIFICATION
+# ═══════════════════════════════════════════════════════════════════════════════
+# Per-sector: pe_avg, pe_std, growth_avg (% SGR), growth_std, yield_avg (%)
+SECTOR_BENCHMARKS: Dict[str, Dict[str, float]] = {
+    'Technology':             {'pe_avg': 28.0, 'pe_std': 10.0, 'growth_avg': 15.0, 'growth_std': 8.0, 'yield_avg': 0.8},
+    'Health Care':            {'pe_avg': 22.0, 'pe_std':  8.0, 'growth_avg':  8.0, 'growth_std': 5.0, 'yield_avg': 1.2},
+    'Healthcare':             {'pe_avg': 22.0, 'pe_std':  8.0, 'growth_avg':  8.0, 'growth_std': 5.0, 'yield_avg': 1.2},
+    'Financials':             {'pe_avg': 13.0, 'pe_std':  5.0, 'growth_avg':  7.0, 'growth_std': 4.0, 'yield_avg': 2.5},
+    'Financial Services':     {'pe_avg': 13.0, 'pe_std':  5.0, 'growth_avg':  7.0, 'growth_std': 4.0, 'yield_avg': 2.5},
+    'Consumer Discretionary': {'pe_avg': 24.0, 'pe_std': 10.0, 'growth_avg': 10.0, 'growth_std': 6.0, 'yield_avg': 1.2},
+    'Consumer Staples':       {'pe_avg': 19.0, 'pe_std':  5.0, 'growth_avg':  4.0, 'growth_std': 3.0, 'yield_avg': 2.8},
+    'Industrials':            {'pe_avg': 20.0, 'pe_std':  8.0, 'growth_avg':  7.0, 'growth_std': 4.0, 'yield_avg': 1.8},
+    'Energy':                 {'pe_avg': 14.0, 'pe_std':  6.0, 'growth_avg':  5.0, 'growth_std': 8.0, 'yield_avg': 3.5},
+    'Utilities':              {'pe_avg': 17.0, 'pe_std':  4.0, 'growth_avg':  3.0, 'growth_std': 2.0, 'yield_avg': 3.8},
+    'Real Estate':            {'pe_avg': 40.0, 'pe_std': 15.0, 'growth_avg':  5.0, 'growth_std': 3.0, 'yield_avg': 4.0},
+    'Materials':              {'pe_avg': 18.0, 'pe_std':  7.0, 'growth_avg':  6.0, 'growth_std': 5.0, 'yield_avg': 2.0},
+    'Communication Services': {'pe_avg': 22.0, 'pe_std': 10.0, 'growth_avg': 10.0, 'growth_std': 7.0, 'yield_avg': 0.9},
+    'default':                {'pe_avg': 20.0, 'pe_std':  8.0, 'growth_avg':  8.0, 'growth_std': 5.0, 'yield_avg': 2.0},
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ENUMS AND DATA STRUCTURES
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1607,51 +1628,97 @@ class NeuralResumenEngine:
         )
 
         # ── [Layer 0] Early company type classification (before Layer 5 for type-aware analysis) ──
-        _sgr = data.get('sustainableGrowthRate', 0) or 0
-        _sgr_pct = _sgr * 100 if _sgr < 1 else _sgr
-        _avn = data.get('advanceValueNet') or {}
-        _pe = _avn.get('pe_ratio', 999) or 999
-        _div_yield = _avn.get('dividend_yield', 0) or 0
-        _div_yield_pct = _div_yield * 100 if _div_yield < 1 else _div_yield
-        _pb = _avn.get('pb_ratio', 3.0) or 3.0
+        # Use real ratiosTTM data (forwarded from frontend) for accurate P/E, yield, P/B
+        _ratios_ttm = data.get('ratiosTTM') or {}
+        _profile     = data.get('profile') or {}
 
-        # Pull quality dimensions for richer classification (if available)
-        _quality_raw = data.get('companyQualityNet') or {}
-        _moat_raw   = _quality_raw.get('moat',   0) or 0
-        _growth_dim = _quality_raw.get('growth', 0) or 0
-        # Normalize: quality scores may be 0-100 or 0-1
+        _sector  = str(_profile.get('sector', '') or '')
+        _mkt_cap = float(_profile.get('mktCap', 0) or 0)
+
+        # SGR
+        _sgr     = data.get('sustainableGrowthRate', 0) or 0
+        _sgr_pct = float(_sgr) * 100 if float(_sgr) < 1 else float(_sgr)
+
+        # P/E: prefer ratiosTTM; fallback to advanceValueNet or neutral 20
+        _pe_raw = _ratios_ttm.get('priceEarningsRatio')
+        if not _pe_raw or float(_pe_raw) <= 0 or float(_pe_raw) > 900:
+            _avn    = data.get('advanceValueNet') or {}
+            _pe_raw = _avn.get('pe_ratio') or 20.0
+        _pe = float(_pe_raw)
+
+        # Dividend yield: ratiosTTM returns fraction (0.015 → 1.5 %), normalize to pct
+        _dy_raw        = _ratios_ttm.get('dividendYield') or 0.0
+        _div_yield_pct = float(_dy_raw) * 100 if float(_dy_raw) < 1 else float(_dy_raw)
+
+        # P/B: ratiosTTM
+        _pb_raw = _ratios_ttm.get('priceToBookRatio') or 3.0
+        _pb     = float(_pb_raw) if _pb_raw and float(_pb_raw) > 0 else 3.0
+
+        # Quality dimensions (moat, growth) from CompanyQualityNet
+        _quality_raw     = data.get('companyQualityNet') or {}
+        _moat_raw        = _quality_raw.get('moat',   0) or 0
+        _growth_dim      = _quality_raw.get('growth', 0) or 0
         _moat_score      = (_moat_raw   / 100.0) if _moat_raw   > 1 else float(_moat_raw)
         _growth_dim_norm = (_growth_dim / 100.0) if _growth_dim > 1 else float(_growth_dim)
 
-        # Multi-factor composite scores
-        # Growth score: quality growth dimension (0.4) + relative SGR vs 25% ceiling (0.35) + moat (0.25)
+        # Sector benchmarks for sector-relative scoring
+        bench = SECTOR_BENCHMARKS.get(_sector, SECTOR_BENCHMARKS['default'])
+
+        # Z-scores relative to sector (clipped to avoid extreme outliers dominating)
+        _pe_z = ((_pe - bench['pe_avg']) / bench['pe_std']
+                 if bench['pe_std'] > 0 and _pe < 900 else 0.0)
+        _pe_z = max(-3.0, min(3.0, _pe_z))
+
+        _gr_z = ((_sgr_pct - bench['growth_avg']) / bench['growth_std']
+                 if bench['growth_std'] > 0 else 0.0)
+        _gr_z = max(-3.0, min(3.0, _gr_z))
+
+        # Market-cap size penalty: large-caps need much stronger growth signals
+        if _mkt_cap >= 200e9:
+            _size_factor = 0.65   # mega-cap  (>$200 B — e.g. UNH, AAPL, NVDA)
+        elif _mkt_cap >= 10e9:
+            _size_factor = 0.80   # large-cap ($10–200 B)
+        elif _mkt_cap >= 2e9:
+            _size_factor = 0.90   # mid-cap   ($2–10 B)
+        else:
+            _size_factor = 1.00   # small-cap (<$2 B)
+
+        # Growth composite: sector-relative SGR z-score + quality growth dimension + moat
+        _gr_z_norm    = min(1.0, max(0.0, _gr_z / 2.0 + 0.5))  # map z → [0,1]
         _score_growth = (
             _growth_dim_norm * 0.40 +
-            min(1.0, _sgr_pct / 25.0) * 0.35 +
-            _moat_score * 0.25
-        )
-        # Value score: low P/E (0.50) + dividend yield proxy (0.30) + low P/B (0.20)
+            _gr_z_norm       * 0.35 +
+            _moat_score      * 0.25
+        ) * _size_factor
+
+        # Value composite: cheap P/E vs sector + dividend + low P/B
+        _value_pe    = max(0.0, min(1.0, (-_pe_z + 1.0) / 2.0))  # pe_z<0 → more value
         _score_value = (
-            max(0.0, (15.0 - min(_pe,  30.0)) / 15.0) * 0.50 +
-            min(1.0, _div_yield_pct / 4.0)             * 0.30 +
-            max(0.0, (2.0  - min(_pb,  4.0)) /  2.0)  * 0.20
+            _value_pe                                                           * 0.50 +
+            min(1.0, _div_yield_pct / max(bench['yield_avg'] * 2.0, 1.0))      * 0.30 +
+            max(0.0, (2.0 - min(_pb, 4.0)) / 2.0)                              * 0.20
         )
 
-        if _score_growth > 0.55 and _sgr_pct > 8:
-            stock_style     = 'growth'
-            _type_confidence = min(0.95, _score_growth + 0.05)
-        elif _div_yield_pct > 3 and _score_value > 0.30:
-            stock_style     = 'dividend'
-            _type_confidence = min(0.90, 0.55 + (_div_yield_pct - 3.0) * 0.05)
-        elif _score_value > 0.55 and _pe < 18:
-            stock_style     = 'value'
-            _type_confidence = min(0.88, _score_value)
-        elif _sgr_pct > 8:
-            stock_style     = 'growth'
-            _type_confidence = 0.52
+        # Dividend composite
+        _score_div = min(1.0, _div_yield_pct / 3.0) * 0.70 + _score_value * 0.30
+
+        # ── Classification ──
+        # GROWTH: clearly growing faster than sector peers AND trading at a premium
+        if _score_growth > 0.52 and _gr_z > 0.5:
+            stock_style      = 'growth'
+            _type_confidence = min(0.93, _score_growth + 0.05)
+        # DIVIDEND: meaningful yield with value characteristics
+        elif _div_yield_pct > 2.5 and _score_div > 0.45:
+            stock_style      = 'dividend'
+            _type_confidence = min(0.90, 0.55 + (_div_yield_pct - 2.5) * 0.05)
+        # VALUE: significantly cheaper than sector peers
+        elif _score_value > 0.50 and _pe_z < -0.5:
+            stock_style      = 'value'
+            _type_confidence = min(0.87, _score_value)
+        # BLEND: growing, but not enough above peers or premium not justified
         else:
-            stock_style     = 'blend'
-            _type_confidence = 0.45
+            stock_style      = 'blend'
+            _type_confidence = 0.52 if (_gr_z > 0 or _score_growth > 0.44) else 0.45
 
         self._company_type    = stock_style
         self._type_confidence = _type_confidence
@@ -1659,7 +1726,9 @@ class NeuralResumenEngine:
         logger.info(
             f"[Layer 0] Type detected: {stock_style.upper()} "
             f"(conf={_type_confidence:.2f}, growth_score={_score_growth:.2f}, "
-            f"value_score={_score_value:.2f}, moat={_moat_score:.2f}, SGR={_sgr_pct:.1f}%)"
+            f"value_score={_score_value:.2f}, moat={_moat_score:.2f}, "
+            f"SGR={_sgr_pct:.1f}%, PE={_pe:.1f}, pe_z={_pe_z:.2f}, gr_z={_gr_z:.2f}, "
+            f"sector='{_sector}', mkt_cap={_mkt_cap/1e9:.0f}B, size_factor={_size_factor:.2f})"
         )
 
         # Layer 5: Valuation (blends neural model with average of all frontend methods)
