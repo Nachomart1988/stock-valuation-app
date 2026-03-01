@@ -3078,15 +3078,70 @@ class NeuralResumenEngine:
                 growth_premium = lr.sub_scores.get('growth_premium', False)
                 break
 
-        effective_stop = s1 if (s1 and s1 < current_price * 0.98) else current_price * 0.88
-        stop_reason    = (
-            f"S1 ${effective_stop:.2f}" if (s1 and s1 < current_price * 0.98)
-            else f"-12% (${effective_stop:.2f})"
-        )
+        # ── Dynamic entry point (based on upside, support levels, MC risk) ──
+        mc_prob_pct = int((1.0 - mc_downside_risk) * 100)
+
+        if s1 and 0 < s1 < current_price * 0.98 and s1 > current_price * 0.85:
+            entry = round((current_price + s1) / 2, 2)
+            entry_reason = f"punto medio entre spot y soporte S1 (${s1:.2f})"
+        elif upside_pct > 30:
+            entry = round(current_price * 0.95, 2)
+            entry_reason = f"{((1 - entry/current_price)*100):.0f}% descuento — margen amplio por alto upside"
+        elif upside_pct > 15:
+            entry = round(current_price * 0.97, 2)
+            entry_reason = f"{((1 - entry/current_price)*100):.0f}% descuento al spot"
+        elif upside_pct > 5:
+            entry = round(current_price * 0.985, 2)
+            entry_reason = f"{((1 - entry/current_price)*100):.1f}% descuento — margen ajustado"
+        else:
+            entry = current_price
+            entry_reason = "a mercado — upside limitado, no forzar descuento"
+
+        # ── Dynamic stop-loss (type-aware + volatility-aware + support-aware) ──
+        if ctype == 'growth' and moat > 0.60:
+            stop_pct = 0.15
+            stop_note = "stop amplio — moat protege downside"
+        elif ctype == 'value':
+            stop_pct = 0.10
+            stop_note = "stop conservador — evitar value trap"
+        elif ctype == 'dividend':
+            stop_pct = 0.12
+            stop_note = "proteger capital generador de renta"
+        elif risk_level == 'High':
+            stop_pct = 0.10
+            stop_note = "stop ceñido — riesgo elevado"
+        else:
+            stop_pct = 0.12
+            stop_note = "stop estándar"
+
+        if s1 and s1 < current_price * (1 - stop_pct * 0.3) and s1 > current_price * (1 - stop_pct * 1.5):
+            effective_stop = s1
+            stop_reason = f"S1 ${s1:.2f} ({stop_note})"
+        else:
+            effective_stop = round(current_price * (1 - stop_pct), 2)
+            stop_reason = f"-{int(stop_pct * 100)}% (${effective_stop:.2f}) — {stop_note}"
+
         moat_str = (
             f"moat excepcional ({moat*100:.0f}%)" if moat > 0.75
             else f"moat sólido ({moat*100:.0f}%)"   if moat > 0.55
             else None
+        )
+
+        # ── Top catalyst and risk (for inclusion in advice) ──
+        top_catalyst = None
+        if bullish_signals:
+            top_bull = sorted(bullish_signals, key=lambda s: s.strength, reverse=True)
+            top_catalyst = top_bull[0].description
+        top_risk = None
+        if cautionary_signals:
+            top_risk = cautionary_signals[0].description
+        elif bearish_signals:
+            top_risk = bearish_signals[0].description
+
+        # ── MC context phrase ──
+        mc_ctx = (
+            f"Monte Carlo asigna {mc_prob_pct}% de probabilidad de retorno positivo a 12 meses. "
+            if mc_prob_pct != 50 else ""
         )
 
         # Generate narrative (type-aware)
@@ -3121,10 +3176,15 @@ class NeuralResumenEngine:
 
         if bullish_signals:
             top_bullish = sorted(bullish_signals, key=lambda s: s.strength, reverse=True)[:2]
-            summary_text += f"Señales positivas: {top_bullish[0].description}. "
+            summary_text += f"Señales positivas: {top_bullish[0].description}"
+            if len(top_bullish) > 1:
+                summary_text += f"; {top_bullish[1].description}"
+            summary_text += ". "
 
         if cautionary_signals:
             summary_text += f"Precaución: {cautionary_signals[0].description}. "
+
+        summary_text += mc_ctx
 
         summary_text += (
             f"El precio objetivo de ${target_price:.2f} implica un "
@@ -3132,111 +3192,167 @@ class NeuralResumenEngine:
             f"del {abs(upside_pct):.1f}%."
         )
 
-        # Actionable advice — personalized by company type + pivot S1 stop-loss + moat
+        # ═══ Actionable advice — personalized by type, moat, upside, risk, MC, signals ═══
 
-        # Horizon and type-specific context note
+        # Horizon (varies by type + conviction)
         if ctype == 'growth':
-            horizon  = "6-18 meses"
-            if moat_str:
-                type_note = (
-                    f"Empresa Growth con {moat_str}: "
-                    "valoración tradicional puede subestimar el valor del moat y el SGR sostenido. "
-                    "Priorizar momentum de revisiones EPS y expansión de TAM."
-                )
-            else:
-                type_note = (
-                    "Empresa de crecimiento sin moat defensivo evidente: "
-                    "seguir de cerca la evolución del SGR y márgenes operativos."
-                )
+            horizon = "3-12 meses" if conviction >= 80 else "6-18 meses"
         elif ctype == 'dividend':
-            horizon  = "12-24 meses"
-            type_note = (
-                "Empresa dividendera: verificar sostenibilidad del payout (FCF payout ratio), "
-                "cobertura de deuda y historial de mantenimiento/crecimiento del dividendo."
-            )
+            horizon = "12-36 meses" if moat > 0.55 else "12-24 meses"
         elif ctype == 'value':
-            horizon  = "12-24 meses"
-            if moat_str:
-                type_note = (
-                    f"Empresa Value con {moat_str}: "
-                    "esperar catalizador de re-rating (mejora operativa o cambio de narrativa). "
-                    "El moat protege el downside mientras se espera la convergencia al valor intrínseco."
-                )
-            else:
-                type_note = (
-                    "Empresa de valor sin moat diferenciado: "
-                    "esperar catalizador concreto de re-rating múltiplo antes de ampliar posición; "
-                    "riesgo de value trap si el negocio no genera FCF creciente."
-                )
+            horizon = "6-18 meses" if upside_pct > 25 else "12-24 meses"
         else:
-            horizon  = "12-18 meses"
-            type_note = "Perfil mixto (Blend): diversificar entre crecimiento y generación de valor."
+            horizon = "6-12 meses" if conviction >= 75 else "12-18 meses"
 
-        # Build actionable advice by recommendation + type
-        entry = current_price * 0.97
         upside_str = f"+{upside_pct:.0f}%" if upside_pct > 0 else f"{upside_pct:.0f}%"
 
         if recommendation in ["Strong Buy", "Buy"]:
+            action_label = "COMPRA FUERTE" if recommendation == "Strong Buy" else "ACUMULAR"
+
             if ctype == 'growth' and growth_premium:
-                # Growth stock appearing "overvalued" by traditional metrics but moat justifies it
                 actionable = (
-                    f"ACUMULAR con consciencia del premium: "
-                    f"Entrada escalonada — 50% en ${entry:.2f}, resto si confirma soporte. "
-                    f"Objetivo: ${target_price:.2f} ({upside_str}). "
-                    f"Stop disciplinado: {stop_reason}. "
-                    f"Horizonte: {horizon}. "
-                    f"{type_note}"
+                    f"{action_label} con consciencia del premium: "
+                    f"Entrada escalonada — 50% en ${entry:.2f} ({entry_reason}), "
+                    f"resto si confirma soporte en próximo earnings. "
+                    f"Objetivo: ${target_price:.2f} ({upside_str}), rango ${target_low:.2f}–${target_high:.2f}. "
+                    f"Stop: {stop_reason}. Horizonte: {horizon}. "
                 )
+                actionable += (
+                    f"CONTEXTO GROWTH: {moat_str or 'moat'} justifica premium — "
+                    "priorizar momentum de revisiones EPS y expansión de TAM sobre métricas P/E tradicionales. "
+                )
+            elif ctype == 'growth':
+                actionable = (
+                    f"{action_label}: Entrada en ${entry:.2f} ({entry_reason}). "
+                    f"Objetivo: ${target_price:.2f} ({upside_str}), rango ${target_low:.2f}–${target_high:.2f}. "
+                    f"Stop: {stop_reason}. Horizonte: {horizon}. "
+                    f"Empresa de crecimiento "
+                )
+                if moat_str:
+                    actionable += f"con {moat_str}: seguir evolución de márgenes y aceleración de ingresos. "
+                else:
+                    actionable += "sin moat defensivo evidente: monitorear SGR y márgenes operativos de cerca. "
             elif ctype == 'dividend':
                 actionable = (
-                    f"ACUMULAR / REINVERSIÓN DE DIVIDENDOS: "
-                    f"Entrada en ${entry:.2f}. Objetivo: ${target_price:.2f} ({upside_str}) + rendimiento por dividendo. "
-                    f"Stop: {stop_reason}. "
-                    f"Horizonte: {horizon}. "
-                    f"{type_note}"
+                    f"{action_label} + REINVERSIÓN DE DIVIDENDOS: "
+                    f"Entrada en ${entry:.2f} ({entry_reason}). "
+                    f"Objetivo total return: ${target_price:.2f} ({upside_str}) + rendimiento por dividendo. "
+                    f"Stop: {stop_reason}. Horizonte: {horizon}. "
+                    f"Verificar sostenibilidad del payout (FCF payout ratio), "
+                    f"cobertura de deuda y track record de crecimiento del dividendo. "
                 )
-            else:
+            elif ctype == 'value':
                 actionable = (
-                    f"ACUMULAR: Entrada óptima en ${entry:.2f} (3% descuento al spot). "
-                    f"Objetivo: ${target_price:.2f} ({upside_str}). "
-                    f"Stop-loss: {stop_reason}. "
-                    f"Horizonte: {horizon}. "
-                    f"{type_note}"
+                    f"{action_label}: Entrada en ${entry:.2f} ({entry_reason}). "
+                    f"Objetivo: ${target_price:.2f} ({upside_str}), rango ${target_low:.2f}–${target_high:.2f}. "
+                    f"Stop: {stop_reason}. Horizonte: {horizon}. "
                 )
+                if moat_str:
+                    actionable += (
+                        f"Empresa Value con {moat_str}: el descuento vs sector sugiere re-rating pendiente — "
+                        "el moat protege el downside mientras se espera convergencia al valor intrínseco. "
+                    )
+                else:
+                    actionable += (
+                        "Empresa de valor sin moat diferenciado: "
+                        "esperar catalizador concreto de re-rating (mejora de márgenes, buyback, cambio de narrativa). "
+                        "Riesgo de value trap si FCF no es creciente. "
+                    )
+            else:  # blend
+                scaling = "en 2–3 tramos" if upside_pct > 20 else "posición completa"
+                actionable = (
+                    f"{action_label}: Entrada {scaling} en ${entry:.2f} ({entry_reason}). "
+                    f"Objetivo: ${target_price:.2f} ({upside_str}), rango ${target_low:.2f}–${target_high:.2f}. "
+                    f"Stop: {stop_reason}. Horizonte: {horizon}. "
+                    f"Perfil Blend: combina atributos de crecimiento y valor — "
+                    f"diversificar la exposición según la evolución del ciclo de mercado. "
+                )
+
+            # Append MC + catalyst + risk
+            if mc_ctx:
+                actionable += mc_ctx
+            if top_catalyst:
+                actionable += f"Catalizador principal: {top_catalyst}. "
+            if top_risk:
+                actionable += f"Riesgo a vigilar: {top_risk}."
+
         elif recommendation == "Hold":
             if ctype == 'growth' and moat > 0.55:
                 actionable = (
                     f"MANTENER + monitoreo activo: "
                     f"Pese a valoración ajustada, {moat_str or 'el moat'} justifica la posición. "
-                    f"Tomar ganancias parciales si supera ${target_high:.2f} sin aceleración de EPS. "
+                    f"Tomar ganancias parciales ({int(upside_pct*0.5+10)}%) si supera ${target_high:.2f} "
+                    f"sin aceleración de EPS. "
                     f"Re-evaluar urgente si rompe {stop_reason}. "
-                    f"Horizonte: {horizon}."
+                    f"Horizonte: {horizon}. "
+                )
+            elif ctype == 'dividend':
+                actionable = (
+                    f"MANTENER + cobrar dividendos: "
+                    f"Posición justificada por el rendimiento de renta. "
+                    f"Considerar incrementar si cae a ${entry:.2f} ({entry_reason}). "
+                    f"Reducir si recorta dividendo o rompe {stop_reason}. "
+                    f"Horizonte: {horizon}. "
+                )
+            elif ctype == 'value':
+                actionable = (
+                    f"MANTENER con sesgo cauto: "
+                    f"El descuento al fair value de ${target_price:.2f} ({upside_str}) es insuficiente para "
+                    f"ampliar posición sin catalizador visible. "
+                    f"Incrementar solo si cae a ${entry:.2f}. "
+                    f"Re-evaluar si rompe {stop_reason}. Horizonte: {horizon}. "
                 )
             else:
                 actionable = (
                     f"MANTENER: Posición justificada con sesgo neutral. "
                     f"Tomar ganancias parciales si supera ${target_high:.2f}. "
-                    f"Re-evaluar si rompe soporte en {stop_reason}. "
-                    f"{type_note}"
+                    f"Incrementar si cae a ${entry:.2f} ({entry_reason}). "
+                    f"Re-evaluar si rompe {stop_reason}. Horizonte: {horizon}. "
                 )
-        else:
-            sell_pct = min(70, max(30, int(abs(upside_pct) * 2)))
+
+            if mc_ctx:
+                actionable += mc_ctx
+            if top_risk:
+                actionable += f"Riesgo principal: {top_risk}."
+
+        else:  # Sell / Strong Sell
+            sell_pct = min(70, max(30, int(abs(upside_pct) * 1.5 + 20)))
+            sell_label = "VENTA FUERTE" if recommendation == "Strong Sell" else "REDUCIR"
+
             if ctype == 'growth' and moat > 0.65:
-                # Even sell-rated growth + high moat: suggest partial reduction, not full exit
+                cap = min(sell_pct, 40)
                 actionable = (
-                    f"REDUCIR GRADUALMENTE (~{min(sell_pct, 40)}%): "
-                    f"Pese a señales bajistas, {moat_str or 'moat elevado'} limita el downside. "
-                    f"Conservar núcleo de posición; stop duro en {stop_reason}. "
+                    f"{sell_label} GRADUAL (~{cap}%): "
+                    f"Señales bajistas, pero {moat_str or 'moat elevado'} limita el downside. "
+                    f"Conservar núcleo de posición (~{100-cap}%); stop duro en {stop_reason}. "
                     f"Re-evaluar si próximo trimestre muestra aceleración de ingresos. "
-                    f"{type_note}"
+                    f"Horizonte de revisión: 3 meses. "
+                )
+            elif ctype == 'dividend':
+                actionable = (
+                    f"{sell_label} ({sell_pct}% de posición): "
+                    f"El rendimiento por dividendo ya no compensa el riesgo de capital. "
+                    f"Conservar resto solo si dividend yield sigue siendo atractivo. "
+                    f"Stop duro: {stop_reason}. No promediar a la baja. "
+                )
+            elif ctype == 'value':
+                actionable = (
+                    f"{sell_label} ({sell_pct}% de posición): "
+                    f"Señales de value trap — el descuento P/E podría profundizarse. "
+                    f"Conservar resto solo con catalizador visible. "
+                    f"Stop duro: {stop_reason}. No promediar sin FCF creciente. "
                 )
             else:
                 actionable = (
-                    f"REDUCIR: Vender ~{sell_pct}% de posición progresivamente. "
-                    f"Conservar resto en rebotes hacia ${current_price * 1.05:.2f}. "
-                    f"Stop duro en {stop_reason}. "
-                    f"No promediar a la baja. {type_note}"
+                    f"{sell_label}: Reducir ~{sell_pct}% de posición progresivamente. "
+                    f"Conservar resto para rebotes hacia ${current_price * 1.05:.2f}. "
+                    f"Stop duro: {stop_reason}. No promediar a la baja. "
                 )
+
+            if mc_ctx:
+                actionable += mc_ctx
+            if top_risk:
+                actionable += f"Riesgo principal: {top_risk}."
 
         # Build chain of thought
         chain_of_thought = []

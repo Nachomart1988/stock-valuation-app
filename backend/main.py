@@ -256,6 +256,8 @@ async def resumen_predict(req: ResumenRequest):
             'news': req.news,
             'averageValuation': req.averageValuation,
             'fmp_api_key': os.environ.get('FMP_API_KEY'),
+            'profile': req.profile,
+            'ratiosTTM': req.ratiosTTM,
         }
 
         # Run the 14-layer neural reasoning engine
