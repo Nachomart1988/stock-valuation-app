@@ -42,17 +42,27 @@ export const metadata: Metadata = {
     canonical: "https://www.prismo.us",
   },
   openGraph: {
-    title: "Prismo",
-    description: "El primer multimodelo de valuacion fully customizable",
+    title: "Prismo - Analisis de Acciones con IA Multimodelo",
+    description: "El primer multimodelo de valuacion fully customizable. 20+ modelos, Monte Carlo, analisis neural, clasificador hibrido y mas.",
     url: "https://www.prismo.us",
     siteName: "Prismo",
     type: "website",
+    locale: "es_AR",
+    images: [
+      {
+        url: "/cover-prismo.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Prismo - Analisis de Acciones con IA Multimodelo",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Prismo - Analisis de Acciones con IA",
-    description: "El primer multimodelo de valuacion fully customizable",
+    title: "Prismo - Analisis de Acciones con IA Multimodelo",
+    description: "20+ modelos de valuacion, Monte Carlo, analisis neural y clasificador hibrido. Todo personalizable.",
     site: "@prismo_us",
+    images: ["/cover-prismo.jpg"],
   },
 };
 

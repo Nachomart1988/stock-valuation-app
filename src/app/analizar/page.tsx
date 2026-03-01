@@ -1721,14 +1721,22 @@ function InicioTab({
         {/* Company Info Card */}
         <div className="flex-1 bg-gray-800 p-4 sm:p-6 md:p-8 rounded-2xl border border-white/[0.08]">
           <div className="flex items-center gap-3 sm:gap-6 mb-4 sm:mb-6">
-            {profile?.image && (
+            {profile?.image ? (
               <img
                 src={profile.image}
                 alt={ticker}
                 className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-xl bg-white p-1.5 sm:p-2 shrink-0"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                onError={(e) => {
+                  const el = e.target as HTMLImageElement;
+                  el.style.display = 'none';
+                  const fb = el.nextElementSibling;
+                  if (fb && fb.classList.contains('logo-fallback')) fb.classList.remove('hidden');
+                }}
               />
-            )}
+            ) : null}
+            <div className={`logo-fallback w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 flex items-center justify-center shrink-0 ${profile?.image ? 'hidden' : ''}`}>
+              <span className="text-white font-bold text-xl sm:text-3xl md:text-4xl">{ticker?.charAt(0) || 'P'}</span>
+            </div>
             <div className="min-w-0">
               <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white">{ticker}</h2>
               <p className="text-sm sm:text-lg text-gray-400 truncate">{profile?.companyName || t('analysis.company')}</p>
@@ -2134,9 +2142,6 @@ function GeneralTab({ profile, quote, ticker }: { profile: any; quote: any; tick
         <h3 className="text-xl sm:text-3xl font-bold text-gray-100 mb-4 sm:mb-8">
           {es ? 'Información Básica' : 'Basic Information'}
         </h3>
-        {es && profile.description && (
-          <p className="text-xs text-gray-500 italic mb-1">Descripción disponible solo en inglés (fuente: API financiera)</p>
-        )}
         <p className="text-sm sm:text-xl text-gray-300 leading-relaxed mb-4 sm:mb-8">
           {profile.description || (es ? 'No hay descripción disponible.' : 'No description available.')}
         </p>

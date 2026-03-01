@@ -155,16 +155,21 @@ export default function ResumenTab({
       .replace('tight confidence interval', 'intervalo de confianza estrecho')
       .replace('Robust analysis', 'Análisis robusto')
       .replace('valuation models used', 'modelos de valuación utilizados')
-      .replace('upside', 'potencial alcista')
+      .replace(/(\d+% )upside\b/g, '$1potencial alcista')
+      .replace(/upside\)/g, 'potencial alcista)')
       .replace('downside risk', 'riesgo de caída')
       .replace('premium', 'prima')
+      .replace('Blended fair value', 'Valor justo combinado')
+      .replace('above current price', 'por encima del precio actual')
       // ── Growth / WACC ──
       .replace('Strong value creator', 'Fuerte creador de valor')
       .replace('Value creator', 'Creador de valor')
+      .replace('Growth roughly matches cost of capital', 'Crecimiento alineado con el costo de capital')
       .replace('Marginal value destroyer', 'Destructor marginal de valor')
       .replace('Value destroyer', 'Destructor de valor')
       .replace('SGR exceeds WACC by', 'SGR supera WACC por')
       .replace('WACC exceeds SGR by', 'WACC supera SGR por')
+      .replace('High growth may not be sustainable with weak profitability', 'Alto crecimiento puede no ser sostenible con rentabilidad débil')
       // ── Forecasts ──
       .replace('Strong revenue growth forecast', 'Fuerte proyección de ingresos')
       .replace('Healthy revenue growth expected', 'Crecimiento saludable de ingresos esperado')
@@ -174,6 +179,7 @@ export default function ResumenTab({
       .replace('Strong earnings growth forecast', 'Fuerte proyección de ganancias')
       .replace('Earnings decline expected', 'Declive de ganancias esperado')
       .replace('Well-covered by analysts', 'Bien cubierto por analistas')
+      .replace('Limited analyst coverage', 'Cobertura de analistas limitada')
       .replace('slope:', 'pendiente:')
       .replace('/yr,', '/año,')
       // ── Institutional ──
@@ -193,23 +199,38 @@ export default function ResumenTab({
       .replace('Insider buying detected', 'Compra de insiders detectada')
       .replace('bought)', 'comprado)')
       .replace('sold)', 'vendido)')
+      .replace('buys vs', 'compras vs')
+      .replace('sells vs', 'ventas vs')
+      .replace(/(\d+) buys\b/g, '$1 compras')
+      .replace(/(\d+) sells\b/g, '$1 ventas')
       .replace('Very high institutional ownership', 'Propiedad institucional muy alta')
       .replace('Strong institutional backing', 'Fuerte respaldo institucional')
       .replace('Low institutional interest', 'Bajo interés institucional')
       .replace('Long-term institutional commitment', 'Compromiso institucional a largo plazo')
+      .replace('avg ', 'prom. ')
       .replace('year holding)', 'año de tenencia)')
       .replace('Net accumulation', 'Acumulación neta')
       .replace('Net distribution', 'Distribución neta')
+      .replace('new positions', 'nuevas posiciones')
+      .replace('increased positions', 'posiciones incrementadas')
+      .replace('decreased positions', 'posiciones reducidas')
+      .replace('sold out', 'vendidas')
       // ── Technical ──
       .replace('Trading near support', 'Operando cerca del soporte')
+      .replace('In lower third of trading range', 'En el tercio inferior del rango de operación')
       .replace('Testing resistance at', 'Probando resistencia en')
+      .replace('In upper third of trading range', 'En el tercio superior del rango de operación')
       .replace('Excellent risk/reward ratio', 'Excelente relación riesgo/beneficio')
       .replace('Favorable risk/reward', 'Relación riesgo/beneficio favorable')
       .replace('Poor risk/reward', 'Pobre relación riesgo/beneficio')
       .replace('Strong technical setup', 'Configuración técnica fuerte')
       .replace('Bearish technical setup', 'Configuración técnica bajista')
       .replace('High model agreement', 'Alta coincidencia de modelos')
+      .replace('At 38.2% Fibonacci retracement level', 'En nivel de retroceso Fibonacci 38.2%')
+      .replace('At 61.8% Fibonacci golden ratio level', 'En nivel áureo Fibonacci 61.8%')
+      .replace('High volatility environment', 'Entorno de alta volatilidad')
       .replace('High volatility', 'Alta volatilidad')
+      .replace('of price)', 'del precio)')
       // ── Monte Carlo ──
       .replace('High probability', 'Alta probabilidad')
       .replace('Favorable odds', 'Probabilidades favorables')
@@ -217,6 +238,7 @@ export default function ResumenTab({
       .replace('of reaching target', 'de alcanzar objetivo')
       .replace('High downside risk', 'Alto riesgo bajista')
       // ── Quality dimensions ──
+      .replace('Consistent quality across all dimensions', 'Calidad consistente en todas las dimensiones')
       .replace('Excellent financial strength', 'Excelente solidez financiera')
       .replace('Weak financial strength', 'Débil solidez financiera')
       .replace('Poor financial strength', 'Pobre solidez financiera')
@@ -232,6 +254,27 @@ export default function ResumenTab({
       .replace('Excellent moat', 'Excelente ventaja competitiva')
       .replace('Weak moat', 'Débil ventaja competitiva')
       .replace('Poor moat', 'Pobre ventaja competitiva')
+      // ── Correlation layer ──
+      .replace('VALUE-QUALITY ALIGNMENT:', 'ALINEACIÓN VALOR-CALIDAD:')
+      .replace('Undervalued with strong fundamentals', 'Subvalorado con fundamentos sólidos')
+      .replace('VALUE TRAP RISK:', 'RIESGO DE TRAMPA DE VALOR:')
+      .replace('Appears cheap but weak fundamentals', 'Parece barato pero con fundamentos débiles')
+      .replace('MOMENTUM CONFIRMATION:', 'CONFIRMACIÓN DE MOMENTUM:')
+      .replace('Technical and sentiment aligned bullish', 'Técnico y sentimiento alineados al alza')
+      .replace('SMART MONEY VALIDATED:', 'VALIDADO POR SMART MONEY:')
+      .replace('Strong institutional interest in quality company', 'Fuerte interés institucional en empresa de calidad')
+      .replace('UNDISCOVERED GEM:', 'GEMA OCULTA:')
+      .replace('High quality but low institutional awareness', 'Alta calidad pero baja visibilidad institucional')
+      .replace('SUSTAINABILITY CONCERN:', 'PREOCUPACIÓN DE SOSTENIBILIDAD:')
+      .replace('High growth with weak fundamentals', 'Alto crecimiento con fundamentos débiles')
+      .replace('SECTOR TAILWIND:', 'VIENTO A FAVOR SECTORIAL:')
+      .replace('Company is undervalued in a strong-performing sector', 'Empresa subvalorada en sector con buen desempeño')
+      .replace('SECTOR HEADWIND:', 'VIENTO EN CONTRA SECTORIAL:')
+      .replace('Overvalued in a weak sector environment', 'Sobrevalorada en entorno sectorial débil')
+      .replace('CYCLE-TECHNICAL ALIGNMENT:', 'ALINEACIÓN CICLO-TÉCNICA:')
+      .replace('FFT cycle upturn confirmed by technical setup', 'Alza de ciclo FFT confirmada por configuración técnica')
+      .replace('CYCLE-TECHNICAL WEAKNESS:', 'DEBILIDAD CICLO-TÉCNICA:')
+      .replace('FFT cycle downturn with poor technical setup', 'Baja de ciclo FFT con configuración técnica débil')
       // ── Sector / Industry ──
       .replace("Company's sector", 'El sector de la empresa')
       .replace("Company's industry", 'La industria de la empresa')
@@ -245,33 +288,49 @@ export default function ResumenTab({
       .replace('Positive news momentum', 'Impulso noticioso positivo')
       .replace('Positive news sentiment', 'Sentimiento positivo en noticias')
       .replace('Negative news sentiment', 'Sentimiento negativo en noticias')
+      .replace('Sentiment trend improving', 'Tendencia de sentimiento mejorando')
+      .replace('Sentiment trend deteriorating', 'Tendencia de sentimiento deteriorando')
+      .replace(/(\d+) positive\b/g, '$1 positivas')
+      .replace(/(\d+) negative\b/g, '$1 negativas')
+      .replace('positive vs', 'positivas vs')
+      .replace('negative vs', 'negativas vs')
       // ── Spectral / Cycle ──
       .replace('At cycle TROUGH', 'En MÍNIMO de ciclo')
       .replace('At cycle PEAK', 'En MÁXIMO de ciclo')
       .replace('potential entry point', 'posible punto de entrada')
       .replace('consider reducing exposure', 'considerar reducir exposición')
+      .replace('In RISING phase of dominant cycle', 'En fase ASCENDENTE del ciclo dominante')
+      .replace('In FALLING phase of dominant cycle', 'En fase DESCENDENTE del ciclo dominante')
+      .replace('Momentum confirms cycle upturn', 'Momentum confirma alza del ciclo')
+      .replace('Momentum confirms cycle downturn', 'Momentum confirma baja del ciclo')
+      .replace('Detrended RSI oversold', 'RSI sin tendencia en sobreventa')
+      .replace('Detrended RSI overbought', 'RSI sin tendencia en sobrecompra')
+      .replace('Strong cyclical regime detected', 'Régimen cíclico fuerte detectado')
+      .replace('FFT signals are high-confidence', 'señales FFT son de alta confianza')
+      .replace('Noisy/random regime', 'Régimen ruidoso/aleatorio')
+      .replace('cycle signals have low reliability', 'señales de ciclo tienen baja fiabilidad')
       // ── Data quality ──
       .replace('Comprehensive data available', 'Datos completos disponibles')
       .replace('Limited data', 'Datos limitados')
       .replace('Data freshness decay applied', 'Decaimiento por antigüedad de datos aplicado')
       .replace('sources)', 'fuentes)')
-      // ── Common ──
+      .replace('sources', 'fuentes')
+      // ── Common fallback words ──
       .replace('investors,', 'inversores,')
       .replace('investors', 'inversores')
       .replace('shares', 'acciones')
-      .replace('improving', 'mejorando')
-      .replace('deteriorating', 'deteriorando')
-      .replace('stable', 'estable');
+      .replace('increased', 'incrementadas')
+      .replace('decreased', 'reducidas');
   };
 
+  // Catalysts use the same signal translation + additional catalyst-specific entries
   const tlCatalyst = (c: string): string => {
     if (!es) return c;
-    return c
+    let t = tlSignal(c);
+    return t
       .replace('Potential earnings beat', 'Posible superación de estimaciones')
       .replace('Multiple expansion', 'Expansión de múltiplos')
       .replace('Operational improvement', 'Mejora operativa')
-      .replace('Blended fair value', 'Valor justo combinado')
-      .replace('above current price', 'por encima del precio actual')
       .replace('analyst consensus', 'consenso de analistas');
   };
 
@@ -331,7 +390,7 @@ export default function ResumenTab({
   const [fftData, setFftData] = useState<SpectralCycleData | null>(null);
   const [fftLoading, setFftLoading] = useState(false);
 
-  const generarResumen = async () => {
+  const generarResumen = async (retryCount = 0) => {
     if (!advanceValueNet && !companyQualityNet && !dcfValuation) {
       console.log('[ResumenTab] Waiting for data...');
       return;
@@ -364,7 +423,7 @@ export default function ResumenTab({
       console.log('[ResumenTab] Sending payload to multi-layer engine:', payload);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/resumen/predict`, {
         method: 'POST',
@@ -385,11 +444,22 @@ export default function ResumenTab({
       setResumen(data);
     } catch (err: any) {
       console.error('[ResumenTab] Error:', err);
+
+      // Auto-retry once on timeout or transient errors
+      if (retryCount < 1 && (err.name === 'AbortError' || err.message === 'Failed to fetch')) {
+        console.log('[ResumenTab] Auto-retrying...');
+        return generarResumen(retryCount + 1);
+      }
+
       let errorMsg = err.message || 'Error al generar el Resumen Maestro';
       if (err.name === 'AbortError') {
-        errorMsg = 'Timeout: El servidor tardó demasiado en responder';
+        errorMsg = es
+          ? 'El servidor tardó demasiado en responder. Intenta de nuevo.'
+          : 'Server took too long to respond. Please retry.';
       } else if (err.message === 'Failed to fetch') {
-        errorMsg = 'No se pudo conectar al servidor backend. Verifica que esté corriendo';
+        errorMsg = es
+          ? 'No se pudo conectar al servidor backend. Verifica que esté corriendo.'
+          : 'Could not connect to backend server. Check that it is running.';
       }
       setError(errorMsg);
     } finally {
