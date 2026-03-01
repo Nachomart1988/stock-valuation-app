@@ -220,7 +220,7 @@ export default function DRLTradingTab({ ticker }: DRLTradingTabProps) {
             ))}
           </div>
 
-          {/* Extended metrics row */}
+          {/* Extended metrics row — DRL mode */}
           {result.metrics.sharpe !== undefined && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="bg-black/40 rounded-xl border border-green-900/20 p-3 text-center">
@@ -245,6 +245,27 @@ export default function DRLTradingTab({ ticker }: DRLTradingTabProps) {
                 <p className="text-xs text-gray-500 mb-1">{es ? 'Valor Final' : 'Final Value'}</p>
                 <p className="text-lg font-data font-bold text-white">
                   ${result.metrics.final_value.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Fallback mode: show final value row when SB3 not available */}
+          {!result.sb3_available && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-black/40 rounded-xl border border-green-900/20 p-3 text-center">
+                <p className="text-xs text-gray-500 mb-1">{es ? 'Valor Final' : 'Final Value'}</p>
+                <p className="text-lg font-data font-bold text-white">
+                  ${result.metrics.final_value.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                </p>
+              </div>
+              <div className="bg-yellow-900/10 rounded-xl border border-yellow-500/20 p-3 text-center">
+                <p className="text-xs text-yellow-500/80 mb-1">{es ? 'Modo' : 'Mode'}</p>
+                <p className="text-sm font-semibold text-yellow-400">
+                  {es ? 'Momentum (Fallback)' : 'Momentum (Fallback)'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {es ? 'PPO/A2C disponible pronto' : 'PPO/A2C coming soon'}
                 </p>
               </div>
             </div>
@@ -333,7 +354,9 @@ export default function DRLTradingTab({ ticker }: DRLTradingTabProps) {
             <span>{es ? 'Evaluacion' : 'Test'}: {result.test_days} {es ? 'dias' : 'days'}</span>
             {result.training_steps && <span>{result.training_steps.toLocaleString()} steps</span>}
             {!result.sb3_available && (
-              <span className="text-yellow-500">stable-baselines3 not installed — using rule-based fallback</span>
+              <span className="text-yellow-500">
+                {es ? 'Modo momentum RSI — PPO/A2C se activa cuando se instale stable-baselines3' : 'RSI momentum mode — PPO/A2C activates once stable-baselines3 is installed'}
+              </span>
             )}
           </div>
         </>
