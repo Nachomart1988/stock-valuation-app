@@ -1035,9 +1035,9 @@ function AnalizarContent() {
     t('analysis.categories.options'),
     `${t('analysis.categories.summary')} (Beta)`,
     t('analysis.categories.investorJournal'),
-    t('analysis.categories.quantumPortfolio'),
-    t('analysis.categories.drlTrading'),
-    t('analysis.categories.quantumRisk'),
+    `${t('analysis.categories.quantumPortfolio')} (Beta)`,
+    `${t('analysis.categories.drlTrading')} (Beta)`,
+    `${t('analysis.categories.quantumRisk')} (Beta)`,
   ];
 
   return (

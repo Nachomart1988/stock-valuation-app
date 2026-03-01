@@ -242,6 +242,222 @@ Detecta la "base apretada" post-corrida:
 `,
   },
   {
+    id: 'quantum-portfolio',
+    title: 'Quantum Portfolio Optimizer (Beta)',
+    color: 'text-cyan-400',
+    border: 'border-cyan-700/40',
+    content: `
+## Quantum Portfolio Optimizer — QAOA
+
+Optimiza la selección y pesos de un portfolio usando el algoritmo QAOA (Quantum Approximate Optimization Algorithm), simulado clásicamente via PennyLane.
+
+### ¿Qué problema resuelve?
+
+La selección óptima de activos es un problema NP-difícil: dado un conjunto de n activos, hay 2^n combinaciones posibles. Los computadores cuánticos (y sus simuladores) pueden explorar ese espacio exponencial más eficientemente que los métodos clásicos greedy.
+
+### Formulación QUBO
+
+El problema se codifica como QUBO (Quadratic Unconstrained Binary Optimization):
+
+**min x^T Q x**
+
+- **x_i ∈ {0, 1}**: incluir o excluir el activo i
+- **Q_ii = −return_i + penalty × (1 − 2k)**: diagonal (retorno esperado)
+- **Q_ij = λ × Cov(i,j) + penalty**: off-diagonal (riesgo de covarianza)
+- **k** = número objetivo de activos a seleccionar (~n/2)
+- **penalty** = coeficiente que fuerza la restricción presupuestal
+
+### Circuito QAOA
+
+Un circuito QAOA de p capas alterna dos unitarios:
+
+1. **Unitario de costo**: exp(−i γ H_C) — aplica la función objetivo como Hamiltoniano
+2. **Unitario mixer**: ∏ RX(2β, qubit_i) — mezcla los estados para explorar el espacio
+
+Los parámetros γ = (γ₁,...,γ_p) y β = (β₁,...,β_p) se optimizan clásicamente con COBYLA (200 iteraciones) minimizando el valor esperado ⟨ψ|H_C|ψ⟩.
+
+### Comparación con Markowitz Clásico
+
+| Aspecto | QAOA (Cuántico) | Markowitz (Clásico) |
+|---------|-----------------|---------------------|
+| Variables | Binarias (0/1) | Continuas (0 a 1) |
+| Método | Circuito cuántico + COBYLA | SLSQP (scipy) |
+| Restricción | Penalización QUBO | Restricción explícita Σw=1 |
+| Escala | ≤10 qubits / 10 activos | Sin límite |
+
+### Métricas de Salida
+- **Sharpe ratio**: (Retorno − Rf) / Volatilidad, donde Rf = 4.2%
+- **Retorno anualizado**: retorno logarítmico medio × 252
+- **Riesgo anualizado**: desviación estándar × √252
+- **Ventaja cuántica**: diferencia de Sharpe entre ambos métodos
+
+### Fuentes de Datos
+- Precios históricos ajustados: FMP /stable/historical-price-eod/full
+- Período: 3 años (756 días de trading)
+- Límite: 2-10 activos (>10 qubits = complejidad prohibitiva)
+
+### Modo Fallback
+Si PennyLane no está disponible, usa fuerza bruta clásica: itera los 2^n estados y encuentra el mínimo de x^T Q x directamente.
+`,
+  },
+  {
+    id: 'drl-trading',
+    title: 'DRL Trading Simulator — PPO / A2C (Beta)',
+    color: 'text-violet-400',
+    border: 'border-violet-700/40',
+    content: `
+## Deep Reinforcement Learning Trading Simulator
+
+Entrena un agente de RL (PPO o A2C) sobre datos históricos reales y lo evalúa en un conjunto de test, comparando vs Buy & Hold.
+
+### Arquitectura del Ambiente (Gymnasium)
+
+El ambiente implementa la interfaz OpenAI Gymnasium con:
+
+- **Estado (observación)**: vector de 23 features
+- **Acciones**: Discrete(3) → 0=Hold, 1=Buy, 2=Sell
+- **Recompensa**: cambio porcentual en valor del portfolio en cada step
+- **Comisión**: 0.1% por operación (lado compra y venta)
+
+### Las 23 Features del Estado
+
+| # | Feature | Descripción |
+|---|---------|-------------|
+| 0 | Close normalizado | Z-score vs ventana 50d |
+| 1 | Volumen normalizado | Z-score vs ventana 20d |
+| 2 | Retorno 1d | log(P_t / P_{t-1}) |
+| 3 | Retorno 5d | log(P_t / P_{t-5}) |
+| 4 | Retorno 20d | log(P_t / P_{t-20}) |
+| 5 | RSI(14) | Normalizado a [-1, 1] |
+| 6 | MACD signal | (EMA12 − EMA26 − Signal) / σ |
+| 7 | Bollinger position | (P − SMA20) / (2 × σ20) |
+| 8-11 | SMA ratios | P/SMA5, P/SMA10, P/SMA20, P/SMA50 − 1 |
+| 12 | Volatilidad 20d | σ_log_returns × √252 |
+| 13 | Trend de volumen | Vol_t / mean(Vol_{t-10}) − 1 |
+| 14-16 | Momentum | ROC 5d, 10d, 20d |
+| 17 | Rango H-L | (max − min) / mean (ventana 5d) |
+| 18 | Gap overnight | (P_t − P_{t-1}) / P_{t-1} |
+| 19 | Retorno acumulado | P_t / P_0 − 1 |
+| 20 | Posición actual | 1 si comprado, 0 si efectivo |
+| 21 | Ratio de efectivo | Cash / Capital inicial |
+| 22 | Ratio de portfolio | Valor total / Capital inicial |
+
+### Algoritmos Disponibles
+
+**PPO (Proximal Policy Optimization)**
+- Policy gradient con clipping del ratio de política para estabilidad
+- n_steps=256, batch_size=64, lr=3e-4
+- Más estable y ampliamente usado
+
+**A2C (Advantage Actor-Critic)**
+- Actualiza en cada step (on-policy, sin buffer de replay)
+- Generalmente más rápido para converger pero más variable
+
+### Split Train / Test
+- **Entrenamiento**: 70% de los datos históricos (≈532 días de 3 años)
+- **Evaluación**: 30% restante (≈224 días)
+- El agente nunca ve datos del test durante el entrenamiento
+
+### Métricas de Evaluación
+- **Retorno total**: (Valor Final / Capital Inicial) − 1
+- **Alpha**: Retorno Agente − Retorno Buy & Hold
+- **Sharpe**: (retorno medio / desv estándar) × √252 (sobre PnL diario del test)
+- **Max Drawdown**: máx caída desde pico (peak-to-trough)
+- **Win Rate**: % de round-trips (compra+venta) con ganancia
+
+### Fuentes de Datos
+- Precios históricos + volumen: FMP /stable/historical-price-eod/full
+- Período: 3 años (756 días de trading)
+- Mínimo requerido: 100 días de datos
+
+### Modo Fallback
+Sin stable-baselines3, usa un agente de momentum RSI:
+- Compra cuando RSI < −0.3 y momentum 20d > 0
+- Vende cuando RSI > 0.3 y tiene posición
+`,
+  },
+  {
+    id: 'quantum-risk',
+    title: 'Quantum Risk Model + Alt Data (Beta)',
+    color: 'text-rose-400',
+    border: 'border-rose-700/40',
+    content: `
+## Quantum Risk Model + Alt Data Fusion
+
+Combina 5 señales de datos alternativos con modelado de riesgo cuántico para calcular VaR y CVaR con mayor precisión que métodos paramétricos clásicos.
+
+### Parte 1: Alt Data Fusion (5 Señales)
+
+Cada señal se normaliza a [-1, 1] y se combina con pesos fijos:
+
+| Señal | Peso | Fuente | Descripción |
+|-------|------|--------|-------------|
+| Sentimiento de mercado | 25% | Momentum precio | Proxy: retorno 20d × 5 |
+| Anomalía de volumen | 20% | FMP histórico | Z-score del volumen reciente vs 30d |
+| Flujo de opciones | 20% | FMP put-call-ratio | Ratio Put/Call — alto = bajista |
+| Actividad insider | 15% | FMP insider-trading | Balance compras vs ventas últimas 20 trans. |
+| Revisiones analistas | 20% | FMP analyst-estimates | Cambio % en EPS estimado (período actual vs anterior) |
+
+**Score compuesto** = Σ (señal_i × peso_i), clippeado a [-1, 1]
+
+- Muy Favorable: score > 0.50
+- Favorable: 0.15 < score ≤ 0.50
+- Neutral: −0.15 ≤ score ≤ 0.15
+- Desfavorable: −0.50 ≤ score < −0.15
+- Muy Desfavorable: score < −0.50
+
+### Parte 2: VaR y CVaR (Value at Risk / Conditional VaR)
+
+Se calculan tres versiones de VaR para el nivel de confianza elegido (90%, 95%, 99%):
+
+**VaR Histórico**
+- Percentil α de los retornos históricos observados
+- Ejemplo al 95%: el 5% peor de los días históricos
+
+**VaR Paramétrico (Normal)**
+- VaR = μ + z_α × σ
+- CVaR = μ − σ × φ(z_α) / α
+- z_α = cuantil normal estándar, φ = densidad normal
+
+**VaR t-Student**
+- Ajusta por colas pesadas (fat tails) — más realista para retornos financieros
+- Fit de df, loc, scale con scipy.stats.t.fit()
+
+### Parte 3: Quantum VaR (Qiskit)
+
+Con Qiskit disponible, usa Quantum Amplitude Estimation:
+
+1. Discretiza la distribución de retornos en 2^4 = 16 bins (4 qubits)
+2. Codifica las probabilidades como amplitudes en un circuito cuántico con QuantumCircuit.initialize()
+3. Encuentra el bin cuyo cumulative probability cruza el umbral α → ese bin center es el Quantum VaR
+4. CVaR cuántico = media ponderada de todos los bins en la cola inferior
+
+### Ajuste por Alt Data
+
+El VaR cuántico se ajusta según el score de alt data:
+
+**VaR_ajustado = VaR_cuántico × (1 + score_altdata × 0.15)**
+
+- Score positivo (señales favorables) → reduce el VaR (menor riesgo percibido)
+- Score negativo (señales adversas) → aumenta el VaR (mayor riesgo percibido)
+
+### Estadísticas de Salida
+- **Retorno anualizado**: media(log_returns) × 252
+- **Volatilidad anualizada**: std(log_returns) × √252
+- **Comparación quantum vs clásico**: diferencia entre métodos
+
+### Fuentes de Datos
+- Precios históricos: FMP /stable/historical-price-eod/full
+- Ratio put/call: FMP /stable/put-call-ratio
+- Insider trading: FMP /stable/insider-trading
+- Estimaciones analistas: FMP /stable/analyst-estimates
+- Período: 2 años (504 días de trading)
+
+### Modo Fallback
+Sin Qiskit, usa Monte Carlo (10,000 simulaciones) con distribución t ajustada a los retornos reales.
+`,
+  },
+  {
     id: 'monte-carlo',
     title: 'Monte Carlo DCF',
     color: 'text-pink-400',
