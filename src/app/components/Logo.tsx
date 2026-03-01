@@ -55,7 +55,7 @@ export function PrismoIcon({
   innerClassName?: string;
 }) {
   return (
-    <div className={`${className} rounded-xl bg-black flex items-center justify-center shadow-lg shadow-emerald-500/20 border border-emerald-500/30`}>
+    <div className={`${className} rounded-xl bg-black flex items-center justify-center shadow-[0_0_15px_rgba(0,166,81,0.3)] border border-emerald-500/30 ring-1 ring-green-500/20 hover:ring-green-500/50 transition-all`}>
       <span className={`${innerClassName} font-black bg-linear-to-b from-green-400 to-emerald-500 bg-clip-text text-transparent tracking-tighter`}>
         P
       </span>

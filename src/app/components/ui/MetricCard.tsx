@@ -54,7 +54,7 @@ export function MetricCard({
   };
 
   return (
-    <div className={`bg-primary-800 rounded-xl border border-primary-700 hover:border-primary-600 transition-all duration-200 hover:shadow-medium ${sizeClasses[size]}`}>
+    <div className={`bg-black/60 backdrop-blur-sm rounded-xl border border-green-900/25 border-l-2 border-l-green-600/50 hover:border-green-900/50 hover:shadow-[0_0_24px_rgba(0,166,81,0.08)] transition-all duration-300 animate-fade-in-up ${sizeClasses[size]}`}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           {icon && (
@@ -70,7 +70,7 @@ export function MetricCard({
       </div>
 
       <div className="mb-2">
-        <p className={`font-bold font-mono text-neutral-100 ${valueSizeClasses[size]}`}>
+        <p className={`font-bold font-data text-neutral-100 ${valueSizeClasses[size]}`}>
           {formatValue(value)}
         </p>
       </div>

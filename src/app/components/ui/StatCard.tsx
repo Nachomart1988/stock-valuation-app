@@ -26,7 +26,7 @@ export function StatCard({ label, value, subtitle, color = 'blue', icon }: StatC
   };
 
   return (
-  <div className={`relative overflow-hidden rounded-2xl border bg-linear-to-br ${colorClasses[color]} p-6`}>
+  <div className={`relative overflow-hidden rounded-2xl border bg-linear-to-br bg-grid ${colorClasses[color]} p-6 animate-fade-in-up`}>
       {icon && (
         <div className="absolute top-4 right-4 opacity-20">
           <div className="w-12 h-12">{icon}</div>
@@ -34,7 +34,7 @@ export function StatCard({ label, value, subtitle, color = 'blue', icon }: StatC
       )}
       <div className="relative">
         <p className="text-sm font-medium text-neutral-300 mb-2">{label}</p>
-        <p className={`text-4xl font-bold ${textColorClasses[color]} mb-1`}>
+        <p className={`text-4xl font-bold font-data ${textColorClasses[color]} mb-1`}>
           {value}
         </p>
         {subtitle && (

@@ -21,6 +21,10 @@ from options_strategy_simulator import (
     auto_analyze_options_strategy, suggest_options_strategies, get_iv_surface,
     scan_options_combinations,
 )
+from quantum_portfolio_engine import get_quantum_portfolio_optimizer, PENNYLANE_AVAILABLE
+from drl_trading_engine import get_drl_engine, SB3_AVAILABLE
+from quantum_risk_engine import get_quantum_risk_engine, QISKIT_AVAILABLE
+import asyncio
 
 app = FastAPI(
     title="Stock Analysis AI API",
@@ -1582,6 +1586,100 @@ async def options_evaluate(req: OptionsEvaluateRequest):
         print(f"[Options] Error evaluating strategy: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# QUANTUM / DRL ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════
+
+class QuantumPortfolioRequest(BaseModel):
+    tickers: List[str]
+    risk_aversion: float = 1.0
+    n_layers: int = 2
+    period_days: int = 756
+
+class DRLSimulateRequest(BaseModel):
+    ticker: str
+    algorithm: str = 'PPO'
+    training_steps: int = 10000
+    initial_capital: float = 10000.0
+    period_days: int = 756
+
+class QuantumRiskRequest(BaseModel):
+    ticker: str
+    confidence: float = 0.95
+    period_days: int = 504
+
+
+@app.post("/quantum/portfolio-optimize")
+async def quantum_portfolio_optimize(req: QuantumPortfolioRequest):
+    """QAOA quantum-inspired portfolio optimization."""
+    try:
+        optimizer = get_quantum_portfolio_optimizer()
+        result = await asyncio.to_thread(
+            optimizer.optimize,
+            req.tickers, req.risk_aversion, req.n_layers, req.period_days
+        )
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Quantum Portfolio] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/drl/simulate")
+async def drl_simulate(req: DRLSimulateRequest):
+    """Deep Reinforcement Learning trading simulation."""
+    try:
+        engine = get_drl_engine()
+        result = await asyncio.to_thread(
+            engine.simulate,
+            req.ticker, req.algorithm, req.training_steps,
+            req.initial_capital, req.period_days
+        )
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[DRL Trading] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/quantum/risk-model")
+async def quantum_risk_model(req: QuantumRiskRequest):
+    """Quantum-inspired risk modeling with alt data fusion."""
+    try:
+        engine = get_quantum_risk_engine()
+        result = await asyncio.to_thread(
+            engine.analyze,
+            req.ticker, req.confidence, req.period_days
+        )
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Quantum Risk] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/quantum/status")
+async def quantum_status():
+    """Check availability of quantum/DRL libraries."""
+    return {
+        'pennylane': PENNYLANE_AVAILABLE,
+        'qiskit': QISKIT_AVAILABLE,
+        'stable_baselines3': SB3_AVAILABLE,
+    }
 
 
 if __name__ == "__main__":

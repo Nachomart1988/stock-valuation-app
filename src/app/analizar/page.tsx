@@ -43,6 +43,9 @@ import ResumenTab from '@/app/components/tabs/ResumenTab';
 import MLPredictionTab from '@/app/components/tabs/MLPredictionTab';
 import PortfolioOptimizerTab from '@/app/components/tabs/PortfolioOptimizerTab';
 import OptionsTab from '@/app/components/tabs/OptionsTab';
+import QuantumPortfolioTab from '@/app/components/tabs/QuantumPortfolioTab';
+import DRLTradingTab from '@/app/components/tabs/DRLTradingTab';
+import QuantumRiskTab from '@/app/components/tabs/QuantumRiskTab';
 import PDFConfigModal, { PDFConfig } from '@/app/components/PDFConfigModal';
 import { fetchFmp } from '@/lib/fmpClient';
 
@@ -1032,6 +1035,9 @@ function AnalizarContent() {
     t('analysis.categories.options'),
     `${t('analysis.categories.summary')} (Beta)`,
     t('analysis.categories.investorJournal'),
+    t('analysis.categories.quantumPortfolio'),
+    t('analysis.categories.drlTrading'),
+    t('analysis.categories.quantumRisk'),
   ];
 
   return (
@@ -1098,17 +1104,17 @@ function AnalizarContent() {
           {/* Tab bar: horizontal scroll on mobile, wrap on desktop */}
           <div className="relative mb-6 sm:mb-10">
             <div className="overflow-x-auto pb-1">
-              <Tab.List className="flex gap-1.5 sm:gap-2 rounded-xl bg-gray-800 p-2 sm:p-3 min-w-max sm:min-w-0 sm:flex-wrap shadow-sm">
+              <Tab.List className="flex gap-1.5 sm:gap-2 rounded-xl bg-black/80 backdrop-blur-md border border-green-900/30 p-1.5 sm:p-2 min-w-max sm:min-w-0 sm:flex-wrap">
                 {categories.map((category) => (
                   <Tab
                     key={category}
                     className={({ selected }) =>
                       classNames(
-                        'shrink-0 rounded-lg sm:rounded-xl py-2 px-3 sm:py-3 sm:px-4 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap',
-                        'focus:outline-none focus:ring-2 focus:ring-green-500',
+                        'shrink-0 rounded-lg py-2 px-3 sm:py-2.5 sm:px-4 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap',
+                        'focus:outline-none focus:ring-1 focus:ring-green-500/50',
                         selected
-                          ? 'bg-gray-700 text-white shadow-lg border-b-4 border-green-500'
-                          : 'text-gray-400 hover:bg-gray-700 hover:text-white hover:shadow'
+                          ? 'bg-green-900/20 text-green-400 border border-green-500/40 shadow-[0_0_12px_rgba(0,166,81,0.2)]'
+                          : 'text-gray-500 hover:text-green-400/70 hover:bg-green-900/10 border border-transparent'
                       )
                     }
                   >
@@ -1121,7 +1127,7 @@ function AnalizarContent() {
 
 <Tab.Panels className="mt-2">
   {/* 1. Inicio */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     <InicioTab
       ticker={activeTicker}
       quote={quote}
@@ -1135,7 +1141,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 2. Financial Statements (Income, Balance, CashFlow) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     <FinancialStatementsGroup
       IncomeTab={<FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} secData={secData} growthData={incomeGrowth?.length > 0 ? incomeGrowth : financialGrowth} asReportedData={incomeAsReported} financialGrowth={financialGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} currencyInfo={currencyInfo} />}
       BalanceTab={<FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} secData={secData} growthData={balanceGrowth?.length > 0 ? balanceGrowth : financialGrowth} asReportedData={balanceAsReported} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} enterpriseValue={enterpriseValue} currencyInfo={currencyInfo} />}
@@ -1144,7 +1150,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 3. Forecasts (Forecasts + Revenue Forecast) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     {canAccessTab(userPlan, 2) ? (
       <ForecastsGroup
         ForecastsTab={<ForecastsTab ticker={ticker} />}
@@ -1157,7 +1163,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 4. Info General (Analisis General, Key Metrics, Analistas, DuPont) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     <GeneralInfoGroup
       AnalisisGeneralTab={<GeneralTab profile={profile} quote={quote} ticker={activeTicker} />}
       KeyMetricsTab={<KeyMetricsTab ticker={activeTicker} industry={profile?.industry} onCompanyQualityNetChange={setSharedCompanyQualityNet} ownerEarnings={ownerEarnings} />}
@@ -1170,7 +1176,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 5. Compañía (Competidores, Industry, Segmentation, Holders) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     <CompanyGroup
       CompetidoresTab={<CompetidoresTab ticker={ticker} />}
       IndustryTab={<IndustryTab ticker={activeTicker} />}
@@ -1183,7 +1189,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 6. Noticias */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     {canAccessTab(userPlan, 5) ? (
       <NoticiasTab ticker={activeTicker} />
     ) : (
@@ -1192,7 +1198,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 7. Inputs (Sustainable Growth, Beta, CAGR, WACC) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     <InputsGroup
       SustainableGrowthTab={
         <SustainableGrowthTab
@@ -1226,7 +1232,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 8. Intraday (Pivots + Gaps) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     {canAccessTab(userPlan, 7) ? (
       <IntradayGroup
         PivotsTab={<PivotsTab ticker={activeTicker} />}
@@ -1239,7 +1245,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 9. DCF (Cálculos, DCF Models) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     <DCFGroup
       CalculosTab={
         <CalculosTab
@@ -1270,7 +1276,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 10. Valuaciones */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     <ValuacionesTab
       ticker={activeTicker}
       income={income}
@@ -1294,7 +1300,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 11. Probability */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     {canAccessTab(userPlan, 10) ? (
       <ProbabilityTab
         ticker={activeTicker}
@@ -1310,7 +1316,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 12. Options */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     {canAccessTab(userPlan, 11) ? (
       <OptionsTab ticker={activeTicker} currentPrice={quote?.price || 0} />
     ) : (
@@ -1319,7 +1325,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 13. Resumen Maestro */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     {canAccessTab(userPlan, 12) ? (
       <ResumenTab
         ticker={activeTicker}
@@ -1345,7 +1351,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 14. Diario Inversor + Portfolio Optimizer */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-800 p-3 sm:p-6 md:p-10 shadow-2xl border border-white/[0.06]">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
     {canAccessTab(userPlan, 13) ? (
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg mb-4">
@@ -1363,6 +1369,33 @@ function AnalizarContent() {
       </Tab.Group>
     ) : (
       <LockedTab requiredPlan={TAB_MIN_PLAN[13]} currentPlan={userPlan} tabName="Diario Inversor" />
+    )}
+  </Tab.Panel>
+
+  {/* 15. Quantum Portfolio Optimizer (QAOA) */}
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+    {canAccessTab(userPlan, 14) ? (
+      <QuantumPortfolioTab ticker={activeTicker} />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[14]} currentPlan={userPlan} tabName="Quantum Portfolio" />
+    )}
+  </Tab.Panel>
+
+  {/* 16. DRL Trading Simulator */}
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+    {canAccessTab(userPlan, 15) ? (
+      <DRLTradingTab ticker={activeTicker} />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[15]} currentPlan={userPlan} tabName="DRL Trading" />
+    )}
+  </Tab.Panel>
+
+  {/* 17. Quantum Risk Model + Alt Data */}
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/60 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+    {canAccessTab(userPlan, 16) ? (
+      <QuantumRiskTab ticker={activeTicker} />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[16]} currentPlan={userPlan} tabName="Quantum Risk" />
     )}
   </Tab.Panel>
 </Tab.Panels>

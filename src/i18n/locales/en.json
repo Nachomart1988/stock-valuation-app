@@ -232,7 +232,10 @@
       "probability": "Probability",
       "options": "Options",
       "investorJournal": "Investor Journal",
-      "summary": "Summary"
+      "summary": "Summary",
+      "quantumPortfolio": "Quantum Portfolio",
+      "drlTrading": "DRL Trading",
+      "quantumRisk": "Quantum Risk"
     },
     "precio": {
       "actual": "Current Price",

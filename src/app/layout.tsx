@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from "@/i18n/LanguageContext";
 import { ClerkProvider } from "@clerk/nextjs";
@@ -7,14 +7,16 @@ import ServiceWorkerRegistrar from "./components/ServiceWorkerRegistrar";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-sans",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-data",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const viewport: Viewport = {
@@ -75,7 +77,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="es" suppressHydrationWarning>
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+          className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased`}
         >
           <LanguageProvider>
             {children}

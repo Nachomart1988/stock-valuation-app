@@ -16,6 +16,9 @@
 // 11 - Options          (sub-tabs: Chain, Strategy Simulator, Suggestions)
 // 12 - Resumen Maestro
 // 13 - Diario Inversor  (sub-tabs: Diario, Portfolio Optimization)
+// 14 - Quantum Portfolio (QAOA)
+// 15 - DRL Trading Simulator
+// 16 - Quantum Risk Model
 
 export type PlanTier = 'free' | 'pro' | 'elite' | 'gold';
 
@@ -37,6 +40,9 @@ export const TAB_MIN_PLAN: Record<number, PlanTier> = {
   11: 'pro',   // Options
   12: 'elite', // Resumen Maestro
   13: 'elite', // Diario Inversor + Portfolio Optimization
+  14: 'gold',  // Quantum Portfolio (QAOA)
+  15: 'gold',  // DRL Trading Simulator
+  16: 'gold',  // Quantum Risk Model
 };
 
 // ── Sub-tab access ───────────────────────────────────────────
