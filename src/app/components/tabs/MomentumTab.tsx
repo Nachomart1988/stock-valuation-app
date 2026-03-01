@@ -181,7 +181,7 @@ function signalBgColor(color: string) {
     blue:    'bg-blue-900/30 border-blue-500/40 text-blue-300',
     purple:  'bg-purple-900/30 border-purple-500/40 text-purple-300',
     orange:  'bg-orange-900/30 border-orange-500/40 text-orange-300',
-    gray:    'bg-gray-800/50 border-gray-600/40 text-gray-400',
+    gray:    'bg-black/40 border-green-900/20/40 text-gray-400',
   };
   return map[color] || map.gray;
 }
@@ -347,13 +347,13 @@ function LeaderPerformanceBar({ label, stock, benchmark }: {
           {fmtPct(stock)} vs {fmtPct(benchmark)}
         </span>
       </div>
-      <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
+      <div className="relative h-3 bg-black/60 rounded-full overflow-hidden">
         <div
           className={`absolute top-0 left-0 h-full rounded-full ${stockPos ? 'bg-emerald-500' : 'bg-red-500'}`}
           style={{ width: `${stockW}%` }}
         />
       </div>
-      <div className="relative h-2 bg-gray-800 rounded-full overflow-hidden">
+      <div className="relative h-2 bg-black/60 rounded-full overflow-hidden">
         <div
           className={`absolute top-0 left-0 h-full rounded-full ${benchPos ? 'bg-gray-500' : 'bg-gray-600'}`}
           style={{ width: `${benchW}%` }}
@@ -426,19 +426,19 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
   const marketBadge = (status: string) => {
     if (status === 'open') return { text: t('Market Open','Mercado Abierto'), cls: 'bg-emerald-900/50 text-emerald-400 border-emerald-500/30' };
     if (status === 'pre_market_transition') return { text: t('Opening','Apertura'), cls: 'bg-yellow-900/50 text-yellow-400 border-yellow-500/30' };
-    return { text: t('Market Closed','Mercado Cerrado'), cls: 'bg-gray-800/50 text-gray-400 border-gray-600/30' };
+    return { text: t('Market Closed','Mercado Cerrado'), cls: 'bg-black/40 text-gray-400 border-green-900/20/30' };
   };
 
   // ── Loading ─────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
-        <div className="h-8 w-64 bg-gray-800 rounded-lg" />
+        <div className="h-8 w-64 bg-black/60 rounded-lg" />
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <div key={i} className="h-28 bg-gray-800 rounded-xl" />)}
+          {[1,2,3,4].map(i => <div key={i} className="h-28 bg-black/60 rounded-xl" />)}
         </div>
-        <div className="h-48 bg-gray-800 rounded-xl" />
-        <div className="h-32 bg-gray-800 rounded-xl" />
+        <div className="h-48 bg-black/60 rounded-xl" />
+        <div className="h-32 bg-black/60 rounded-xl" />
       </div>
     );
   }
@@ -466,7 +466,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
             <select
               value={benchmark}
               onChange={e => setBenchmark(e.target.value)}
-              className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-emerald-500"
+              className="bg-black/60 border border-green-900/20 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-emerald-500"
             >
               <option value="SPY">SPY</option>
               <option value="QQQ">QQQ</option>
@@ -492,7 +492,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
       )}
 
       {!result && !error && !loading && (
-        <div className="bg-gray-900/50 border border-white/[0.07] rounded-xl p-8 text-center">
+        <div className="bg-black/40 border border-white/[0.07] rounded-xl p-8 text-center">
           <p className="text-4xl mb-3">⚡</p>
           <p className="text-gray-400">
             {t('Click Refresh to start Prismo analysis.', 'Presiona Actualizar para iniciar el análisis Prismo.')}
@@ -521,7 +521,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
 
             {/* Momentum direction */}
-            <div className="bg-gray-900/60 rounded-xl p-4 border border-white/[0.07] flex flex-col items-center text-center">
+            <div className="bg-black/50 rounded-xl p-4 border border-white/[0.07] flex flex-col items-center text-center">
               <p className="text-xs text-gray-400 mb-2">{t('Momentum','Momentum')}</p>
               <p className={`text-lg font-bold ${momentumColor(result.momentum.direction)}`}>
                 {momentumLabel(result.momentum.direction, result.momentum.strength)}
@@ -531,7 +531,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
             </div>
 
             {/* Score Prismo */}
-            <div className="bg-gray-900/60 rounded-xl p-4 border border-white/[0.07] flex flex-col items-center">
+            <div className="bg-black/50 rounded-xl p-4 border border-white/[0.07] flex flex-col items-center">
               <p className="text-xs text-gray-400 mb-1 text-center">{t('Score Prismo','Score Prismo')}</p>
               <div className="w-24">
                 <ScoreGauge score={result.prismo.score} label="/100" color={gaugeColor(result.prismo.score)} />
@@ -539,7 +539,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
             </div>
 
             {/* Breakout Prob */}
-            <div className="bg-gray-900/60 rounded-xl p-4 border border-white/[0.07] flex flex-col items-center">
+            <div className="bg-black/50 rounded-xl p-4 border border-white/[0.07] flex flex-col items-center">
               <p className="text-xs text-gray-400 mb-1 text-center">{t('Breakout Prob.','Prob. Breakout')}</p>
               <div className="w-24">
                 <ScoreGauge score={result.breakout_prob} label="%" color={gaugeColor(result.breakout_prob)} />
@@ -547,7 +547,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
             </div>
 
             {/* RS vs Benchmark */}
-            <div className="bg-gray-900/60 rounded-xl p-4 border border-white/[0.07] flex flex-col items-center justify-center text-center">
+            <div className="bg-black/50 rounded-xl p-4 border border-white/[0.07] flex flex-col items-center justify-center text-center">
               <p className="text-xs text-gray-400 mb-2">{t('Rel. Strength (intraday)','RS Intraday')} vs {result.benchmark}</p>
               <p className={`text-3xl font-bold ${result.metrics.rs >= 1.1 ? 'text-emerald-400' : result.metrics.rs < 0.9 ? 'text-red-400' : 'text-gray-300'}`}>
                 {result.metrics.rs.toFixed(2)}x
@@ -561,7 +561,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
           </div>
 
           {/* ── LEADER SCORE section ── */}
-          <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+          <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <h4 className="text-base font-bold text-blue-400">
                 🏆 {t('Leader Score', 'Score de Liderazgo')}
@@ -575,7 +575,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
                     ? <span className="text-xs font-bold bg-emerald-900/50 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">{t('Top Leader','Líder Top')}</span>
                     : result.leader.score >= 40
                     ? <span className="text-xs font-bold bg-blue-900/50 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/30">{t('Outperformer','Outperformer')}</span>
-                    : <span className="text-xs font-bold bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full border border-gray-600">{t('Average','Promedio')}</span>
+                    : <span className="text-xs font-bold bg-black/60 text-gray-400 px-2 py-0.5 rounded-full border border-green-900/20">{t('Average','Promedio')}</span>
                   }
                 </div>
               </div>
@@ -587,7 +587,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
                 { label: t('6 Months','6 Meses'), stock: result.leader.r6m, bench: result.leader.b6m, ex: result.leader.ex6m },
                 { label: t('12 Months','12 Meses'), stock: result.leader.r12m, bench: result.leader.b12m, ex: result.leader.ex12m },
               ] as const).map(({ label, stock, bench, ex }) => (
-                <div key={label} className="bg-gray-800/50 rounded-lg p-3 border border-white/5">
+                <div key={label} className="bg-black/40 rounded-lg p-3 border border-white/5">
                   <p className="text-xs text-gray-400 mb-2 font-medium">{label}</p>
                   <div className="flex items-baseline gap-2 mb-1">
                     <span className={`text-xl font-bold ${stock >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -604,13 +604,13 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
                   </div>
                   {/* Performance bar */}
                   <div className="mt-2 space-y-1">
-                    <div className="relative h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div className="relative h-2 bg-black/50 rounded-full overflow-hidden">
                       <div
                         className={`absolute top-0 left-0 h-full rounded-full ${stock >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
                         style={{ width: `${Math.min(Math.abs(stock) / Math.max(Math.abs(stock), Math.abs(bench), 10) * 100, 100)}%` }}
                       />
                     </div>
-                    <div className="relative h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                    <div className="relative h-1.5 bg-black/50 rounded-full overflow-hidden">
                       <div
                         className="absolute top-0 left-0 h-full rounded-full bg-gray-500"
                         style={{ width: `${Math.min(Math.abs(bench) / Math.max(Math.abs(stock), Math.abs(bench), 10) * 100, 100)}%` }}
@@ -630,7 +630,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
           </div>
 
           {/* ── COMPRESSION PATTERN section ── */}
-          <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+          <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <h4 className="text-base font-bold text-orange-400">
                 🔲 {t('Post-Run Compression', 'Compresión Post-Corrida')}
@@ -642,7 +642,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
                 <div>
                   {result.compression.detected
                     ? <span className="text-xs font-bold bg-orange-900/50 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/30">{t('Base Active','Base Activa')}</span>
-                    : <span className="text-xs font-bold bg-gray-800 text-gray-500 px-2 py-0.5 rounded-full border border-gray-600">{t('No Base','Sin Base')}</span>
+                    : <span className="text-xs font-bold bg-black/60 text-gray-500 px-2 py-0.5 rounded-full border border-green-900/20">{t('No Base','Sin Base')}</span>
                   }
                 </div>
               </div>
@@ -650,7 +650,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               {/* Big run */}
-              <div className="bg-gray-800/50 rounded-lg p-3 border border-white/5 text-center">
+              <div className="bg-black/40 rounded-lg p-3 border border-white/5 text-center">
                 <p className="text-xs text-gray-400 mb-1">{t('Prior Run','Corrida Previa')}</p>
                 <p className={`text-xl font-bold ${result.compression.big_run_confirmed ? 'text-emerald-400' : 'text-gray-500'}`}>
                   +{result.compression.big_run_pct.toFixed(0)}%
@@ -663,7 +663,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
               </div>
 
               {/* Range compression */}
-              <div className="bg-gray-800/50 rounded-lg p-3 border border-white/5 text-center">
+              <div className="bg-black/40 rounded-lg p-3 border border-white/5 text-center">
                 <p className="text-xs text-gray-400 mb-1">{t('Range Compression','Compresión Rango')}</p>
                 <p className={`text-xl font-bold ${result.compression.range_compressed ? 'text-emerald-400' : 'text-gray-400'}`}>
                   {((1 - result.compression.range_compression) * 100).toFixed(0)}%
@@ -676,7 +676,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
               </div>
 
               {/* Volume dry-up */}
-              <div className="bg-gray-800/50 rounded-lg p-3 border border-white/5 text-center">
+              <div className="bg-black/40 rounded-lg p-3 border border-white/5 text-center">
                 <p className="text-xs text-gray-400 mb-1">{t('Volume Dry-up','Secado Volumen')}</p>
                 <p className={`text-xl font-bold ${result.compression.vol_contracting ? 'text-emerald-400' : 'text-gray-400'}`}>
                   -{((1 - result.compression.vol_dry_up) * 100).toFixed(0)}%
@@ -689,7 +689,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
               </div>
 
               {/* Diagonal ceiling */}
-              <div className="bg-gray-800/50 rounded-lg p-3 border border-white/5 text-center">
+              <div className="bg-black/40 rounded-lg p-3 border border-white/5 text-center">
                 <p className="text-xs text-gray-400 mb-1">{t('Diagonal Ceiling','Techo Diagonal')}</p>
                 <p className={`text-xl font-bold ${result.compression.diagonal_ceiling ? 'text-yellow-400' : 'text-gray-500'}`}>
                   {result.compression.diagonal_ceiling ? t('Yes','Sí') : t('No','No')}
@@ -713,7 +713,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
                   )}
                 </span>
               </div>
-              <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
+              <div className="relative h-3 bg-black/60 rounded-full overflow-hidden">
                 <div
                   className={`absolute top-0 left-0 h-full rounded-full transition-all ${
                     result.compression.breakout_proximity >= 80 ? 'bg-emerald-500' :
@@ -760,7 +760,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
               { label: 'ADX', value: result.metrics.adx.toFixed(0), color: result.metrics.adx < 25 ? 'text-yellow-400' : 'text-gray-300' },
               { label: t('Vol Surge','Surge Vol'),   value: `${result.metrics.vol_surge.toFixed(1)}x`, color: result.metrics.vol_surge >= 2 ? 'text-emerald-400' : result.metrics.vol_surge >= 1.5 ? 'text-yellow-400' : 'text-gray-400' },
             ].map(({ label, value, color }) => (
-              <div key={label} className="bg-gray-900/50 rounded-lg p-3 border border-white/6 text-center">
+              <div key={label} className="bg-black/40 rounded-lg p-3 border border-white/6 text-center">
                 <p className="text-xs text-gray-400 mb-1">{label}</p>
                 <p className={`text-base font-bold ${color}`}>{value}</p>
               </div>
@@ -768,14 +768,14 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
           </div>
 
           {/* ── Multi-TF table ── */}
-          <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+          <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
             <h4 className="text-sm font-semibold text-gray-300 mb-4">
               {t('Multi-Timeframe Metrics','Métricas Multi-Temporalidad')}
             </h4>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border border-white/6 rounded-lg overflow-hidden">
                 <thead>
-                  <tr className="bg-gray-700/50 text-gray-300">
+                  <tr className="bg-black/40 text-gray-300">
                     <th className="text-left px-4 py-2">TF</th>
                     <th className="text-right px-3 py-2">ROC%</th>
                     <th className="text-right px-3 py-2">RS</th>
@@ -785,9 +785,9 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
                     <th className="text-left px-3 py-2 text-gray-500 hidden sm:table-cell">{t('Description','Descripción')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-700/40">
+                <tbody className="divide-y divide-green-900/15/40">
                   {result.metrics_by_tf.map(row => (
-                    <tr key={row.timeframe} className="hover:bg-gray-700/30 transition">
+                    <tr key={row.timeframe} className="hover:bg-black/30 transition">
                       <td className="px-4 py-2 font-semibold text-emerald-400">{row.timeframe}</td>
                       <td className={`text-right px-3 py-2 font-medium ${pctColor(row.roc)}`}>{fmtPct(row.roc)}</td>
                       <td className={`text-right px-3 py-2 ${row.rs != null ? (row.rs >= 1.1 ? 'text-emerald-400' : row.rs < 0.9 ? 'text-red-400' : 'text-gray-300') : 'text-gray-600'}`}>
@@ -813,13 +813,13 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
           {/* ── Charts ── */}
           {result.chart.prices.length > 2 && (
             <div className="space-y-4">
-              <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+              <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
                 <h4 className="text-sm font-semibold text-gray-300 mb-3">
                   {t('Price vs VWAP','Precio vs VWAP')} — {t('5m bars','Barras 5m')}
                 </h4>
                 <PriceChart chart={result.chart} />
               </div>
-              <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+              <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
                 <h4 className="text-sm font-semibold text-gray-300 mb-3">
                   {t('Momentum Oscillator','Oscilador de Momentum')}
                 </h4>
@@ -830,7 +830,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
 
           {/* ── Prismo factors ── */}
           {result.prismo.factors.length > 0 && (
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+            <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
               <h4 className="text-sm font-semibold text-purple-400 mb-3">
                 ⚡ {t('Prismo Factors','Factores Prismo')}
               </h4>
@@ -846,25 +846,25 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
 
           {/* ── Session stats + Fundamentals ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-gray-900/50 rounded-lg p-3 border border-white/6 text-center">
+            <div className="bg-black/40 rounded-lg p-3 border border-white/6 text-center">
               <p className="text-xs text-gray-400 mb-1">{t('BB Compressed','BB Comprimido')}</p>
               <p className={`text-base font-bold ${result.metrics.bb.compressed ? 'text-yellow-400' : 'text-gray-500'}`}>
                 {result.metrics.bb.compressed ? t('Yes — Coiling','Sí — Coiling') : 'No'}
               </p>
               <p className="text-xs text-gray-600 mt-0.5">{result.metrics.bb.compression_pct.toFixed(0)}% {t('compression','compresión')}</p>
             </div>
-            <div className="bg-gray-900/50 rounded-lg p-3 border border-white/6 text-center">
+            <div className="bg-black/40 rounded-lg p-3 border border-white/6 text-center">
               <p className="text-xs text-gray-400 mb-1">{t('Proximity to High','Prox. al Máximo')}</p>
               <p className={`text-base font-bold ${result.metrics.proximity_to_high >= 90 ? 'text-emerald-400' : result.metrics.proximity_to_high < 50 ? 'text-red-400' : 'text-gray-300'}`}>
                 {result.metrics.proximity_to_high.toFixed(0)}%
               </p>
             </div>
-            <div className="bg-gray-900/50 rounded-lg p-3 border border-white/6 text-center">
+            <div className="bg-black/40 rounded-lg p-3 border border-white/6 text-center">
               <p className="text-xs text-gray-400 mb-1">ATR</p>
               <p className="text-base font-bold text-blue-400">{fmtPrice(result.metrics.atr)}</p>
               <p className="text-xs text-gray-600 mt-0.5">{t('Avg True Range','Rango Verdadero')}</p>
             </div>
-            <div className="bg-gray-900/50 rounded-lg p-3 border border-white/6 text-center">
+            <div className="bg-black/40 rounded-lg p-3 border border-white/6 text-center">
               <p className="text-xs text-gray-400 mb-1">{t('Session Range','Rango Sesión')}</p>
               <p className="text-sm font-bold text-gray-300">
                 {fmtPrice(result.metrics.session_low)} — {fmtPrice(result.metrics.session_high)}
@@ -874,7 +874,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
 
           {/* Fundamentals */}
           {result.fundamental && (
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+            <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
               <h4 className="text-sm font-semibold text-gray-300 mb-3">
                 {t('Fundamentals Snapshot','Snapshot Fundamental')}
               </h4>
@@ -907,7 +907,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
 
           {/* ── Narrative ── */}
           {result.narrative && (
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+            <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
               <h4 className="text-sm font-semibold text-gray-300 mb-3">{t('Narrative','Narrativa')}</h4>
               <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">
                 {result.narrative}

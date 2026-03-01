@@ -89,7 +89,7 @@ const sections = [
 function FAQItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-b border-gray-700/50 last:border-0">
+    <div className="border-b border-green-900/15 last:border-0">
       <button
         className="w-full flex items-center justify-between py-4 text-left gap-4 hover:text-emerald-400 transition"
         onClick={() => setOpen(!open)}
@@ -106,7 +106,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 
 export default function FAQPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
       <Header />
 
       <main className="pt-28 pb-20 px-4 max-w-3xl mx-auto">
@@ -119,7 +119,7 @@ export default function FAQPage() {
           {sections.map((section) => (
             <div key={section.title}>
               <h2 className="text-sm font-bold uppercase tracking-widest text-emerald-400 mb-4">{section.title}</h2>
-              <div className="bg-gray-800/40 rounded-2xl border border-gray-700/50 px-6">
+              <div className="bg-black/60/40 rounded-2xl border border-green-900/15 px-6">
                 {section.faqs.map((faq) => (
                   <FAQItem key={faq.q} {...faq} />
                 ))}
@@ -128,7 +128,7 @@ export default function FAQPage() {
           ))}
         </div>
 
-        <div className="mt-12 p-6 rounded-2xl bg-gray-800/50 border border-gray-700/50 text-center">
+        <div className="mt-12 p-6 rounded-2xl bg-black/40 border border-green-900/15 text-center">
           <p className="text-gray-400 mb-3">¿No encontraste tu respuesta?</p>
           <a
             href="mailto:support@prismo.app"

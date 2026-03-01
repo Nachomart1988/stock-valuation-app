@@ -200,7 +200,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
     label, value, subtext, color = 'text-white'
   }: { label: string; value: string; subtext?: string; color?: string }) {
     return (
-      <div className="bg-gray-900/60 rounded-xl p-4 border border-white/[0.07] text-center">
+      <div className="bg-black/50 rounded-xl p-4 border border-white/[0.07] text-center">
         <p className="text-xs text-gray-400 mb-1">{label}</p>
         <p className={`text-2xl font-bold ${color}`}>{value}</p>
         {subtext && <p className="text-xs text-gray-500 mt-1">{subtext}</p>}
@@ -238,7 +238,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm border border-white/[0.06] rounded-lg overflow-hidden">
             <thead>
-              <tr className="bg-gray-700/50 text-gray-300">
+              <tr className="bg-black/40 text-gray-300">
                 <th className="text-left px-4 py-2">{t('Metric', 'Métrica')}</th>
                 <th className="text-right px-3 py-2">{t('Mean', 'Media')}</th>
                 <th className="text-right px-3 py-2">{t('Median', 'Mediana')}</th>
@@ -246,9 +246,9 @@ export default function GapsTab({ ticker }: GapsTabProps) {
                 <th className="text-right px-3 py-2">{t('Max', 'Máx')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700/50">
+            <tbody className="divide-y divide-green-900/15/50">
               {rows.map(row => (
-                <tr key={row.label} className="hover:bg-gray-700/30 transition">
+                <tr key={row.label} className="hover:bg-black/30 transition">
                   <td className="px-4 py-2 text-gray-300">{row.label}</td>
                   <td className={`text-right px-3 py-2 font-medium ${pctColor(row.mean)}`}>{fmtPct(row.mean, 2)}</td>
                   <td className={`text-right px-3 py-2 ${pctColor(row.median)}`}>{fmtPct(row.median, 2)}</td>
@@ -281,7 +281,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
       </div>
 
       {/* Controls */}
-      <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+      <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
         <h4 className="text-sm font-semibold text-gray-300 mb-4">{t('Parameters', 'Parámetros')}</h4>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div>
@@ -293,7 +293,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
               max={2000}
               step={60}
               onChange={e => setDays(Number(e.target.value))}
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+              className="w-full bg-black/60 border border-green-900/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
             />
           </div>
           <div>
@@ -305,7 +305,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
               max={20}
               step={0.5}
               onChange={e => setThreshold(Number(e.target.value))}
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+              className="w-full bg-black/60 border border-green-900/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
             />
           </div>
           <div>
@@ -313,7 +313,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
             <select
               value={direction}
               onChange={e => setDirection(e.target.value as any)}
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+              className="w-full bg-black/60 border border-green-900/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
             >
               <option value="both">{t('Both', 'Ambos')}</option>
               <option value="up">{t('Gap Up Only', 'Solo Gap Alcista')}</option>
@@ -344,16 +344,16 @@ export default function GapsTab({ ticker }: GapsTabProps) {
         <div className="space-y-4 animate-pulse">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[1,2,3,4].map(i => (
-              <div key={i} className="h-24 bg-gray-800 rounded-xl" />
+              <div key={i} className="h-24 bg-black/60 rounded-xl" />
             ))}
           </div>
-          <div className="h-64 bg-gray-800 rounded-xl" />
+          <div className="h-64 bg-black/60 rounded-xl" />
         </div>
       )}
 
       {/* No gaps found */}
       {result && result.totalGaps === 0 && (
-        <div className="bg-gray-900/50 border border-white/[0.07] rounded-xl p-8 text-center">
+        <div className="bg-black/40 border border-white/[0.07] rounded-xl p-8 text-center">
           <p className="text-4xl mb-3">📊</p>
           <p className="text-gray-400">{result.message || t('No gaps found with these parameters.', 'No se encontraron gaps con estos parámetros.')}</p>
         </div>
@@ -424,7 +424,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
           {/* OHLC visual + stats split */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Left: OHLC visualization */}
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+            <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
               <h4 className="text-base font-semibold text-gray-200 mb-4 text-center">
                 {t('Average Gap Day (All)', 'Día de Gap Promedio (Todos)')}
               </h4>
@@ -438,7 +438,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
             </div>
 
             {/* Right: Up vs Down stats */}
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07] space-y-5">
+            <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07] space-y-5">
               <h4 className="text-base font-semibold text-gray-200">
                 {t('Gap Up vs Gap Down Comparison', 'Comparativa Gap Alcista vs Bajista')}
               </h4>
@@ -506,7 +506,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
           </div>
 
           {/* Detailed stats table */}
-          <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+          <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
             <StatsTable
               stats={result.stats}
               title={t('All Gaps — Detailed Statistics', 'Todos los Gaps — Estadísticas Detalladas')}
@@ -516,7 +516,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
 
           {result.upStats && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+              <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
                 <StatsTable
                   stats={result.upStats}
                   title={t('Gap Up Statistics', 'Estadísticas de Gaps Alcistas')}
@@ -524,7 +524,7 @@ export default function GapsTab({ ticker }: GapsTabProps) {
                 />
               </div>
               {result.downStats && (
-                <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+                <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
                   <StatsTable
                     stats={result.downStats}
                     title={t('Gap Down Statistics', 'Estadísticas de Gaps Bajistas')}
@@ -537,14 +537,14 @@ export default function GapsTab({ ticker }: GapsTabProps) {
 
           {/* Recent gaps table */}
           {result.recentGaps && result.recentGaps.length > 0 && (
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-white/[0.07]">
+            <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
               <h4 className="text-base font-semibold text-gray-200 mb-4">
                 {t('Recent Gaps', 'Gaps Recientes')} ({result.recentGaps.length})
               </h4>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs border border-white/[0.06] rounded-lg overflow-hidden">
                   <thead>
-                    <tr className="bg-gray-700/50 text-gray-300">
+                    <tr className="bg-black/40 text-gray-300">
                       <th className="text-left px-3 py-2">{t('Date', 'Fecha')}</th>
                       <th className="text-center px-2 py-2">{t('Type', 'Tipo')}</th>
                       <th className="text-right px-3 py-2">{t('Gap%', 'Gap%')}</th>
@@ -559,11 +559,11 @@ export default function GapsTab({ ticker }: GapsTabProps) {
                       <th className="text-right px-3 py-2">{t('Next Day C/O', 'Sig. C/O')}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-700/40">
+                  <tbody className="divide-y divide-green-900/15/40">
                     {result.recentGaps.map(g => (
                       <tr
                         key={g.date}
-                        className={`hover:bg-gray-700/30 transition ${
+                        className={`hover:bg-black/30 transition ${
                           g.type === 'up' ? 'bg-green-900/10' : 'bg-red-900/10'
                         }`}
                       >

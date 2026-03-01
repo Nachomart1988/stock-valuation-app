@@ -566,13 +566,13 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
       )}
 
       <Tab.Group>
-        <Tab.List className="flex gap-2 bg-gray-700/50 p-2 rounded-lg">
+        <Tab.List className="flex gap-2 bg-black/40 p-2 rounded-lg">
           {subtabs.map((tab) => (
             <Tab
               key={tab}
               className={({ selected }) =>
                 `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
-                  selected ? 'bg-amber-600 text-white shadow-lg' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                  selected ? 'bg-amber-600 text-white shadow-lg' : 'text-gray-500 hover:text-green-400/70 hover:bg-green-900/10'
                 }`
               }
             >
@@ -606,7 +606,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                         className={`px-3 py-1 rounded-lg text-sm transition-all ${
                           selectedExp === exp
                             ? 'bg-amber-600 text-white'
-                            : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                            : 'bg-black/50 text-gray-400 hover:bg-green-900/15'
                         }`}
                       >
                         {exp}
@@ -617,11 +617,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   {selectedExp && chain?.calls?.[selectedExp] && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       {/* Calls */}
-                      <div className="bg-gray-700/30 rounded-xl p-3">
+                      <div className="bg-black/30 rounded-xl p-3">
                         <h4 className="text-sm font-semibold text-green-400 mb-2">CALLS</h4>
                         <div className="overflow-x-auto max-h-80 overflow-y-auto">
                           <table className="w-full text-xs">
-                            <thead className="sticky top-0 bg-gray-800">
+                            <thead className="sticky top-0 bg-black/60">
                               <tr className="text-gray-500">
                                 <th className="py-1 text-left">Strike</th>
                                 <th className="py-1 text-right">Last</th>
@@ -636,7 +636,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                               {(chain.calls[selectedExp] ?? []).map((c: any, i: number) => {
                                 const itm = c.strike <= currentPrice;
                                 return (
-                                  <tr key={i} className={`border-t border-gray-700/30 ${itm ? 'bg-green-900/10' : ''}`}>
+                                  <tr key={i} className={`border-t border-green-900/20/30 ${itm ? 'bg-green-900/10' : ''}`}>
                                     <td className={`py-1 font-semibold ${itm ? 'text-green-400' : 'text-gray-300'}`}>{c.strike}</td>
                                     <td className="py-1 text-right text-gray-300">{c.lastPrice?.toFixed(2)}</td>
                                     <td className="py-1 text-right text-gray-400">{c.bid?.toFixed(2)}</td>
@@ -653,11 +653,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                       </div>
 
                       {/* Puts */}
-                      <div className="bg-gray-700/30 rounded-xl p-3">
+                      <div className="bg-black/30 rounded-xl p-3">
                         <h4 className="text-sm font-semibold text-red-400 mb-2">PUTS</h4>
                         <div className="overflow-x-auto max-h-80 overflow-y-auto">
                           <table className="w-full text-xs">
-                            <thead className="sticky top-0 bg-gray-800">
+                            <thead className="sticky top-0 bg-black/60">
                               <tr className="text-gray-500">
                                 <th className="py-1 text-left">Strike</th>
                                 <th className="py-1 text-right">Last</th>
@@ -672,7 +672,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                               {(chain?.puts?.[selectedExp] ?? []).map((p: any, i: number) => {
                                 const itm = p.strike >= currentPrice;
                                 return (
-                                  <tr key={i} className={`border-t border-gray-700/30 ${itm ? 'bg-red-900/10' : ''}`}>
+                                  <tr key={i} className={`border-t border-green-900/20/30 ${itm ? 'bg-red-900/10' : ''}`}>
                                     <td className={`py-1 font-semibold ${itm ? 'text-red-400' : 'text-gray-300'}`}>{p.strike}</td>
                                     <td className="py-1 text-right text-gray-300">{p.lastPrice?.toFixed(2)}</td>
                                     <td className="py-1 text-right text-gray-400">{p.bid?.toFixed(2)}</td>
@@ -705,7 +705,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   <select
                     value={strategy}
                     onChange={(e) => { setStrategy(e.target.value); setScanResults(null); setAnalysis(null); }}
-                    className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
+                    className="px-3 py-2 bg-black/50 border border-green-900/20 rounded-lg text-white text-sm"
                   >
                     {STRATEGIES.map((s) => (
                       <option key={s.value} value={s.value}>{s.label}</option>
@@ -718,7 +718,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   <select
                     value={selectedExp}
                     onChange={(e) => { setSelectedExp(e.target.value); setScanResults(null); setAnalysis(null); }}
-                    className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
+                    className="px-3 py-2 bg-black/50 border border-green-900/20 rounded-lg text-white text-sm"
                   >
                     {(chain?.allExpirations ?? chain?.expirations)?.map((exp) => (
                       <option key={exp} value={exp}>{exp}</option>
@@ -738,7 +738,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     step={1}
                     value={contracts}
                     onChange={(e) => setContracts(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-20 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm text-center"
+                    className="w-20 px-3 py-2 bg-black/50 border border-green-900/20 rounded-lg text-white text-sm text-center"
                   />
                 </div>
 
@@ -765,7 +765,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
 
               {/* ── Scan results table ───────────────────────────────────── */}
               {scanResults !== null && (
-                <div className="bg-gray-700/30 rounded-xl p-4 space-y-3">
+                <div className="bg-black/30 rounded-xl p-4 space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <h4 className="text-sm font-semibold text-amber-400">
                       {es
@@ -790,7 +790,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     <div className="overflow-x-auto rounded-lg">
                       <table className="w-full text-xs">
                         <thead>
-                          <tr className="text-gray-500 border-b border-gray-600 bg-gray-800/50">
+                          <tr className="text-gray-500 border-b border-green-900/20 bg-black/40">
                             <th className="py-2 px-2 text-left w-6">#</th>
                             <th className="py-2 px-2 text-left">{es ? 'Descripción' : 'Description'}</th>
                             <th className="py-2 px-2 text-right whitespace-nowrap">{es ? 'Max Gan.' : 'Max Profit'}</th>
@@ -813,23 +813,23 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                               <tr
                                 key={i}
                                 onClick={() => setSelectedComboIdx(i)}
-                                className={`border-t border-gray-700/30 cursor-pointer transition-colors ${
+                                className={`border-t border-green-900/20/30 cursor-pointer transition-colors ${
                                   isSelected
                                     ? 'bg-amber-900/25 ring-1 ring-inset ring-amber-500/50'
-                                    : 'hover:bg-gray-700/40'
+                                    : 'hover:bg-black/50/40'
                                 }`}
                               >
-                                <td className="py-2 px-2 text-gray-500 font-mono">{i + 1}</td>
+                                <td className="py-2 px-2 text-gray-500 font-data">{i + 1}</td>
                                 <td className="py-2 px-2">
                                   {isOptimal && <span className="text-amber-400 mr-1 font-bold">★</span>}
                                   <span className={isSelected ? 'text-white font-medium' : 'text-gray-200'}>
                                     {combo.description}
                                   </span>
                                 </td>
-                                <td className="py-2 px-2 text-right text-green-400 font-mono">
+                                <td className="py-2 px-2 text-right text-green-400 font-data">
                                   {fmtScan(combo.maxProfit)}
                                 </td>
-                                <td className="py-2 px-2 text-right text-red-400 font-mono">
+                                <td className="py-2 px-2 text-right text-red-400 font-data">
                                   {typeof combo.maxLoss === 'number'
                                     ? fmtScan(-Math.abs(combo.maxLoss))
                                     : combo.maxLoss ?? '—'}
@@ -840,7 +840,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                 <td className="py-2 px-2 text-right text-yellow-400">
                                   {combo.riskReward != null ? `${combo.riskReward.toFixed(2)}x` : '—'}
                                 </td>
-                                <td className="py-2 px-2 text-right text-gray-300 font-mono">
+                                <td className="py-2 px-2 text-right text-gray-300 font-data">
                                   {combo.costBasis != null ? `$${Math.abs(combo.costBasis).toFixed(2)}` : '—'}
                                 </td>
                                 <td className="py-2 px-2 text-right">
@@ -882,7 +882,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
               {/* ── Full analysis result ─────────────────────────────────── */}
               {analysis && (
                 <>
-                  <div className="bg-gray-700/30 rounded-xl p-5 space-y-4">
+                  <div className="bg-black/30 rounded-xl p-5 space-y-4">
                     <h4 className="text-lg font-bold text-amber-400">
                       {analysis.name || strategy.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                       {contracts > 1 && (
@@ -933,7 +933,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
 
                     {/* SVG Payoff Diagram */}
                     {analysis.payoffDiagram?.length > 0 && (
-                      <div className="bg-gray-800/60 rounded-lg p-3">
+                      <div className="bg-black/50 rounded-lg p-3">
                         <div className="text-xs text-gray-500 mb-2">
                           {es ? 'Diagrama de Payoff' : 'Payoff Diagram'}
                           {contracts > 1 && (
@@ -952,7 +952,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     {/* Greeks */}
                     <div className="grid grid-cols-4 gap-3">
                       {(['delta', 'gamma', 'theta', 'vega'] as const).map((g) => (
-                        <div key={g} className="text-center bg-gray-800/40 rounded-lg p-2">
+                        <div key={g} className="text-center bg-black/60/40 rounded-lg p-2">
                           <div className="text-xs text-gray-500 uppercase">{g}</div>
                           <div className="text-sm font-semibold text-gray-200">
                             {((analysis.greeks as any)[g] ?? 0).toFixed(4)}
@@ -963,7 +963,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   </div>
 
                   {/* Legs detail */}
-                  <div className="bg-gray-700/30 rounded-xl p-4">
+                  <div className="bg-black/30 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-3">
                       <h5 className="text-sm font-semibold text-gray-300">Legs</h5>
                       <span className="text-xs text-gray-500">
@@ -973,7 +973,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="text-xs text-gray-500 border-b border-gray-700">
+                          <tr className="text-xs text-gray-500 border-b border-green-900/20">
                             <th className="py-1 text-left">{es ? 'Acción' : 'Action'}</th>
                             <th className="py-1 text-right">{es ? 'Tipo' : 'Type'}</th>
                             <th className="py-1 text-right">Strike</th>
@@ -991,7 +991,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                             if (leg.type === 'stock') {
                               const stockCost = leg.strike * Math.abs(qty) * 100;
                               return (
-                                <tr key={i} className="border-t border-gray-700/40 bg-blue-900/10">
+                                <tr key={i} className="border-t border-green-900/20/40 bg-blue-900/10">
                                   <td className="py-2 font-bold text-blue-400">
                                     ▲ LONG {Math.abs(qty) * 100} {es ? 'acciones' : 'shares'}
                                   </td>
@@ -1009,7 +1009,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
 
                             const totalCost = leg.premium * leg.quantity * contracts * 100;
                             return (
-                              <tr key={i} className="border-t border-gray-700/40">
+                              <tr key={i} className="border-t border-green-900/20/40">
                                 <td className={`py-2 font-bold ${qty > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                   {qty > 0 ? '▲ BUY' : '▼ SELL'} {Math.abs(qty)}
                                 </td>
@@ -1035,7 +1035,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                         </tbody>
                       </table>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-700/50 flex items-center justify-between text-sm">
+                    <div className="mt-3 pt-3 border-t border-green-900/15 flex items-center justify-between text-sm">
                       <span className="text-gray-400">{es ? 'Costo neto total' : 'Net total cost'}:</span>
                       <span className={`font-bold text-base ${analysis.costBasis * contracts * 100 > 0 ? 'text-red-400' : 'text-green-400'}`}>
                         {analysis.costBasis * contracts * 100 > 0
@@ -1066,8 +1066,8 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                       onClick={() => setOutlook(o.value)}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                         outlook === o.value
-                          ? `bg-gray-700 ${o.color} ring-1 ring-gray-500`
-                          : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                          ? `bg-black/50 ${o.color} ring-1 ring-gray-500`
+                          : 'bg-black/60 text-gray-400 hover:bg-black/50'
                       }`}
                     >
                       {es ? o.labelEs : o.label}
@@ -1084,7 +1084,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
               </div>
 
               {suggestions !== null && suggestions.length === 0 && (
-                <div className="p-4 bg-gray-700/30 rounded-xl text-gray-400 text-sm">
+                <div className="p-4 bg-black/30 rounded-xl text-gray-400 text-sm">
                   {es ? 'No se encontraron sugerencias para esta perspectiva.' : 'No suggestions found for this outlook.'}
                 </div>
               )}
@@ -1092,11 +1092,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
               {suggestions && suggestions.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {suggestions.map((s, i) => (
-                    <div key={i} className="bg-gray-700/30 rounded-xl p-4 border border-gray-600/50 space-y-2">
+                    <div key={i} className="bg-black/30 rounded-xl p-4 border border-green-900/15 space-y-2">
                       <div className="flex items-start justify-between">
                         <h4 className="font-semibold text-amber-400">{s.name}</h4>
                         {s.riskProfile && (
-                          <span className="text-xs px-2 py-0.5 bg-gray-800 rounded text-gray-400">{s.riskProfile}</span>
+                          <span className="text-xs px-2 py-0.5 bg-black/60 rounded text-gray-400">{s.riskProfile}</span>
                         )}
                       </div>
                       <p className="text-sm text-gray-300">{s.description}</p>
@@ -1132,10 +1132,10 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
 
               {/* ── Mis Estrategias (Saved) ── */}
               {savedStrategies.length > 0 && (
-                <div className="bg-gray-800/50 rounded-xl border border-amber-500/20 overflow-hidden">
+                <div className="bg-black/40 rounded-xl border border-amber-500/20 overflow-hidden">
                   <button
                     onClick={() => setShowSaved(v => !v)}
-                    className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-700/40 transition-all"
+                    className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-black/50/40 transition-all"
                   >
                     <span className="font-medium text-amber-400">
                       💾 {es ? 'Mis Estrategias' : 'My Strategies'} ({savedStrategies.length})
@@ -1145,7 +1145,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   {showSaved && (
                     <div className="px-4 pb-3 grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                       {savedStrategies.map(s => (
-                        <div key={s.id} className="flex items-center gap-2 bg-gray-700/40 rounded-lg px-3 py-2">
+                        <div key={s.id} className="flex items-center gap-2 bg-black/50/40 rounded-lg px-3 py-2">
                           <div className="flex-1 min-w-0">
                             <div className="text-xs font-semibold text-gray-200 truncate">{s.name}</div>
                             <div className="text-xs text-gray-500">{s.ticker} · {s.legs.length} {es ? 'piernas' : 'legs'} · {new Date(s.savedAt).toLocaleDateString()}</div>
@@ -1197,11 +1197,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
 
               {/* ── Legs table ── */}
               {customLegs.length > 0 && (
-                <div className="bg-gray-700/30 rounded-xl p-4 space-y-3">
+                <div className="bg-black/30 rounded-xl p-4 space-y-3">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-xs text-gray-500 border-b border-gray-700">
+                        <tr className="text-xs text-gray-500 border-b border-green-900/20">
                           <th className="py-1 text-left">{es ? 'Tipo' : 'Type'}</th>
                           <th className="py-1 text-center">{es ? 'Posición' : 'Side'}</th>
                           <th className="py-1 text-center">{es ? 'Contratos' : 'Qty'}</th>
@@ -1241,12 +1241,12 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                               : (Math.max(0, leg.strike - currentPrice) - leg.entryPremium) * sign * legQty;
                           const tc = leg.type === 'call' ? 'text-green-400' : leg.type === 'put' ? 'text-red-400' : 'text-blue-400';
                           return (
-                            <tr key={leg.id} className="border-t border-gray-700/40">
+                            <tr key={leg.id} className="border-t border-green-900/20/40">
                               <td className={`py-2 font-semibold ${tc}`}>{leg.type.toUpperCase()}</td>
                               <td className="py-2 text-center">
                                 <select value={leg.side}
                                   onChange={e => updateCustomLeg(leg.id, 'side', e.target.value)}
-                                  className="bg-gray-800 text-gray-200 rounded px-2 py-0.5 text-xs border border-gray-600">
+                                  className="bg-black/60 text-gray-200 rounded px-2 py-0.5 text-xs border border-green-900/20">
                                   <option value="long">{es ? 'Compra' : 'Buy'}</option>
                                   <option value="short">{es ? 'Venta' : 'Sell'}</option>
                                 </select>
@@ -1254,7 +1254,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                               <td className="py-2 text-center">
                                 <input type="number" value={leg.qty || 1} min={1} step={1}
                                   onChange={e => updateCustomLeg(leg.id, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                                  className="w-14 bg-gray-800 text-amber-300 rounded px-2 py-0.5 text-xs border border-gray-600 text-center" />
+                                  className="w-14 bg-black/60 text-amber-300 rounded px-2 py-0.5 text-xs border border-green-900/20 text-center" />
                                 <div className="text-xs text-gray-600 mt-0.5">{(leg.qty || 1) * 100}{es ? 'acc' : 'sh'}</div>
                               </td>
                               <td className="py-2 text-right">
@@ -1263,7 +1263,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                 ) : strikeOpts.length > 0 ? (
                                   <select value={leg.strike}
                                     onChange={e => updateCustomLeg(leg.id, 'strike', +e.target.value)}
-                                    className="bg-gray-800 text-gray-200 rounded px-2 py-0.5 text-xs border border-gray-600">
+                                    className="bg-black/60 text-gray-200 rounded px-2 py-0.5 text-xs border border-green-900/20">
                                     {strikeOpts.map((o: any) => (
                                       <option key={o.strike} value={o.strike}>${o.strike}</option>
                                     ))}
@@ -1271,7 +1271,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                 ) : (
                                   <input type="number" value={leg.strike} step="0.5"
                                     onChange={e => updateCustomLeg(leg.id, 'strike', +e.target.value)}
-                                    className="w-20 bg-gray-800 text-gray-200 rounded px-2 py-0.5 text-xs border border-gray-600 text-right" />
+                                    className="w-20 bg-black/60 text-gray-200 rounded px-2 py-0.5 text-xs border border-green-900/20 text-right" />
                                 )}
                               </td>
                               <td className="py-2 text-right">
@@ -1280,7 +1280,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                 ) : (chain?.expirations ?? []).length > 0 ? (
                                   <select value={leg.expiration}
                                     onChange={e => updateCustomLeg(leg.id, 'expiration', e.target.value)}
-                                    className="bg-gray-800 text-gray-200 rounded px-2 py-0.5 text-xs border border-gray-600">
+                                    className="bg-black/60 text-gray-200 rounded px-2 py-0.5 text-xs border border-green-900/20">
                                     {(chain?.expirations ?? []).map(exp => (
                                       <option key={exp} value={exp}>{exp}</option>
                                     ))}
@@ -1288,7 +1288,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                 ) : (
                                   <input type="text" value={leg.expiration} placeholder="YYYY-MM-DD"
                                     onChange={e => updateCustomLeg(leg.id, 'expiration', e.target.value)}
-                                    className="w-24 bg-gray-800 text-gray-200 rounded px-2 py-0.5 text-xs border border-gray-600 text-right" />
+                                    className="w-24 bg-black/60 text-gray-200 rounded px-2 py-0.5 text-xs border border-green-900/20 text-right" />
                                 )}
                               </td>
                               <td className="py-2 text-right">
@@ -1296,7 +1296,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                   <div className="flex items-center justify-end gap-1">
                                     <input type="number" value={leg.entryPremium} step="0.01"
                                       onChange={e => updateCustomLeg(leg.id, 'entryPremium', +e.target.value)}
-                                      className="w-20 bg-gray-800 text-blue-300 rounded px-2 py-0.5 text-xs border border-gray-600 text-right" />
+                                      className="w-20 bg-black/60 text-blue-300 rounded px-2 py-0.5 text-xs border border-green-900/20 text-right" />
                                     <span className="text-xs text-gray-500">/sh</span>
                                   </div>
                                 ) : (
@@ -1304,7 +1304,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                                     <span className="text-xs text-gray-500">$</span>
                                     <input type="number" value={leg.entryPremium} step="0.01" min="0"
                                       onChange={e => updateCustomLeg(leg.id, 'entryPremium', +e.target.value)}
-                                      className="w-20 bg-gray-800 text-yellow-300 rounded px-2 py-0.5 text-xs border border-gray-600 text-right" />
+                                      className="w-20 bg-black/60 text-yellow-300 rounded px-2 py-0.5 text-xs border border-green-900/20 text-right" />
                                     <span className="text-xs text-gray-500">/sh</span>
                                   </div>
                                 )}
@@ -1357,7 +1357,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                     }, 0) : null;
                     const hasChain = customLegs.some(l => l.type === 'stock' || getChainPremium(l) !== null);
                     return (
-                      <div className="pt-2 border-t border-gray-700/50 space-y-1.5">
+                      <div className="pt-2 border-t border-green-900/15 space-y-1.5">
                         {hasChain && (
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-400">{es ? 'P&L neto si cierras hoy:' : 'Net P&L if closed today:'}</span>
@@ -1404,11 +1404,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                       value={strategyName}
                       onChange={e => setStrategyName(e.target.value)}
                       placeholder={es ? 'Nombre de estrategia...' : 'Strategy name...'}
-                      className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:border-amber-500 focus:outline-none"
+                      className="flex-1 px-3 py-2 bg-black/60 border border-green-900/20 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:border-amber-500 focus:outline-none"
                       onKeyDown={e => e.key === 'Enter' && saveStrategy()}
                     />
                     <button onClick={saveStrategy}
-                      className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-amber-400 text-sm font-medium rounded-lg border border-gray-600 transition-all whitespace-nowrap">
+                      className="px-4 py-2 bg-black/50 hover:bg-green-900/15 text-amber-400 text-sm font-medium rounded-lg border border-green-900/20 transition-all whitespace-nowrap">
                       💾 {es ? 'Guardar' : 'Save'}
                     </button>
                   </div>
@@ -1417,7 +1417,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
 
               {/* ── Analysis results ── */}
               {customAnalysis && (
-                <div className="bg-gray-700/30 rounded-xl p-5 space-y-4">
+                <div className="bg-black/30 rounded-xl p-5 space-y-4">
                   <h4 className="text-lg font-bold text-amber-400">
                     {es ? 'Análisis Custom' : 'Custom Analysis'}
                   </h4>
@@ -1453,7 +1453,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   </div>
 
                   {customAnalysis.payoffDiagram?.length > 0 && (
-                    <div className="bg-gray-800/60 rounded-lg p-3">
+                    <div className="bg-black/50 rounded-lg p-3">
                       <div className="text-xs text-gray-500 mb-2">{es ? 'Diagrama de Payoff' : 'Payoff Diagram'}</div>
                       {/* contracts=1 since qty is already baked into backend quantities */}
                       <PayoffSVG
@@ -1465,7 +1465,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
 
                   <div className="grid grid-cols-4 gap-3">
                     {(['delta', 'gamma', 'theta', 'vega'] as const).map(g => (
-                      <div key={g} className="text-center bg-gray-800/40 rounded-lg p-2">
+                      <div key={g} className="text-center bg-black/60/40 rounded-lg p-2">
                         <div className="text-xs text-gray-500 uppercase">{g}</div>
                         <div className="text-sm font-semibold text-gray-200">{((customAnalysis.greeks as any)[g] ?? 0).toFixed(4)}</div>
                       </div>
@@ -1473,7 +1473,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                   </div>
 
                   {/* ── AI Evaluation ── */}
-                  <div className="border-t border-gray-700/50 pt-4">
+                  <div className="border-t border-green-900/15 pt-4">
                     {!aiEval && !aiEvalLoading && (
                       <button onClick={getAIEvaluation}
                         className="w-full py-2.5 bg-purple-700/30 hover:bg-purple-700/50 text-purple-300 font-medium rounded-lg border border-purple-600/40 text-sm transition-all">
@@ -1503,21 +1503,21 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
                               className="text-gray-600 hover:text-gray-400 text-xs ml-1">↻</button>
                           </div>
                         </div>
-                        <p className="text-xs text-gray-300 bg-gray-800/50 rounded-lg px-3 py-2 leading-relaxed">{aiEval.summary}</p>
+                        <p className="text-xs text-gray-300 bg-black/40 rounded-lg px-3 py-2 leading-relaxed">{aiEval.summary}</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                          <div className="bg-gray-800/40 rounded-lg p-3">
+                          <div className="bg-black/60/40 rounded-lg p-3">
                             <div className="text-purple-400 font-medium mb-1">⚡ {es ? 'Análisis de Greeks' : 'Greeks Analysis'}</div>
                             <p className="text-gray-400 leading-relaxed">{aiEval.greeksAnalysis}</p>
                           </div>
-                          <div className="bg-gray-800/40 rounded-lg p-3">
+                          <div className="bg-black/60/40 rounded-lg p-3">
                             <div className="text-amber-400 font-medium mb-1">⚖️ {es ? 'Riesgo / Reward' : 'Risk / Reward'}</div>
                             <p className="text-gray-400 leading-relaxed">{aiEval.riskAnalysis}</p>
                           </div>
-                          <div className="bg-gray-800/40 rounded-lg p-3">
+                          <div className="bg-black/60/40 rounded-lg p-3">
                             <div className="text-cyan-400 font-medium mb-1">📈 {es ? 'Mercado ideal' : 'Ideal Market'}</div>
                             <p className="text-gray-400 leading-relaxed">{aiEval.marketOutlook}</p>
                           </div>
-                          <div className="bg-gray-800/40 rounded-lg p-3">
+                          <div className="bg-black/60/40 rounded-lg p-3">
                             <div className="text-green-400 font-medium mb-1">💡 {es ? 'Sugerencias' : 'Suggestions'}</div>
                             <ul className="space-y-1">
                               {(aiEval.suggestions ?? []).map((s: string, i: number) => (

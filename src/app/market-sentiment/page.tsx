@@ -81,7 +81,7 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
         <span className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider">{label}</span>
         <span className={`text-xs sm:text-sm font-bold ${textColor}`}>{score.toFixed(0)}</span>
       </div>
-      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-black/60 rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${score}%` }} />
       </div>
     </div>
@@ -316,7 +316,7 @@ export default function MarketSentimentPage() {
       case 'neutral': return 'from-amber-950/70 to-yellow-950/50 border-amber-500/40';
       case 'bearish': return 'from-orange-950/70 to-red-950/50 border-orange-500/40';
       case 'very_bearish': return 'from-red-950/90 to-red-950/40 border-red-500/60';
-      default: return 'from-gray-900 to-slate-900 border-white/[0.08]';
+      default: return 'from-black to-slate-900 border-white/[0.08]';
     }
   };
 
@@ -324,7 +324,7 @@ export default function MarketSentimentPage() {
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 to-slate-950 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gradient-to-br from-black to-slate-950 flex items-center justify-center px-4">
         <div className="text-center">
           <LogoLoader size="xl" />
           <p className="text-xl sm:text-2xl font-light text-emerald-400 mt-6">{t('marketSentiment.analyzing')}</p>
@@ -336,7 +336,7 @@ export default function MarketSentimentPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 to-slate-950 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gradient-to-br from-black to-slate-950 flex items-center justify-center px-4">
         <div className="text-center max-w-md">
           <div className="text-5xl mb-4">⚠️</div>
           <h2 className="text-xl sm:text-2xl font-bold text-red-400 mb-4">{t('marketSentiment.error')}</h2>
@@ -352,11 +352,11 @@ export default function MarketSentimentPage() {
   if (!data) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 pb-16">
+    <div className="min-h-screen bg-gradient-to-br from-black via-slate-900 to-black pb-16">
       <Header />
 
       {/* Sub-header */}
-      <header className="border-b border-gray-800 bg-black/70 backdrop-blur-lg mt-16">
+      <header className="border-b border-green-900/20 bg-black/70 backdrop-blur-lg mt-16">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 sm:gap-4">
@@ -366,7 +366,7 @@ export default function MarketSentimentPage() {
                   <span className="text-base sm:text-xl font-bold text-white">Market Pulse</span>
                   <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-900/60 text-cyan-400 border border-cyan-700/50 uppercase tracking-wider">Beta</span>
                 </div>
-                <div className="text-[9px] sm:text-[10px] text-emerald-400 font-mono tracking-[2px] sm:tracking-[3px] uppercase">
+                <div className="text-[9px] sm:text-[10px] text-emerald-400 font-data tracking-[2px] sm:tracking-[3px] uppercase">
                   NEURAL v{data.version}
                 </div>
               </div>
@@ -383,7 +383,7 @@ export default function MarketSentimentPage() {
               )}
               <button
                 onClick={() => setAutoRefresh(!autoRefresh)}
-                className={`px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs rounded-full border transition-all ${autoRefresh ? 'bg-green-500/10 border-green-500 text-green-400' : 'bg-gray-800 border-white/[0.06] text-gray-500'}`}
+                className={`px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs rounded-full border transition-all ${autoRefresh ? 'bg-green-500/10 border-green-500 text-green-400' : 'bg-black/60 border-white/[0.06] text-gray-500'}`}
               >
                 {autoRefresh ? '🔄 Auto' : '⏸️ Off'}
               </button>
@@ -448,7 +448,7 @@ export default function MarketSentimentPage() {
         </div>
 
         {/* ── BRIEFING ── */}
-        <div className="bg-gray-900/70 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+        <div className="bg-black/80/70 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
           <h3 className="text-base sm:text-lg font-bold text-emerald-400 mb-3 sm:mb-4 flex items-center gap-2">
             🧠 {t('marketSentiment.neuralAnalysis')}
           </h3>
@@ -457,7 +457,7 @@ export default function MarketSentimentPage() {
 
         {/* ── TEMPORAL TRENDS ── */}
         {data.trends && !data.trends.note && (
-          <div className="bg-gray-900/60 border border-cyan-800/30 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+          <div className="bg-black/50 border border-cyan-800/30 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
             <h3 className="text-base sm:text-lg font-bold text-cyan-400 mb-4 flex items-center gap-2">
               📈 {locale === 'es' ? 'Tendencia Histórica' : 'Historical Trend'}
               {data.trends.anomaly && (
@@ -466,7 +466,7 @@ export default function MarketSentimentPage() {
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {/* EMA Score */}
-              <div className="bg-gray-800/50 rounded-xl p-3 sm:p-4 text-center border border-cyan-800/20">
+              <div className="bg-black/40 rounded-xl p-3 sm:p-4 text-center border border-cyan-800/20">
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
                   {locale === 'es' ? 'Score EMA' : 'EMA Score'}
                 </div>
@@ -476,7 +476,7 @@ export default function MarketSentimentPage() {
                 <div className="text-[9px] text-gray-600 mt-0.5">α=0.3 EMA</div>
               </div>
               {/* Daily delta */}
-              <div className="bg-gray-800/50 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+              <div className="bg-black/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
                   {locale === 'es' ? 'Δ Día' : 'Δ Day'}
                 </div>
@@ -486,7 +486,7 @@ export default function MarketSentimentPage() {
                 <div className="text-[9px] text-gray-600 mt-0.5">{locale === 'es' ? 'vs ayer' : 'vs yesterday'}</div>
               </div>
               {/* Weekly mean */}
-              <div className="bg-gray-800/50 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+              <div className="bg-black/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
                   {locale === 'es' ? 'Media 7d' : '7d Mean'}
                 </div>
@@ -504,7 +504,7 @@ export default function MarketSentimentPage() {
                 </div>
               </div>
               {/* Monthly delta */}
-              <div className="bg-gray-800/50 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+              <div className="bg-black/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
                   {locale === 'es' ? 'Δ 30d' : 'Δ 30d'}
                 </div>
@@ -530,16 +530,16 @@ export default function MarketSentimentPage() {
         )}
 
         {/* ── SCORE BREAKDOWN ── */}
-        <div className="bg-gray-900/60 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+        <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
           <h3 className="text-base sm:text-lg font-bold text-teal-400 mb-4 sm:mb-6 flex items-center gap-2">
             📊 {t('marketSentiment.neuralLayers')}
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {Object.entries(data.scores).map(([key, value]) => (
-              <div key={key} className="bg-gray-800/60 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center border border-white/[0.06]/50">
+              <div key={key} className="bg-black/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center border border-white/[0.06]/50">
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{scoreLabels[key] || key}</div>
                 <div className={`text-2xl sm:text-3xl font-bold ${scoreColor(value)}`}>{value.toFixed(0)}</div>
-                <div className="h-1 bg-gray-700 rounded-full mt-2 overflow-hidden">
+                <div className="h-1 bg-black/50 rounded-full mt-2 overflow-hidden">
                   <div className={`h-full rounded-full ${value >= 60 ? 'bg-green-500' : value >= 45 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${value}%` }} />
                 </div>
               </div>
@@ -549,17 +549,17 @@ export default function MarketSentimentPage() {
 
         {/* ── MACRO ANALYSIS ── */}
         {data.macroAnalysis && (
-          <div className="bg-gray-900/60 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+          <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
             <h3 className="text-base sm:text-lg font-bold text-teal-400 mb-4 sm:mb-6 flex items-center gap-2">
               🌐 {t('marketSentiment.macroAnalysis')}
             </h3>
             <div className="space-y-4 sm:space-y-6">
               {/* Breadth bars */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div className="bg-gray-800/50 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/[0.06]">
+                <div className="bg-black/40 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/[0.06]">
                   <ScoreBar score={data.macroAnalysis.sectorBreadth} label={t('marketSentiment.sectorBreadth') + ' %'} />
                 </div>
-                <div className="bg-gray-800/50 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/[0.06]">
+                <div className="bg-black/40 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/[0.06]">
                   <ScoreBar score={data.macroAnalysis.industryBreadth} label={t('marketSentiment.industryBreadth') + ' %'} />
                 </div>
               </div>
@@ -573,7 +573,7 @@ export default function MarketSentimentPage() {
                       {data.macroAnalysis.hotSectors.slice(0, 5).map((s, i) => (
                         <div key={i} className="flex justify-between items-center">
                           <span className="text-green-300 text-xs sm:text-sm truncate mr-2">{s.sector}</span>
-                          <span className="text-green-400 text-xs font-mono shrink-0">+{s.change?.toFixed(2)}%</span>
+                          <span className="text-green-400 text-xs font-data shrink-0">+{s.change?.toFixed(2)}%</span>
                         </div>
                       ))}
                     </div>
@@ -586,7 +586,7 @@ export default function MarketSentimentPage() {
                       {data.macroAnalysis.coldSectors.slice(0, 5).map((s, i) => (
                         <div key={i} className="flex justify-between items-center">
                           <span className="text-red-300 text-xs sm:text-sm truncate mr-2">{s.sector}</span>
-                          <span className="text-red-400 text-xs font-mono shrink-0">{s.change?.toFixed(2)}%</span>
+                          <span className="text-red-400 text-xs font-data shrink-0">{s.change?.toFixed(2)}%</span>
                         </div>
                       ))}
                     </div>
@@ -615,7 +615,7 @@ export default function MarketSentimentPage() {
 
         {/* ── SIGNALS ── */}
         {data.signals.length > 0 && (
-          <div className="bg-gray-900/60 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+          <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
             <h3 className="text-base sm:text-lg font-bold text-emerald-400 mb-4 sm:mb-6 flex items-center gap-2">
               📡 {t('marketSentiment.signalsDetected')} ({data.signals.length})
             </h3>
@@ -625,7 +625,7 @@ export default function MarketSentimentPage() {
                   signal.type === 'bullish' ? 'bg-emerald-900/25 border-emerald-700/50' :
                   signal.type === 'bearish' ? 'bg-red-900/25 border-red-700/50' :
                   signal.type === 'cautionary' ? 'bg-amber-900/25 border-amber-700/50' :
-                  'bg-gray-800/50 border-white/[0.06]'
+                  'bg-black/40 border-white/[0.06]'
                 }`}>
                   <div className="flex items-start gap-2">
                     <span className="text-lg sm:text-xl shrink-0">{signal.emoji}</span>
@@ -646,11 +646,11 @@ export default function MarketSentimentPage() {
         )}
 
         {/* ── BREADTH BAR ── */}
-        <div className="bg-gray-900/60 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+        <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
           <h3 className="text-base sm:text-lg font-bold text-amber-400 mb-4">📊 {t('marketSentiment.marketBreadth')}</h3>
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
             <div className="flex-1 w-full">
-              <div className="h-5 sm:h-6 bg-gray-800 rounded-full overflow-hidden flex">
+              <div className="h-5 sm:h-6 bg-black/60 rounded-full overflow-hidden flex">
                 <div className="h-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all" style={{ width: `${data.moversAnalysis.breadthRatio * 100}%` }} />
                 <div className="h-full bg-gradient-to-r from-red-500 to-rose-400" style={{ width: `${(1 - data.moversAnalysis.breadthRatio) * 100}%` }} />
               </div>
@@ -680,7 +680,7 @@ export default function MarketSentimentPage() {
               <div className="space-y-1.5 sm:space-y-2">
                 {data.moversAnalysis.topGainers.slice(0, 8).map((stock, idx) => (
                   <Link key={idx} href={`/analizar?ticker=${stock.symbol}`}
-                    className="flex items-center justify-between bg-gray-900/50 p-2.5 sm:p-3 rounded-xl hover:bg-gray-800/60 transition">
+                    className="flex items-center justify-between bg-black/40 p-2.5 sm:p-3 rounded-xl hover:bg-black/50 transition">
                     <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       <span className="text-gray-600 text-xs w-4 shrink-0">{idx + 1}</span>
                       <div className="min-w-0">
@@ -709,7 +709,7 @@ export default function MarketSentimentPage() {
               <div className="space-y-1.5 sm:space-y-2">
                 {data.moversAnalysis.topLosers.slice(0, 8).map((stock, idx) => (
                   <Link key={idx} href={`/analizar?ticker=${stock.symbol}`}
-                    className="flex items-center justify-between bg-gray-900/50 p-2.5 sm:p-3 rounded-xl hover:bg-gray-800/60 transition">
+                    className="flex items-center justify-between bg-black/40 p-2.5 sm:p-3 rounded-xl hover:bg-black/50 transition">
                     <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       <span className="text-gray-600 text-xs w-4 shrink-0">{idx + 1}</span>
                       <div className="min-w-0">
@@ -731,7 +731,7 @@ export default function MarketSentimentPage() {
         {/* ── SECTOR ROTATION ── */}
         {(data.moversAnalysis.sectorRotation.hot.length > 0 || data.moversAnalysis.sectorRotation.cold.length > 0) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
-            <div className="bg-gray-900/60 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-4 sm:p-6">
+            <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-4 sm:p-6">
               <h3 className="text-green-400 font-bold mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                 🔥 {t('marketSentiment.hotSectorsRotation')}
               </h3>
@@ -744,7 +744,7 @@ export default function MarketSentimentPage() {
                 ))}
               </div>
             </div>
-            <div className="bg-gray-900/60 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-4 sm:p-6">
+            <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-4 sm:p-6">
               <h3 className="text-red-400 font-bold mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                 ❄️ {t('marketSentiment.coldSectorsRotation')}
               </h3>
@@ -762,10 +762,10 @@ export default function MarketSentimentPage() {
 
         {/* ── REASONING CHAIN (collapsible) ── */}
         {data.reasoningChain && data.reasoningChain.length > 0 && (
-          <div className="bg-gray-900/60 border border-white/[0.06] rounded-2xl sm:rounded-3xl overflow-hidden">
+          <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl overflow-hidden">
             <button
               onClick={() => setShowReasoning(!showReasoning)}
-              className="w-full px-5 sm:px-8 py-4 sm:py-5 flex items-center justify-between hover:bg-gray-800/30 transition"
+              className="w-full px-5 sm:px-8 py-4 sm:py-5 flex items-center justify-between hover:bg-black/60/30 transition"
             >
               <h3 className="text-sm sm:text-lg font-bold text-amber-400 flex items-center gap-2">
                 🔗 {t('marketSentiment.reasoningChain')} ({data.reasoningChain.length} steps)
@@ -773,7 +773,7 @@ export default function MarketSentimentPage() {
               <span className="text-gray-400 text-lg">{showReasoning ? '▲' : '▼'}</span>
             </button>
             {showReasoning && (
-              <div className="px-5 sm:px-8 pb-5 sm:pb-8 space-y-2 sm:space-y-3 border-t border-gray-800">
+              <div className="px-5 sm:px-8 pb-5 sm:pb-8 space-y-2 sm:space-y-3 border-t border-green-900/20">
                 {data.reasoningChain.map((step, i) => (
                   <div key={i} className="flex items-start gap-3 pt-2">
                     <div className="shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-[10px] sm:text-xs font-bold">
@@ -788,12 +788,12 @@ export default function MarketSentimentPage() {
         )}
 
         {/* ── FOOTER ── */}
-        <div className="text-center pt-6 border-t border-gray-800">
+        <div className="text-center pt-6 border-t border-green-900/20">
           <p className="text-gray-500 text-xs mb-4">
             Neural Market Pulse v{data.version} · {t('marketSentiment.footerText')}
           </p>
           <div className="flex justify-center gap-3 sm:gap-4 flex-wrap">
-            <Link href="/" className="px-4 sm:px-6 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition text-xs sm:text-sm">
+            <Link href="/" className="px-4 sm:px-6 py-2 bg-black/60 hover:bg-black/50 text-gray-300 rounded-lg transition text-xs sm:text-sm">
               ← {t('marketSentiment.backToHome')}
             </Link>
             <Link href="/analizar" className="px-4 sm:px-6 py-2 bg-gradient-to-r from-emerald-600 to-emerald-600 hover:from-emerald-500 hover:to-emerald-500 text-white rounded-lg transition text-xs sm:text-sm">

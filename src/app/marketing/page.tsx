@@ -83,7 +83,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
       {/* Navigation */}
       <Header />
 
@@ -114,7 +114,7 @@ export default function Home() {
               value={ticker}
               onChange={(e) => setTicker(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && handleAnalizar()}
-              className="flex-1 px-6 py-4 bg-gray-800/50 border border-white/[0.06] rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent placeholder-gray-500"
+              className="flex-1 px-6 py-4 bg-black/40 border border-white/[0.06] rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent placeholder-gray-500"
             />
             <button
               onClick={handleAnalizar}
@@ -162,7 +162,7 @@ export default function Home() {
       </section>
 
       {/* Market Movers Section - NEW */}
-      <section id="market" className="py-20 px-4 bg-gray-800/30">
+      <section id="market" className="py-20 px-4 bg-black/60/30">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-2xl sm:text-4xl font-bold mb-4">{t('market.title')}</h2>
@@ -171,7 +171,7 @@ export default function Home() {
             </p>
             <Link
               href="/market-sentiment"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-xl transition-all border border-gray-700 text-sm"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-black/60 hover:bg-black/50 text-gray-300 font-semibold rounded-xl transition-all border border-green-900/20 text-sm"
             >
               {t('market.neuralAnalysis')}
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -187,7 +187,7 @@ export default function Home() {
           ) : (
             <div className="grid lg:grid-cols-3 gap-8">
               {/* Top Gainers */}
-              <div className="bg-gray-800/50 rounded-2xl border border-white/[0.06] p-6">
+              <div className="bg-black/40 rounded-2xl border border-white/[0.06] p-6">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-2xl">📈</span>
                   <h3 className="text-xl font-bold text-green-400">{t('market.topGainers')}</h3>
@@ -222,7 +222,7 @@ export default function Home() {
               </div>
 
               {/* Top Losers */}
-              <div className="bg-gray-800/50 rounded-2xl border border-white/[0.06] p-6">
+              <div className="bg-black/40 rounded-2xl border border-white/[0.06] p-6">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-2xl">📉</span>
                   <h3 className="text-xl font-bold text-red-400">{t('market.topLosers')}</h3>
@@ -257,7 +257,7 @@ export default function Home() {
               </div>
 
               {/* Latest News */}
-              <div className="bg-gray-800/50 rounded-2xl border border-white/[0.06] p-6 lg:row-span-1">
+              <div className="bg-black/40 rounded-2xl border border-white/[0.06] p-6 lg:row-span-1">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-2xl">📰</span>
                   <h3 className="text-xl font-bold text-green-400">{t('market.latestNews')}</h3>
@@ -272,7 +272,7 @@ export default function Home() {
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block p-3 rounded-xl bg-gray-700/30 border border-white/[0.08]/30 hover:border-green-500/50 transition"
+                        className="block p-3 rounded-xl bg-black/30 border border-white/[0.08]/30 hover:border-green-500/50 transition"
                       >
                         <div className="flex gap-3">
                           {item.image && (
@@ -353,7 +353,7 @@ export default function Home() {
                 description: t('features.forecasts.description')
               },
             ].map((feature) => (
-              <div key={feature.title} className="p-6 rounded-2xl bg-gray-800/50 border border-gray-700/60 hover:border-emerald-500/50 transition group">
+              <div key={feature.title} className="p-6 rounded-2xl bg-black/40 border border-green-900/20 hover:border-emerald-500/50 transition group">
                 <div className="w-1 h-6 bg-gradient-to-b from-emerald-400 to-teal-500 rounded-full mb-4"></div>
                 <h3 className="text-lg font-bold mb-2 group-hover:text-emerald-400 transition">{feature.title}</h3>
                 <p className="text-gray-400 text-sm">{feature.description}</p>
@@ -364,7 +364,7 @@ export default function Home() {
       </section>
 
       {/* How it Works */}
-      <section id="how-it-works" className="py-20 px-4 bg-gray-800/30">
+      <section id="how-it-works" className="py-20 px-4 bg-black/60/30">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-2xl sm:text-4xl font-bold mb-4">{t('howItWorks.title')}</h2>
@@ -414,7 +414,7 @@ export default function Home() {
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="py-20 px-4 bg-gray-800/30">
+      <section id="pricing" className="py-20 px-4 bg-black/60/30">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-2xl sm:text-4xl font-bold mb-4">{t('pricing.title')}</h2>
@@ -426,17 +426,17 @@ export default function Home() {
           {/* Plan headers — 4 columns */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 max-w-5xl mx-auto mb-6">
             {/* Free */}
-            <div className="p-5 rounded-2xl bg-gray-900/80 border-2 border-gray-700 flex flex-col items-center text-center">
+            <div className="p-5 rounded-2xl bg-black/60 border-2 border-green-900/20 flex flex-col items-center text-center">
               <div className="text-sm font-semibold text-gray-400 mb-1">Free</div>
               <div className="text-3xl font-black mb-1">$0</div>
               <div className="text-xs text-gray-500 mb-4">{t('pricing.perMonth')}</div>
-              <Link href="/analizar" className="w-full py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-sm font-bold transition text-center block">
+              <Link href="/analizar" className="w-full py-2 rounded-xl bg-black/60 hover:bg-black/50 text-white text-sm font-bold transition text-center block">
                 {t('pricing.free.cta')}
               </Link>
             </div>
 
             {/* Pro */}
-            <div className="p-5 rounded-2xl bg-gray-900/80 border-2 border-emerald-500 relative flex flex-col items-center text-center">
+            <div className="p-5 rounded-2xl bg-black/60 border-2 border-emerald-500 relative flex flex-col items-center text-center">
               <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap">
                 {t('pricing.mostPopular')}
               </div>
@@ -449,7 +449,7 @@ export default function Home() {
             </div>
 
             {/* Elite */}
-            <div className="p-5 rounded-2xl bg-gray-900/80 border-2 border-violet-500 flex flex-col items-center text-center">
+            <div className="p-5 rounded-2xl bg-black/60 border-2 border-violet-500 flex flex-col items-center text-center">
               <div className="text-sm font-semibold text-violet-400 mb-1">Elite</div>
               <div className="text-3xl font-black mb-1">$59</div>
               <div className="text-xs text-gray-500 mb-4">{t('pricing.perMonth')}</div>
@@ -459,7 +459,7 @@ export default function Home() {
             </div>
 
             {/* Gold */}
-            <div className="p-5 rounded-2xl bg-gray-900/80 border-2 border-yellow-500 flex flex-col items-center text-center">
+            <div className="p-5 rounded-2xl bg-black/60 border-2 border-yellow-500 flex flex-col items-center text-center">
               <div className="text-sm font-semibold text-yellow-400 mb-1">⭐ Gold</div>
               <div className="text-3xl font-black mb-1">$100</div>
               <div className="text-xs text-gray-500 mb-4">{t('pricing.perMonth')}</div>
@@ -470,11 +470,11 @@ export default function Home() {
           </div>
 
           {/* Comparison table */}
-          <div className="max-w-5xl mx-auto bg-gray-900/50 rounded-2xl border border-gray-800 overflow-hidden mb-8">
+          <div className="max-w-5xl mx-auto bg-black/40 rounded-2xl border border-green-900/20 overflow-hidden mb-8">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-800">
+                  <tr className="border-b border-green-900/20">
                     <th className="text-left p-4 text-gray-400 font-semibold min-w-[180px]">
                       {es ? 'Función' : 'Feature'}
                     </th>
@@ -499,7 +499,7 @@ export default function Home() {
                     { feature: es ? 'Acceso Early Beta'                   : 'Early Beta Access',                  free: false, pro: false, elite: false, gold: true  },
                     { feature: es ? 'Soporte'                             : 'Support',                            free: 'Email', pro: es ? 'Prior.' : 'Priority', elite: 'VIP', gold: 'VIP <2h' },
                   ] as { feature: string; free: boolean | string; pro: boolean | string; elite: boolean | string; gold: boolean | string }[]).map((row, i) => (
-                    <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/20">
+                    <tr key={i} className="border-b border-green-900/20/50 hover:bg-black/60/20">
                       <td className="p-3 text-gray-300 text-sm">{row.feature}</td>
                       <td className="p-3 text-center">{typeof row.free === 'string' ? <span className="text-gray-300 text-xs font-semibold">{row.free}</span> : row.free ? <svg className="w-4 h-4 text-emerald-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> : <span className="text-gray-600">—</span>}</td>
                       <td className="p-3 text-center bg-emerald-500/5">{typeof row.pro === 'string' ? <span className="text-gray-300 text-xs font-semibold">{row.pro}</span> : row.pro ? <svg className="w-4 h-4 text-emerald-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> : <span className="text-gray-600">—</span>}</td>
@@ -620,7 +620,7 @@ export default function Home() {
                 { title: 'Rigor Analítico', desc: 'Cada modelo fue validado contra datos reales para garantizar precisión.' },
                 { title: 'Sin Conflictos', desc: 'No vendemos recomendaciones. Solo proveemos las herramientas para que decidas vos.' },
               ].map((item) => (
-                <div key={item.title} className="p-4 rounded-xl bg-gray-800/50 border border-gray-700/60">
+                <div key={item.title} className="p-4 rounded-xl bg-black/40 border border-green-900/20">
                   <div className="w-6 h-0.5 bg-gradient-to-r from-emerald-400 to-teal-400 rounded-full mb-3"></div>
                   <div className="font-semibold text-sm mb-1 text-white">{item.title}</div>
                   <div className="text-xs text-gray-500 leading-relaxed">{item.desc}</div>
@@ -632,7 +632,7 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-4 bg-gray-800/30">
+      <section className="py-20 px-4 bg-black/60/30">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-2xl sm:text-4xl font-bold mb-6">
             {t('cta.title')}
@@ -649,7 +649,7 @@ export default function Home() {
             </Link>
             <Link
               href="/analizar"
-              className="px-8 py-4 border border-white/[0.08] rounded-xl text-lg font-semibold hover:bg-gray-800 transition"
+              className="px-8 py-4 border border-white/[0.08] rounded-xl text-lg font-semibold hover:bg-black/60 transition"
             >
               {t('cta.tryWithoutRegister')}
             </Link>
@@ -658,7 +658,7 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="py-12 px-4 border-t border-gray-800">
+      <footer className="py-12 px-4 border-t border-green-900/20">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
             {/* Company */}
@@ -707,7 +707,7 @@ export default function Home() {
           </div>
 
           {/* Bottom Footer */}
-          <div className="flex flex-col md:flex-row items-center justify-between pt-8 border-t border-gray-800">
+          <div className="flex flex-col md:flex-row items-center justify-between pt-8 border-t border-green-900/20">
             <div className="flex items-center gap-3 mb-4 md:mb-0">
               <Logo size="sm" showText={false} linkTo="/" />
               <span className="text-gray-400">© 2025 Prismo. {t('footer.copyright')}</span>
@@ -716,7 +716,7 @@ export default function Home() {
             {/* Social Links */}
             <div className="flex items-center gap-4">
               {['Twitter', 'LinkedIn', 'GitHub', 'YouTube'].map((social) => (
-                <a key={social} href="#" className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 transition">
+                <a key={social} href="#" className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center text-gray-400 hover:text-white hover:bg-black/50 transition">
                   {social[0]}
                 </a>
               ))}

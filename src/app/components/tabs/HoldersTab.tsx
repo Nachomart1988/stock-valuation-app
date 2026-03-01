@@ -389,14 +389,14 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
         </div>
         {(positionsSummary || ownershipSummary) && (
           <div className="flex items-center gap-4">
-            <div className="text-right bg-gray-950 px-4 py-2 rounded-xl border border-green-600">
+            <div className="text-right bg-black/80 px-4 py-2 rounded-xl border border-green-600">
               <p className="text-xs text-green-400">{t('holdersTab.institutionalOwnership')}</p>
               <p className="text-xl font-bold text-green-400">
                 {formatPercent(positionsSummary?.ownershipPercent || ownershipSummary?.institutionalOwnership)}
               </p>
             </div>
             {positionsSummary && (
-              <div className="text-right bg-gradient-to-r bg-gray-900 px-4 py-2 rounded-xl border border-emerald-600">
+              <div className="text-right bg-gradient-to-r bg-black/80 px-4 py-2 rounded-xl border border-emerald-600">
                 <p className="text-xs text-emerald-400">Q{positionsSummary.quarter} {positionsSummary.year}</p>
                 <p className="text-xl font-bold text-emerald-400">
                   {formatNumber(positionsSummary.investorsHolding)} {t('holdersTab.institutionalHolders')}
@@ -409,7 +409,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
 
       {/* Positions Summary Cards - NEW */}
       {positionsSummary && (
-        <div className="bg-gray-950 p-6 rounded-xl border border-green-600">
+        <div className="bg-black/80 p-6 rounded-xl border border-green-600">
           <h4 className="text-2xl font-bold text-green-400 mb-6 flex items-center gap-3">
             <span>🏛️</span> {t('holdersTab.positionsSummary')}
             <span className="text-sm font-normal text-gray-400">
@@ -419,7 +419,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
 
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {/* Investors Holding */}
-            <div className="bg-gray-800/50 p-4 rounded-xl">
+            <div className="bg-black/40 p-4 rounded-xl">
               <p className="text-xs text-gray-400 mb-1">{t('holdersTab.investorsHolding')}</p>
               <p className="text-2xl font-bold text-white">{formatNumber(positionsSummary.investorsHolding)}</p>
               <p className={`text-sm ${getChangeColor(positionsSummary.investorsHoldingChange)}`}>
@@ -428,7 +428,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             </div>
 
             {/* Total Invested */}
-            <div className="bg-gray-800/50 p-4 rounded-xl">
+            <div className="bg-black/40 p-4 rounded-xl">
               <p className="text-xs text-gray-400 mb-1">{t('holdersTab.totalInvested')}</p>
               <p className="text-2xl font-bold text-green-400">{formatCurrency(positionsSummary.totalInvested)}</p>
               <p className={`text-sm ${getChangeColor(positionsSummary.totalInvestedChange)}`}>
@@ -437,7 +437,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             </div>
 
             {/* 13F Shares */}
-            <div className="bg-gray-800/50 p-4 rounded-xl">
+            <div className="bg-black/40 p-4 rounded-xl">
               <p className="text-xs text-gray-400 mb-1">{t('holdersTab.thirteenFShares')}</p>
               <p className="text-2xl font-bold text-green-400">{formatShares(positionsSummary.numberOf13FShares)}</p>
               <p className={`text-sm ${getChangeColor(positionsSummary.numberOf13FSharesChange)}`}>
@@ -446,7 +446,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             </div>
 
             {/* Ownership % */}
-            <div className="bg-gray-800/50 p-4 rounded-xl">
+            <div className="bg-black/40 p-4 rounded-xl">
               <p className="text-xs text-gray-400 mb-1">{t('holdersTab.ownershipPercent')}</p>
               <p className="text-2xl font-bold text-emerald-400">{formatPercent(positionsSummary.ownershipPercent)}</p>
               <p className={`text-sm ${getChangeColor(positionsSummary.ownershipPercentChange)}`}>
@@ -455,7 +455,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             </div>
 
             {/* Put/Call Ratio */}
-            <div className="bg-gray-800/50 p-4 rounded-xl">
+            <div className="bg-black/40 p-4 rounded-xl">
               <p className="text-xs text-gray-400 mb-1">{t('holdersTab.putCallRatio')}</p>
               <p className={`text-2xl font-bold ${(positionsSummary.putCallRatio || 0) > 1 ? 'text-red-400' : 'text-green-400'}`}>
                 {positionsSummary.putCallRatio?.toFixed(2) || 'N/A'}
@@ -515,7 +515,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
 
           {/* Options Activity */}
           {(positionsSummary.totalCalls > 0 || positionsSummary.totalPuts > 0) && (
-            <div className="mt-6 bg-gray-800/50 p-4 rounded-xl">
+            <div className="mt-6 bg-black/40 p-4 rounded-xl">
               <h5 className="text-sm font-semibold text-gray-300 mb-3">Options Activity (13F)</h5>
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
@@ -540,7 +540,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
 
       {/* Quarterly Trend Chart */}
       {positionsHistory.length > 1 && (
-        <div className="bg-gradient-to-r from-gray-950 to-teal-900/30 p-6 rounded-xl border border-emerald-600">
+        <div className="bg-gradient-to-r from-black to-teal-900/30 p-6 rounded-xl border border-emerald-600">
           <h4 className="text-xl font-bold text-emerald-400 mb-4">📊 Quarterly Ownership Trend</h4>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -558,7 +558,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
               </thead>
               <tbody>
                 {positionsHistory.map((q, idx) => (
-                  <tr key={`${q.year}-${q.quarter}`} className={`border-b border-gray-800 ${idx === 0 ? 'bg-emerald-900/20' : ''}`}>
+                  <tr key={`${q.year}-${q.quarter}`} className={`border-b border-green-900/20 ${idx === 0 ? 'bg-emerald-900/20' : ''}`}>
                     <td className="py-2 px-3 font-medium text-gray-200">
                       Q{q.quarter} {q.year}
                       {idx === 0 && <span className="ml-2 text-xs text-emerald-400">(Latest)</span>}
@@ -588,29 +588,29 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             </span>
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            <div className="bg-gray-800/50 p-4 rounded-xl text-center">
+            <div className="bg-black/40 p-4 rounded-xl text-center">
               <p className="text-3xl font-bold text-green-400">{insiderStats.purchases || 0}</p>
               <p className="text-sm text-gray-400 mt-1">{t('holdersTab.purchases')}</p>
             </div>
-            <div className="bg-gray-800/50 p-4 rounded-xl text-center">
+            <div className="bg-black/40 p-4 rounded-xl text-center">
               <p className="text-3xl font-bold text-red-400">{insiderStats.sales || 0}</p>
               <p className="text-sm text-gray-400 mt-1">{t('holdersTab.sales')}</p>
             </div>
-            <div className="bg-gray-800/50 p-4 rounded-xl text-center">
+            <div className="bg-black/40 p-4 rounded-xl text-center">
               <p className={`text-3xl font-bold ${(insiderStats.buySellRatio || 0) >= 1 ? 'text-green-400' : 'text-red-400'}`}>
                 {insiderStats.buySellRatio?.toFixed(2) || 'N/A'}
               </p>
               <p className="text-sm text-gray-400 mt-1">{t('holdersTab.buySellRatio')}</p>
             </div>
-            <div className="bg-gray-800/50 p-4 rounded-xl text-center">
+            <div className="bg-black/40 p-4 rounded-xl text-center">
               <p className="text-3xl font-bold text-green-400">{formatCurrency(insiderStats.totalBought)}</p>
               <p className="text-sm text-gray-400 mt-1">{t('holdersTab.totalBought')}</p>
             </div>
-            <div className="bg-gray-800/50 p-4 rounded-xl text-center">
+            <div className="bg-black/40 p-4 rounded-xl text-center">
               <p className="text-3xl font-bold text-red-400">{formatCurrency(insiderStats.totalSold)}</p>
               <p className="text-sm text-gray-400 mt-1">{t('holdersTab.totalSold')}</p>
             </div>
-            <div className="bg-gray-800/50 p-4 rounded-xl text-center">
+            <div className="bg-black/40 p-4 rounded-xl text-center">
               <p className={`text-3xl font-bold ${(insiderStats.totalBought || 0) >= (insiderStats.totalSold || 0) ? 'text-green-400' : 'text-red-400'}`}>
                 {formatCurrency((insiderStats.totalBought || 0) - (insiderStats.totalSold || 0))}
               </p>
@@ -623,7 +623,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
               <span className="text-green-400">Buying Activity</span>
               <span className="text-red-400">Selling Activity</span>
             </div>
-            <div className="h-4 bg-gray-700 rounded-full overflow-hidden flex">
+            <div className="h-4 bg-black/50 rounded-full overflow-hidden flex">
               {(() => {
                 const total = (insiderStats.totalBought || 0) + (insiderStats.totalSold || 0);
                 const buyPercent = total > 0 ? ((insiderStats.totalBought || 0) / total) * 100 : 50;
@@ -646,7 +646,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
           className={`px-4 py-2 rounded-t-xl font-semibold transition-all whitespace-nowrap ${
             activeView === 'summary'
               ? 'bg-green-600 text-white'
-              : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+              : 'bg-black/50 text-gray-400 hover:bg-green-900/15 hover:text-white'
           }`}
         >
           {t('holdersTab.summary')}
@@ -657,7 +657,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             className={`px-4 py-2 rounded-t-xl font-semibold transition-all whitespace-nowrap ${
               activeView === 'institutional'
                 ? 'bg-green-600 text-white'
-                : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                : 'bg-black/50 text-gray-400 hover:bg-green-900/15 hover:text-white'
             }`}
           >
             {t('holdersTab.institutional')} ({institutionalHolders.length})
@@ -669,7 +669,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             className={`px-4 py-2 rounded-t-xl font-semibold transition-all whitespace-nowrap ${
               activeView === 'mutualfunds'
                 ? 'bg-green-600 text-white'
-                : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                : 'bg-black/50 text-gray-400 hover:bg-green-900/15 hover:text-white'
             }`}
           >
             {t('holdersTab.mutualFunds')} ({mutualFundHolders.length})
@@ -681,7 +681,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             className={`px-4 py-2 rounded-t-xl font-semibold transition-all whitespace-nowrap ${
               activeView === 'analytics'
                 ? 'bg-emerald-600 text-white'
-                : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                : 'bg-black/50 text-gray-400 hover:bg-green-900/15 hover:text-white'
             }`}
           >
             {t('holdersTab.analytics')} ({institutionalAnalytics.length})
@@ -691,23 +691,23 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
 
       {/* Summary View */}
       {activeView === 'summary' && (
-        <div className="bg-gray-800 rounded-xl border border-white/[0.06] p-6">
+        <div className="bg-black/60 rounded-xl border border-white/[0.06] p-6">
           <h4 className="text-lg font-semibold text-gray-200 mb-4">Quick Summary</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gray-700 rounded-lg p-4 text-center">
+            <div className="bg-black/50 rounded-lg p-4 text-center">
               <p className="text-3xl font-bold text-green-400">{institutionalHolders.length}</p>
               <p className="text-sm text-gray-400">Institutional Holders</p>
             </div>
-            <div className="bg-gray-700 rounded-lg p-4 text-center">
+            <div className="bg-black/50 rounded-lg p-4 text-center">
               <p className="text-3xl font-bold text-green-400">{mutualFundHolders.length}</p>
               <p className="text-sm text-gray-400">Mutual Fund Holders</p>
             </div>
-            <div className="bg-gray-700 rounded-lg p-4 text-center">
+            <div className="bg-black/50 rounded-lg p-4 text-center">
               <p className="text-2xl font-bold text-amber-400">{formatCurrency(totalInstitutionalValue)}</p>
               <p className="text-sm text-gray-400">Total Inst. Value</p>
             </div>
             {insiderStats && (
-              <div className="bg-gray-700 rounded-lg p-4 text-center">
+              <div className="bg-black/50 rounded-lg p-4 text-center">
                 <p className={`text-2xl font-bold ${(insiderStats.buySellRatio || 0) >= 1 ? 'text-green-400' : 'text-red-400'}`}>
                   {insiderStats.buySellRatio?.toFixed(2) || 'N/A'}x
                 </p>
@@ -725,7 +725,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             <p className="text-gray-400 text-center py-8">No institutional holder data available</p>
           ) : (
             <>
-              <div className="bg-gray-800/50 p-4 rounded-xl flex justify-between items-center flex-wrap gap-4">
+              <div className="bg-black/40 p-4 rounded-xl flex justify-between items-center flex-wrap gap-4">
                 <span className="text-gray-400">Top {institutionalHolders.length} Institutional Holders</span>
                 <div className="flex gap-6">
                   <span className="text-gray-300">
@@ -751,7 +751,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
                   </thead>
                   <tbody>
                     {institutionalHolders.map((holder, idx) => (
-                      <tr key={idx} className="border-b border-gray-800 hover:bg-gray-800/50">
+                      <tr key={idx} className="border-b border-green-900/20 hover:bg-black/40">
                         <td className="py-3 px-4 text-gray-500">{idx + 1}</td>
                         <td className="py-3 px-4 text-gray-200 font-medium">{holder.holder}</td>
                         <td className="py-3 px-4 text-right text-gray-100">{formatShares(holder.shares)}</td>
@@ -794,7 +794,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
                 </thead>
                 <tbody>
                   {mutualFundHolders.map((holder, idx) => (
-                    <tr key={idx} className="border-b border-gray-800 hover:bg-gray-800/50">
+                    <tr key={idx} className="border-b border-green-900/20 hover:bg-black/40">
                       <td className="py-3 px-4 text-gray-500">{idx + 1}</td>
                       <td className="py-3 px-4 text-gray-200 font-medium">{holder.holder}</td>
                       <td className="py-3 px-4 text-right text-gray-100">{formatShares(holder.shares)}</td>
@@ -822,7 +822,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
             <p className="text-gray-400 text-center py-8">No institutional analytics data available</p>
           ) : (
             <>
-              <div className="bg-gray-800/50 p-4 rounded-xl">
+              <div className="bg-black/40 p-4 rounded-xl">
                 <p className="text-gray-400">
                   Detailed analytics for {institutionalAnalytics.length} institutional holders showing performance, holding period, and portfolio changes.
                 </p>
@@ -843,7 +843,7 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
                   </thead>
                   <tbody>
                     {institutionalAnalytics.map((holder, idx) => (
-                      <tr key={idx} className="border-b border-gray-800 hover:bg-gray-800/50">
+                      <tr key={idx} className="border-b border-green-900/20 hover:bg-black/40">
                         <td className="py-3 px-3 text-gray-200 font-medium max-w-[200px] truncate" title={holder.investorName}>
                           {holder.investorName}
                         </td>

@@ -197,7 +197,7 @@ export default function QuantumPortfolioTab({ ticker }: QuantumPortfolioTabProps
                 { label: 'Gates', value: result.quantum.circuit_info.total_gates },
                 { label: es ? 'Convergido' : 'Converged', value: result.quantum.circuit_info.converged ? 'Yes' : 'No' },
               ].map((item) => (
-                <div key={item.label} className="text-center p-2 bg-gray-900/50 rounded-lg">
+                <div key={item.label} className="text-center p-2 bg-black/40 rounded-lg">
                   <p className="text-xs text-gray-500">{item.label}</p>
                   <p className="text-sm font-data text-white">{item.value}</p>
                 </div>
@@ -315,7 +315,7 @@ export default function QuantumPortfolioTab({ ticker }: QuantumPortfolioTabProps
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800">
+                  <tr className="border-b border-green-900/20">
                     <th className="text-left py-2 text-gray-400">{es ? 'Metrica' : 'Metric'}</th>
                     <th className="text-right py-2 text-green-400">{es ? 'Cuantico' : 'Quantum'}</th>
                     <th className="text-right py-2 text-gray-400">{es ? 'Clasico' : 'Classical'}</th>
@@ -362,7 +362,7 @@ export default function QuantumPortfolioTab({ ticker }: QuantumPortfolioTabProps
                 <div key={i} className="flex items-center gap-3">
                   <span className="font-data text-xs text-gray-500 w-6">#{i + 1}</span>
                   <span className="font-data text-sm text-green-400 tracking-wider">|{state.bitstring}&#x27E9;</span>
-                  <div className="flex-1 h-2 bg-gray-900 rounded-full overflow-hidden">
+                  <div className="flex-1 h-2 bg-black/80 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-green-600 to-emerald-500 rounded-full"
                       style={{ width: `${Math.min(state.probability * 100, 100)}%` }}

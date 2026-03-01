@@ -253,7 +253,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
       </div>
 
       {/* Input Parameters */}
-      <div className="bg-gray-700 p-6 rounded-xl border border-white/[0.08]">
+      <div className="bg-black/50 p-6 rounded-xl border border-white/[0.08]">
         <h4 className="text-xl font-bold text-gray-100 mb-6">{t('waccTab.inputParameters')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div>
@@ -264,7 +264,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 step="0.1"
                 value={riskFreeRate}
                 onChange={(e) => setRiskFreeRate(parseFloat(e.target.value) || 0)}
-                className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
+                className="w-full bg-black/80 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
               />
               <span className="text-gray-400">%</span>
             </div>
@@ -277,7 +277,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 step="0.1"
                 value={equityRiskPremium}
                 onChange={(e) => setEquityRiskPremium(parseFloat(e.target.value) || 0)}
-                className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
+                className="w-full bg-black/80 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
               />
               <span className="text-gray-400">%</span>
             </div>
@@ -290,7 +290,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 step="1"
                 value={marginalTaxRate}
                 onChange={(e) => setMarginalTaxRate(parseFloat(e.target.value) || 0)}
-                className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
+                className="w-full bg-black/80 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
               />
               <span className="text-gray-400">%</span>
             </div>
@@ -307,7 +307,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                   setPreferredEquityRate(isNaN(val) ? null : val);
                 }}
                 placeholder={`Auto: ${calculatedCostOfPreferred.toFixed(2)}%`}
-                className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
+                className="w-full bg-black/80 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
               />
               <span className="text-gray-400">%</span>
             </div>
@@ -353,7 +353,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 value={customBeta}
                 onChange={(e) => setCustomBeta(parseFloat(e.target.value) || 1)}
                 disabled={selectedBetaSource !== 'custom'}
-                className="w-20 bg-gray-900 border border-white/[0.08] rounded-lg px-2 py-1 text-white disabled:opacity-50"
+                className="w-20 bg-black/80 border border-white/[0.08] rounded-lg px-2 py-1 text-white disabled:opacity-50"
               />
             </label>
           </div>
@@ -361,7 +361,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
       </div>
 
       {/* WACC Tree Visualization */}
-      <div className="bg-gray-800 p-8 rounded-xl border border-white/[0.06]">
+      <div className="bg-black/60 p-8 rounded-xl border border-white/[0.06]">
         <h4 className="text-2xl font-bold text-gray-100 mb-8 text-center">{t('waccTab.title')}</h4>
 
         <div className="flex flex-col items-center gap-8">
@@ -369,7 +369,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl">
             {/* Cost of Debt Branch */}
             <div className="space-y-4">
-              <div className="bg-gray-700 p-4 rounded-lg border border-white/[0.08]">
+              <div className="bg-black/50 p-4 rounded-lg border border-white/[0.08]">
                 <h5 className="text-lg font-bold text-green-400 mb-3">{t('waccTab.costOfDebt')}</h5>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -416,7 +416,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
 
             {/* Cost of Equity Branch */}
             <div className="space-y-4">
-              <div className="bg-gray-700 p-4 rounded-lg border border-white/[0.08]">
+              <div className="bg-black/50 p-4 rounded-lg border border-white/[0.08]">
                 <h5 className="text-lg font-bold text-emerald-400 mb-3">{t('waccTab.costOfEquity')}</h5>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -445,7 +445,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
 
             {/* Preferred Equity Branch */}
             <div className="space-y-4">
-              <div className="bg-gray-700 p-4 rounded-lg border border-white/[0.08]">
+              <div className="bg-black/50 p-4 rounded-lg border border-white/[0.08]">
                 <h5 className="text-lg font-bold text-orange-400 mb-3">{t('waccTab.preferredEquity')}</h5>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -472,17 +472,17 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
           <div className="text-center text-2xl text-gray-500">↓ {t('waccTab.applyWeights')} ↓</div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl">
-            <div className="bg-gray-700/50 p-4 rounded-lg text-center">
+            <div className="bg-black/40 p-4 rounded-lg text-center">
               <p className="text-gray-400 text-sm">{t('waccTab.debtWeight')}</p>
               <p className="text-2xl font-bold text-green-400">{formatPct(capitalStructure.debtPct)}</p>
               <p className="text-xs text-gray-500">{formatMoney(capitalStructure.totalDebt)} / {formatMoney(capitalStructure.totalCapital)}</p>
             </div>
-            <div className="bg-gray-700/50 p-4 rounded-lg text-center">
+            <div className="bg-black/40 p-4 rounded-lg text-center">
               <p className="text-gray-400 text-sm">{t('waccTab.equityWeight')}</p>
               <p className="text-2xl font-bold text-emerald-400">{formatPct(capitalStructure.equityPct)}</p>
               <p className="text-xs text-gray-500">{formatMoney(capitalStructure.marketCap)} / {formatMoney(capitalStructure.totalCapital)}</p>
             </div>
-            <div className="bg-gray-700/50 p-4 rounded-lg text-center">
+            <div className="bg-black/40 p-4 rounded-lg text-center">
               <p className="text-gray-400 text-sm">{t('waccTab.preferredWeight')}</p>
               <p className="text-2xl font-bold text-orange-400">{formatPct(capitalStructure.preferredPct)}</p>
               <p className="text-xs text-gray-500">{formatMoney(capitalStructure.preferredStock)} / {formatMoney(capitalStructure.totalCapital)}</p>
@@ -513,7 +513,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
           {/* Final WACC */}
           <div className="text-center text-3xl text-gray-500">↓</div>
 
-          <div className="bg-gray-950 p-8 rounded-2xl border-2 border-green-500 text-center max-w-md">
+          <div className="bg-black/80 p-8 rounded-2xl border-2 border-green-500 text-center max-w-md">
             <p className="text-xl text-gray-300 mb-2">{t('waccTab.finalWacc')}</p>
             <p className="text-6xl font-bold text-green-400">{formatPct(wacc)}</p>
             <p className="text-sm text-gray-400 mt-4">
@@ -524,7 +524,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
       </div>
 
       {/* Summary Table */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-white/[0.06]">
+      <div className="bg-black/60 p-6 rounded-xl border border-white/[0.06]">
         <h4 className="text-xl font-bold text-gray-100 mb-4">{t('waccTab.summaryTitle')}</h4>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -536,7 +536,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 <th className="px-4 py-3 text-right text-gray-300">{t('waccTab.contribution')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700">
+            <tbody className="divide-y divide-green-900/15">
               <tr>
                 <td className="px-4 py-3 text-gray-200">{t('waccTab.debtAfterTax')}</td>
                 <td className="px-4 py-3 text-right text-green-400">{formatPct(costOfDebtCalc.afterTaxCostOfDebt)}</td>
@@ -555,7 +555,7 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
                 <td className="px-4 py-3 text-right text-gray-300">{formatPct(capitalStructure.preferredPct)}</td>
                 <td className="px-4 py-3 text-right text-orange-400 font-bold">{formatPct(weightedCostOfPreferred)}</td>
               </tr>
-              <tr className="bg-gray-700/50">
+              <tr className="bg-black/40">
                 <td className="px-4 py-3 text-gray-100 font-bold">WACC</td>
                 <td className="px-4 py-3"></td>
                 <td className="px-4 py-3 text-right text-gray-300">100%</td>

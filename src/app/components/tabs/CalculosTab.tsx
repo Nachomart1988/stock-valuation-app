@@ -491,7 +491,7 @@ export default function CalculosTab({
       </div>
 
       {/* Controles de supuestos */}
-      <div className="bg-gray-700 p-6 rounded-xl border border-white/[0.08]">
+      <div className="bg-black/50 p-6 rounded-xl border border-white/[0.08]">
         <h4 className="text-xl font-bold text-gray-100 mb-4">{t('calculosTab.inputParameters')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div>
@@ -504,7 +504,7 @@ export default function CalculosTab({
                 max="25"
                 value={userWacc !== null ? userWacc : wacc}
                 onChange={(e) => setUserWacc(parseFloat(e.target.value) || null)}
-                className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
+                className="w-full bg-black/80 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
               />
               <span className="text-gray-400">%</span>
             </div>
@@ -522,7 +522,7 @@ export default function CalculosTab({
                 max="50"
                 value={exitMultiple}
                 onChange={(e) => { exitMultipleUserEdited.current = true; setExitMultiple(parseFloat(e.target.value) || 12); }}
-                className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
+                className="w-full bg-black/80 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
               />
               <span className="text-gray-400">x</span>
             </div>
@@ -537,7 +537,7 @@ export default function CalculosTab({
                 max="50"
                 value={projectedGrowthRate}
                 onChange={(e) => setProjectedGrowthRate(parseFloat(e.target.value) || 5)}
-                className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
+                className="w-full bg-black/80 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
               />
               <span className="text-gray-400">%</span>
             </div>
@@ -552,24 +552,24 @@ export default function CalculosTab({
               max="10"
               value={yearsToProject}
               onChange={(e) => setYearsToProject(parseInt(e.target.value) || 5)}
-              className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
+              className="w-full bg-black/80 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
             />
           </div>
         </div>
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div className="bg-gray-800 p-3 rounded-lg">
+          <div className="bg-black/60 p-3 rounded-lg">
             <p className="text-gray-400">EBITDA Margin (avg)</p>
             <p className="text-gray-200 font-semibold">{avgEbitdaMargin?.toFixed(1)}%</p>
           </div>
-          <div className="bg-gray-800 p-3 rounded-lg">
+          <div className="bg-black/60 p-3 rounded-lg">
             <p className="text-gray-400">CapEx/Revenue (avg)</p>
             <p className="text-gray-200 font-semibold">{avgCapexToRevenue?.toFixed(1)}%</p>
           </div>
-          <div className="bg-gray-800 p-3 rounded-lg">
+          <div className="bg-black/60 p-3 rounded-lg">
             <p className="text-gray-400">D&A/Revenue (avg)</p>
             <p className="text-gray-200 font-semibold">{avgDnAToRevenue?.toFixed(1)}%</p>
           </div>
-          <div className="bg-gray-800 p-3 rounded-lg">
+          <div className="bg-black/60 p-3 rounded-lg">
             <p className="text-gray-400">TTM EV/EBITDA (calculado)</p>
             <p className="text-gray-200 font-semibold">{calculatedTTMMultiple?.toFixed(1)}x</p>
           </div>
@@ -579,24 +579,24 @@ export default function CalculosTab({
       {/* Tabla de proyecciones */}
       <div className="overflow-x-auto">
         <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
-          <thead className="bg-gray-800">
+          <thead className="bg-black/60">
             <tr>
-              <th className="px-4 py-4 text-left text-gray-200 font-bold sticky left-0 bg-gray-800 z-10 min-w-[180px]">
+              <th className="px-4 py-4 text-left text-gray-200 font-bold sticky left-0 bg-black/60 z-10 min-w-[180px]">
                 {t('calculosTab.projectionTable')}
               </th>
               {projections.map((p: Projection) => (
                 <th
                   key={p.year}
-                  className={`px-4 py-4 text-center font-bold min-w-[120px] ${p.isProjected ? 'text-green-300 bg-gray-750' : 'text-gray-200'}`}
+                  className={`px-4 py-4 text-center font-bold min-w-[120px] ${p.isProjected ? 'text-green-300 bg-green-900/10' : 'text-gray-200'}`}
                 >
                   {p.year}{p.isProjected ? 'E' : ''}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-700">
-            <tr className="hover:bg-gray-800">
-              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
+          <tbody className="divide-y divide-green-900/15">
+            <tr className="hover:bg-black/60">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-black/80 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('calculosTab.revenue')}
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -606,8 +606,8 @@ export default function CalculosTab({
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800">
-              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
+            <tr className="hover:bg-black/60">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-black/80 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('calculosTab.growth')}
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -617,8 +617,8 @@ export default function CalculosTab({
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800">
-              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
+            <tr className="hover:bg-black/60">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-black/80 z-10 border-r border-white/[0.06] text-gray-300">
                 EBITDA
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -628,8 +628,8 @@ export default function CalculosTab({
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800">
-              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
+            <tr className="hover:bg-black/60">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-black/80 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('calculosTab.margin')}
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -639,8 +639,8 @@ export default function CalculosTab({
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800">
-              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
+            <tr className="hover:bg-black/60">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-black/80 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('calculosTab.depreciation')}
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -650,8 +650,8 @@ export default function CalculosTab({
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800">
-              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
+            <tr className="hover:bg-black/60">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-black/80 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('calculosTab.nopat')}
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -661,8 +661,8 @@ export default function CalculosTab({
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800">
-              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
+            <tr className="hover:bg-black/60">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-black/80 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('calculosTab.capex')}
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -672,8 +672,8 @@ export default function CalculosTab({
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800">
-              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
+            <tr className="hover:bg-black/60">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-black/80 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('calculosTab.changeInWC')}
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -683,8 +683,8 @@ export default function CalculosTab({
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800 bg-gray-800/50">
-              <td className="px-4 py-3 font-bold sticky left-0 bg-gray-800 z-10 border-r border-white/[0.06] text-gray-100">
+            <tr className="hover:bg-black/60 bg-black/40">
+              <td className="px-4 py-3 font-bold sticky left-0 bg-black/60 z-10 border-r border-white/[0.06] text-gray-100">
                 {t('calculosTab.fcfUnlevered')}
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -695,8 +695,8 @@ export default function CalculosTab({
             </tr>
 
             {/* Discount factor y discounted FCF solo para proyecciones */}
-            <tr className="hover:bg-gray-800">
-              <td className="px-4 py-3 font-medium sticky left-0 bg-gray-900 z-10 border-r border-white/[0.06] text-gray-300">
+            <tr className="hover:bg-black/60">
+              <td className="px-4 py-3 font-medium sticky left-0 bg-black/80 z-10 border-r border-white/[0.06] text-gray-300">
                 {t('calculosTab.discountFactor')} (WACC={wacc?.toFixed(1)}%)
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -706,8 +706,8 @@ export default function CalculosTab({
               ))}
             </tr>
 
-            <tr className="hover:bg-gray-800 bg-gray-800/50">
-              <td className="px-4 py-3 font-bold sticky left-0 bg-gray-800 z-10 border-r border-white/[0.06] text-gray-100">
+            <tr className="hover:bg-black/60 bg-black/40">
+              <td className="px-4 py-3 font-bold sticky left-0 bg-black/60 z-10 border-r border-white/[0.06] text-gray-100">
                 {t('calculosTab.discountedFcf')}
               </td>
               {projections.map((p: Projection, i: number) => (
@@ -722,7 +722,7 @@ export default function CalculosTab({
 
       {/* Resumen de valoración */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-gray-800 p-6 rounded-xl border border-white/[0.06]">
+        <div className="bg-black/60 p-6 rounded-xl border border-white/[0.06]">
           <h4 className="text-xl font-bold text-gray-100 mb-4">{t('calculosTab.valuationSummary')}</h4>
           <div className="space-y-3">
             <div className="flex justify-between">
@@ -752,7 +752,7 @@ export default function CalculosTab({
           </div>
         </div>
 
-        <div className="bg-gray-800 p-6 rounded-xl border border-white/[0.06]">
+        <div className="bg-black/60 p-6 rounded-xl border border-white/[0.06]">
           <h4 className="text-xl font-bold text-gray-100 mb-4">{t('calculosTab.valuationSummary')}</h4>
           <div className="space-y-3">
             <div className="flex justify-between">
@@ -784,7 +784,7 @@ export default function CalculosTab({
       </div>
 
       {/* Comparación con mercado */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-white/[0.06]">
+      <div className="bg-black/60 p-6 rounded-xl border border-white/[0.06]">
         <h4 className="text-xl font-bold text-gray-100 mb-4">{t('calculosTab.valuationSummary')}</h4>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           <div className="text-center">

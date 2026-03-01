@@ -766,14 +766,14 @@ export default function DiarioInversorTab() {
               type="number"
               value={accountBalance}
               onChange={(e) => setAccountBalance(Number(e.target.value))}
-              className="w-32 px-2 py-1 bg-gray-700 border border-white/[0.08] rounded text-white"
+              className="w-32 px-2 py-1 bg-black/50 border border-white/[0.08] rounded text-white"
             />
           </div>
 
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="px-3 py-2 bg-gray-700 border border-white/[0.08] rounded text-white"
+            className="px-3 py-2 bg-black/50 border border-white/[0.08] rounded text-white"
           >
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
@@ -793,7 +793,7 @@ export default function DiarioInversorTab() {
               syncStatus === 'saving' ? 'bg-green-900/40 border-green-500/40 text-green-300' :
               syncStatus === 'saved'  ? 'bg-green-900/40 border-green-500/40 text-green-300' :
               syncStatus === 'error'  ? 'bg-red-900/40 border-red-500/40 text-red-300' :
-              'bg-gray-800 border-white/[0.08] text-gray-400'
+              'bg-black/60 border-white/[0.08] text-gray-400'
             }`}>
               {syncStatus === 'saving' && <><span className="animate-spin">⏳</span> Saving...</>}
               {syncStatus === 'saved'  && <>✅ Saved to cloud</>}
@@ -810,7 +810,7 @@ export default function DiarioInversorTab() {
 
       {/* Sub-tabs */}
       <Tab.Group>
-        <Tab.List className="flex gap-2 bg-gray-800 p-2 rounded-lg">
+        <Tab.List className="flex gap-2 bg-black/60 p-2 rounded-lg">
           {['SWING', 'P&L', 'Portfolio', 'PTA'].map(tab => (
             <Tab
               key={tab}
@@ -818,7 +818,7 @@ export default function DiarioInversorTab() {
                 `flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
                   selected
                     ? 'bg-green-600 text-white'
-                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                    : 'bg-black/50 text-gray-400 hover:bg-green-900/15 hover:text-white'
                 }`
               }
             >
@@ -927,7 +927,7 @@ function SwingTab({
     <div className="space-y-6">
       {/* Stats Summary */}
       {stats && (
-        <div className="bg-gray-800 rounded-lg p-4 border border-white/[0.06]">
+        <div className="bg-black/60 rounded-lg p-4 border border-white/[0.06]">
           <h3 className="text-lg font-bold text-green-400 mb-4">📈 {t('diarioTab.statistics')}</h3>
 
           {/* Main stats grid */}
@@ -966,7 +966,7 @@ function SwingTab({
                 </thead>
                 <tbody>
                   {stats.recentPerformance.map((r: any) => (
-                    <tr key={r.n} className="border-b border-gray-800">
+                    <tr key={r.n} className="border-b border-green-900/20">
                       <td className="px-2 py-1 text-gray-300">Last {r.n}</td>
                       <td className="px-2 py-1 text-center">{r.count}</td>
                       <td className={`px-2 py-1 text-center ${r.winRate >= 0.5 ? 'text-green-400' : 'text-red-400'}`}>
@@ -988,7 +988,7 @@ function SwingTab({
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               {Object.entries(stats.setupStats).map(([setup, data]: [string, any]) => (
                 data.count > 0 && (
-                  <div key={setup} className="bg-gray-700 rounded p-2 text-sm">
+                  <div key={setup} className="bg-black/50 rounded p-2 text-sm">
                     <div className="font-semibold text-green-300">{setup}</div>
                     <div className="text-gray-400">Trades: {data.count}</div>
                     <div className={data.wins / data.count >= 0.5 ? 'text-green-400' : 'text-red-400'}>
@@ -1039,7 +1039,7 @@ function SwingTab({
             {trades.map((trade, idx) => {
               const metrics = calculateMetrics(trade);
               return (
-                <tr key={trade.id} className="border-b border-gray-800 hover:bg-gray-750">
+                <tr key={trade.id} className="border-b border-green-900/20 hover:bg-green-900/10">
                   <td className="px-2 py-2 text-gray-500">{idx + 1}</td>
                   <td className="px-2 py-2 font-semibold text-green-300">{trade.symbol}</td>
                   <td className="px-2 py-2 text-gray-300">{trade.name}</td>
@@ -1067,7 +1067,7 @@ function SwingTab({
                   <td className="px-2 py-2">{metrics.timeDays ?? '-'}</td>
                   <td className="px-2 py-2">
                     <div className="flex gap-1">
-                      <button onClick={() => onEditTrade(trade)} className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-xs">
+                      <button onClick={() => onEditTrade(trade)} className="px-2 py-1 bg-black/50 hover:bg-green-900/20 border border-green-900/20 rounded text-xs">
                         ✏️
                       </button>
                       {trade.state === 'Open' && (
@@ -1096,7 +1096,7 @@ function SwingTab({
       {/* Close Trade Modal */}
       {closeModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-96">
+          <div className="bg-black/60 rounded-lg p-6 w-96">
             <h3 className="text-lg font-bold mb-4">Cerrar Trade: {closeModal.trade.symbol}</h3>
             <input
               type="number"
@@ -1104,7 +1104,7 @@ function SwingTab({
               placeholder="Precio de salida"
               value={closeModal.price}
               onChange={(e) => setCloseModal({ ...closeModal, price: e.target.value })}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded mb-4"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded mb-4"
             />
             <div className="flex gap-2">
               <button
@@ -1118,7 +1118,7 @@ function SwingTab({
               >
                 Cerrar
               </button>
-              <button onClick={() => setCloseModal(null)} className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded">
+              <button onClick={() => setCloseModal(null)} className="flex-1 px-4 py-2 bg-black/50 hover:bg-green-900/20 border border-green-900/20 rounded">
                 Cancelar
               </button>
             </div>
@@ -1229,7 +1229,7 @@ function PLTab({
       </div>
 
       {/* Weekly Table */}
-      <div className="bg-gray-800 rounded-lg p-4 border border-white/[0.06]">
+      <div className="bg-black/60 rounded-lg p-4 border border-white/[0.06]">
         <h3 className="text-lg font-bold text-green-400 mb-4">📅 Weekly Performance</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -1247,7 +1247,7 @@ function PLTab({
             </thead>
             <tbody>
               {weeklyData.map(week => (
-                <tr key={week.weekStart} className="border-b border-gray-800">
+                <tr key={week.weekStart} className="border-b border-green-900/20">
                   <td className="px-2 py-2 font-semibold text-green-300">{week.weekLabel}</td>
                   <td className="px-2 py-2 text-gray-400">{week.weekStart}</td>
                   <td className="px-2 py-2 text-center">{week.trades}</td>
@@ -1275,7 +1275,7 @@ function PLTab({
 
       {/* Visual Charts */}
       {weeklyData.length > 0 && (
-        <div className="bg-gray-800 rounded-lg p-4 border border-white/[0.06]">
+        <div className="bg-black/60 rounded-lg p-4 border border-white/[0.06]">
           <h3 className="text-lg font-bold text-green-400 mb-4">📈 Weekly P&L Chart</h3>
           <div className="h-48 flex items-end justify-center gap-1">
             {(() => {
@@ -1301,7 +1301,7 @@ function PLTab({
 
       {/* Cumulative Equity Curve */}
       {weeklyData.length > 1 && (
-        <div className="bg-gray-800 rounded-lg p-4 border border-white/[0.06]">
+        <div className="bg-black/60 rounded-lg p-4 border border-white/[0.06]">
           <h3 className="text-lg font-bold text-emerald-400 mb-4">📊 Equity Curve (Cumulative)</h3>
           <div className="h-32 flex items-end gap-1">
             {(() => {
@@ -1334,7 +1334,7 @@ function PLTab({
       {/* Monthly & Quarterly with visual bars */}
       <div className="grid md:grid-cols-2 gap-4">
         {/* Monthly with bars */}
-        <div className="bg-gray-800 rounded-lg p-4 border border-white/[0.06]">
+        <div className="bg-black/60 rounded-lg p-4 border border-white/[0.06]">
           <h3 className="text-lg font-bold text-green-400 mb-4">📆 Monthly Summary</h3>
           <div className="space-y-2">
             {(() => {
@@ -1344,7 +1344,7 @@ function PLTab({
                 return (
                   <div key={month} className="flex items-center gap-2">
                     <span className="text-gray-400 w-20 text-sm">{month.split('-')[1]}</span>
-                    <div className="flex-1 h-5 bg-gray-700 rounded overflow-hidden">
+                    <div className="flex-1 h-5 bg-black/50 rounded overflow-hidden">
                       <div
                         className={`h-full rounded transition-all ${pnl >= 0 ? 'bg-green-500' : 'bg-red-500'}`}
                         style={{ width: `${widthPct}%` }}
@@ -1361,7 +1361,7 @@ function PLTab({
         </div>
 
         {/* Quarterly with visual blocks */}
-        <div className="bg-gray-800 rounded-lg p-4 border border-white/[0.06]">
+        <div className="bg-black/60 rounded-lg p-4 border border-white/[0.06]">
           <h3 className="text-lg font-bold text-green-400 mb-4">📊 Quarterly Summary</h3>
           <div className="grid grid-cols-4 gap-2">
             {['Q1', 'Q2', 'Q3', 'Q4'].map(q => {
@@ -1373,7 +1373,7 @@ function PLTab({
                   className={`p-4 rounded-lg text-center border-2 ${
                     pnl > 0 ? 'bg-green-900/30 border-green-500' :
                     pnl < 0 ? 'bg-red-900/30 border-red-500' :
-                    'bg-gray-700/30 border-white/[0.08]'
+                    'bg-black/30 border-white/[0.08]'
                   }`}
                 >
                   <div className="text-lg font-bold text-gray-300">{q}</div>
@@ -1450,7 +1450,7 @@ function PortfolioTab({
       {portfolioStats ? (
         <div className="space-y-6">
           {/* Main Stats */}
-          <div className="bg-gray-900 rounded-xl p-6 border border-white/[0.06] shadow-xl">
+          <div className="bg-black/80 rounded-xl p-6 border border-white/[0.06] shadow-xl">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {/* Main P&L Card - Larger */}
               <div className={`col-span-2 p-6 rounded-xl ${portfolioStats.totalOpenProfit >= 0 ? 'bg-green-900/40 border-green-500' : 'bg-red-900/40 border-red-500'} border-2`}>
@@ -1504,7 +1504,7 @@ function PortfolioTab({
           {openTrades.length > 0 && (
             <div className="grid md:grid-cols-2 gap-4">
               {/* P&L Distribution by Position */}
-              <div className="bg-gray-800 rounded-lg p-4 border border-white/[0.06]">
+              <div className="bg-black/60 rounded-lg p-4 border border-white/[0.06]">
                 <h3 className="text-lg font-bold text-emerald-400 mb-4">📊 P&L by Position</h3>
                 <div className="space-y-2">
                   {openTrades.map(trade => {
@@ -1514,7 +1514,7 @@ function PortfolioTab({
                     return (
                       <div key={trade.id} className="flex items-center gap-2">
                         <span className="text-green-300 w-16 text-sm font-medium">{trade.symbol}</span>
-                        <div className="flex-1 h-4 bg-gray-700 rounded overflow-hidden">
+                        <div className="flex-1 h-4 bg-black/50 rounded overflow-hidden">
                           <div
                             className={`h-full rounded transition-all ${metrics.pnl >= 0 ? 'bg-gradient-to-r from-green-600 to-green-400' : 'bg-gradient-to-r from-red-600 to-red-400'}`}
                             style={{ width: `${widthPct}%` }}
@@ -1530,7 +1530,7 @@ function PortfolioTab({
               </div>
 
               {/* Exposure by Setup */}
-              <div className="bg-gray-800 rounded-lg p-4 border border-white/[0.06]">
+              <div className="bg-black/60 rounded-lg p-4 border border-white/[0.06]">
                 <h3 className="text-lg font-bold text-emerald-400 mb-4">🎯 Exposure by Setup</h3>
                 <div className="space-y-2">
                   {(() => {
@@ -1546,7 +1546,7 @@ function PortfolioTab({
                       return (
                         <div key={setup} className="flex items-center gap-2">
                           <span className="text-gray-300 w-20 text-sm">{setup}</span>
-                          <div className="flex-1 h-4 bg-gray-700 rounded overflow-hidden">
+                          <div className="flex-1 h-4 bg-black/50 rounded overflow-hidden">
                             <div
                               className={`h-full rounded transition-all ${colors[idx % colors.length]}`}
                               style={{ width: `${pct}%` }}
@@ -1563,7 +1563,7 @@ function PortfolioTab({
           )}
         </div>
       ) : (
-        <div className="bg-gray-800 rounded-xl p-8 text-center border border-white/[0.06]">
+        <div className="bg-black/60 rounded-xl p-8 text-center border border-white/[0.06]">
           <div className="text-4xl mb-4">📭</div>
           <p className="text-gray-400 text-lg">{t('diarioTab.noOpenPositions')}</p>
           <p className="text-gray-500 text-sm mt-2">{t('diarioTab.addTradeInSwing')}</p>
@@ -1597,7 +1597,7 @@ function PortfolioTab({
               const metrics = calculateMetrics(trade);
               const weight = accountBalance > 0 ? metrics.currentValue / accountBalance : 0;
               return (
-                <tr key={trade.id} className="border-b border-gray-800 hover:bg-gray-750">
+                <tr key={trade.id} className="border-b border-green-900/20 hover:bg-green-900/10">
                   <td className="px-2 py-2 font-semibold text-green-300">{trade.symbol}</td>
                   <td className="px-2 py-2 text-gray-400">{trade.industry || '-'}</td>
                   <td className={`px-2 py-2 ${trade.side === 'Long' ? 'text-green-400' : 'text-red-400'}`}>
@@ -1686,14 +1686,14 @@ function PTATab({
       {/* Entries List */}
       <div className="space-y-4">
         {entries.sort((a, b) => b.date.localeCompare(a.date)).map(entry => (
-          <div key={entry.id} className="bg-gray-800 rounded-lg p-4 border border-white/[0.06]">
+          <div key={entry.id} className="bg-black/60 rounded-lg p-4 border border-white/[0.06]">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <div className="text-lg font-semibold text-green-300">{entry.date}</div>
                 <div className="text-sm text-gray-400">Score: {entry.score}/10 | P&L: {formatCurrency(entry.plDay)}</div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => { setEditingEntry(entry); setShowForm(true); }} className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-xs">
+                <button onClick={() => { setEditingEntry(entry); setShowForm(true); }} className="px-2 py-1 bg-black/50 hover:bg-green-900/20 border border-green-900/20 rounded text-xs">
                   ✏️ Editar
                 </button>
                 <button onClick={() => deleteEntry(entry.id)} className="px-2 py-1 bg-red-600 hover:bg-red-500 rounded text-xs">
@@ -1780,7 +1780,7 @@ function StatCard({
   };
 
   return (
-    <div className="bg-gray-700 rounded-lg p-3">
+    <div className="bg-black/50 rounded-lg p-3">
       <div className="text-xs text-gray-400 mb-1">{label}</div>
       <div className={`text-lg font-bold ${colorClasses[color]}`}>{value}</div>
     </div>
@@ -1903,14 +1903,14 @@ function TradeFormModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
-      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-black/60 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <h3 className="text-xl font-bold text-green-400 mb-6">
           {trade.symbol ? `${t('diarioTab.editTradeTitle')}: ${trade.symbol}` : t('diarioTab.newTrade')}
         </h3>
 
         {/* Entry Summary Card */}
         {form.entryPrice > 0 && form.qty > 0 && (
-          <div className="bg-gray-700/50 rounded-lg p-4 mb-6 border border-white/[0.08]">
+          <div className="bg-black/40 rounded-lg p-4 mb-6 border border-white/[0.08]">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
               <div>
                 <div className="text-xs text-gray-400">Position Value</div>
@@ -1954,7 +1954,7 @@ function TradeFormModal({
               type="text"
               value={form.symbol}
               onChange={(e) => updateField('symbol', e.target.value.toUpperCase())}
-              className={`w-full px-3 py-2 bg-gray-700 border rounded focus:border-green-500 focus:ring-1 focus:ring-green-500 ${
+              className={`w-full px-3 py-2 bg-black/50 border rounded focus:border-green-500 focus:ring-1 focus:ring-green-500 ${
                 quoteError ? 'border-red-500' : form.currentPrice ? 'border-green-500' : 'border-white/[0.08]'
               }`}
               placeholder="AAPL"
@@ -1972,7 +1972,7 @@ function TradeFormModal({
               type="text"
               value={form.name}
               onChange={(e) => updateField('name', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded focus:border-green-500"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded focus:border-green-500"
               placeholder="Apple Inc"
             />
           </div>
@@ -1981,7 +1981,7 @@ function TradeFormModal({
             <select
               value={form.side}
               onChange={(e) => updateField('side', e.target.value as TradeSide)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             >
               <option value="Long">🟢 Long</option>
               <option value="Short">🔴 Short</option>
@@ -1993,7 +1993,7 @@ function TradeFormModal({
               type="date"
               value={form.date}
               onChange={(e) => updateField('date', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             />
           </div>
 
@@ -2005,7 +2005,7 @@ function TradeFormModal({
               step="0.01"
               value={form.entryPrice || ''}
               onChange={(e) => updateField('entryPrice', Number(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-700 border border-green-500 rounded text-lg font-bold"
+              className="w-full px-3 py-2 bg-black/50 border border-green-500 rounded text-lg font-bold"
               placeholder="150.00"
             />
           </div>
@@ -2015,7 +2015,7 @@ function TradeFormModal({
               type="number"
               value={form.qty || ''}
               onChange={(e) => updateField('qty', Number(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
               placeholder="100"
             />
           </div>
@@ -2036,7 +2036,7 @@ function TradeFormModal({
               step="0.01"
               value={form.commission || ''}
               onChange={(e) => updateField('commission', Number(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             />
           </div>
 
@@ -2048,7 +2048,7 @@ function TradeFormModal({
               step="0.01"
               value={form.sl || ''}
               onChange={(e) => updateField('sl', Number(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-700 border border-red-500 rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-red-500 rounded"
               placeholder="145.00"
             />
           </div>
@@ -2059,7 +2059,7 @@ function TradeFormModal({
               step="0.01"
               value={form.initialSL || ''}
               onChange={(e) => updateField('initialSL', Number(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             />
           </div>
           <div>
@@ -2078,7 +2078,7 @@ function TradeFormModal({
               type="text"
               value={form.industry}
               onChange={(e) => updateField('industry', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
               placeholder="Technology"
             />
           </div>
@@ -2089,7 +2089,7 @@ function TradeFormModal({
             <select
               value={form.setup}
               onChange={(e) => updateField('setup', e.target.value as TradeSetup)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             >
               <option value="WB">WB</option>
               <option value="WBPB">WBPB</option>
@@ -2112,7 +2112,7 @@ function TradeFormModal({
               step="0.01"
               value={form.pt1Price || ''}
               onChange={(e) => updateField('pt1Price', e.target.value ? Number(e.target.value) : null)}
-              className="w-full px-3 py-2 bg-gray-700 border border-green-500 rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-green-500 rounded"
               placeholder="160.00"
             />
           </div>
@@ -2122,7 +2122,7 @@ function TradeFormModal({
               type="number"
               value={form.pt1Qty || ''}
               onChange={(e) => updateField('pt1Qty', e.target.value ? Number(e.target.value) : null)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
               placeholder="50"
             />
           </div>
@@ -2133,7 +2133,7 @@ function TradeFormModal({
               step="0.01"
               value={form.pt2Price || ''}
               onChange={(e) => updateField('pt2Price', e.target.value ? Number(e.target.value) : null)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
               placeholder="170.00"
             />
           </div>
@@ -2143,7 +2143,7 @@ function TradeFormModal({
               type="number"
               value={form.pt2Qty || ''}
               onChange={(e) => updateField('pt2Qty', e.target.value ? Number(e.target.value) : null)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
               placeholder="50"
             />
           </div>
@@ -2158,7 +2158,7 @@ function TradeFormModal({
                   step="0.01"
                   value={form.exitPrice || ''}
                   onChange={(e) => updateField('exitPrice', e.target.value ? Number(e.target.value) : null)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+                  className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
                 />
               </div>
               <div>
@@ -2167,7 +2167,7 @@ function TradeFormModal({
                   type="date"
                   value={form.exitDate || ''}
                   onChange={(e) => updateField('exitDate', e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+                  className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
                 />
               </div>
               <div>
@@ -2175,7 +2175,7 @@ function TradeFormModal({
                 <select
                   value={form.sellReason || ''}
                   onChange={(e) => updateField('sellReason', e.target.value as SellReason)}
-                  className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+                  className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
                 >
                   <option value="">-</option>
                   <option value="Stopped">Stopped</option>
@@ -2195,7 +2195,7 @@ function TradeFormModal({
             <select
               value={form.state}
               onChange={(e) => updateField('state', e.target.value as TradeState)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             >
               <option value="Open">Open</option>
               <option value="Closed">Closed</option>
@@ -2209,7 +2209,7 @@ function TradeFormModal({
           <textarea
             value={form.postAnalysis}
             onChange={(e) => updateField('postAnalysis', e.target.value)}
-            className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded h-24"
+            className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded h-24"
             placeholder="Trade notes, lessons learned..."
           />
         </div>
@@ -2220,7 +2220,7 @@ function TradeFormModal({
             type="text"
             value={form.chartLink}
             onChange={(e) => updateField('chartLink', e.target.value)}
-            className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+            className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             placeholder="TradingView link..."
           />
         </div>
@@ -2235,7 +2235,7 @@ function TradeFormModal({
           </button>
           <button
             onClick={onCancel}
-            className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded font-semibold"
+            className="flex-1 px-4 py-2 bg-black/50 hover:bg-green-900/20 border border-green-900/20 rounded font-semibold"
           >
             Cancelar
           </button>
@@ -2269,7 +2269,7 @@ function PTAFormModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto p-4">
-      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-black/60 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <h3 className="text-xl font-bold text-green-400 mb-6">{t('diarioTab.ptaEntry')}</h3>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -2279,7 +2279,7 @@ function PTAFormModal({
               type="date"
               value={form.date}
               onChange={(e) => updateField('date', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             />
           </div>
           <div>
@@ -2290,7 +2290,7 @@ function PTAFormModal({
               max="10"
               value={form.score}
               onChange={(e) => updateField('score', Number(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             />
           </div>
           <div>
@@ -2300,7 +2300,7 @@ function PTAFormModal({
               step="0.01"
               value={form.plDay}
               onChange={(e) => updateField('plDay', Number(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             />
           </div>
           <div>
@@ -2309,7 +2309,7 @@ function PTAFormModal({
               type="text"
               value={form.ptmmSignal}
               onChange={(e) => updateField('ptmmSignal', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             />
           </div>
         </div>
@@ -2320,7 +2320,7 @@ function PTAFormModal({
           <textarea
             value={form.preMarketPlan}
             onChange={(e) => updateField('preMarketPlan', e.target.value)}
-            className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded h-24"
+            className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded h-24"
           />
         </div>
 
@@ -2346,7 +2346,7 @@ function PTAFormModal({
             <textarea
               value={form.whatWentGood}
               onChange={(e) => updateField('whatWentGood', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded h-20"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded h-20"
             />
           </div>
           <div>
@@ -2354,7 +2354,7 @@ function PTAFormModal({
             <textarea
               value={form.needToImprove}
               onChange={(e) => updateField('needToImprove', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded h-20"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded h-20"
             />
           </div>
           <div>
@@ -2362,7 +2362,7 @@ function PTAFormModal({
             <textarea
               value={form.executionMistakes}
               onChange={(e) => updateField('executionMistakes', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded h-20"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded h-20"
             />
           </div>
           <div>
@@ -2370,7 +2370,7 @@ function PTAFormModal({
             <textarea
               value={form.disciplineEmotions}
               onChange={(e) => updateField('disciplineEmotions', e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-white/[0.08] rounded h-20"
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded h-20"
             />
           </div>
         </div>
@@ -2380,7 +2380,7 @@ function PTAFormModal({
           <button onClick={() => onSave(form)} className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded font-semibold">
             💾 Guardar
           </button>
-          <button onClick={onCancel} className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded font-semibold">
+          <button onClick={onCancel} className="flex-1 px-4 py-2 bg-black/50 hover:bg-green-900/20 border border-green-900/20 rounded font-semibold">
             Cancelar
           </button>
         </div>
@@ -2404,7 +2404,7 @@ function CheckboxField({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="w-4 h-4 rounded bg-gray-700 border-white/[0.08]"
+        className="w-4 h-4 rounded bg-black/50 border-white/[0.08]"
       />
       <span className="text-sm text-gray-300">{label}</span>
     </label>

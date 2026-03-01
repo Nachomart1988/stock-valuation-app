@@ -27,7 +27,7 @@ export function TrendIndicator({ trend, change, showPercentage = true }: TrendIn
     <div className={`inline-flex items-center gap-1 ${getColor()}`}>
       <span className="text-xl font-bold">{getIcon()}</span>
       {showPercentage && change !== undefined && (
-        <span className="text-sm font-mono font-semibold">
+        <span className="text-sm font-data font-semibold">
           {Math.abs(change).toFixed(2)}%
         </span>
       )}

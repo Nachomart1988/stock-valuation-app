@@ -620,7 +620,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
             <p className="text-xl font-bold text-yellow-400">${currentPrice.toFixed(2)}</p>
           </div>
           {standardPivots && standardPivots.length > 0 && (
-            <div className="text-right bg-gradient-to-r bg-gray-900 px-4 py-2 rounded-xl border border-emerald-600">
+            <div className="text-right bg-gradient-to-r bg-black/80 px-4 py-2 rounded-xl border border-emerald-600">
               <p className="text-xs text-emerald-400">{t('pivotsTab.pivotPoint')}</p>
               <p className="text-xl font-bold text-emerald-400">
                 ${standardPivots.find(p => p.name === 'PP')?.value.toFixed(2) || '—'}
@@ -631,7 +631,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
       </div>
 
       {/* Configuration Panel */}
-      <div className="bg-gray-950 p-6 rounded-2xl border border-emerald-600">
+      <div className="bg-black/80 p-6 rounded-2xl border border-emerald-600">
         <h4 className="text-xl font-bold text-emerald-300 mb-4">{t('pivotsTab.configuration')}</h4>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
@@ -639,7 +639,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
             <select
               value={pivotMethod}
               onChange={(e) => setPivotMethod(e.target.value as any)}
-              className="w-full px-3 py-2 bg-gray-800 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
+              className="w-full px-3 py-2 bg-black/60 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
             >
               <option value="standard">{t('pivotsTab.standard')}</option>
               <option value="fibonacci">{t('pivotsTab.fibonacci')}</option>
@@ -653,7 +653,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
             <select
               value={timeframe}
               onChange={(e) => setTimeframe(e.target.value as any)}
-              className="w-full px-3 py-2 bg-gray-800 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
+              className="w-full px-3 py-2 bg-black/60 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
             >
               <option value="daily">{t('pivotsTab.daily')}</option>
               <option value="weekly">{t('pivotsTab.weekly')}</option>
@@ -669,7 +669,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                   setLookbackPeriods(v);
                   setLookbackInput(String(v));
                 }}
-                className="w-8 h-9 flex items-center justify-center bg-gray-700 hover:bg-gray-600 border border-emerald-500/40 rounded-l-lg text-gray-200 font-bold transition select-none"
+                className="w-8 h-9 flex items-center justify-center bg-black/50 hover:bg-green-900/15 border border-emerald-500/40 rounded-l-lg text-gray-200 font-bold transition select-none"
               >−</button>
               <input
                 type="number"
@@ -702,7 +702,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                   if (e.key === 'ArrowUp') { e.preventDefault(); const v = Math.min(756, lookbackPeriods + 1); setLookbackPeriods(v); setLookbackInput(String(v)); }
                   if (e.key === 'ArrowDown') { e.preventDefault(); const v = Math.max(20, lookbackPeriods - 1); setLookbackPeriods(v); setLookbackInput(String(v)); }
                 }}
-                className="flex-1 px-3 py-2 bg-gray-800 border-y border-emerald-500/50 text-gray-100 focus:outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="flex-1 px-3 py-2 bg-black/60 border-y border-emerald-500/50 text-gray-100 focus:outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <button
                 onClick={() => {
@@ -710,7 +710,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                   setLookbackPeriods(v);
                   setLookbackInput(String(v));
                 }}
-                className="w-8 h-9 flex items-center justify-center bg-gray-700 hover:bg-gray-600 border border-emerald-500/40 rounded-r-lg text-gray-200 font-bold transition select-none"
+                className="w-8 h-9 flex items-center justify-center bg-black/50 hover:bg-green-900/15 border border-emerald-500/40 rounded-r-lg text-gray-200 font-bold transition select-none"
               >+</button>
             </div>
           </div>
@@ -726,10 +726,10 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
               <button
                 onClick={() => setPeriodOffset(p => Math.max(0, p - 1))}
                 disabled={periodOffset === 0}
-                className="w-8 h-9 flex items-center justify-center bg-gray-700 hover:bg-gray-600 border border-emerald-500/40 rounded-l-lg text-gray-200 font-bold transition disabled:opacity-30 disabled:cursor-not-allowed select-none"
+                className="w-8 h-9 flex items-center justify-center bg-black/50 hover:bg-green-900/15 border border-emerald-500/40 rounded-l-lg text-gray-200 font-bold transition disabled:opacity-30 disabled:cursor-not-allowed select-none"
                 title="Período más reciente"
               >‹</button>
-              <div className="flex-1 px-3 py-2 bg-gray-800 border-y border-emerald-500/50 text-gray-100 text-center text-sm">
+              <div className="flex-1 px-3 py-2 bg-black/60 border-y border-emerald-500/50 text-gray-100 text-center text-sm">
                 {periodOffset === 0
                   ? (t('pivotsTab.currentPeriod') ?? 'Último período')
                   : `-${periodOffset}`}
@@ -737,7 +737,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
               <button
                 onClick={() => setPeriodOffset(p => Math.min(aggregatedData.length - 2, p + 1))}
                 disabled={periodOffset >= aggregatedData.length - 2}
-                className="w-8 h-9 flex items-center justify-center bg-gray-700 hover:bg-gray-600 border border-emerald-500/40 rounded-r-lg text-gray-200 font-bold transition disabled:opacity-30 disabled:cursor-not-allowed select-none"
+                className="w-8 h-9 flex items-center justify-center bg-black/50 hover:bg-green-900/15 border border-emerald-500/40 rounded-r-lg text-gray-200 font-bold transition disabled:opacity-30 disabled:cursor-not-allowed select-none"
                 title="Período anterior"
               >›</button>
             </div>
@@ -769,7 +769,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
                   (e.target as HTMLInputElement).blur();
                 }
               }}
-              className="w-full px-3 py-2 bg-gray-800 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
+              className="w-full px-3 py-2 bg-black/60 border border-emerald-500/50 rounded-lg text-gray-100 focus:border-emerald-400"
             />
           </div>
           <div className="flex items-end gap-4">
@@ -788,7 +788,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Current Pivot Levels */}
       {currentPivots && (
-        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.06]">
+        <div className="bg-black/80 p-6 rounded-2xl border border-white/[0.06]">
           <h4 className="text-xl font-bold text-gray-100 mb-4">
             {pivotMethod.charAt(0).toUpperCase() + pivotMethod.slice(1)} Pivot Points ({timeframe})
           </h4>
@@ -824,7 +824,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
           </div>
 
           {/* Method Description */}
-          <div className="mt-4 p-4 bg-gray-800/50 rounded-lg border border-white/[0.06]">
+          <div className="mt-4 p-4 bg-black/40 rounded-lg border border-white/[0.06]">
             <p className="text-sm text-gray-400">
               {pivotMethod === 'standard' && t('pivotsTab.standardDesc')}
               {pivotMethod === 'fibonacci' && t('pivotsTab.fibonacciDesc')}
@@ -838,7 +838,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Chart with Pivot Lines */}
       {chartData && (
-        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.06]">
+        <div className="bg-black/80 p-6 rounded-2xl border border-white/[0.06]">
           <h4 className="text-xl font-bold text-gray-100 mb-4">{t('pivotsTab.chartTitle')}</h4>
           <div className="h-[500px]">
             <Line
@@ -876,7 +876,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Historical Support/Resistance Levels */}
       {showHistoricalLevels && historicalPivots.length > 0 && (
-        <div className="bg-gradient-to-r from-gray-950 to-teal-900/30 p-6 rounded-2xl border border-emerald-600">
+        <div className="bg-gradient-to-r from-black to-teal-900/30 p-6 rounded-2xl border border-emerald-600">
           <h4 className="text-xl font-bold text-emerald-400 mb-4">
             {t('pivotsTab.historicalLevels')}
           </h4>
@@ -955,7 +955,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Volume Profile & POC */}
       {volumeProfile && pocLevel && (
-        <div className="bg-gray-950 p-6 rounded-2xl border border-green-600">
+        <div className="bg-black/80 p-6 rounded-2xl border border-green-600">
           <h4 className="text-xl font-bold text-green-400 mb-4">{t('pivotsTab.volumeProfile')}</h4>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1019,7 +1019,7 @@ export default function PivotsTab({ ticker }: PivotsTabProps) {
 
       {/* Summary / Signal */}
       {currentPivots && (
-        <div className="bg-gray-900 p-6 rounded-2xl border border-white/[0.08]">
+        <div className="bg-black/80 p-6 rounded-2xl border border-white/[0.08]">
           <h4 className="text-xl font-bold text-gray-100 mb-4">{t('pivotsTab.analysisSummary')}</h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Nearest Support */}

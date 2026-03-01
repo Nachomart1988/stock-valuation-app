@@ -78,14 +78,14 @@ function SignalGauge({ signal, signalKey }: { signal: SignalData; signalKey: str
   const pct = ((signal.value + 1) / 2) * 100; // -1..1 → 0..100
 
   return (
-    <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-800/50">
+    <div className="bg-black/40 rounded-lg p-3 border border-green-900/20/50">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold text-gray-300">{signal.label}</span>
         <span className="font-data text-sm font-bold" style={{ color }}>
           {signal.value > 0 ? '+' : ''}{signal.value.toFixed(2)}
         </span>
       </div>
-      <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+      <div className="h-2 bg-black/60 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{ width: `${pct}%`, backgroundColor: color }}
@@ -306,7 +306,7 @@ export default function QuantumRiskTab({ ticker }: QuantumRiskTabProps) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800">
+                  <tr className="border-b border-green-900/20">
                     <th className="text-left py-2 text-gray-400">{es ? 'Metodo' : 'Method'}</th>
                     <th className="text-right py-2 text-gray-400">VaR ({(result.risk.confidence * 100).toFixed(0)}%)</th>
                     <th className="text-right py-2 text-gray-400">CVaR</th>

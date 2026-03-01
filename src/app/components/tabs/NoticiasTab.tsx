@@ -85,7 +85,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
           <p className="text-sm text-gray-400 mt-1">{t('noticiasTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gray-950 px-4 py-2 rounded-xl border border-green-600">
+          <div className="text-right bg-black/80 px-4 py-2 rounded-xl border border-green-600">
             <p className="text-xs text-green-400">{t('noticiasTab.total')}</p>
             <p className="text-xl font-bold text-green-400">{companyNews.length}</p>
           </div>
@@ -110,7 +110,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
                 href={news.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block bg-gray-700 rounded-xl border border-white/[0.08] hover:border-green-500 transition-all hover:shadow-lg hover:shadow-green-500/10 overflow-hidden group"
+                className="block bg-black/50 rounded-xl border border-white/[0.08] hover:border-green-500 transition-all hover:shadow-lg hover:shadow-green-500/10 overflow-hidden group"
               >
                 <div className="flex">
                   {news.image && (
@@ -154,14 +154,14 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
       </div>
 
       {/* Summary Stats */}
-      <div className="bg-gray-800 rounded-xl border border-white/[0.06] p-6">
+      <div className="bg-black/60 rounded-xl border border-white/[0.06] p-6">
         <h4 className="text-lg font-semibold text-gray-200 mb-4">{t('noticiasTab.coverageSummary')}</h4>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <div className="bg-gray-700 rounded-lg p-4 text-center">
+          <div className="bg-black/50 rounded-lg p-4 text-center">
             <p className="text-3xl font-bold text-green-400">{companyNews.length}</p>
             <p className="text-sm text-gray-400">{t('noticiasTab.recentNews')}</p>
           </div>
-          <div className="bg-gray-700 rounded-lg p-4 text-center">
+          <div className="bg-black/50 rounded-lg p-4 text-center">
             <p className="text-3xl font-bold text-green-400">
               {companyNews.length > 0
                 ? new Set(companyNews.map((n) => n.site).filter(Boolean)).size
@@ -169,7 +169,7 @@ export default function NoticiasTab({ ticker }: NoticiasTabProps) {
             </p>
             <p className="text-sm text-gray-400">{t('noticiasTab.sources')}</p>
           </div>
-          <div className="bg-gray-700 rounded-lg p-4 text-center">
+          <div className="bg-black/50 rounded-lg p-4 text-center">
             <p className="text-3xl font-bold text-amber-400">
               {companyNews.length > 0
                 ? formatDate(companyNews[0]?.publishedDate || new Date().toISOString()).split(',')[0]

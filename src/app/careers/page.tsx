@@ -29,7 +29,7 @@ const openings = [
 
 export default function CareersPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
       <Header />
 
       <main className="pt-28 pb-20 px-4 max-w-4xl mx-auto">
@@ -58,7 +58,7 @@ export default function CareersPage() {
             { title: 'Finance + Tech', desc: 'Rare intersection. If you can do both, you belong here.' },
             { title: 'Impact Fast', desc: 'Small team, high ownership. Your work ships to thousands of investors.' },
           ].map((v) => (
-            <div key={v.title} className="p-5 rounded-2xl bg-gray-800/60 border border-gray-700/50">
+            <div key={v.title} className="p-5 rounded-2xl bg-black/50 border border-green-900/15">
               <div className="w-1 h-5 bg-gradient-to-b from-emerald-400 to-teal-500 rounded-full mb-3" />
               <div className="font-semibold mb-1">{v.title}</div>
               <div className="text-sm text-gray-400">{v.desc}</div>
@@ -70,7 +70,7 @@ export default function CareersPage() {
         <h2 className="text-2xl font-bold mb-6">Open Positions</h2>
         <div className="space-y-4 mb-16">
           {openings.map((role) => (
-            <div key={role.title} className="p-6 rounded-2xl bg-gray-800/50 border border-gray-700/50 hover:border-emerald-500/40 transition group">
+            <div key={role.title} className="p-6 rounded-2xl bg-black/40 border border-green-900/15 hover:border-emerald-500/40 transition group">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div>
                   <h3 className="text-lg font-bold group-hover:text-emerald-400 transition">{role.title}</h3>

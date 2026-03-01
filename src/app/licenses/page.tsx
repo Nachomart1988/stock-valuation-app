@@ -29,7 +29,7 @@ const licenseColors: Record<string, string> = {
 
 export default function LicensesPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
       <Header />
 
       <main className="pt-28 pb-20 px-4 max-w-4xl mx-auto">
@@ -60,10 +60,10 @@ export default function LicensesPage() {
           This product includes software developed by third parties, each governed by their respective open-source licenses.
         </p>
 
-        <div className="overflow-hidden rounded-2xl border border-gray-700/50">
+        <div className="overflow-hidden rounded-2xl border border-green-900/15">
           <table className="w-full">
             <thead>
-              <tr className="bg-gray-800/60 border-b border-gray-700/50">
+              <tr className="bg-black/50 border-b border-green-900/15">
                 <th className="text-left p-4 text-gray-400 font-semibold text-sm">Package</th>
                 <th className="text-left p-4 text-gray-400 font-semibold text-sm">Version</th>
                 <th className="text-left p-4 text-gray-400 font-semibold text-sm">License</th>
@@ -72,11 +72,11 @@ export default function LicensesPage() {
             </thead>
             <tbody>
               {openSourceLibs.map((lib, i) => (
-                <tr key={lib.name} className={`border-b border-gray-700/30 ${i % 2 === 0 ? '' : 'bg-gray-800/20'}`}>
+                <tr key={lib.name} className={`border-b border-green-900/20/30 ${i % 2 === 0 ? '' : 'bg-black/60/20'}`}>
                   <td className="p-4 font-semibold text-sm">{lib.name}</td>
-                  <td className="p-4 text-gray-500 text-sm font-mono">{lib.version}</td>
+                  <td className="p-4 text-gray-500 text-sm font-data">{lib.version}</td>
                   <td className="p-4">
-                    <span className={`text-xs font-bold px-2 py-1 rounded border ${licenseColors[lib.license] ?? 'text-gray-400 bg-gray-800 border-gray-700'}`}>
+                    <span className={`text-xs font-bold px-2 py-1 rounded border ${licenseColors[lib.license] ?? 'text-gray-400 bg-black/60 border-green-900/20'}`}>
                       {lib.license}
                     </span>
                   </td>
@@ -93,8 +93,8 @@ export default function LicensesPage() {
 
         <p className="text-gray-500 text-xs mt-6">
           This list may not be exhaustive. For the complete list of dependencies, see{' '}
-          <code className="font-mono text-gray-400">package.json</code> and{' '}
-          <code className="font-mono text-gray-400">requirements.txt</code> in the project repository.
+          <code className="font-data text-gray-400">package.json</code> and{' '}
+          <code className="font-data text-gray-400">requirements.txt</code> in the project repository.
         </p>
       </main>
     </div>

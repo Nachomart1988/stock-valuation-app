@@ -56,29 +56,29 @@ export function DataTable({
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border border-primary-700 rounded-xl overflow-hidden">
-        <thead className={`bg-primary-700 ${stickyHeader ? 'sticky top-0 z-10' : ''}`}>
+    <div className="overflow-x-auto rounded-xl border border-green-900/20">
+      <table className="min-w-full">
+        <thead className={`bg-black/60 backdrop-blur-sm ${stickyHeader ? 'sticky top-0 z-10' : ''}`}>
           <tr>
             {columns.map((column) => (
               <th
                 key={column.key}
-                className={`px-6 py-4 text-sm font-semibold text-neutral-200 ${getAlignClass(column.align)}`}
+                className={`px-6 py-4 text-sm font-semibold text-green-400/80 border-b border-green-900/20 ${getAlignClass(column.align)}`}
               >
                 {column.label}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-primary-700">
+        <tbody className="divide-y divide-green-900/10">
           {data.map((row, rowIndex) => {
             const isHighlighted = highlightRow ? highlightRow(row, rowIndex) : false;
-            
+
             return (
               <tr
                 key={rowIndex}
-                className={`hover:bg-primary-700/50 transition-colors ${
-                  isHighlighted ? 'bg-primary-700/30' : ''
+                className={`hover:bg-green-900/10 transition-colors ${
+                  isHighlighted ? 'bg-green-900/5' : ''
                 }`}
               >
                 {columns.map((column, colIndex) => (
@@ -87,7 +87,7 @@ export function DataTable({
                     className={`px-6 py-4 ${getAlignClass(column.align)}`}
                   >
                     <div className="flex items-center gap-2 justify-end">
-                      <span className="font-mono text-neutral-100">
+                      <span className="font-data text-neutral-100">
                         {formatValue(row[column.key], column.format)}
                       </span>
                       {showTrends && colIndex > 0 && rowIndex < data.length - 1 && (

@@ -21,10 +21,25 @@ from options_strategy_simulator import (
     auto_analyze_options_strategy, suggest_options_strategies, get_iv_surface,
     scan_options_combinations,
 )
-from quantum_portfolio_engine import get_quantum_portfolio_optimizer, PENNYLANE_AVAILABLE
-from drl_trading_engine import get_drl_engine, SB3_AVAILABLE
-from quantum_risk_engine import get_quantum_risk_engine, QISKIT_AVAILABLE
 import asyncio
+
+try:
+    from quantum_portfolio_engine import get_quantum_portfolio_optimizer, PENNYLANE_AVAILABLE
+except ImportError:
+    PENNYLANE_AVAILABLE = False
+    get_quantum_portfolio_optimizer = None
+
+try:
+    from drl_trading_engine import get_drl_engine, SB3_AVAILABLE
+except ImportError:
+    SB3_AVAILABLE = False
+    get_drl_engine = None
+
+try:
+    from quantum_risk_engine import get_quantum_risk_engine, QISKIT_AVAILABLE
+except ImportError:
+    QISKIT_AVAILABLE = False
+    get_quantum_risk_engine = None
 
 app = FastAPI(
     title="Stock Analysis AI API",
@@ -1614,6 +1629,8 @@ class QuantumRiskRequest(BaseModel):
 @app.post("/quantum/portfolio-optimize")
 async def quantum_portfolio_optimize(req: QuantumPortfolioRequest):
     """QAOA quantum-inspired portfolio optimization."""
+    if get_quantum_portfolio_optimizer is None:
+        raise HTTPException(status_code=503, detail="Quantum portfolio engine not available")
     try:
         optimizer = get_quantum_portfolio_optimizer()
         result = await asyncio.to_thread(
@@ -1634,6 +1651,8 @@ async def quantum_portfolio_optimize(req: QuantumPortfolioRequest):
 @app.post("/drl/simulate")
 async def drl_simulate(req: DRLSimulateRequest):
     """Deep Reinforcement Learning trading simulation."""
+    if get_drl_engine is None:
+        raise HTTPException(status_code=503, detail="DRL trading engine not available")
     try:
         engine = get_drl_engine()
         result = await asyncio.to_thread(
@@ -1655,6 +1674,8 @@ async def drl_simulate(req: DRLSimulateRequest):
 @app.post("/quantum/risk-model")
 async def quantum_risk_model(req: QuantumRiskRequest):
     """Quantum-inspired risk modeling with alt data fusion."""
+    if get_quantum_risk_engine is None:
+        raise HTTPException(status_code=503, detail="Quantum risk engine not available")
     try:
         engine = get_quantum_risk_engine()
         result = await asyncio.to_thread(

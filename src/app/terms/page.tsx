@@ -6,7 +6,7 @@ export default function TermsPage() {
   const lastUpdated = 'February 25, 2026';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
       <Header />
 
       <main className="pt-28 pb-20 px-4 max-w-3xl mx-auto">

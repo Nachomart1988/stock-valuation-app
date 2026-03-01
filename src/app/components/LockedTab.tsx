@@ -20,8 +20,10 @@ export default function LockedTab({ requiredPlan, currentPlan, tabName }: Locked
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[400px] text-center px-6 py-16">
-      <div className="text-6xl mb-6">{icons[requiredPlan]}</div>
+    <div className="flex flex-col items-center justify-center min-h-[400px] text-center px-6 py-16 bg-grid">
+      <div className="w-20 h-20 rounded-2xl bg-black/60 border border-green-900/30 flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(0,166,81,0.1)]">
+        <span className="text-4xl">{icons[requiredPlan]}</span>
+      </div>
       <h2 className="text-2xl font-bold text-white mb-4">
         {tabName} — requiere plan <PlanBadge plan={requiredPlan} size="md" />
       </h2>
@@ -38,13 +40,7 @@ export default function LockedTab({ requiredPlan, currentPlan, tabName }: Locked
       </p>
       <Link
         href="/pricing"
-        className={`px-8 py-3 rounded-xl font-bold text-white transition-all shadow-lg ${
-          requiredPlan === 'gold'
-            ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400'
-            : requiredPlan === 'elite'
-            ? 'bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400'
-            : 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400'
-        }`}
+        className="px-8 py-3 rounded-xl font-bold text-white transition-all shadow-[0_0_15px_rgba(0,166,81,0.2)] bg-green-700 hover:bg-green-600 border border-green-500/30"
       >
         Ver planes — desde ${PLAN_METADATA[requiredPlan].price}/mes
       </Link>
@@ -55,15 +51,17 @@ export default function LockedTab({ requiredPlan, currentPlan, tabName }: Locked
 /** Wraps a sub-tab inside a Group component with a lock overlay */
 export function LockedSubTab({ requiredPlan, currentPlan }: { requiredPlan: PlanTier; currentPlan: PlanTier }) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[300px] text-center px-6 py-12">
-      <div className="text-4xl mb-4">🔒</div>
+    <div className="flex flex-col items-center justify-center min-h-[300px] text-center px-6 py-12 bg-grid">
+      <div className="w-14 h-14 rounded-xl bg-black/60 border border-green-900/30 flex items-center justify-center mb-4 shadow-[0_0_15px_rgba(0,166,81,0.08)]">
+        <span className="text-2xl">🔒</span>
+      </div>
       <p className="text-gray-300 font-semibold mb-3">
         Requiere plan <PlanBadge plan={requiredPlan} size="md" />
       </p>
       <p className="text-gray-500 text-sm mb-6">
         Tu plan actual <PlanBadge plan={currentPlan} size="sm" /> no incluye esta sección.
       </p>
-      <Link href="/pricing" className="px-6 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-sm font-semibold transition">
+      <Link href="/pricing" className="px-6 py-2 bg-green-800 hover:bg-green-700 border border-green-500/30 text-white rounded-lg text-sm font-semibold transition shadow-[0_0_10px_rgba(0,166,81,0.15)]">
         Actualizar plan
       </Link>
     </div>

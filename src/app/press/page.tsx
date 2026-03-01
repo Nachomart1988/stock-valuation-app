@@ -18,7 +18,7 @@ const pressKit = [
 
 export default function PressPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
       <Header />
 
       <main className="pt-28 pb-20 px-4 max-w-4xl mx-auto">
@@ -32,7 +32,7 @@ export default function PressPage() {
 
         {/* Media Contact */}
         <div className="grid md:grid-cols-2 gap-6 mb-12">
-          <div className="p-6 rounded-2xl bg-gray-800/60 border border-gray-700/50">
+          <div className="p-6 rounded-2xl bg-black/50 border border-green-900/15">
             <h2 className="text-xl font-bold mb-4">Media Contact</h2>
             <div className="space-y-3">
               <div>
@@ -47,13 +47,13 @@ export default function PressPage() {
                   partnerships@prismo.app
                 </a>
               </div>
-              <div className="mt-4 pt-4 border-t border-gray-700/50 text-sm text-gray-400">
+              <div className="mt-4 pt-4 border-t border-green-900/15 text-sm text-gray-400">
                 Response time: within 24 business hours
               </div>
             </div>
           </div>
 
-          <div className="p-6 rounded-2xl bg-gray-800/60 border border-gray-700/50">
+          <div className="p-6 rounded-2xl bg-black/50 border border-green-900/15">
             <h2 className="text-xl font-bold mb-4">Company Facts</h2>
             <div className="space-y-2">
               {pressKit.map((item) => (
@@ -75,7 +75,7 @@ export default function PressPage() {
               href={s.url}
               target="_blank"
               rel="noopener noreferrer"
-              className={`p-5 rounded-2xl bg-gray-800/50 border ${s.color} hover:scale-[1.02] transition`}
+              className={`p-5 rounded-2xl bg-black/40 border ${s.color} hover:scale-[1.02] transition`}
             >
               <div className={`font-bold mb-1 ${s.color.split(' ')[0]}`}>{s.name}</div>
               <div className="text-sm text-gray-400">{s.handle}</div>
@@ -84,7 +84,7 @@ export default function PressPage() {
         </div>
 
         {/* Elevator Pitch */}
-        <div className="p-8 rounded-2xl bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700/50">
+        <div className="p-8 rounded-2xl bg-gradient-to-br from-gray-800/80 to-black/80 border border-green-900/15">
           <h2 className="text-xl font-bold mb-3">About Prismo</h2>
           <p className="text-gray-300 leading-relaxed">
             Prismo is a professional-grade investment analysis platform designed for the individual investor.
@@ -93,7 +93,7 @@ export default function PressPage() {
             of financial analysis in seconds, giving retail investors the same analytical tools previously
             available only to large institutions.
           </p>
-          <div className="mt-4 pt-4 border-t border-gray-700/50 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="mt-4 pt-4 border-t border-green-900/15 grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { n: '20+', l: 'Valuation Models' },
               { n: '21', l: 'Analysis Tabs' },

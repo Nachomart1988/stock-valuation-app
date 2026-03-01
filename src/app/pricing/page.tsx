@@ -10,7 +10,7 @@ const PLANS = [
     name: 'Free',
     price: 0,
     annualPrice: 0,
-    color: 'border-gray-700',
+    color: 'border-green-900/20',
     badge: null as string | null,
     badgeColor: '',
     features: [
@@ -22,7 +22,7 @@ const PLANS = [
     ],
     cta: 'Empezar gratis',
     ctaHref: '/register',
-    ctaStyle: 'bg-gray-800 hover:bg-gray-700 text-white',
+    ctaStyle: 'bg-black/60 hover:bg-black/50 text-white',
   },
   {
     key: 'pro',
@@ -123,7 +123,7 @@ export default function PricingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-black via-slate-900 to-black text-white">
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-16 pt-20 sm:pt-24">
@@ -139,7 +139,7 @@ export default function PricingPage() {
 
         {/* Billing Toggle */}
         <div className="flex justify-center mb-10">
-          <div className="bg-gray-900 rounded-full p-1.5 flex border border-gray-800">
+          <div className="bg-black/80 rounded-full p-1.5 flex border border-green-900/20">
             <button onClick={() => setIsAnnual(false)} className={`px-6 py-2.5 rounded-full text-sm font-semibold transition-all ${!isAnnual ? 'bg-white text-black shadow' : 'text-gray-400 hover:text-white'}`}>
               Mensual
             </button>
@@ -152,7 +152,7 @@ export default function PricingPage() {
         {/* Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-16">
           {PLANS.map((plan) => (
-            <div key={plan.key} className={`relative bg-gray-900/80 backdrop-blur rounded-2xl p-6 border-2 transition-all hover:scale-[1.02] ${plan.color}`}>
+            <div key={plan.key} className={`relative bg-black/60 backdrop-blur rounded-2xl p-6 border-2 transition-all hover:scale-[1.02] ${plan.color}`}>
               {plan.badge && (
                 <div className={`absolute -top-4 left-1/2 -translate-x-1/2 ${plan.badgeColor} text-white text-xs font-bold px-5 py-1.5 rounded-full`}>
                   {plan.badge}
@@ -184,11 +184,11 @@ export default function PricingPage() {
         {/* Comparison */}
         <div className="mb-16">
           <h2 className="text-2xl font-bold text-center mb-8">Comparación detallada</h2>
-          <div className="bg-gray-900/50 rounded-2xl border border-gray-800 overflow-hidden">
+          <div className="bg-black/40 rounded-2xl border border-green-900/20 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-800">
+                  <tr className="border-b border-green-900/20">
                     <th className="text-left p-4 text-gray-400 font-semibold min-w-[220px]">Feature</th>
                     <th className="p-4 text-center text-gray-400 font-semibold">Free</th>
                     <th className="p-4 text-center text-emerald-400 font-semibold bg-emerald-500/5">Pro</th>
@@ -198,7 +198,7 @@ export default function PricingPage() {
                 </thead>
                 <tbody>
                   {COMPARISON.map((row, i) => (
-                    <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/20">
+                    <tr key={i} className="border-b border-green-900/20/50 hover:bg-black/60/20">
                       <td className="p-4 text-gray-300 text-sm">{row.feature}</td>
                       <td className="p-4 text-center"><Check ok={row.free} /></td>
                       <td className="p-4 text-center bg-emerald-500/5"><Check ok={row.pro} /></td>
@@ -217,8 +217,8 @@ export default function PricingPage() {
           <h2 className="text-2xl font-bold text-center mb-8">Preguntas frecuentes</h2>
           <div className="space-y-3">
             {faqs.map((faq, i) => (
-              <div key={i} className="bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden">
-                <button onClick={() => setOpenFaq(openFaq === i ? null : i)} className="w-full p-5 text-left flex items-center justify-between hover:bg-gray-800/30 transition">
+              <div key={i} className="bg-black/40 rounded-xl border border-green-900/20 overflow-hidden">
+                <button onClick={() => setOpenFaq(openFaq === i ? null : i)} className="w-full p-5 text-left flex items-center justify-between hover:bg-black/60/30 transition">
                   <span className="font-semibold text-gray-200 text-sm">{faq.q}</span>
                   <svg className={`w-4 h-4 text-gray-400 shrink-0 ml-4 transition-transform ${openFaq === i ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
@@ -229,11 +229,11 @@ export default function PricingPage() {
         </div>
 
         {/* CTA */}
-        <div className="text-center bg-gray-900/60 rounded-3xl p-8 sm:p-12 border border-emerald-500/20">
+        <div className="text-center bg-black/50 rounded-3xl p-8 sm:p-12 border border-emerald-500/20">
           <h2 className="text-2xl sm:text-3xl font-bold mb-3">¿Listo para empezar?</h2>
           <p className="text-gray-400 mb-8 max-w-lg mx-auto">Únete a la comunidad de inversores que toman decisiones basadas en datos reales.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register" className="px-8 py-3 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl transition">Empezar gratis</Link>
+            <Link href="/register" className="px-8 py-3 bg-black/60 hover:bg-black/50 text-white font-bold rounded-xl transition">Empezar gratis</Link>
             <Link href="/register?plan=pro" className="px-8 py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl transition shadow-lg shadow-emerald-500/20">
               Empezar con Pro — $29/mes
             </Link>
@@ -241,7 +241,7 @@ export default function PricingPage() {
         </div>
       </main>
 
-      <footer className="border-t border-gray-800 mt-16 py-10">
+      <footer className="border-t border-green-900/20 mt-16 py-10">
         <div className="max-w-7xl mx-auto px-6 text-center text-gray-500 text-sm">
           <p>&copy; 2025 StockAnalyzer Pro. Todos los derechos reservados.</p>
         </div>

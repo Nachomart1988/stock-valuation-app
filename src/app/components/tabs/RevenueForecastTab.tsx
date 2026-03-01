@@ -300,7 +300,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
           <p className="text-sm text-gray-400 mt-1">{t('revenueForecastTab.subtitle')}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-gray-950 to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+          <div className="text-right bg-gradient-to-r from-black to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
             <p className="text-xs text-emerald-400">{t('revenueForecastTab.yearsProjected')}</p>
             <p className="text-xl font-bold text-emerald-400">{forecastYears}</p>
           </div>
@@ -308,25 +308,25 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       </div>
 
       {/* Info de optimización */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-white/[0.06]">
+      <div className="bg-black/60 p-6 rounded-xl border border-white/[0.06]">
         <h3 className="text-xl font-bold text-emerald-400 mb-4">{t('revenueForecastTab.optimizedParameters')}</h3>
         {isOptimizing ? (
           <p className="text-gray-400">{t('revenueForecastTab.optimizing')}</p>
         ) : optimizedParams ? (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-gray-700 p-4 rounded-lg text-center">
+            <div className="bg-black/50 p-4 rounded-lg text-center">
               <p className="text-gray-400 text-sm mb-1">{t('revenueForecastTab.alpha')}</p>
               <p className="text-2xl font-bold text-emerald-400">{optimizedParams.alpha.toFixed(2)}</p>
             </div>
-            <div className="bg-gray-700 p-4 rounded-lg text-center">
+            <div className="bg-black/50 p-4 rounded-lg text-center">
               <p className="text-gray-400 text-sm mb-1">{t('revenueForecastTab.betaParam')}</p>
               <p className="text-2xl font-bold text-emerald-400">{optimizedParams.beta.toFixed(2)}</p>
             </div>
-            <div className="bg-gray-700 p-4 rounded-lg text-center">
+            <div className="bg-black/50 p-4 rounded-lg text-center">
               <p className="text-gray-400 text-sm mb-1">{t('revenueForecastTab.mseHolt')}</p>
               <p className="text-2xl font-bold text-emerald-400">{optimizedParams.mse.toFixed(4)}</p>
             </div>
-            <div className="bg-gray-700 p-4 rounded-lg text-center">
+            <div className="bg-black/50 p-4 rounded-lg text-center">
               <p className="text-gray-400 text-sm mb-1">{t('revenueForecastTab.mseRegression')}</p>
               <p className="text-2xl font-bold text-amber-400">{regressionMSE.toFixed(4)}</p>
             </div>
@@ -338,7 +338,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
       </div>
 
       {/* Control de años */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-white/[0.06]">
+      <div className="bg-black/60 p-6 rounded-xl border border-white/[0.06]">
         <div className="max-w-xs">
           <label className="block text-gray-300 mb-2">{t('revenueForecastTab.yearsToProject')}</label>
           <input
@@ -347,13 +347,13 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
             max="10"
             value={forecastYears}
             onChange={(e) => setForecastYears(Math.max(1, parseInt(e.target.value) || 5))}
-            className="w-full bg-gray-900 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
+            className="w-full bg-black/80 border border-white/[0.08] rounded-lg px-4 py-2 text-white"
           />
         </div>
       </div>
 
       {/* Gráfico */}
-      <div className="bg-gray-800 p-6 rounded-xl border border-white/[0.06]">
+      <div className="bg-black/60 p-6 rounded-xl border border-white/[0.06]">
         <h3 className="text-2xl font-bold text-green-400 mb-6 text-center">
           {t('revenueForecastTab.chartTitle')} ({forecastYears} {t('revenueForecastTab.yearsToProject')})
         </h3>
@@ -392,8 +392,8 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
 
       {/* Tabla comparativa */}
       <div className="overflow-x-auto">
-        <table className="min-w-full bg-gray-800 border border-white/[0.06] rounded-xl overflow-hidden">
-          <thead className="bg-gray-700">
+        <table className="min-w-full bg-black/60 border border-white/[0.06] rounded-xl overflow-hidden">
+          <thead className="bg-black/50">
             <tr>
               <th className="px-6 py-4 text-left">{t('revenueForecastTab.yearsProjected').replace('Proyectados', '').replace('Projected', '')}</th>
               <th className="px-6 py-4 text-right">{t('revenueForecastTab.revenueHistorical')}</th>
@@ -403,7 +403,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
               <th className="px-6 py-4 text-right">{t('revenueForecastTab.regressionForecast')}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-700">
+          <tbody className="divide-y divide-green-900/15">
             {years.map((year, idx) => {
               const isHistorical = idx < historical.length;
               const histRev = isHistorical ? historical[idx].revenue : null;
@@ -413,7 +413,7 @@ export default function RevenueForecastTab({ income }: RevenueForecastTabProps) 
               const regFor = idx >= historical.length ? regressionForecast[idx - historical.length] : null;
 
               return (
-                <tr key={year} className={isHistorical ? '' : 'bg-gray-900/50'}>
+                <tr key={year} className={isHistorical ? '' : 'bg-black/40'}>
                   <td className="px-6 py-4 font-medium">{year}</td>
                   <td className="px-6 py-4 text-right text-green-400 font-semibold">
                     {histRev ? histRev.toFixed(2) : '—'}

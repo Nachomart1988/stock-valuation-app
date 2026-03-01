@@ -67,7 +67,9 @@
       "Bash(gh api:*)",
       "Bash(cat:*)",
       "Bash(npx vercel env ls:*)",
-      "Bash(npx vercel projects ls)"
+      "Bash(npx vercel projects ls)",
+      "Bash(git merge master)",
+      "Bash(/dev/null ! -path \"*/node_modules/*\")"
     ]
   }
 }

@@ -1512,7 +1512,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
               {industry}
             </span>
           )}
-          <div className="text-right bg-gradient-to-r from-gray-950 to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
+          <div className="text-right bg-gradient-to-r from-black to-teal-900/40 px-4 py-2 rounded-xl border border-emerald-600">
             <p className="text-xs text-emerald-400">Benchmark Score</p>
             <p className="text-xl font-bold text-emerald-400">
               {benchmarkSummary.good}/{benchmarkSummary.good + benchmarkSummary.neutral + benchmarkSummary.bad}
@@ -1522,7 +1522,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
       </div>
 
       {/* Industry Benchmark Summary & Legend */}
-      <div className="bg-gradient-to-r from-gray-800/80 to-gray-900/80 p-6 rounded-xl border border-white/[0.08]">
+      <div className="bg-gradient-to-r from-black/60 to-black/80 p-6 rounded-xl border border-white/[0.08]">
         <div className="flex flex-wrap justify-between items-start gap-6">
           {/* Summary Score */}
           <div className="flex-1 min-w-[250px]">
@@ -1580,7 +1580,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
           CompanyQuality Net - AI-Powered Quality Assessment
           ═══════════════════════════════════════════════════ */}
       {(keyMetrics || ratios) && (
-        <div className="bg-gradient-to-br from-green-950 via-emerald-950 to-gray-900 p-8 rounded-3xl border-2 border-emerald-500/50 shadow-2xl">
+        <div className="bg-gradient-to-br from-green-950 via-emerald-950 to-black p-8 rounded-3xl border-2 border-emerald-500/50 shadow-2xl">
           {qualityLoading && (
             <div className="flex items-center justify-center py-8 gap-3">
               <LogoLoader size="sm" />
@@ -1628,7 +1628,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
               </div>
 
               {/* Risk Level & Recommendation */}
-              <div className="flex items-center justify-between bg-gray-800/50 p-4 rounded-xl">
+              <div className="flex items-center justify-between bg-black/40 p-4 rounded-xl">
                 <div className="flex items-center gap-4">
                   <span className="text-lg font-semibold text-gray-300">Nivel de Riesgo:</span>
                   <span className={`px-4 py-2 rounded-full text-sm font-bold ${
@@ -1663,11 +1663,11 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
 
       {/* Financial Scores */}
       {scores && (
-        <div className="bg-gray-950 p-6 rounded-xl border border-emerald-600">
+        <div className="bg-black/80 p-6 rounded-xl border border-emerald-600">
           <h4 className="text-2xl font-bold text-emerald-400 mb-6">Financial Health Scores</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Altman Z-Score */}
-            <div className="bg-gray-800/50 p-6 rounded-xl">
+            <div className="bg-black/40 p-6 rounded-xl">
               <h5 className="text-lg font-semibold text-gray-200 mb-2">Altman Z-Score</h5>
               <p className={`text-5xl font-bold ${getScoreColor(scores.altmanZScore, 'altman')}`}>
                 {scores.altmanZScore?.toFixed(2) || 'N/A'}
@@ -1680,7 +1680,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
             </div>
 
             {/* Piotroski Score */}
-            <div className="bg-gray-800/50 p-6 rounded-xl">
+            <div className="bg-black/40 p-6 rounded-xl">
               <h5 className="text-lg font-semibold text-gray-200 mb-2">Piotroski F-Score</h5>
               <p className={`text-5xl font-bold ${getScoreColor(scores.piotroskiScore, 'piotroski')}`}>
                 {scores.piotroskiScore || 'N/A'} <span className="text-2xl text-gray-500">/ 9</span>
@@ -2006,15 +2006,15 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-700">
+                <tbody className="divide-y divide-green-900/15">
                   {([
                     { key: 'averagePPE', label: 'Average PP&E' },
                     { key: 'maintenanceCapex', label: 'Maintenance CapEx' },
                     { key: 'ownersEarnings', label: 'Owner Earnings' },
                     { key: 'growthCapex', label: 'Growth CapEx' },
                   ] as { key: string; label: string }[]).map(({ key, label }) => (
-                    <tr key={key} className="hover:bg-gray-700/30 transition-colors">
-                      <td className="px-6 py-3 text-sm text-gray-300 font-medium sticky left-0 bg-gray-800 z-10">
+                    <tr key={key} className="hover:bg-black/30 transition-colors">
+                      <td className="px-6 py-3 text-sm text-gray-300 font-medium sticky left-0 bg-black/60 z-10">
                         {label}
                       </td>
                       {ownerEarnings.slice(0, 10).map((row: any, i: number) => (
@@ -2065,7 +2065,7 @@ function MetricCard({
   };
 
   return (
-    <div className="bg-gray-800 p-4 rounded-lg border border-white/[0.06]">
+    <div className="bg-black/60 p-4 rounded-lg border border-white/[0.06]">
       <p className="text-xs text-gray-400 mb-1">{label}</p>
       <p className={`text-xl font-bold ${colorClasses[color]}`}>{value}</p>
     </div>
@@ -2095,7 +2095,7 @@ function MetricCardWithBenchmark({
   };
 
   return (
-    <div className="bg-gray-800 p-4 rounded-lg border border-white/[0.06] relative group">
+    <div className="bg-black/60 p-4 rounded-lg border border-white/[0.06] relative group">
       <div className="flex items-center justify-between">
         <p className="text-xs text-gray-400 mb-1">{label}</p>
         {comparison.indicator && (
@@ -2106,7 +2106,7 @@ function MetricCardWithBenchmark({
       </div>
       <p className={`text-xl font-bold ${colorClasses[color]}`}>{value}</p>
       {/* Tooltip on hover */}
-      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-gray-300 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 border border-white/[0.08]">
+      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-black/80 text-gray-300 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 border border-white/[0.08]">
         {comparison.tooltip}
       </div>
     </div>
@@ -2132,9 +2132,9 @@ function QualityBar({ label, score }: { label: string; score: number }) {
   };
 
   return (
-    <div className="bg-gray-800/60 p-3 rounded-xl">
+    <div className="bg-black/50 p-3 rounded-xl">
       <div className="text-xs text-gray-400 mb-2 truncate" title={label}>{label}</div>
-      <div className="h-3 bg-gray-700 rounded-full overflow-hidden mb-1">
+      <div className="h-3 bg-black/50 rounded-full overflow-hidden mb-1">
         <div
           className={`h-full ${getColor(score)} rounded-full transition-all duration-500 ease-out`}
           style={{ width: `${Math.min(100, Math.max(0, score))}%` }}

@@ -300,7 +300,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
           <p className="text-sm text-gray-400 mt-1">{t('segmentationTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r bg-gray-900 px-4 py-2 rounded-xl border border-green-600">
+          <div className="text-right bg-gradient-to-r bg-black/80 px-4 py-2 rounded-xl border border-green-600">
             <p className="text-xs text-green-400">{t('segmentationTab.segments')}</p>
             <p className="text-xl font-bold text-green-400">{latestProductData.length + latestGeoData.length}</p>
           </div>
@@ -308,7 +308,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
       </div>
 
       {/* Product Segmentation */}
-      <div className="bg-gray-950 p-6 rounded-xl border border-green-600">
+      <div className="bg-black/80 p-6 rounded-xl border border-green-600">
         <h4 className="text-2xl font-bold text-green-400 mb-6">{t('segmentationTab.productSegmentation')}</h4>
 
         {latestProductData.length === 0 ? (
@@ -316,7 +316,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Pie Chart */}
-            <div className="bg-gray-800/50 p-6 rounded-xl">
+            <div className="bg-black/40 p-6 rounded-xl">
               <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.latestPeriod')}</h5>
               <p className="text-sm text-gray-400 mb-4">{t('segmentationTab.date')}: {latestProductData[0]?.date}</p>
               <div className="h-80">
@@ -325,7 +325,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
             </div>
 
             {/* Breakdown Table */}
-            <div className="bg-gray-800/50 p-6 rounded-xl">
+            <div className="bg-black/40 p-6 rounded-xl">
               <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.revenueBreakdown')}</h5>
               <div className="space-y-3">
                 {latestProductData
@@ -333,7 +333,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
                   .map((segment, idx) => {
                     const percentage = totalProductRevenue > 0 ? (segment.revenue / totalProductRevenue) * 100 : 0;
                     return (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">
+                      <div key={idx} className="flex items-center justify-between p-3 bg-black/40 rounded-lg">
                         <div className="flex items-center gap-3">
                           <div
                             className="w-4 h-4 rounded-full"
@@ -359,7 +359,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
 
         {/* Historical Bar Chart */}
         {productSegments.length > 0 && (
-          <div className="mt-8 bg-gray-800/50 p-6 rounded-xl">
+          <div className="mt-8 bg-black/40 p-6 rounded-xl">
             <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.historicalProduct')}</h5>
             <div className="h-80">
               <Bar data={productHistoricalData} options={barChartOptions} />
@@ -369,7 +369,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
       </div>
 
       {/* Geographic Segmentation */}
-      <div className="bg-gradient-to-r from-gray-950 to-teal-900/30 p-6 rounded-xl border border-green-600">
+      <div className="bg-gradient-to-r from-black to-teal-900/30 p-6 rounded-xl border border-green-600">
         <h4 className="text-2xl font-bold text-green-400 mb-6">{t('segmentationTab.geographicSegmentation')}</h4>
 
         {latestGeoData.length === 0 ? (
@@ -377,7 +377,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Pie Chart */}
-            <div className="bg-gray-800/50 p-6 rounded-xl">
+            <div className="bg-black/40 p-6 rounded-xl">
               <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.latestPeriod')}</h5>
               <p className="text-sm text-gray-400 mb-4">{t('segmentationTab.date')}: {latestGeoData[0]?.date}</p>
               <div className="h-80">
@@ -386,7 +386,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
             </div>
 
             {/* Breakdown Table */}
-            <div className="bg-gray-800/50 p-6 rounded-xl">
+            <div className="bg-black/40 p-6 rounded-xl">
               <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.regionalRevenue')}</h5>
               <div className="space-y-3">
                 {latestGeoData
@@ -394,7 +394,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
                   .map((segment, idx) => {
                     const percentage = totalGeoRevenue > 0 ? (segment.revenue / totalGeoRevenue) * 100 : 0;
                     return (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">
+                      <div key={idx} className="flex items-center justify-between p-3 bg-black/40 rounded-lg">
                         <div className="flex items-center gap-3">
                           <div
                             className="w-4 h-4 rounded-full"
@@ -420,7 +420,7 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
 
         {/* Historical Bar Chart */}
         {geoSegments.length > 0 && (
-          <div className="mt-8 bg-gray-800/50 p-6 rounded-xl">
+          <div className="mt-8 bg-black/40 p-6 rounded-xl">
             <h5 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.historicalGeographic')}</h5>
             <div className="h-80">
               <Bar data={geoHistoricalData} options={barChartOptions} />
@@ -431,24 +431,24 @@ export default function SegmentationTab({ ticker }: SegmentationTabProps) {
 
       {/* Summary Stats */}
       {(latestProductData.length > 0 || latestGeoData.length > 0) && (
-        <div className="bg-gray-800 rounded-xl border border-white/[0.06] p-6">
+        <div className="bg-black/60 rounded-xl border border-white/[0.06] p-6">
           <h4 className="text-lg font-semibold text-gray-200 mb-4">{t('segmentationTab.summaryTitle')}</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gray-700 rounded-lg p-4 text-center">
+            <div className="bg-black/50 rounded-lg p-4 text-center">
               <p className="text-3xl font-bold text-green-400">{latestProductData.length}</p>
               <p className="text-sm text-gray-400">{t('segmentationTab.productSegments')}</p>
             </div>
-            <div className="bg-gray-700 rounded-lg p-4 text-center">
+            <div className="bg-black/50 rounded-lg p-4 text-center">
               <p className="text-3xl font-bold text-green-400">{latestGeoData.length}</p>
               <p className="text-sm text-gray-400">{t('segmentationTab.geographicRegions')}</p>
             </div>
-            <div className="bg-gray-700 rounded-lg p-4 text-center">
+            <div className="bg-black/50 rounded-lg p-4 text-center">
               <p className="text-2xl font-bold text-emerald-400">
                 {latestProductData.length > 0 ? latestProductData.sort((a, b) => b.revenue - a.revenue)[0]?.segment : 'N/A'}
               </p>
               <p className="text-sm text-gray-400">{t('segmentationTab.topProduct')}</p>
             </div>
-            <div className="bg-gray-700 rounded-lg p-4 text-center">
+            <div className="bg-black/50 rounded-lg p-4 text-center">
               <p className="text-2xl font-bold text-amber-400">
                 {latestGeoData.length > 0 ? latestGeoData.sort((a, b) => b.revenue - a.revenue)[0]?.region : 'N/A'}
               </p>

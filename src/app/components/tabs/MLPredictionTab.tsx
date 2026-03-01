@@ -182,7 +182,7 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
           </p>
           <div className="mt-4 flex justify-center gap-1">
             {(es ? PROGRESS_STEPS_ES : PROGRESS_STEPS_EN).map((_, i) => (
-              <div key={i} className={`h-1 w-6 rounded-full transition-all ${i <= progressStep ? 'bg-cyan-500' : 'bg-gray-700'}`} />
+              <div key={i} className={`h-1 w-6 rounded-full transition-all ${i <= progressStep ? 'bg-cyan-500' : 'bg-black/50'}`} />
             ))}
           </div>
         </div>
@@ -213,7 +213,7 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
               const confidencePct = pred.confidence <= 1 ? pred.confidence * 100 : pred.confidence;
               const isUp = changePct >= 0;
               return (
-                <div key={pred.horizon} className="bg-gray-700/50 rounded-xl p-4 border border-gray-600/50">
+                <div key={pred.horizon} className="bg-black/40 rounded-xl p-4 border border-green-900/15">
                   <div className="text-sm text-gray-400 mb-1">
                     {pred.horizon} {es ? 'días' : 'days'}
                   </div>
@@ -244,19 +244,19 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
 
           {/* Metrics */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gray-700/30 rounded-lg p-3">
+            <div className="bg-black/30 rounded-lg p-3">
               <div className="text-xs text-gray-500 uppercase">MAE</div>
               <div className="text-lg font-semibold text-gray-200">${result.metrics.mae.toFixed(2)}</div>
             </div>
-            <div className="bg-gray-700/30 rounded-lg p-3">
+            <div className="bg-black/30 rounded-lg p-3">
               <div className="text-xs text-gray-500 uppercase">RMSE</div>
               <div className="text-lg font-semibold text-gray-200">${result.metrics.rmse.toFixed(2)}</div>
             </div>
-            <div className="bg-gray-700/30 rounded-lg p-3">
+            <div className="bg-black/30 rounded-lg p-3">
               <div className="text-xs text-gray-500 uppercase">MAPE</div>
               <div className="text-lg font-semibold text-gray-200">{result.metrics.mape.toFixed(2)}%</div>
             </div>
-            <div className="bg-gray-700/30 rounded-lg p-3">
+            <div className="bg-black/30 rounded-lg p-3">
               <div className="text-xs text-gray-500 uppercase">{es ? 'Precisión Direc.' : 'Dir. Accuracy'}</div>
               <div className={`text-lg font-semibold ${(result.metrics.directionalAccuracy ?? 0) >= 55 ? 'text-green-400' : (result.metrics.directionalAccuracy ?? 0) >= 50 ? 'text-cyan-400' : 'text-red-400'}`}>
                 {(result.metrics.directionalAccuracy ?? 0).toFixed(1)}%
@@ -271,7 +271,7 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
 
           {/* Feature Importance */}
           {result.featureImportance && Object.keys(result.featureImportance).length > 0 && (
-            <div className="bg-gray-700/30 rounded-xl p-4">
+            <div className="bg-black/30 rounded-xl p-4">
               <h4 className="text-sm font-semibold text-gray-300 mb-3">
                 {es ? 'Importancia de Features' : 'Feature Importance'}
               </h4>
@@ -299,7 +299,7 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
 
           {/* Historical Backtest */}
           {result.historicalPredictions && result.historicalPredictions.length > 0 && (
-            <div className="bg-gray-700/30 rounded-xl p-4">
+            <div className="bg-black/30 rounded-xl p-4">
               <h4 className="text-sm font-semibold text-gray-300 mb-3">
                 {es ? 'Backtest (últimos 30 días)' : 'Backtest (last 30 days)'}
               </h4>
@@ -317,7 +317,7 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
                     {result.historicalPredictions.slice(-15).map((hp) => {
                       const err = ((hp.predicted - hp.actual) / hp.actual) * 100;
                       return (
-                        <tr key={hp.date} className="border-t border-gray-700/50">
+                        <tr key={hp.date} className="border-t border-green-900/15">
                           <td className="py-1 text-gray-400">{hp.date}</td>
                           <td className="py-1 text-right text-gray-300">{fmtPrice(hp.actual)}</td>
                           <td className="py-1 text-right text-cyan-400">{fmtPrice(hp.predicted)}</td>
@@ -344,7 +344,7 @@ export default function MLPredictionTab({ ticker, currentPrice }: MLPredictionTa
 
           {/* Disclaimer */}
           {result.disclaimer && (
-            <div className="text-xs text-gray-600 italic border-t border-gray-700/50 pt-3">
+            <div className="text-xs text-gray-600 italic border-t border-green-900/15 pt-3">
               ⚠️ {result.disclaimer}
             </div>
           )}

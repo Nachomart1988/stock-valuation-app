@@ -24,7 +24,7 @@ const faqs = [
 
 export default function SupportPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
       <Header />
 
       <main className="pt-28 pb-20 px-4 max-w-4xl mx-auto">
@@ -35,7 +35,7 @@ export default function SupportPage() {
 
         {/* Contact options */}
         <div className="grid md:grid-cols-3 gap-4 mb-12">
-          <div className="p-6 rounded-2xl bg-gray-800/60 border border-gray-700/50 text-center">
+          <div className="p-6 rounded-2xl bg-black/50 border border-green-900/15 text-center">
             <div className="text-3xl mb-3">📧</div>
             <div className="font-bold mb-2">Email</div>
             <a href="mailto:support@prismo.app" className="text-emerald-400 hover:text-emerald-300 text-sm transition">
@@ -51,7 +51,7 @@ export default function SupportPage() {
             </a>
             <div className="text-xs text-gray-500 mt-2">Elite / Gold — respuesta &lt;2h</div>
           </div>
-          <div className="p-6 rounded-2xl bg-gray-800/60 border border-gray-700/50 text-center">
+          <div className="p-6 rounded-2xl bg-black/50 border border-green-900/15 text-center">
             <div className="text-3xl mb-3">📖</div>
             <div className="font-bold mb-2">Documentación</div>
             <Link href="/docs" className="text-emerald-400 hover:text-emerald-300 text-sm transition">
@@ -65,7 +65,7 @@ export default function SupportPage() {
         <h2 className="text-xl font-bold mb-6">Preguntas Frecuentes</h2>
         <div className="space-y-4 mb-12">
           {faqs.map((faq) => (
-            <div key={faq.q} className="p-5 rounded-2xl bg-gray-800/50 border border-gray-700/50">
+            <div key={faq.q} className="p-5 rounded-2xl bg-black/40 border border-green-900/15">
               <div className="font-semibold mb-2 text-white">{faq.q}</div>
               <div className="text-sm text-gray-400">{faq.a}</div>
             </div>

@@ -288,7 +288,7 @@ function DocSection({ section }: { section: typeof sections[0] }) {
         if (match) return <p key={i} className="text-sm text-gray-400 ml-4 my-0.5">• <strong className="text-gray-200">{match[1]}</strong>{match[2]}</p>;
       }
       if (line.startsWith('- ')) return <p key={i} className="text-sm text-gray-400 ml-4 my-0.5">• {line.replace('- ', '')}</p>;
-      if (line.startsWith('|')) return <p key={i} className="text-sm text-gray-400 font-mono my-0.5">{line}</p>;
+      if (line.startsWith('|')) return <p key={i} className="text-sm text-gray-400 font-data my-0.5">{line}</p>;
       if (line.trim() === '') return <div key={i} className="h-1" />;
       return <p key={i} className="text-sm text-gray-400 my-1">{line}</p>;
     });
@@ -298,7 +298,7 @@ function DocSection({ section }: { section: typeof sections[0] }) {
     <div className={`rounded-2xl border ${section.border} overflow-hidden`}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-800/30 transition"
+        className="w-full flex items-center justify-between p-5 text-left hover:bg-black/60/30 transition"
       >
         <div>
           <span className={`text-xs font-bold uppercase tracking-wider ${section.color} block mb-0.5`}>{section.id.toUpperCase()}</span>
@@ -307,7 +307,7 @@ function DocSection({ section }: { section: typeof sections[0] }) {
         <span className={`text-xl transition-transform ${open ? 'rotate-45' : ''} ${section.color}`}>+</span>
       </button>
       {open && (
-        <div className="px-6 pb-6 bg-gray-800/20 border-t border-gray-700/30">
+        <div className="px-6 pb-6 bg-black/60/20 border-t border-green-900/20/30">
           <div className="pt-4">{renderContent(section.content)}</div>
         </div>
       )}
@@ -317,7 +317,7 @@ function DocSection({ section }: { section: typeof sections[0] }) {
 
 export default function DocsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
       <Header />
 
       <main className="pt-28 pb-20 px-4 max-w-4xl mx-auto">
@@ -329,7 +329,7 @@ export default function DocsPage() {
         </div>
 
         {/* Data sources summary */}
-        <div className="p-5 rounded-2xl bg-gray-800/50 border border-gray-700/50 mb-10">
+        <div className="p-5 rounded-2xl bg-black/40 border border-green-900/15 mb-10">
           <h2 className="font-bold mb-3">Fuentes de Datos Principales</h2>
           <div className="grid sm:grid-cols-3 gap-4 text-sm">
             {[
@@ -351,7 +351,7 @@ export default function DocsPage() {
           ))}
         </div>
 
-        <div className="mt-10 p-5 rounded-2xl bg-gray-800/40 border border-gray-700/50 text-sm text-gray-400">
+        <div className="mt-10 p-5 rounded-2xl bg-black/60/40 border border-green-900/15 text-sm text-gray-400">
           <strong className="text-white">Disclaimer:</strong> Los modelos de valuación producen estimaciones, no certezas.
           Los resultados dependen de la calidad de los datos históricos y de los supuestos elegidos.
           Prismo es una herramienta educativa e informativa. No constituye asesoramiento de inversión.

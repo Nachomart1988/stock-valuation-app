@@ -23,7 +23,7 @@ export default function ComingSoonPage() {
   const isWaitlisted = isLoaded && user && !hasAccess;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div className="min-h-screen bg-black/80 text-white flex flex-col">
       {/* Header */}
       <header className="px-6 py-5 flex items-center justify-between border-b border-gray-900">
         <Logo size="md" showText linkTo="/" />
@@ -31,7 +31,7 @@ export default function ComingSoonPage() {
           {isLoaded && !user && (
             <Link
               href="/login"
-              className="text-sm text-gray-400 hover:text-white transition px-4 py-2 rounded-lg hover:bg-gray-800"
+              className="text-sm text-gray-400 hover:text-white transition px-4 py-2 rounded-lg hover:bg-black/60"
             >
               Iniciar sesion
             </Link>
@@ -82,7 +82,7 @@ export default function ComingSoonPage() {
 
           {/* Conditional: waitlisted user vs anonymous */}
           {isWaitlisted ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 text-center">
+            <div className="bg-black/80 border border-green-900/20 rounded-2xl p-8 text-center">
               <div className="w-12 h-12 mx-auto mb-4">
                 <PrismoIcon className="w-12 h-12" innerClassName="text-base" />
               </div>
@@ -124,7 +124,7 @@ export default function ComingSoonPage() {
           {/* Bottom dots */}
           <div className="flex justify-center gap-2 mt-16">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="w-1 h-1 rounded-full bg-gray-700" />
+              <div key={i} className="w-1 h-1 rounded-full bg-black/50" />
             ))}
           </div>
         </div>

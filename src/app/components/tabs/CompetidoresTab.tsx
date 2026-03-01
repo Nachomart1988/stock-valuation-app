@@ -163,9 +163,9 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
 
       <div className="overflow-x-auto">
         <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
-          <thead className="bg-gray-800">
+          <thead className="bg-black/60">
             <tr>
-              <th className="px-6 py-4 text-left font-bold text-gray-200 sticky left-0 bg-gray-800 z-10 min-w-[220px]">
+              <th className="px-6 py-4 text-left font-bold text-gray-200 sticky left-0 bg-black/60 z-10 min-w-[220px]">
                 {t('competidoresTab.company')}
               </th>
               <th className="px-6 py-4 text-center font-bold text-gray-200">{t('competidoresTab.leveredBeta')}</th>
@@ -174,7 +174,7 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
               <th className="px-6 py-4 text-right font-bold text-gray-200">{t('competidoresTab.debtToMktCap')}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-700">
+          <tbody className="divide-y divide-green-900/15">
             {validPeerData.map((peer, index) => {
               let debtToMktCap: number | null = null;
               if (peer.totalDebt !== null && peer.marketCap !== null && peer.marketCap > 0) {
@@ -186,12 +186,12 @@ export default function CompetidoresTab({ ticker }: { ticker: string }) {
               return (
                 <tr
                   key={peer.symbol}
-                  className={`hover:bg-gray-700 transition-colors ${
+                  className={`hover:bg-black/50 transition-colors ${
                     isMainTicker ? 'bg-green-900/30 border-l-4 border-green-500' : ''
                   }`}
                 >
                   <td className={`px-6 py-4 font-medium sticky left-0 z-10 border-r border-white/[0.06] ${
-                    isMainTicker ? 'bg-green-900/30' : 'bg-gray-900'
+                    isMainTicker ? 'bg-green-900/30' : 'bg-black/80'
                   }`}>
                     <span className={`font-semibold ${isMainTicker ? 'text-green-400' : 'text-gray-100'}`}>
                       {peer.symbol}

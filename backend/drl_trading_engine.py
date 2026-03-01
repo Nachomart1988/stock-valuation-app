@@ -20,16 +20,22 @@ try:
     SB3_AVAILABLE = True
 except ImportError:
     SB3_AVAILABLE = False
+    gym = None
+    spaces = None
+    PPO = None
+    A2C = None
+    BaseCallback = object  # fallback base class so class definitions don't crash
     logger.warning("stable-baselines3 not available — DRL trading will use rule-based fallback")
 
 TRADING_DAYS = 252
 
 
-class TrainingCallback(BaseCallback):
+class TrainingCallback(BaseCallback if SB3_AVAILABLE else object):
     """Callback to capture training metrics."""
 
     def __init__(self):
-        super().__init__()
+        if SB3_AVAILABLE:
+            super().__init__()
         self.losses = []
         self.rewards = []
 
@@ -40,7 +46,7 @@ class TrainingCallback(BaseCallback):
         return True
 
 
-class TradingEnvironment(gym.Env):
+class TradingEnvironment(gym.Env if SB3_AVAILABLE else object):
     """
     Custom Gymnasium environment for stock trading.
 
@@ -61,26 +67,31 @@ class TradingEnvironment(gym.Env):
 
     def __init__(self, prices: np.ndarray, features: np.ndarray,
                  initial_cash: float = 10000.0, commission: float = 0.001):
-        super().__init__()
+        if SB3_AVAILABLE:
+            super().__init__()
         self.prices = prices
         self.features = features
         self.initial_cash = initial_cash
         self.commission = commission
         self.n_steps = len(prices)
 
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(23,), dtype=np.float32)
-        self.action_space = spaces.Discrete(3)
+        if SB3_AVAILABLE:
+            self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(23,), dtype=np.float32)
+            self.action_space = spaces.Discrete(3)
 
         self.reset()
 
     def reset(self, seed=None, options=None):
-        super().reset(seed=seed)
+        if SB3_AVAILABLE:
+            super().reset(seed=seed)
         self.current_step = 20  # skip first 20 for indicator warmup
         self.cash = self.initial_cash
         self.shares = 0
         self.trades = []
         self.portfolio_values = []
-        return self._get_obs(), {}
+        if SB3_AVAILABLE:
+            return self._get_obs(), {}
+        return None, {}
 
     def _get_obs(self) -> np.ndarray:
         feat = self.features[self.current_step]

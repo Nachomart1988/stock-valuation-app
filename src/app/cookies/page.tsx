@@ -6,7 +6,7 @@ export default function CookiesPage() {
   const lastUpdated = 'February 25, 2026';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
       <Header />
 
       <main className="pt-28 pb-20 px-4 max-w-3xl mx-auto">
@@ -69,7 +69,7 @@ export default function CookiesPage() {
                   <div className="space-y-3">
                     {group.items.map((item) => (
                       <div key={item.name} className="grid grid-cols-3 gap-3 text-sm">
-                        <div className="font-mono text-gray-200">{item.name}</div>
+                        <div className="font-data text-gray-200">{item.name}</div>
                         <div className="text-gray-400 col-span-1">{item.purpose}</div>
                         <div className="text-gray-500 text-right">{item.duration}</div>
                       </div>

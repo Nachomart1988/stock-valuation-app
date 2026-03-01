@@ -46,7 +46,7 @@ function SubscriptionSuccessContent() {
           </div>
 
           {/* Features unlocked */}
-          <div className="bg-gray-800/50 rounded-2xl p-6 border border-white/[0.06]">
+          <div className="bg-black/40 rounded-2xl p-6 border border-white/[0.06]">
             <h3 className="font-semibold mb-4 text-green-400">Funcionalidades Desbloqueadas:</h3>
             <ul className="space-y-2 text-left">
               {[
@@ -76,7 +76,7 @@ function SubscriptionSuccessContent() {
             </Link>
             <Link
               href="/account"
-              className="px-8 py-4 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-xl transition"
+              className="px-8 py-4 bg-black/60 hover:bg-black/50 text-white font-semibold rounded-xl transition"
             >
               Ver Mi Cuenta
             </Link>
@@ -106,7 +106,7 @@ function LoadingFallback() {
 
 export default function SubscriptionSuccessPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 text-white flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-black via-slate-900 to-black text-white flex items-center justify-center px-4">
       <Suspense fallback={<LoadingFallback />}>
         <SubscriptionSuccessContent />
       </Suspense>

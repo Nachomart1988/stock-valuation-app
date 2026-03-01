@@ -623,7 +623,7 @@ export default function ResumenTab({
             href={`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/health`}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-6 py-3 border border-white/[0.08] text-gray-300 rounded-xl font-semibold hover:bg-gray-800 transition"
+            className="px-6 py-3 border border-white/[0.08] text-gray-300 rounded-xl font-semibold hover:bg-black/60 transition"
           >
             Verificar Backend
           </a>
@@ -637,7 +637,7 @@ export default function ResumenTab({
     const activeSpectral: SpectralCycleData | null | undefined = fftData ?? resumen?.spectralCycles;
     if (!activeSpectral && fftLoading) {
       return (
-        <div className="bg-gray-900/80 rounded-3xl border border-white/[0.06]/50 p-6 flex items-center gap-3 text-gray-500">
+        <div className="bg-black/60 rounded-3xl border border-white/[0.06]/50 p-6 flex items-center gap-3 text-gray-500">
           <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm">Calculando ciclos espectrales FFT...</span>
         </div>
@@ -645,7 +645,7 @@ export default function ResumenTab({
     }
     if (!activeSpectral) return null;
     return (
-      <div className="bg-gray-900/80 rounded-3xl border border-white/[0.06]/50 overflow-hidden">
+      <div className="bg-black/60 rounded-3xl border border-white/[0.06]/50 overflow-hidden">
         <div className="px-6 py-4 bg-gradient-to-r from-violet-950/40 to-indigo-950/30 border-b border-white/[0.06]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -682,7 +682,7 @@ export default function ResumenTab({
           {(activeSpectral.score != null || activeSpectral.cycleStrength != null || activeSpectral.phasePosition != null || activeSpectral.rsi != null || activeSpectral.atrPct != null) && (
             <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
               {activeSpectral.score != null && (
-                <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                <div className="bg-black/50 rounded-xl p-3 text-center">
                   <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">FFT Score</p>
                   <p className={`text-xl font-bold ${
                     activeSpectral.score >= 60 ? 'text-emerald-400' : activeSpectral.score >= 40 ? 'text-yellow-400' : 'text-red-400'
@@ -690,19 +690,19 @@ export default function ResumenTab({
                 </div>
               )}
               {activeSpectral.cycleStrength != null && (
-                <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                <div className="bg-black/50 rounded-xl p-3 text-center">
                   <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Fuerza Ciclo</p>
                   <p className="text-xl font-bold text-violet-400">{activeSpectral.cycleStrength.toFixed(1)}%</p>
                 </div>
               )}
               {activeSpectral.phasePosition != null && (
-                <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                <div className="bg-black/50 rounded-xl p-3 text-center">
                   <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Posición Fase</p>
                   <p className="text-xl font-bold text-indigo-400">{activeSpectral.phasePosition.toFixed(1)}%</p>
                 </div>
               )}
               {activeSpectral.rsi != null && (
-                <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                <div className="bg-black/50 rounded-xl p-3 text-center">
                   <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">RSI Detrend</p>
                   <p className={`text-xl font-bold ${
                     activeSpectral.rsi < 30 ? 'text-emerald-400' : activeSpectral.rsi > 70 ? 'text-red-400' : 'text-gray-300'
@@ -710,7 +710,7 @@ export default function ResumenTab({
                 </div>
               )}
               {activeSpectral.atrPct != null && (
-                <div className="bg-gray-800/60 rounded-xl p-3 text-center">
+                <div className="bg-black/50 rounded-xl p-3 text-center">
                   <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">ATR %</p>
                   <p className={`text-xl font-bold ${
                     activeSpectral.atrPct > 3 ? 'text-red-400' : 'text-gray-300'
@@ -729,7 +729,7 @@ export default function ResumenTab({
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-gray-500 border-b border-gray-800">
+                    <tr className="text-gray-500 border-b border-green-900/20">
                       <th className="text-left py-2 pr-4">Período (días)</th>
                       <th className="text-right pr-4">Magnitud |A|</th>
                       <th className="text-right pr-4">Real (cos)</th>
@@ -740,19 +740,19 @@ export default function ResumenTab({
                   </thead>
                   <tbody>
                     {activeSpectral.complexComponents.map((c, i) => (
-                      <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                        <td className="py-2 pr-4 font-mono text-violet-300">{c.period_days}d</td>
-                        <td className="text-right pr-4 font-mono text-gray-300">{c.magnitude.toFixed(3)}</td>
-                        <td className="text-right pr-4 font-mono">
+                      <tr key={i} className="border-b border-green-900/20/50 hover:bg-black/60/30">
+                        <td className="py-2 pr-4 font-data text-violet-300">{c.period_days}d</td>
+                        <td className="text-right pr-4 font-data text-gray-300">{c.magnitude.toFixed(3)}</td>
+                        <td className="text-right pr-4 font-data">
                           <span className={c.real >= 0 ? 'text-emerald-400' : 'text-red-400'}>{c.real.toFixed(3)}</span>
                         </td>
-                        <td className="text-right pr-4 font-mono">
+                        <td className="text-right pr-4 font-data">
                           <span className={c.imag >= 0 ? 'text-emerald-400' : 'text-red-400'}>{c.imag.toFixed(3)}</span>
                         </td>
-                        <td className="text-right pr-4 font-mono text-indigo-300">{c.phase_deg.toFixed(1)}°</td>
+                        <td className="text-right pr-4 font-data text-indigo-300">{c.phase_deg.toFixed(1)}°</td>
                         <td className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <div className="w-16 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                            <div className="w-16 h-1.5 bg-black/60 rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full"
                                 style={{ width: `${Math.min(100, c.contribution_pct * 3)}%` }}
@@ -779,7 +779,7 @@ export default function ResumenTab({
               <h5 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
                 Precio vs Curva FFT Reconstruida (últimas {activeSpectral.rollingCurve.length} barras)
               </h5>
-              <div className="bg-gray-950/60 rounded-xl p-3 overflow-x-auto">
+              <div className="bg-black/50 rounded-xl p-3 overflow-x-auto">
                 {(() => {
                   const curve = activeSpectral.rollingCurve!;
                   const allVals = curve.flatMap(b => [b.price, b.reconstructed]);
@@ -824,7 +824,7 @@ export default function ResumenTab({
               <div className="flex flex-wrap gap-2">
                 {activeSpectral.dominantCycles.map((c, i) => (
                   <div key={i} className="bg-violet-900/20 border border-violet-800/40 rounded-lg px-3 py-2 text-xs">
-                    <span className="text-violet-300 font-mono font-bold">{c.period_days}d</span>
+                    <span className="text-violet-300 font-data font-bold">{c.period_days}d</span>
                     <span className="text-gray-500 mx-1">·</span>
                     <span className="text-gray-400">{c.contribution_pct.toFixed(1)}%</span>
                     <span className="text-gray-500 mx-1">·</span>
@@ -849,7 +849,7 @@ export default function ResumenTab({
           <div className="mt-8 grid grid-cols-6 gap-2 max-w-2xl mx-auto">
             {['Ingesta', 'Sentiment', 'Institucional', 'Técnico', 'Valuación', 'Calidad', 'Growth', 'Forecasts', 'MonteCarlo', 'Correlación', 'Síntesis', 'Output'].map((layer, i) => (
               <div key={layer} className="text-center">
-                <div className="w-8 h-8 mx-auto rounded-full bg-gray-800 border border-white/[0.06] flex items-center justify-center text-gray-600 text-[10px]">
+                <div className="w-8 h-8 mx-auto rounded-full bg-black/60 border border-white/[0.06] flex items-center justify-center text-gray-600 text-[10px]">
                   L{i + 1}
                 </div>
                 <p className="text-[8px] text-gray-600 mt-1">{layer}</p>
@@ -951,9 +951,9 @@ export default function ResumenTab({
 
       {/* ── Hybrid Classifier Panel ──────────────────────────────────────── */}
       {(resumen?.causalInsight || resumen?.gnnScores) && (
-        <div className="bg-gray-900/60 border border-gray-700/50 rounded-xl overflow-hidden">
+        <div className="bg-black/50 border border-green-900/15 rounded-xl overflow-hidden">
           {/* Panel header */}
-          <div className="px-4 py-2.5 border-b border-gray-700/40 flex items-center gap-2">
+          <div className="px-4 py-2.5 border-b border-green-900/20/40 flex items-center gap-2">
             <span className="text-cyan-400 text-sm">⚡</span>
             <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
               {es ? 'Clasificador Híbrido' : 'Hybrid Classifier'}
@@ -986,13 +986,13 @@ export default function ResumenTab({
                           <span className={`text-[11px] w-24 text-right ${isWinner ? (TYPE_TEXT_COLOR[cls] || 'text-gray-300') + ' font-semibold' : 'text-gray-500'}`}>
                             {COMPANY_TYPE_LABEL[cls] ?? cls}
                           </span>
-                          <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                          <div className="flex-1 h-3 bg-black/60 rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all ${isWinner ? (TYPE_COLOR[cls] || 'bg-gray-500') : 'bg-gray-600'}`}
                               style={{ width: `${Math.max(pct, 2)}%`, opacity: isWinner ? 1 : 0.5 }}
                             />
                           </div>
-                          <span className={`text-[11px] w-10 font-mono ${isWinner ? 'text-gray-200 font-semibold' : 'text-gray-600'}`}>
+                          <span className={`text-[11px] w-10 font-data ${isWinner ? 'text-gray-200 font-semibold' : 'text-gray-600'}`}>
                             {pct}%
                           </span>
                         </div>
@@ -1010,7 +1010,7 @@ export default function ResumenTab({
                 </p>
                 <div className="flex items-center gap-2 flex-wrap">
                   {resumen.rfType && (
-                    <div className="flex items-center gap-1.5 bg-gray-800/80 rounded-lg px-2.5 py-1.5 border border-gray-700/50">
+                    <div className="flex items-center gap-1.5 bg-black/60 rounded-lg px-2.5 py-1.5 border border-green-900/15">
                       <span className="text-[10px] text-gray-500">RF</span>
                       <span className={`text-xs font-medium ${TYPE_TEXT_COLOR[resumen.rfType] || 'text-gray-300'}`}>
                         {COMPANY_TYPE_LABEL[resumen.rfType] ?? resumen.rfType}
@@ -1022,7 +1022,7 @@ export default function ResumenTab({
                   )}
                   <span className="text-gray-600 text-xs">→</span>
                   {resumen.kmType && (
-                    <div className="flex items-center gap-1.5 bg-gray-800/80 rounded-lg px-2.5 py-1.5 border border-gray-700/50">
+                    <div className="flex items-center gap-1.5 bg-black/60 rounded-lg px-2.5 py-1.5 border border-green-900/15">
                       <span className="text-[10px] text-gray-500">KMeans</span>
                       <span className={`text-xs font-medium ${TYPE_TEXT_COLOR[resumen.kmType] || 'text-gray-300'}`}>
                         {COMPANY_TYPE_LABEL[resumen.kmType] ?? resumen.kmType}
@@ -1031,7 +1031,7 @@ export default function ResumenTab({
                   )}
                   <span className="text-gray-600 text-xs">→</span>
                   {resumen.companyType && (
-                    <div className="flex items-center gap-1.5 bg-gray-800/60 rounded-lg px-2.5 py-1.5 border-2 border-cyan-700/50">
+                    <div className="flex items-center gap-1.5 bg-black/50 rounded-lg px-2.5 py-1.5 border-2 border-cyan-700/50">
                       <span className="text-[10px] text-cyan-500">{es ? 'Final' : 'Final'}</span>
                       <span className={`text-xs font-bold ${TYPE_TEXT_COLOR[resumen.companyType] || 'text-gray-300'}`}>
                         {COMPANY_TYPE_LABEL[resumen.companyType] ?? resumen.companyType}
@@ -1079,10 +1079,10 @@ export default function ResumenTab({
                               <span className="text-[10px] text-gray-500 w-28 text-right truncate" title={feat}>
                                 {FEATURE_LABEL[feat] ?? feat}
                               </span>
-                              <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                              <div className="flex-1 h-2 bg-black/60 rounded-full overflow-hidden">
                                 <div className="h-full bg-cyan-600/70 rounded-full" style={{ width: `${Math.max(barW, 2)}%` }} />
                               </div>
-                              <span className="text-[10px] text-gray-600 w-8 font-mono">{pct}%</span>
+                              <span className="text-[10px] text-gray-600 w-8 font-data">{pct}%</span>
                             </div>
                           );
                         })}
@@ -1109,10 +1109,10 @@ export default function ResumenTab({
                               <span className="text-[10px] text-gray-500 w-28 text-right truncate" title={feat}>
                                 {FEATURE_LABEL[feat] ?? feat}
                               </span>
-                              <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                              <div className="flex-1 h-2 bg-black/60 rounded-full overflow-hidden">
                                 <div className="h-full bg-violet-600/70 rounded-full" style={{ width: `${Math.max(barW, 2)}%` }} />
                               </div>
-                              <span className="text-[10px] text-gray-600 w-8 font-mono">{pct}%</span>
+                              <span className="text-[10px] text-gray-600 w-8 font-data">{pct}%</span>
                             </div>
                           );
                         })}
@@ -1126,13 +1126,13 @@ export default function ResumenTab({
       )}
 
       {/* Data Quality Indicator + Refresh Button */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-900/50 rounded-xl border border-gray-800">
+      <div className="flex items-center justify-between px-4 py-2 bg-black/40 rounded-xl border border-green-900/20">
         <div className="flex items-center gap-4 flex-wrap">
           {dataQuality && (
             <>
               <span className="text-xs text-gray-500 uppercase tracking-wider">{es ? 'Calidad de Datos' : 'Data Quality'}</span>
               <div className="flex items-center gap-2">
-                <div className="w-32 h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div className="w-32 h-2 bg-black/60 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all"
                     style={{ width: `${dataQuality.completeness}%` }}
@@ -1155,7 +1155,7 @@ export default function ResumenTab({
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-gray-500">{es ? 'Historial' : 'History'}:</span>
               {resumen.scoreHistory.slice(0, 5).map((h, i) => (
-                <span key={i} className={`font-mono ${h.finalScore >= 60 ? 'text-emerald-400' : h.finalScore >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
+                <span key={i} className={`font-data ${h.finalScore >= 60 ? 'text-emerald-400' : h.finalScore >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
                   {h.finalScore?.toFixed(0)}
                 </span>
               ))}
@@ -1257,10 +1257,10 @@ export default function ResumenTab({
 
       {/* Synthesis Details */}
       {synthesisDetails && (
-        <div className="bg-gray-900/80 rounded-3xl border border-white/[0.06]/50 overflow-hidden">
+        <div className="bg-black/60 rounded-3xl border border-white/[0.06]/50 overflow-hidden">
           <button
             onClick={() => setShowSynthesis(!showSynthesis)}
-            className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r from-gray-950 to-emerald-900/30 hover:bg-gray-950 hover:to-emerald-900/50 transition-all"
+            className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r from-black to-emerald-900/30 hover:bg-black/80 hover:to-emerald-900/50 transition-all"
           >
             <div className="flex items-center gap-3">
               <span className="text-2xl">⚡</span>
@@ -1289,7 +1289,7 @@ export default function ResumenTab({
                     {Object.entries(synthesisDetails.componentScores).map(([key, value]) => (
                       <div key={key} className="flex items-center gap-3">
                         <span className="w-24 text-sm text-gray-400 capitalize">{key}</span>
-                        <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                        <div className="flex-1 h-3 bg-black/60 rounded-full overflow-hidden">
                           <div
                             className={`h-full bg-gradient-to-r ${getBarColor(value)} rounded-full transition-all`}
                             style={{ width: `${value}%` }}
@@ -1310,7 +1310,7 @@ export default function ResumenTab({
                     {Object.entries(synthesisDetails.appliedWeights).map(([key, value]) => (
                       <div key={key} className="flex items-center gap-3">
                         <span className="w-24 text-sm text-gray-400 capitalize">{key}</span>
-                        <div className="flex-1 h-3 bg-gray-800 rounded-full overflow-hidden">
+                        <div className="flex-1 h-3 bg-black/60 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-gradient-to-r from-amber-500 to-orange-400 rounded-full transition-all"
                             style={{ width: `${value * 2}%` }}
@@ -1326,7 +1326,7 @@ export default function ResumenTab({
               </div>
 
               {/* Score Breakdown */}
-              <div className="mt-6 flex items-center justify-center gap-4 p-4 bg-gray-800/50 rounded-xl">
+              <div className="mt-6 flex items-center justify-center gap-4 p-4 bg-black/40 rounded-xl">
                 <div className="text-center">
                   <p className="text-xs text-gray-500">Raw Score</p>
                   <p className="text-2xl font-bold text-gray-400">{synthesisDetails.rawScore}</p>
@@ -1361,7 +1361,7 @@ export default function ResumenTab({
               return (
                 <div
                   key={dim}
-                  className="bg-gray-900/80 p-4 rounded-2xl border border-white/[0.06]/50 hover:border-emerald-500/50 transition-all group"
+                  className="bg-black/60 p-4 rounded-2xl border border-white/[0.06]/50 hover:border-emerald-500/50 transition-all group"
                 >
                   <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 truncate">
                     {tlDim(dim.replace(/([A-Z])/g, ' $1').trim())}
@@ -1369,7 +1369,7 @@ export default function ResumenTab({
                   <p className={`text-3xl font-bold ${getScoreColor(numScore)} group-hover:scale-110 transition-transform`}>
                     {numScore}
                   </p>
-                  <div className="h-1.5 bg-gray-800 rounded mt-2 overflow-hidden">
+                  <div className="h-1.5 bg-black/60 rounded mt-2 overflow-hidden">
                     <div
                       className={`h-full bg-gradient-to-r ${getBarColor(numScore)} rounded transition-all duration-500`}
                       style={{ width: `${numScore}%` }}
@@ -1383,14 +1383,14 @@ export default function ResumenTab({
       )}
 
       {/* Summary Narrative */}
-      <div className="bg-gray-900/80 p-8 rounded-3xl border border-white/[0.06]/50">
+      <div className="bg-black/60 p-8 rounded-3xl border border-white/[0.06]/50">
         <h4 className="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
           <span className="text-emerald-400">📝</span> {es ? 'Análisis Narrativo' : 'Narrative Analysis'}
         </h4>
         <p className="text-lg leading-relaxed text-gray-200">{summaryText}</p>
 
         {actionableAdvice && (
-          <div className="mt-8 bg-gradient-to-r from-gray-950 via-emerald-900/40 to-emerald-900/40 p-6 rounded-2xl border border-emerald-500/30">
+          <div className="mt-8 bg-gradient-to-r from-black via-emerald-900/40 to-emerald-900/40 p-6 rounded-2xl border border-emerald-500/30">
             <p className="uppercase text-emerald-400 text-xs tracking-[3px] mb-2 flex items-center gap-2">
               <span>🎯</span> {es ? 'PLAN DE ACCIÓN' : 'ACTION PLAN'}
             </p>
@@ -1435,7 +1435,7 @@ export default function ResumenTab({
                       <span>{es ? 'Ciclos dominantes:' : 'Dominant cycles:'}</span>
                       {fftData.complexComponents.slice(0, 3).map((c, i) => (
                         <span key={i} className="bg-violet-900/30 border border-violet-800/30 rounded px-2 py-0.5">
-                          <span className="text-violet-300 font-mono">{c.period_days}d</span>
+                          <span className="text-violet-300 font-data">{c.period_days}d</span>
                           <span className="text-gray-600 mx-1">·</span>
                           <span className="text-gray-400">{c.contribution_pct.toFixed(1)}%</span>
                         </span>
@@ -1521,7 +1521,7 @@ export default function ResumenTab({
       {renderFFTSection()}
 
       {/* Footer */}
-      <div className="text-center text-xs text-gray-600 pt-4 border-t border-gray-800">
+      <div className="text-center text-xs text-gray-600 pt-4 border-t border-green-900/20">
         <p>Motor de Razonamiento Multi-Capa v1.0 | {chainOfThought?.length || 0} capas procesadas | Confianza: {synthesisDetails?.confidence || '--'}%</p>
       </div>
     </div>

@@ -302,7 +302,7 @@ export default function DRLTradingTab({ ticker }: DRLTradingTabProps) {
               <div className="max-h-[200px] overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-gray-800">
+                    <tr className="border-b border-green-900/20">
                       <th className="text-left py-1.5 text-gray-500">{es ? 'Dia' : 'Day'}</th>
                       <th className="text-left py-1.5 text-gray-500">{es ? 'Accion' : 'Action'}</th>
                       <th className="text-right py-1.5 text-gray-500">{es ? 'Precio' : 'Price'}</th>

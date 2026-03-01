@@ -19,7 +19,7 @@ export default function SSOCallbackPage() {
   }, [handleRedirectCallback, router]);
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+    <div className="min-h-screen bg-black/80 flex items-center justify-center">
       <div className="text-center">
         <LogoLoader size="md" message="Completando autenticación..." />
       </div>

@@ -254,9 +254,9 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Configurar PDF">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative w-full max-w-2xl bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl flex flex-col max-h-[92vh]">
+      <div className="relative w-full max-w-2xl bg-black/95 backdrop-blur-xl border border-green-900/30 rounded-2xl shadow-2xl flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-green-900/20 shrink-0">
           <div className="flex items-center gap-3">
             <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -270,7 +270,7 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowPresets(v => !v)}
-              className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-emerald-400 transition"
+              className="text-xs px-2.5 py-1 rounded-lg bg-black/60 hover:bg-green-900/20 border border-green-900/20 text-gray-400 hover:text-emerald-400 transition"
               aria-label="Gestionar presets"
             >
               Presets {presets.length > 0 && <span className="text-emerald-500">({presets.length})</span>}
@@ -292,14 +292,14 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
 
         {/* Presets panel */}
         {showPresets && (
-          <div className="mx-6 mt-3 p-4 rounded-xl bg-gray-800/70 border border-gray-700 shrink-0">
+          <div className="mx-6 mt-3 p-4 rounded-xl bg-black/60 border border-green-900/20 shrink-0">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Presets guardados</p>
             {presets.length === 0 ? (
               <p className="text-xs text-gray-500 mb-3">No hay presets aún.</p>
             ) : (
               <div className="space-y-1.5 mb-3">
                 {presets.map((p, i) => (
-                  <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-gray-900/60">
+                  <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-black/50">
                     <button onClick={() => loadPreset(p)} className="flex-1 text-left text-sm text-gray-200 hover:text-emerald-400 transition truncate">{p.name}</button>
                     <span className="text-xs text-gray-600 shrink-0">{new Date(p.savedAt).toLocaleDateString('es-AR')}</span>
                     <button onClick={() => deletePreset(i)} className="text-gray-600 hover:text-red-400 transition text-xs shrink-0" aria-label={`Eliminar ${p.name}`}>✕</button>
@@ -312,7 +312,7 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
                 value={presetName} onChange={e => setPresetName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && savePreset()}
                 placeholder="Nombre del preset..."
-                className="flex-1 px-3 py-1.5 rounded-lg bg-gray-900 border border-gray-700 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                className="flex-1 px-3 py-1.5 rounded-lg bg-black/60 border border-green-900/20 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-green-500"
                 aria-label="Nombre del nuevo preset"
               />
               <button onClick={savePreset} className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm font-medium transition">Guardar</button>
@@ -340,7 +340,7 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
                     <p className={`text-xs font-semibold uppercase tracking-widest mb-1 pl-1 ${group.color}`}>{group.label}</p>
                     <div className="space-y-1">
                       {group.sections.map(s => (
-                        <label key={s.key} className="flex items-center gap-3 p-2 rounded-lg bg-gray-800/50 hover:bg-gray-800 cursor-pointer transition">
+                        <label key={s.key} className="flex items-center gap-3 p-2 rounded-lg bg-black/40 hover:bg-green-900/10 cursor-pointer transition">
                           <input
                             type="checkbox"
                             checked={selectedSections.has(s.key)}
@@ -368,9 +368,9 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
                 <label className="block text-xs text-gray-400 mb-1.5">Color de fondo</label>
                 <div className="flex items-center gap-3">
                   <input type="color" value={bgHex} onChange={e => { setBgHex(e.target.value); setBgInput(e.target.value); }}
-                    className="w-10 h-10 rounded-lg cursor-pointer border border-gray-600 bg-transparent shrink-0" aria-label="Color de fondo" />
+                    className="w-10 h-10 rounded-lg cursor-pointer border border-green-900/30 bg-transparent shrink-0" aria-label="Color de fondo" />
                   <input value={bgInput} onChange={e => onBgInput(e.target.value)} maxLength={7}
-                    className={`w-28 px-2.5 py-1.5 rounded-lg text-sm font-mono bg-gray-800 border focus:outline-none ${isValidHex(bgInput) ? 'border-gray-600 text-gray-200' : 'border-red-600 text-red-400'}`}
+                    className={`w-28 px-2.5 py-1.5 rounded-lg text-sm font-data bg-black/60 border focus:outline-none ${isValidHex(bgInput) ? 'border-green-900/30 text-gray-200' : 'border-red-600 text-red-400'}`}
                     aria-label="Hex del color de fondo" />
                 </div>
               </div>
@@ -380,9 +380,9 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
                 <label className="block text-xs text-gray-400 mb-1.5">Color de acento</label>
                 <div className="flex items-center gap-3">
                   <input type="color" value={accentHex} onChange={e => { setAccentHex(e.target.value); setAccentInput(e.target.value); }}
-                    className="w-10 h-10 rounded-lg cursor-pointer border border-gray-600 bg-transparent shrink-0" aria-label="Color de acento" />
+                    className="w-10 h-10 rounded-lg cursor-pointer border border-green-900/30 bg-transparent shrink-0" aria-label="Color de acento" />
                   <input value={accentInput} onChange={e => onAccentInput(e.target.value)} maxLength={7}
-                    className={`w-28 px-2.5 py-1.5 rounded-lg text-sm font-mono bg-gray-800 border focus:outline-none ${isValidHex(accentInput) ? 'border-gray-600 text-gray-200' : 'border-red-600 text-red-400'}`}
+                    className={`w-28 px-2.5 py-1.5 rounded-lg text-sm font-data bg-black/60 border focus:outline-none ${isValidHex(accentInput) ? 'border-green-900/30 text-gray-200' : 'border-red-600 text-red-400'}`}
                     aria-label="Hex del color de acento" />
                   <div className="flex-1 h-2.5 rounded-full" style={{ background: isValidHex(accentHex) ? accentHex : '#00A651' }} aria-hidden="true" />
                 </div>
@@ -394,7 +394,7 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
                 <div className="flex gap-2" role="radiogroup" aria-label="Tipografía del PDF">
                   {FONTS.map(f => (
                     <button key={f} onClick={() => setFont(f)} role="radio" aria-checked={font === f}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition capitalize ${font === f ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>{f}</button>
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition capitalize ${font === f ? 'bg-green-900/30 text-green-400 border border-green-500/40' : 'bg-black/40 text-gray-500 hover:text-green-400/70 border border-transparent'}`}>{f}</button>
                   ))}
                 </div>
               </div>
@@ -403,7 +403,7 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Logo (opcional, máx. 2 MB)</label>
                 <button onClick={() => fileRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm transition border border-gray-700 w-full" aria-label="Subir logo">
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/60 hover:bg-green-900/20 border border-green-900/20 text-gray-300 text-sm transition w-full" aria-label="Subir logo">
                   <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -413,7 +413,7 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
                 <input ref={fileRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" aria-label="Archivo de logo" />
                 {logoBase64 && (
                   <div className="flex items-center gap-2 mt-2">
-                    <img src={logoBase64} alt="Vista previa del logo" className="h-8 rounded object-contain bg-gray-800 p-1" />
+                    <img src={logoBase64} alt="Vista previa del logo" className="h-8 rounded object-contain bg-black/60 p-1" />
                     <button onClick={() => { setLogoBase64(undefined); setLogoName(''); }}
                       className="text-xs text-gray-500 hover:text-red-400 transition" aria-label="Quitar logo">Quitar</button>
                   </div>
@@ -425,7 +425,7 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
                 <label className="block text-xs text-gray-400 mb-1.5">Disclaimer personalizado <span className="text-gray-600">(opcional)</span></label>
                 <textarea value={customDisc} onChange={e => setCustomDisc(e.target.value)}
                   placeholder="Dejar vacío para usar el disclaimer estándar…" rows={3}
-                  className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500 resize-none"
+                  className="w-full px-3 py-2 rounded-xl bg-black/60 border border-green-900/20 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-green-500 resize-none"
                   aria-label="Disclaimer personalizado" />
               </div>
             </div>
@@ -433,15 +433,15 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-800 bg-gray-900/50 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-green-900/20 bg-black/40 shrink-0">
           <p className="text-xs text-gray-600">
             {selectedSections.size} sección{selectedSections.size !== 1 ? 'es' : ''}
             {ticker && <> · <span className="text-gray-500">{ticker}</span></>}
           </p>
           <div className="flex gap-2">
-            <button onClick={onClose} className="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium transition" aria-label="Cancelar">Cancelar</button>
+            <button onClick={onClose} className="px-4 py-2 rounded-xl bg-black/60 hover:bg-green-900/20 border border-green-900/20 text-gray-300 text-sm font-medium transition" aria-label="Cancelar">Cancelar</button>
             <button onClick={handlePreview} disabled={generating}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-black/60 hover:bg-green-900/20 border border-green-900/20 text-gray-200 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Vista previa">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />

@@ -58,7 +58,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
         </div>
         {rows.length > 0 && (
           <div className="flex items-center gap-4">
-            <div className="text-right bg-gray-950 px-4 py-2 rounded-xl border border-green-600">
+            <div className="text-right bg-black/80 px-4 py-2 rounded-xl border border-green-600">
               <p className="text-xs text-green-400">{t('dupontTab.currentRoe')}</p>
               <p className="text-xl font-bold text-green-400">{rows[0]?.roe || '—'}</p>
             </div>
@@ -69,7 +69,7 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
       {/* DuPont Analysis Table */}
       <div className="overflow-x-auto">
         <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
-          <thead className="bg-gray-800">
+          <thead className="bg-black/60">
             <tr>
               <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">{t('dupontTab.date')}</th>
               <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">{t('dupontTab.roe')}</th>
@@ -78,9 +78,9 @@ export default function DuPontTab({ income, balance, ticker }: DuPontTabProps) {
               <th className="px-8 py-5 text-left text-gray-200 font-bold text-lg">{t('dupontTab.equityMultiplier')}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-700">
+          <tbody className="divide-y divide-green-900/15">
             {rows.map((row, i) => (
-              <tr key={i} className="hover:bg-gray-700 transition">
+              <tr key={i} className="hover:bg-black/50 transition">
                 <td className="px-8 py-5 text-gray-300 text-lg">{row.date}</td>
                 <td className="px-8 py-5 text-gray-300 text-lg">
                   {row.roe} {i < rows.length - 1 && getArrow(row.roe, rows[i + 1].roe)}

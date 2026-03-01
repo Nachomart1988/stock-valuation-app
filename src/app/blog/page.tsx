@@ -122,12 +122,12 @@ function calcLeaderboard(posts: BlogPost[]): UserScore[] {
 const sentimentColor = (s: string) =>
   s === 'bullish' ? 'text-emerald-400 bg-emerald-900/30 border-emerald-700/40'
     : s === 'bearish' ? 'text-red-400 bg-red-900/30 border-red-700/40'
-    : 'text-gray-400 bg-gray-800/40 border-gray-700/40';
+    : 'text-gray-400 bg-black/60/40 border-green-900/20/40';
 
 const outcomeColor = (o: string | null) =>
   o === 'hit' ? 'text-emerald-400 bg-emerald-900/20'
     : o === 'miss' ? 'text-red-400 bg-red-900/20'
-    : 'text-gray-400 bg-gray-800/30';
+    : 'text-gray-400 bg-black/60/30';
 
 const outcomeLabel = (o: string | null) =>
   o === 'hit' ? '✓ Acertó' : o === 'miss' ? '✗ Falló' : '⏳ Pendiente';
@@ -183,8 +183,8 @@ function NewPostForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: B
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-800">
+      <div className="bg-black/80 border border-green-900/20 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-green-900/20">
           <h2 className="text-xl font-bold">Publicar Análisis</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">×</button>
         </div>
@@ -194,7 +194,7 @@ function NewPostForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: B
             <div>
               <label className="block text-xs text-gray-400 mb-1">Ticker *</label>
               <input
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full bg-black/60 border border-green-900/20 rounded-xl px-4 py-2.5 text-sm font-data uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder="AAPL"
                 value={form.ticker}
                 onChange={(e) => handle('ticker', e.target.value)}
@@ -203,7 +203,7 @@ function NewPostForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: B
             <div>
               <label className="block text-xs text-gray-400 mb-1">Sentimiento</label>
               <select
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full bg-black/60 border border-green-900/20 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 value={form.sentiment}
                 onChange={(e) => handle('sentiment', e.target.value)}
               >
@@ -217,7 +217,7 @@ function NewPostForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: B
           <div>
             <label className="block text-xs text-gray-400 mb-1">Título *</label>
             <input
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full bg-black/60 border border-green-900/20 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               placeholder="Ej: AAPL — DCF sugiere 20% upside"
               value={form.title}
               onChange={(e) => handle('title', e.target.value)}
@@ -228,7 +228,7 @@ function NewPostForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: B
             <label className="block text-xs text-gray-400 mb-1">Análisis *</label>
             <textarea
               rows={5}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+              className="w-full bg-black/60 border border-green-900/20 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
               placeholder="Explica tu tesis. Qué modelo usaste, qué datos te llevaron a esta conclusión, qué riesgos ves..."
               value={form.body}
               onChange={(e) => handle('body', e.target.value)}
@@ -240,7 +240,7 @@ function NewPostForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: B
               <label className="block text-xs text-gray-400 mb-1">Precio Objetivo ($)</label>
               <input
                 type="number"
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full bg-black/60 border border-green-900/20 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 placeholder="150.00"
                 value={form.targetPrice}
                 onChange={(e) => handle('targetPrice', e.target.value)}
@@ -249,7 +249,7 @@ function NewPostForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: B
             <div>
               <label className="block text-xs text-gray-400 mb-1">Horizonte</label>
               <select
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full bg-black/60 border border-green-900/20 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 value={form.horizon}
                 onChange={(e) => handle('horizon', e.target.value)}
               >
@@ -263,8 +263,8 @@ function NewPostForm({ onClose, onSaved }: { onClose: () => void; onSaved: (p: B
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 p-6 border-t border-gray-800">
-          <button onClick={onClose} className="px-5 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-sm font-semibold transition">
+        <div className="flex justify-end gap-3 p-6 border-t border-green-900/20">
+          <button onClick={onClose} className="px-5 py-2.5 rounded-xl bg-black/60 hover:bg-black/50 text-sm font-semibold transition">
             Cancelar
           </button>
           <button
@@ -289,11 +289,11 @@ function PostCard({ post, onClick }: { post: BlogPost; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
-      className="p-5 rounded-2xl bg-gray-800/50 border border-gray-700/50 hover:border-emerald-500/40 transition cursor-pointer"
+      className="p-5 rounded-2xl bg-black/40 border border-green-900/15 hover:border-emerald-500/40 transition cursor-pointer"
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-mono font-bold text-white bg-gray-700 px-2 py-0.5 rounded text-sm">{post.ticker}</span>
+          <span className="font-data font-bold text-white bg-black/50 px-2 py-0.5 rounded text-sm">{post.ticker}</span>
           <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${sentimentColor(post.sentiment)}`}>
             {post.sentiment === 'bullish' ? '📈 Alcista' : post.sentiment === 'bearish' ? '📉 Bajista' : '➖ Neutral'}
           </span>
@@ -336,10 +336,10 @@ function PostModal({ post, onClose }: { post: BlogPost; onClose: () => void }) {
   const router = useRouter();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-gray-800">
+      <div className="bg-black/80 border border-green-900/20 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-green-900/20">
           <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-white bg-gray-700 px-2 py-0.5 rounded">{post.ticker}</span>
+            <span className="font-data font-bold text-white bg-black/50 px-2 py-0.5 rounded">{post.ticker}</span>
             <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${sentimentColor(post.sentiment)}`}>
               {post.sentiment === 'bullish' ? '📈 Alcista' : post.sentiment === 'bearish' ? '📉 Bajista' : '➖ Neutral'}
             </span>
@@ -362,7 +362,7 @@ function PostModal({ post, onClose }: { post: BlogPost; onClose: () => void }) {
           <p className="text-gray-300 leading-relaxed whitespace-pre-wrap mb-6">{post.body}</p>
 
           {(post.targetPrice || post.horizon) && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-gray-800/50 border border-gray-700/50 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-black/40 border border-green-900/15 mb-6">
               {post.targetPrice && (
                 <div>
                   <div className="text-xs text-gray-500">Precio Objetivo</div>
@@ -423,7 +423,7 @@ export default function BlogPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
       <Header />
 
       {showForm && <NewPostForm onClose={() => setShowForm(false)} onSaved={onSaved} />}
@@ -447,7 +447,7 @@ export default function BlogPage() {
           <SignedOut>
             <Link
               href="/login"
-              className="flex-shrink-0 px-5 py-3 rounded-xl bg-gray-700 hover:bg-gray-600 font-semibold transition text-sm text-center"
+              className="flex-shrink-0 px-5 py-3 rounded-xl bg-black/50 hover:bg-green-900/15 font-semibold transition text-sm text-center"
             >
               Inicia sesión para publicar
             </Link>
@@ -460,7 +460,7 @@ export default function BlogPage() {
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3 mb-6">
               <input
-                className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500 w-28"
+                className="bg-black/60 border border-green-900/20 rounded-xl px-4 py-2 text-sm font-data uppercase focus:outline-none focus:ring-2 focus:ring-emerald-500 w-28"
                 placeholder="Ticker"
                 value={filterTicker}
                 onChange={(e) => setFilterTicker(e.target.value)}
@@ -472,7 +472,7 @@ export default function BlogPage() {
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
                     filterSentiment === s
                       ? 'bg-emerald-600 text-white'
-                      : 'bg-gray-800 text-gray-400 hover:text-white border border-gray-700'
+                      : 'bg-black/60 text-gray-400 hover:text-white border border-green-900/20'
                   }`}
                 >
                   {s === 'all' ? 'Todos' : s === 'bullish' ? '📈 Alcista' : s === 'bearish' ? '📉 Bajista' : '➖ Neutral'}
@@ -498,7 +498,7 @@ export default function BlogPage() {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* How it works */}
-            <div className="p-5 rounded-2xl bg-gray-800/50 border border-gray-700/50">
+            <div className="p-5 rounded-2xl bg-black/40 border border-green-900/15">
               <h3 className="font-bold mb-3">Cómo funciona el Win-Rate</h3>
               <div className="space-y-3 text-sm text-gray-400">
                 <p>1. Publica tu análisis con un precio objetivo y horizonte temporal.</p>
@@ -509,7 +509,7 @@ export default function BlogPage() {
             </div>
 
             {/* Leaderboard */}
-            <div className="p-5 rounded-2xl bg-gray-800/50 border border-gray-700/50">
+            <div className="p-5 rounded-2xl bg-black/40 border border-green-900/15">
               <h3 className="font-bold mb-4">🏆 Top Analistas</h3>
               {leaderboard.length === 0 ? (
                 <p className="text-sm text-gray-500">Todavía no hay predicciones resueltas. ¡Sé el primero!</p>
@@ -534,7 +534,7 @@ export default function BlogPage() {
             </div>
 
             {/* Stats */}
-            <div className="p-5 rounded-2xl bg-gray-800/50 border border-gray-700/50">
+            <div className="p-5 rounded-2xl bg-black/40 border border-green-900/15">
               <h3 className="font-bold mb-3">Estadísticas</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
