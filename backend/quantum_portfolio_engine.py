@@ -48,17 +48,19 @@ class QuantumPortfolioOptimizer:
         prices = {}
         for ticker in tickers:
             try:
-                url = f"https://financialmodelingprep.com/stable/historical-price-eod/dividend-adjusted"
+                url = "https://financialmodelingprep.com/stable/historical-price-eod/full"
                 params = {
                     'symbol': ticker,
-                    'from': (datetime.now() - timedelta(days=period_days)).strftime('%Y-%m-%d'),
-                    'to': datetime.now().strftime('%Y-%m-%d'),
                     'apikey': self.api_key,
                 }
                 resp = self._session.get(url, params=params, timeout=15)
                 data = resp.json()
-                if isinstance(data, list) and len(data) > 5:
-                    closes = np.array([d['close'] for d in reversed(data) if 'close' in d])
+                # FMP returns {"historical": [...]} or a list depending on endpoint
+                hist = data.get('historical', data) if isinstance(data, dict) else data
+                if isinstance(hist, list) and len(hist) > 5:
+                    # FMP returns newest-first — reverse to oldest-first
+                    hist_sorted = sorted(hist, key=lambda x: x.get('date', ''))
+                    closes = np.array([d['close'] for d in hist_sorted if 'close' in d])
                     if len(closes) > 20:
                         prices[ticker] = closes
             except Exception as e:
