@@ -8,6 +8,7 @@ export interface PDFBranding {
   fontFamily: string;
   logoBase64?: string;
   customDisclaimer?: string;
+  userCompany?: string;
 }
 
 export interface PDFConfig {
@@ -149,6 +150,7 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
   const [logoBase64,    setLogoBase64]    = useState<string | undefined>(undefined);
   const [logoName,      setLogoName]      = useState('');
   const [customDisc,    setCustomDisc]    = useState('');
+  const [userCompany,   setUserCompany]   = useState('');
   const [toast,         setToast]         = useState<string | null>(null);
   const [showPresets,   setShowPresets]   = useState(false);
   const [presets,       setPresets]       = useState<Preset[]>([]);
@@ -206,6 +208,7 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
       fontFamily:       font,
       logoBase64,
       customDisclaimer: customDisc.trim() || undefined,
+      userCompany:      userCompany.trim() || undefined,
     },
     preview,
   });
@@ -397,6 +400,16 @@ export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition capitalize ${font === f ? 'bg-green-900/30 text-green-400 border border-green-500/40' : 'bg-black/40 text-gray-500 hover:text-green-400/70 border border-transparent'}`}>{f}</button>
                   ))}
                 </div>
+              </div>
+
+              {/* User company name */}
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Tu empresa / Your firm name <span className="text-gray-600">(opcional)</span></label>
+                <input value={userCompany} onChange={e => setUserCompany(e.target.value)}
+                  placeholder="Ej: Goldman Sachs, Mi Consultora…"
+                  className="w-full px-3 py-2 rounded-xl bg-black/60 border border-green-900/20 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-green-500"
+                  aria-label="Nombre de tu empresa" />
+                <p className="mt-1 text-xs text-gray-600">Aparece en portada y encabezado del PDF</p>
               </div>
 
               {/* Logo */}

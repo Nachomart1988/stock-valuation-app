@@ -7,6 +7,7 @@ export interface PDFBranding {
   fontFamily?:       string;                    // default 'helvetica'
   logoBase64?:       string;                    // optional base64 data URL
   customDisclaimer?: string;                    // optional replacement disclaimer text
+  userCompany?:      string;                    // user's firm name for branded reports
 }
 
 export interface PDFData {
@@ -144,22 +145,22 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   }
 
   // ── Page header ────────────────────────────────────────────────────────
+  const userCo = d.branding?.userCompany?.trim() || '';
   function pageHeader() {
     sf(BK); doc.rect(0, 0, PW, 11, 'F');
     ss(G);  doc.setLineWidth(0.25); doc.line(0, 11, PW, 11);
-    appLogo(M, 2, 7);
     doc.setFont(FONT,'bold'); doc.setFontSize(7); st(G);
-    doc.text('Prismo', M+9.5, 7);
+    doc.text(`${ticker}  ·  ${co}`, M, 7);
     doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TG);
-    doc.text(`${ticker}  ·  ${co}`, M+22, 7);
-    doc.text(`p.${pg}  ·  ${date}`, PW-M, 7, { align:'right' });
+    const headerRight = userCo ? `${userCo}  ·  p.${pg}  ·  ${date}` : `p.${pg}  ·  ${date}`;
+    doc.text(headerRight, PW-M, 7, { align:'right' });
   }
 
   // ── Page footer ────────────────────────────────────────────────────────
   function pageFooter() {
     ss(D3); doc.setLineWidth(0.2); doc.line(M, PH-11, PW-M, PH-11);
-    doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
-    doc.text('Prismo Investment Intelligence  ·  For informational purposes only  ·  Not financial advice', PW/2, PH-6.5, { align:'center' });
+    doc.setFont(FONT,'normal'); doc.setFontSize(5.5); st(TG);
+    doc.text('Analysis by Prismo  ·  prismo.us  ·  For informational purposes only', PW/2, PH-6.5, { align:'center' });
   }
 
   function newPage(): number {
@@ -175,10 +176,15 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   }
 
   // ── Section heading ────────────────────────────────────────────────────
-  function section(y: number, title: string): number {
+  function section(y: number, title: string, summary?: string): number {
     doc.setFont(FONT,'bold'); doc.setFontSize(7.5); st(G);
     doc.text(title.toUpperCase(), M, y);
     ss(G); doc.setLineWidth(0.25); doc.line(M, y+1.8, PW-M, y+1.8);
+    if (summary) {
+      doc.setFont(FONT,'italic'); doc.setFontSize(6.5); st(TG);
+      doc.text(summary, M, y+6);
+      return y+11;
+    }
     return y+7;
   }
 
@@ -266,12 +272,16 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // Green top edge
   sf(G); doc.rect(0, 0, PW, 1.5, 'F');
 
-  // App branding top-left
-  appLogo(M+2, 14, 11);
-  doc.setFont(FONT,'black'); doc.setFontSize(14); st(G);
-  doc.text('Prismo', M+16, 21.5);
-  doc.setFont(FONT,'normal'); doc.setFontSize(7.5); st(TG);
-  doc.text('Investment Intelligence Platform', M+16, 27);
+  // Top-left: user firm name or just "Investment Analysis Report"
+  if (userCo) {
+    doc.setFont(FONT,'black'); doc.setFontSize(14); st(G);
+    doc.text(userCo, M+2, 21.5);
+    doc.setFont(FONT,'normal'); doc.setFontSize(7.5); st(TG);
+    doc.text('Investment Analysis Report', M+2, 27);
+  } else {
+    doc.setFont(FONT,'bold'); doc.setFontSize(10); st(TG);
+    doc.text('Investment Analysis Report', M+2, 22);
+  }
 
   // Thin divider
   ss(D3); doc.setLineWidth(0.3); doc.line(M+2, 32, PW-M, 32);
@@ -279,11 +289,12 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // User uploaded logo (top-right, replaces company logo)
   if (d.branding?.logoBase64) {
     try {
-      sf(W); doc.circle(PW-M-15, 22, 14, 'F');
+      sf(D3); doc.circle(PW-M-15, 22, 14, 'F');
+      ss(G); doc.setLineWidth(0.3); doc.circle(PW-M-15, 22, 14, 'S');
       doc.addImage(d.branding.logoBase64, PW-M-26, 11, 22, 22, '', 'FAST');
     } catch { /* skip */ }
   } else if (profile?.image) {
-    // Company logo (right side)
+    // Company logo (right side) — dark bg for white/transparent logos
     try {
       const res = await fetch(profile.image);
       if (res.ok) {
@@ -294,8 +305,8 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
           r.onerror = reject;
           r.readAsDataURL(blob);
         });
-        // White bg circle for logo
-        sf(W); doc.circle(PW-M-15, 22, 14, 'F');
+        sf(D3); doc.circle(PW-M-15, 22, 14, 'F');
+        ss(G); doc.setLineWidth(0.3); doc.circle(PW-M-15, 22, 14, 'S');
         doc.addImage(url, 'JPEG', PW-M-26, 11, 22, 22, '', 'FAST');
       }
     } catch { /* skip */ }
@@ -389,7 +400,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   y = newPage();
 
   // Market summary pills
-  y = section(y, 'Market Summary');
+  y = section(y, 'Market Summary', 'Resumen de los indicadores clave de precio y mercado.');
   const pills = [
     ['Price',    `$${f(price)}`],
     ['Day Chg',  fp(quote?.changesPercentage)],
@@ -494,7 +505,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     const inc5 = (income||[]).slice(0,5).reverse();
     if (inc5.length > 0) {
       y = newPage();
-      y = section(y, 'Income Statement — Annual Detail');
+      y = section(y, 'Income Statement — Annual Detail', 'Estado de resultados de los últimos 5 años fiscales.');
       const yrs = inc5.map((i:any) => i.date?.substring(0,4)||'');
       y = atable({
         startY: y,
@@ -528,7 +539,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     const bal5 = (balance||[]).slice(0,5).reverse();
     if (bal5.length > 0) {
       y = newPage();
-      y = section(y, 'Balance Sheet — Annual Detail');
+      y = section(y, 'Balance Sheet — Annual Detail', 'Composición de activos, pasivos y patrimonio.');
       const yrs = bal5.map((b:any) => b.date?.substring(0,4)||'');
       y = atable({
         startY: y,
@@ -569,7 +580,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     const cf5 = (cashFlow||[]).slice(0,5).reverse();
     if (cf5.length > 0) {
       y = newPage();
-      y = section(y, 'Cash Flow Statement — Annual Detail');
+      y = section(y, 'Cash Flow Statement — Annual Detail', 'Flujo de caja operativo, de inversión y financiamiento.');
       const yrs = cf5.map((c:any) => c.date?.substring(0,4)||'');
       y = atable({
         startY: y,
@@ -609,7 +620,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   y = newPage();
 
   // Valuation model visual bars
-  y = section(y, 'Valuation Model Comparison vs Current Price');
+  y = section(y, 'Valuation Model Comparison vs Current Price', 'Valuación intrínseca estimada por múltiples modelos.');
   const avnVals = sharedAdvanceValueNet?.valuations;
   const models: {name:string; val:number}[] = [];
   if (avnVals) {
@@ -693,7 +704,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     const balLatest = (balance||[])[0];
     if (incLatest && balLatest) {
       y = newPage();
-      y = section(y, 'DuPont Analysis — 3-Factor Decomposition');
+      y = section(y, 'DuPont Analysis — 3-Factor Decomposition', 'Descomposición del ROE en sus 3 factores.');
 
       const rev    = incLatest.revenue || 0;
       const ni     = incLatest.netIncome || 0;
@@ -743,7 +754,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('quality_score') && sharedCompanyQualityNet?.scores) {
     y = newPage();
-    y = section(y, 'Company Quality Score');
+    y = section(y, 'Company Quality Score', 'Scoring de calidad empresarial en 5 dimensiones.');
     const sc = sharedCompanyQualityNet.scores;
     Object.entries(sc).forEach(([dim, score]:any) => {
       const pct = typeof score==='number' ? +(score*100).toFixed(0) : 0;
@@ -776,7 +787,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     if (sharedCagrStats?.minCagr != null) capRows.push(['CAGR Range (Min – Max)', `${fp(sharedCagrStats.minCagr)} – ${fp(sharedCagrStats.maxCagr)}`]);
     if (capRows.length > 0) {
       y = checkY(y, 35);
-      y = section(y, 'Cost of Capital — WACC & CAGR');
+      y = section(y, 'Cost of Capital — WACC & CAGR', 'Costo promedio ponderado de capital y tasas de crecimiento compuesto.');
       y = atable({ startY: y, head: [['Metric', 'Value']], body: capRows,
         columnStyles: { 0: { fontStyle: 'bold', fillColor: [14, 14, 14], cellWidth: 120 }, 1: { cellWidth: 60 } } });
     }
@@ -791,7 +802,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     const cfSgr  = (cashFlow||[])[0];
     if (incSgr && balSgr) {
       y = checkY(y, 55);
-      y = section(y, 'Sustainable Growth Rate (SGR)');
+      y = section(y, 'Sustainable Growth Rate (SGR)', 'Tasa de crecimiento sostenible basada en retención de ganancias.');
 
       const niSgr  = incSgr.netIncome || 0;
       const eqSgr  = balSgr.totalStockholdersEquity || balSgr.totalEquity || 1;
@@ -841,7 +852,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     ], [1, 3]);
     if (kmRows.length > 0) {
       y = newPage();
-      y = section(y, 'Key Metrics — Extended Analysis');
+      y = section(y, 'Key Metrics — Extended Analysis', 'Ratios financieros fundamentales y métricas de eficiencia.');
       y = atable({
         startY: y,
         head: [['Metric','Value','Metric','Value']],
@@ -873,7 +884,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     );
     if (fcRows.length > 0) {
       y = newPage();
-      y = section(y, 'Analyst Consensus Estimates');
+      y = section(y, 'Analyst Consensus Estimates', 'Estimaciones de analistas para los próximos años.');
       y = atable({
         startY: y,
         head: [['Year', 'Revenue Est.', 'EPS Est.', 'Net Income', 'EBITDA Est.']],
@@ -903,7 +914,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
 
     if (tgt && tgtL && tgtH && price) {
       y = newPage();
-      y = section(y, 'Analyst Price Target');
+      y = section(y, 'Analyst Price Target', 'Rango de precio objetivo según consenso de analistas.');
 
       const mn  = Math.min(+price, +tgtL)*0.94;
       const mx  = Math.max(+price, +tgtH)*1.06;
@@ -953,7 +964,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     const ttm = Array.isArray(incomeTTM) ? incomeTTM[0] : incomeTTM;
     if (ttm) {
       y = checkY(y, 42);
-      y = section(y, 'Trailing Twelve Months (TTM)');
+      y = section(y, 'Trailing Twelve Months (TTM)', 'Métricas trailing twelve months más recientes.');
       y = atable({
         startY: y,
         body:[
@@ -980,7 +991,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
 
     if (pa52.low52Week && pa52.high52Week && price) {
       y = newPage();
-      y = section(y, '52-Week Price Position');
+      y = section(y, '52-Week Price Position', 'Posición del precio relativa al rango de 52 semanas.');
       const lo = +pa52.low52Week*0.96, hi = +pa52.high52Week*1.04;
       const sp = hi-lo, sc = (CW-20)/sp;
       const tY = y+10;
@@ -1016,7 +1027,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   if (activeSections.has('pivots_fibonacci') && pivot?.pivotPoint) {
     const paFib = pivot;
     y = checkY(y, 50);
-    y = section(y, 'Pivot Points & Fibonacci Levels');
+    y = section(y, 'Pivot Points & Fibonacci Levels', 'Niveles de soporte, resistencia y retrocesos Fibonacci.');
     y = atable({
       startY: y,
       head:[['Level','Price','Level','Price']],
@@ -1043,19 +1054,11 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   if (activeSections.has('disclaimer')) {
   y = newPage();
 
-  // Centered branding
-  appLogo(PW/2 - 6, y, 12);
-  doc.setFont(FONT,'black'); doc.setFontSize(18); st(G);
-  doc.text('Prismo', PW/2, y+22, { align:'center' });
-  doc.setFont(FONT,'normal'); doc.setFontSize(8.5); st(TG);
-  doc.text('Investment Intelligence Platform', PW/2, y+29, { align:'center' });
-
-  y += 38;
-  ss(G); doc.setLineWidth(0.3); doc.line(M+20, y, PW-M-20, y);
-  y += 8;
-
+  // Title
   doc.setFont(FONT,'bold'); doc.setFontSize(10); st(TW);
-  doc.text('Disclaimer & Important Disclosures', PW/2, y, { align:'center' });
+  doc.text('Disclaimer & Important Disclosures', PW/2, y+4, { align:'center' });
+  y += 16;
+  ss(G); doc.setLineWidth(0.3); doc.line(M+20, y, PW-M-20, y);
   y += 10;
 
   doc.setFont(FONT,'normal'); doc.setFontSize(7.5); st(TW);
@@ -1092,6 +1095,9 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   y += 6;
   doc.setFontSize(7); st(TG);
   doc.text(`${co}  (${ticker})  ·  ${date}`, PW/2, y, { align:'center' });
+  y += 8;
+  doc.setFontSize(5.5); st(TG);
+  doc.text('Analysis by Prismo  ·  prismo.us', PW/2, y, { align:'center' });
 
   pageFooter();
   } // end disclaimer
@@ -1101,5 +1107,6 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     const blob: Blob = doc.output('blob');
     return URL.createObjectURL(blob);
   }
-  doc.save(`${ticker}_Prismo_${today.toISOString().split('T')[0]}.pdf`);
+  const filePrefix = userCo ? `${ticker}_${userCo.replace(/[^a-zA-Z0-9]/g, '_')}` : `${ticker}_Analysis`;
+  doc.save(`${filePrefix}_${today.toISOString().split('T')[0]}.pdf`);
 }
