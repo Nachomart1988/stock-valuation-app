@@ -5,6 +5,7 @@ import { LanguageProvider } from "@/i18n/LanguageContext";
 import { ClerkProvider } from "@clerk/nextjs";
 import ServiceWorkerRegistrar from "./components/ServiceWorkerRegistrar";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import Script from "next/script";
 
 const spaceGrotesk = Space_Grotesk({
@@ -83,8 +84,9 @@ export default function RootLayout({
             {children}
           </LanguageProvider>
           <ServiceWorkerRegistrar />
-          {/* Vercel Analytics */}
+          {/* Vercel Analytics + Speed Insights */}
           <Analytics />
+          <SpeedInsights />
           {/* Google Analytics 4 */}
           {process.env.NEXT_PUBLIC_GA_ID && (
             <>
