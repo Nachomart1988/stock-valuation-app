@@ -23,7 +23,6 @@ export interface PDFData {
   sharedWACC: number | null;
   sharedAvgCAPM: number | null;
   sharedForecasts: any[];
-  sharedKeyMetricsSummary: any;
   sharedAdvanceValueNet: any;
   sharedCompanyQualityNet: any;
   sharedCagrStats: { avgCagr: number | null; minCagr: number | null; maxCagr: number | null } | null;
@@ -61,6 +60,86 @@ function filterRows(rows: string[][], valueCols?: number[]): string[][] {
     const cols = valueCols || row.slice(1).map((_, i) => i + 1);
     return cols.some(i => row[i] != null && row[i] !== '-' && row[i] !== '$-' && row[i] !== '-%' && row[i] !== '0.0%');
   });
+}
+
+// ── Self-sufficient computation helpers (no tab dependency) ──────────────
+function computeCAGR(income: any[]): { avgCagr: number|null; minCagr: number|null; maxCagr: number|null } {
+  const sorted = [...income].filter((i: any) => i.revenue > 0).sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
+  const cagrs: number[] = [];
+  for (const span of [3, 5, 10]) {
+    if (sorted.length >= span) {
+      const old = sorted[sorted.length - span]?.revenue;
+      const cur = sorted[sorted.length - 1]?.revenue;
+      if (old > 0 && cur > 0) cagrs.push((Math.pow(cur / old, 1 / span) - 1) * 100);
+    }
+  }
+  if (cagrs.length === 0) return { avgCagr: null, minCagr: null, maxCagr: null };
+  return {
+    avgCagr: cagrs.reduce((a, b) => a + b, 0) / cagrs.length,
+    minCagr: Math.min(...cagrs),
+    maxCagr: Math.max(...cagrs),
+  };
+}
+
+function computeValuationModels(dcfCustom: any, quote: any, km: any): { name: string; val: number }[] {
+  const models: { name: string; val: number }[] = [];
+  if (dcfCustom?.dcf > 0) models.push({ name: 'DCF Intrinsic', val: +dcfCustom.dcf });
+  const eps = quote?.eps, bvps = km.bookValuePerShare, fcfps = km.freeCashFlowPerShare;
+  if (eps > 0 && bvps > 0) models.push({ name: 'Graham Number', val: Math.sqrt(22.5 * eps * bvps) });
+  if (eps > 0) models.push({ name: 'PE Fair Value', val: eps * 15 });
+  if (bvps > 0) models.push({ name: 'Book Value x1.5', val: bvps * 1.5 });
+  if (fcfps > 0) models.push({ name: 'FCF Yield (6%)', val: fcfps / 0.06 });
+  const div = quote?.dividendYield && quote.price ? quote.price * quote.dividendYield : 0;
+  const wacc = dcfCustom?.wacc;
+  if (div > 0 && wacc > 2) models.push({ name: 'DDM', val: div / (wacc / 100 - 0.03) });
+  return models;
+}
+
+function computeAverageValuation(dcfCustom: any, quote: any, km: any): number | null {
+  const models = computeValuationModels(dcfCustom, quote, km);
+  if (models.length === 0) return null;
+  return models.reduce((a, m) => a + m.val, 0) / models.length;
+}
+
+function computeQualityScore(km: any, income: any[], balance: any[]): { scores: Record<string, number>; totalScore: number; rating: string } | null {
+  const inc = income?.[0], bal = balance?.[0];
+  if (!inc || !bal) return null;
+  const s = (v: number, lo: number, hi: number) => Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+
+  const profitability = (
+    s((km.roe ?? km.returnOnEquity ?? 0), 0, 0.3) +
+    s((km.grossProfitMargin ?? inc.grossProfitRatio ?? 0), 0, 0.6) +
+    s((km.netProfitMargin ?? inc.netIncomeRatio ?? 0), 0, 0.25) +
+    s((km.returnOnAssets ?? km.roa ?? 0), 0, 0.15)
+  ) / 4;
+
+  const financial_strength = (
+    s(1 / Math.max(km.debtToEquity ?? km.debtEquityRatio ?? 1, 0.01), 0, 2) +
+    s(Math.min(km.currentRatio ?? 0, 4) / 4, 0, 1) +
+    s(Math.min(km.interestCoverage ?? 0, 20) / 20, 0, 1)
+  ) / 3;
+
+  const efficiency = (
+    s(km.assetTurnover ?? (inc.revenue / (bal.totalAssets || 1)), 0, 2) +
+    s((km.freeCashFlowMargin ?? 0), 0, 0.25)
+  ) / 2;
+
+  const growth = (() => {
+    const rev = income.slice(0, 5).reverse().map((i: any) => i.revenue).filter(Boolean);
+    if (rev.length < 2) return 0.5;
+    const cagr = Math.pow(rev[rev.length - 1] / rev[0], 1 / (rev.length - 1)) - 1;
+    return s(cagr, -0.05, 0.25);
+  })();
+
+  const valuation = (
+    s(1 / Math.max(km.peRatio ?? 30, 1), 0, 0.1) +
+    s((km.earningsYield ?? 0), 0, 0.12)
+  ) / 2;
+
+  const scores: Record<string, number> = { profitability, financial_strength, efficiency, growth, valuation };
+  const total = (profitability + financial_strength + efficiency + growth + valuation) / 5;
+  const rating = total >= 0.75 ? 'Excellent' : total >= 0.6 ? 'Good' : total >= 0.4 ? 'Fair' : 'Weak';
+  return { scores, totalScore: total, rating };
 }
 
 export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
@@ -103,7 +182,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
 
   const { ticker, profile, quote, income, balance, cashFlow, incomeTTM,
           priceTarget, sharedAverageVal, sharedWACC, sharedAvgCAPM,
-          sharedForecasts, sharedKeyMetricsSummary, sharedAdvanceValueNet,
+          sharedForecasts, sharedAdvanceValueNet,
           sharedCompanyQualityNet, sharedCagrStats, sharedPivotAnalysis,
           keyMetrics, keyMetricsTTM, ratios, ratiosTTM, estimates, dcfCustom } = d;
 
@@ -111,7 +190,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   const km0  = (keyMetrics || [])[0] || keyMetricsTTM || {};
   const rat0 = (ratios || [])[0] || ratiosTTM || {};
   // Merge raw metrics into a single lookup (raw FMP fields take priority)
-  const KM: any = { ...rat0, ...km0, ...sharedKeyMetricsSummary };
+  const KM: any = { ...rat0, ...km0 };
 
   // ── Resolve forecasts: raw estimates > shared state ──────────────────
   const forecasts = (sharedForecasts?.length ? sharedForecasts : estimates) || [];
@@ -128,6 +207,11 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     priceVsLow: quote.yearLow ? +((quote.price / quote.yearLow - 1) * 100).toFixed(1) : null,
     priceVsHigh: quote.yearHigh ? +((quote.price / quote.yearHigh - 1) * 100).toFixed(1) : null,
   } : null);
+
+  // ── Self-sufficient: compute from raw FMP data (no tab dependency) ──
+  const cagrStats   = sharedCagrStats ?? computeCAGR(income);
+  const avgVal      = sharedAverageVal ?? computeAverageValuation(dcfCustom, quote, KM);
+  const qualityNet  = sharedCompanyQualityNet ?? computeQualityScore(KM, income, balance);
 
   const co    = profile?.companyName || ticker;
   const sect  = profile?.sector   || '-';
@@ -337,7 +421,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     { l:'Current Price',  v:`$${f(price)}`,                           c:TW },
     { l:'Market Cap',     v:fl(quote?.marketCap),                     c:TW },
     { l:'P/E Ratio',      v:f(quote?.pe),                             c:TW },
-    { l:'Avg Valuation',  v:sharedAverageVal?`$${f(sharedAverageVal)}`:'-', c:G },
+    { l:'Avg Valuation',  v:avgVal?`$${f(avgVal)}`:'-', c:G },
   ].forEach((k, i) => {
     const bx = M + i*(kW+3);
     sf(D1); doc.roundedRect(bx, kY, kW, 20, 2, 2, 'F');
@@ -350,8 +434,8 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   });
 
   // ── Upside/downside ───────────────────────────────────────────────────
-  if (sharedAverageVal && price) {
-    const up   = (sharedAverageVal - price) / price * 100;
+  if (avgVal && price) {
+    const up   = (avgVal - price) / price * 100;
     const isUp = up >= 0;
     const uy   = kY + 26;
     sf(isUp ? [0,45,22] as RGB : [60,5,5] as RGB);
@@ -362,7 +446,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     st(isUp ? [90,255,150] as RGB : [255,110,110] as RGB);
     doc.text(`${isUp?'+':''}${up.toFixed(1)}%`, M+31, uy+12, { align:'center' });
     doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TG);
-    doc.text(`vs avg model valuation $${f(sharedAverageVal)}`, M+64, uy+9);
+    doc.text(`vs avg model valuation $${f(avgVal)}`, M+64, uy+9);
   }
 
   // ── Revenue preview chart on cover ───────────────────────────────────
@@ -621,6 +705,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
 
   // Valuation model visual bars
   y = section(y, 'Valuation Model Comparison vs Current Price', 'Valuación intrínseca estimada por múltiples modelos.');
+  // Use ML-backed valuations if available, otherwise compute from raw FMP data
   const avnVals = sharedAdvanceValueNet?.valuations;
   const models: {name:string; val:number}[] = [];
   if (avnVals) {
@@ -630,14 +715,12 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
       }
     });
   }
-  // Fallback: use raw DCF data if no backend valuations available
-  if (models.length === 0 && dcfCustom) {
-    if (dcfCustom.dcf && isFinite(dcfCustom.dcf) && dcfCustom.dcf > 0)
-      models.push({ name: 'DCF Intrinsic', val: +dcfCustom.dcf });
-    if (dcfCustom.stockPrice && isFinite(dcfCustom.stockPrice))
-      models.push({ name: 'Stock Price', val: +dcfCustom.stockPrice });
+  // Fallback: compute valuation models from raw data
+  if (models.length === 0) {
+    const computed = computeValuationModels(dcfCustom, quote, KM);
+    models.push(...computed);
   }
-  if (sharedAverageVal) models.push({ name:'Average', val:sharedAverageVal });
+  if (avgVal) models.push({ name:'Average', val:avgVal });
 
   if (models.length>0 && price) {
     const maxV = Math.max(...models.map(m=>m.val), price)*1.08;
@@ -752,10 +835,10 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ════════════════════════════════════════════════════════════════════════
   // COMPANY QUALITY SCORE
   // ════════════════════════════════════════════════════════════════════════
-  if (activeSections.has('quality_score') && sharedCompanyQualityNet?.scores) {
+  if (activeSections.has('quality_score') && qualityNet?.scores) {
     y = newPage();
     y = section(y, 'Company Quality Score', 'Scoring de calidad empresarial en 5 dimensiones.');
-    const sc = sharedCompanyQualityNet.scores;
+    const sc = qualityNet.scores;
     Object.entries(sc).forEach(([dim, score]:any) => {
       const pct = typeof score==='number' ? +(score*100).toFixed(0) : 0;
       const lbl = dim.replace(/_/g,' ').replace(/\b\w/g,(c:string)=>c.toUpperCase());
@@ -763,11 +846,11 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
       scoreBar(M, y, CW, lbl, pct);
       y += 8;
     });
-    const total = sharedCompanyQualityNet.totalScore;
+    const total = qualityNet.totalScore;
     if (total != null) {
       ss(D3); doc.setLineWidth(0.2); doc.line(M, y+1, PW-M, y+1);
       doc.setFont(FONT,'bold'); doc.setFontSize(9); st(G);
-      doc.text(`Overall: ${(total*100).toFixed(0)}/100  ·  ${sharedCompanyQualityNet.rating||''}`, M, y+8);
+      doc.text(`Overall: ${(total*100).toFixed(0)}/100  ·  ${qualityNet.rating||''}`, M, y+8);
       y += 13;
     }
   }
@@ -783,8 +866,8 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     if (capmVal)    capRows.push(['Cost of Equity — CAPM', fp(capmVal)]);
     if (dcfCustom?.costOfDebt) capRows.push(['Cost of Debt', fp(dcfCustom.costOfDebt)]);
     if (dcfCustom?.riskFreeRate) capRows.push(['Risk-Free Rate', fp(dcfCustom.riskFreeRate)]);
-    if (sharedCagrStats?.avgCagr != null) capRows.push(['Historical Revenue CAGR (Avg)', fp(sharedCagrStats.avgCagr)]);
-    if (sharedCagrStats?.minCagr != null) capRows.push(['CAGR Range (Min – Max)', `${fp(sharedCagrStats.minCagr)} – ${fp(sharedCagrStats.maxCagr)}`]);
+    if (cagrStats?.avgCagr != null) capRows.push(['Historical Revenue CAGR (Avg)', fp(cagrStats.avgCagr)]);
+    if (cagrStats?.minCagr != null) capRows.push(['CAGR Range (Min – Max)', `${fp(cagrStats.minCagr)} – ${fp(cagrStats.maxCagr)}`]);
     if (capRows.length > 0) {
       y = checkY(y, 35);
       y = section(y, 'Cost of Capital — WACC & CAGR', 'Costo promedio ponderado de capital y tasas de crecimiento compuesto.');

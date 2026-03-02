@@ -991,7 +991,6 @@ function AnalizarContent() {
         sharedWACC,
         sharedAvgCAPM,
         sharedForecasts,
-        sharedKeyMetricsSummary,
         sharedAdvanceValueNet,
         sharedCompanyQualityNet,
         sharedCagrStats,
