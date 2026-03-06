@@ -1095,7 +1095,7 @@ function AnalizarContent() {
             ) : (
               <a
                 href="/pricing"
-                className="flex items-center gap-2 px-4 py-2.5 bg-black/60 hover:bg-black/50 text-gray-400 hover:text-gray-300 font-semibold rounded-xl border border-green-900/20 transition shrink-0 text-sm"
+                className="flex items-center gap-2 px-4 py-2.5 bg-black/60 hover:bg-black/50 text-gray-400 hover:text-gray-300 font-semibold rounded-xl border border-amber-900/15 transition shrink-0 text-sm"
                 title="Plan Elite requerido para exportar PDF"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1111,17 +1111,17 @@ function AnalizarContent() {
           {/* Tab bar: horizontal scroll on mobile, wrap on desktop */}
           <div className="relative mb-6 sm:mb-10">
             <div className="overflow-x-auto pb-1">
-              <Tab.List className="flex gap-1.5 sm:gap-2 rounded-xl bg-black/80 backdrop-blur-md border border-green-900/30 p-1.5 sm:p-2 min-w-max sm:min-w-0 sm:flex-wrap">
+              <Tab.List className="flex gap-1.5 sm:gap-2 rounded-xl bg-black/80 backdrop-blur-md border border-amber-900/25 p-1.5 sm:p-2 min-w-max sm:min-w-0 sm:flex-wrap">
                 {categories.map((category) => (
                   <Tab
                     key={category}
                     className={({ selected }) =>
                       classNames(
                         'shrink-0 rounded-lg py-2 px-3 sm:py-2.5 sm:px-4 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap',
-                        'focus:outline-none focus:ring-1 focus:ring-green-500/50',
+                        'focus:outline-none focus:ring-1 focus:ring-amber-500/40',
                         selected
-                          ? 'bg-green-900/20 text-green-400 border border-green-500/40 shadow-[0_0_12px_rgba(0,166,81,0.2)]'
-                          : 'text-gray-500 hover:text-green-400/70 hover:bg-green-900/10 border border-transparent'
+                          ? 'bg-amber-900/15 backdrop-blur-md text-amber-300 border border-amber-500/30 shadow-[0_0_16px_rgba(212,175,55,0.15)] liquid-gold-shimmer'
+                          : 'text-gray-500 hover:text-amber-400/60 hover:bg-amber-900/10 border border-transparent'
                       )
                     }
                   >
@@ -1134,7 +1134,7 @@ function AnalizarContent() {
 
 <Tab.Panels className="mt-2">
   {/* 1. Inicio */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     <InicioTab
       ticker={activeTicker}
       quote={quote}
@@ -1148,7 +1148,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 2. Financial Statements (Income, Balance, CashFlow) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     <FinancialStatementsGroup
       IncomeTab={<FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} secData={secData} growthData={incomeGrowth?.length > 0 ? incomeGrowth : financialGrowth} asReportedData={incomeAsReported} financialGrowth={financialGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} currencyInfo={currencyInfo} />}
       BalanceTab={<FinancialStatementTab title="Balance Sheet" data={balance} type="balance" ttmData={balanceTTM} secData={secData} growthData={balanceGrowth?.length > 0 ? balanceGrowth : financialGrowth} asReportedData={balanceAsReported} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} enterpriseValue={enterpriseValue} currencyInfo={currencyInfo} />}
@@ -1157,7 +1157,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 3. Forecasts (Forecasts + Revenue Forecast) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 2) ? (
       <ForecastsGroup
         ForecastsTab={<ForecastsTab ticker={ticker} />}
@@ -1170,7 +1170,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 4. Info General (Analisis General, Key Metrics, Analistas, DuPont) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     <GeneralInfoGroup
       AnalisisGeneralTab={<GeneralTab profile={profile} quote={quote} ticker={activeTicker} />}
       KeyMetricsTab={<KeyMetricsTab ticker={activeTicker} industry={profile?.industry} onCompanyQualityNetChange={setSharedCompanyQualityNet} ownerEarnings={ownerEarnings} />}
@@ -1183,7 +1183,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 5. Compañía (Competidores, Industry, Segmentation, Holders) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     <CompanyGroup
       CompetidoresTab={<CompetidoresTab ticker={ticker} />}
       IndustryTab={<IndustryTab ticker={activeTicker} />}
@@ -1196,7 +1196,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 6. Noticias */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 5) ? (
       <NoticiasTab ticker={activeTicker} />
     ) : (
@@ -1205,7 +1205,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 7. Inputs (Sustainable Growth, Beta, CAGR, WACC) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     <InputsGroup
       SustainableGrowthTab={
         <SustainableGrowthTab
@@ -1239,7 +1239,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 8. Intraday (Pivots + Gaps) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 7) ? (
       <IntradayGroup
         PivotsTab={<PivotsTab ticker={activeTicker} />}
@@ -1252,7 +1252,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 9. DCF (Cálculos, DCF Models) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     <DCFGroup
       CalculosTab={
         <CalculosTab
@@ -1283,7 +1283,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 10. Valuaciones */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     <ValuacionesTab
       ticker={activeTicker}
       income={income}
@@ -1307,7 +1307,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 11. Probability */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 10) ? (
       <ProbabilityTab
         ticker={activeTicker}
@@ -1323,7 +1323,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 12. Options */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 11) ? (
       <OptionsTab ticker={activeTicker} currentPrice={quote?.price || 0} />
     ) : (
@@ -1332,7 +1332,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 13. Resumen Maestro */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 12) ? (
       <ResumenTab
         ticker={activeTicker}
@@ -1358,7 +1358,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 14. Diario Inversor + Portfolio Optimizer */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 13) ? (
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-black/40 p-2 rounded-lg mb-4">
@@ -1380,7 +1380,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 15. Quantum Portfolio Optimizer (QAOA) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 14) ? (
       <QuantumPortfolioTab ticker={activeTicker} />
     ) : (
@@ -1389,7 +1389,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 16. DRL Trading Simulator */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 15) ? (
       <DRLTradingTab ticker={activeTicker} />
     ) : (
@@ -1398,7 +1398,7 @@ function AnalizarContent() {
   </Tab.Panel>
 
   {/* 17. Quantum Risk Model + Alt Data */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-green-900/20">
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 16) ? (
       <QuantumRiskTab ticker={activeTicker} />
     ) : (
@@ -1818,11 +1818,11 @@ function InicioTab({
 
       {/* Price Hero Section */}
       <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-4">
-        <div className="col-span-3 sm:col-span-1 bg-gradient-to-br from-green-600 to-green-800 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
-          <p className="text-green-200 text-xs mb-1">{t('analysis.precio.actual')}</p>
-          <p className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">${currentPrice?.toFixed(2) || 'N/A'}</p>
+        <div className="col-span-3 sm:col-span-1 liquid-gold-card p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
+          <p className="text-amber-200/80 text-xs mb-1 relative z-10">{t('analysis.precio.actual')}</p>
+          <p className="text-2xl sm:text-3xl md:text-4xl font-bold text-white relative z-10">${currentPrice?.toFixed(2) || 'N/A'}</p>
           {priceStats && (
-            <p className={`text-xs mt-1 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+            <p className={`text-xs mt-1 relative z-10 ${priceStats.ytdChange >= 0 ? 'text-green-300' : 'text-red-300'}`}>
               {priceStats.ytdChange >= 0 ? '+' : ''}{priceStats.ytdChange.toFixed(1)}% (1A)
             </p>
           )}
@@ -1833,14 +1833,14 @@ function InicioTab({
           { label: t('analysis.precio.upside'), value: sharedAverageVal && currentPrice ? `${(((sharedAverageVal - currentPrice) / currentPrice) * 100).toFixed(1)}%` : 'N/A', color: sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400' },
           { label: t('analysis.precio.peRatio'), value: (() => { const ttmEPS = incomeTTM?.eps || incomeTTM?.epsdiluted || quote?.eps || profile?.ttmEPS; if (currentPrice && ttmEPS && ttmEPS > 0) return (currentPrice / ttmEPS).toFixed(1); return quote?.pe?.toFixed(1) || 'N/A'; })(), color: 'text-emerald-400' },
         ].map(({ label, value, color }) => (
-          <div key={label} className="bg-black/60 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center border border-white/[0.08] flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
-            <p className="text-gray-400 text-[10px] sm:text-xs mb-1 leading-tight">{label}</p>
-            <p className={`text-lg sm:text-2xl md:text-3xl font-bold ${color}`}>{value}</p>
+          <div key={label} className="liquid-gold-card p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
+            <p className="text-gray-400 text-[10px] sm:text-xs mb-1 leading-tight relative z-10">{label}</p>
+            <p className={`text-lg sm:text-2xl md:text-3xl font-bold relative z-10 ${color}`}>{value}</p>
           </div>
         ))}
-        <div className="bg-black/60 p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center border border-amber-600/30 hover:border-amber-500/50 transition flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px] relative group">
-          <p className="text-gray-400 text-[10px] sm:text-xs mb-1 leading-tight">{t('analysis.precio.margenSeguridad')}</p>
-          <div className="flex items-center justify-center gap-1">
+        <div className="liquid-gold-card p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center hover:border-amber-500/50 transition flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px] group">
+          <p className="text-gray-400 text-[10px] sm:text-xs mb-1 leading-tight relative z-10">{t('analysis.precio.margenSeguridad')}</p>
+          <div className="flex items-center justify-center gap-1 relative z-10">
             <input
               type="number"
               value={margenSeguridad}
@@ -1849,7 +1849,7 @@ function InicioTab({
             />
             <span className="text-sm sm:text-xl md:text-2xl font-bold text-amber-400">%</span>
           </div>
-          <p className="text-gray-500 text-[9px] sm:text-[10px] mt-1">✏️ editable</p>
+          <p className="text-gray-500 text-[9px] sm:text-[10px] mt-1 relative z-10">editable</p>
         </div>
       </div>
 
@@ -2750,7 +2750,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
           </span>
         )}
         {(!currencyInfo || currencyInfo.original === 'USD') && (
-          <span className="px-3 py-1 bg-black/50/40 text-gray-500 border border-green-900/20/30 rounded-full text-xs">
+          <span className="px-3 py-1 bg-black/50/40 text-gray-500 border border-amber-900/15/30 rounded-full text-xs">
             Valores en USD
           </span>
         )}

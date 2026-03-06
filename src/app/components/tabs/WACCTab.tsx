@@ -245,9 +245,9 @@ export default function WACCTab({ ticker, income, balance, quote, profile, onWAC
           <p className="text-sm text-gray-400 mt-1">{t('waccTab.subtitle')} {ticker}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right bg-gradient-to-r from-amber-900/40 to-orange-900/40 px-4 py-2 rounded-xl border border-amber-600">
-            <p className="text-xs text-amber-400">{t('waccTab.wacc')}</p>
-            <p className="text-xl font-bold text-amber-400">{wacc.toFixed(2)}%</p>
+          <div className="text-right liquid-gold-card px-4 py-2 rounded-xl">
+            <p className="text-xs text-amber-400 relative z-10">{t('waccTab.wacc')}</p>
+            <p className="text-xl font-bold text-amber-400 relative z-10">{wacc.toFixed(2)}%</p>
           </div>
         </div>
       </div>

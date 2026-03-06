@@ -227,6 +227,87 @@ body::after {
   box-shadow: 0 0 24px rgba(0, 166, 81, 0.08);
 }
 
+/* ── Liquid Gold system ─────────────────────────────────────────────── */
+.glow-gold {
+  box-shadow: 0 0 24px rgba(212,175,55,0.12),
+              inset 0 1px 0 rgba(255,215,0,0.08);
+}
+.border-glow-gold {
+  border-color: rgba(212,175,55,0.25);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.border-glow-gold:hover {
+  border-color: rgba(212,175,55,0.5);
+  box-shadow: 0 0 28px rgba(212,175,55,0.1);
+}
+
+@keyframes liquidGoldShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.liquid-gold-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.liquid-gold-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    transparent 25%,
+    rgba(255,215,0,0.05) 37%,
+    rgba(212,175,55,0.10) 50%,
+    rgba(255,215,0,0.05) 63%,
+    transparent 75%
+  );
+  background-size: 200% 100%;
+  animation: liquidGoldShimmer 6s ease-in-out infinite;
+}
+
+.liquid-gold-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg,
+    rgba(212,175,55,0.08) 0%,
+    rgba(0,0,0,0.6) 50%,
+    rgba(212,175,55,0.04) 100%
+  );
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(212,175,55,0.2);
+  box-shadow: 0 0 24px rgba(212,175,55,0.08),
+              inset 0 1px 0 rgba(255,215,0,0.06);
+}
+.liquid-gold-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    transparent 25%,
+    rgba(255,215,0,0.04) 37%,
+    rgba(212,175,55,0.08) 50%,
+    rgba(255,215,0,0.04) 63%,
+    transparent 75%
+  );
+  background-size: 200% 100%;
+  animation: liquidGoldShimmer 6s ease-in-out infinite;
+}
+
+.section-gold-line {
+  height: 1px;
+  background: linear-gradient(90deg,
+    rgba(212,175,55,0.6),
+    rgba(255,215,0,0.2),
+    transparent
+  );
+}
+
 /* Terminal font for data displays */
 .font-data {
   font-family: 'IBM Plex Mono', var(--font-data), 'Courier New', monospace;

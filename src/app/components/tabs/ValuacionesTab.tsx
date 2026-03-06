@@ -2827,16 +2827,16 @@ export default function ValuacionesTab({
       {/* ═══════════════════════════════════════════════════
           FINAL VALUATION SUMMARY - Premium Design
           ═══════════════════════════════════════════════════ */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-black via-black/80 to-black p-8 rounded-3xl border-2 border-green-500/30 shadow-2xl">
-        {/* Background decoration */}
-        <div className="absolute inset-0 bg-gradient-to-r from-green-600/5 via-emerald-600/5 to-green-600/5"></div>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-green-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl"></div>
+      <div className="liquid-gold-card p-8 rounded-3xl shadow-2xl">
+        {/* Background decoration — gold orbs */}
+        <div className="absolute inset-0 bg-gradient-to-r from-amber-600/5 via-yellow-600/5 to-amber-600/5"></div>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-yellow-500/8 rounded-full blur-3xl"></div>
 
         <div className="relative z-10">
           <div className="text-center mb-6">
             <h4 className="text-lg font-medium text-gray-400 mb-2">{t('valuacionesTab.avgIntrinsicValue')}</h4>
-            <p className="text-7xl font-black bg-gradient-to-r from-green-400 via-green-300 to-emerald-400 bg-clip-text text-transparent tracking-tight">
+            <p className="text-7xl font-black bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 bg-clip-text text-transparent tracking-tight">
               {averageVal !== null ? `$${averageVal.toFixed(2)}` : '—'}
             </p>
             <p className="text-sm text-gray-500 mt-2">
@@ -2851,9 +2851,9 @@ export default function ValuacionesTab({
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Precio de Mercado</p>
                 <p className="text-3xl font-bold text-gray-100">${quote.price.toFixed(2)}</p>
               </div>
-              <div className="bg-green-900/40 backdrop-blur p-5 rounded-2xl border-2 border-green-500/50 text-center">
-                <p className="text-xs text-green-400 uppercase tracking-wide mb-1">Valor Intrínseco</p>
-                <p className="text-3xl font-bold text-green-400">${averageVal.toFixed(2)}</p>
+              <div className="liquid-gold-card backdrop-blur p-5 rounded-2xl text-center">
+                <p className="text-xs text-amber-400 uppercase tracking-wide mb-1 relative z-10">Valor Intrínseco</p>
+                <p className="text-3xl font-bold text-amber-400 relative z-10">${averageVal.toFixed(2)}</p>
               </div>
               <div className={`backdrop-blur p-5 rounded-2xl border text-center ${
                 averageVal > quote.price

@@ -1580,7 +1580,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
           CompanyQuality Net - AI-Powered Quality Assessment
           ═══════════════════════════════════════════════════ */}
       {(keyMetrics || ratios) && (
-        <div className="bg-gradient-to-br from-green-950 via-emerald-950 to-black p-8 rounded-3xl border-2 border-emerald-500/50 shadow-2xl">
+        <div className="liquid-gold-card p-8 rounded-3xl shadow-2xl">
           {qualityLoading && (
             <div className="flex items-center justify-center py-8 gap-3">
               <LogoLoader size="sm" />

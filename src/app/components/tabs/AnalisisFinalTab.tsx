@@ -173,11 +173,11 @@ export default function AnalisisFinalTab({
       )}
 
       {/* Hero Section - Veredicto Principal */}
-      <div className={`rounded-2xl p-8 text-center border-2 ${
-        veredicto === t('analisisFinalTab.cheap') ? 'bg-green-900/20 border-green-500' :
-        veredicto === t('analisisFinalTab.fair') ? 'bg-yellow-900/20 border-yellow-500' :
-        veredicto === t('analisisFinalTab.expensive') ? 'bg-red-900/20 border-red-500' :
-        'bg-black/60 border-white/[0.08]'
+      <div className={`liquid-gold-card rounded-2xl p-8 text-center ${
+        veredicto === t('analisisFinalTab.cheap') ? 'border-green-500/40!' :
+        veredicto === t('analisisFinalTab.fair') ? 'border-yellow-500/40!' :
+        veredicto === t('analisisFinalTab.expensive') ? 'border-red-500/40!' :
+        ''
       }`}>
         <p className="text-xl text-gray-400 mb-2">{t('analisisFinalTab.verdict')}</p>
         <p className={`text-6xl font-black mb-4 ${color}`}>
