@@ -1,4 +1,4 @@
-import { clerkMiddleware, createRouteMatcher, clerkClient } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 // Public paths — always accessible
@@ -19,19 +19,12 @@ export default clerkMiddleware(async (auth, req) => {
   // Public paths: always allow
   if (isPublicPath(req)) return NextResponse.next();
 
-  // Everything else requires login + plan > free
+  // Protected paths: require authentication only.
+  // Plan-level gating is handled client-side in page.tsx (avoids
+  // a slow Clerk API round-trip on every navigation that was causing ~2.9s TTFB).
   const { userId } = await auth();
 
   if (!userId) {
-    return NextResponse.redirect(new URL('/', req.url));
-  }
-
-  // Fetch user directly from Clerk API to get fresh publicMetadata
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  const plan = (user.publicMetadata?.plan as string) ?? 'free';
-
-  if (plan === 'free') {
     return NextResponse.redirect(new URL('/', req.url));
   }
 

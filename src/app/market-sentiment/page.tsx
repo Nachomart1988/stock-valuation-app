@@ -327,7 +327,7 @@ export default function MarketSentimentPage() {
       <div className="min-h-screen bg-gradient-to-br from-black to-slate-950 flex items-center justify-center px-4">
         <div className="text-center">
           <LogoLoader size="xl" />
-          <p className="text-xl sm:text-2xl font-light text-emerald-400 mt-6">{t('marketSentiment.analyzing')}</p>
+          <p className="text-xl sm:text-2xl font-normal text-emerald-400 mt-6">{t('marketSentiment.analyzing')}</p>
           <p className="text-gray-500 mt-2 text-sm">{t('marketSentiment.processingData')}</p>
         </div>
       </div>

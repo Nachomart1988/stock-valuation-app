@@ -580,7 +580,7 @@ export default function ResumenTab({
     return (
       <div className="min-h-[600px] flex flex-col items-center justify-center">
         <LogoLoader size="xl" />
-        <p className="mt-8 text-2xl font-light text-emerald-400">Ejecutando Motor de Razonamiento...</p>
+        <p className="mt-8 text-2xl font-normal text-emerald-400">Ejecutando Motor de Razonamiento...</p>
         <div className="flex flex-col items-center gap-2 mt-4 text-gray-500 text-sm">
           <p className="animate-pulse">Layer 1: Ingesta de Datos</p>
           <p className="animate-pulse" style={{ animationDelay: '0.3s' }}>Layer 2: Análisis Sentimiento (NLP)</p>
