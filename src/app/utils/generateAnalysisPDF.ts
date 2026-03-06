@@ -34,6 +34,14 @@ export interface PDFData {
   ratiosTTM?: any;
   estimates?: any[];
   dcfCustom?: any;
+  // Additional raw data for comprehensive report
+  dividends?: any[];
+  incomeGrowth?: any[];
+  financialGrowth?: any[];
+  enterpriseValue?: any[];
+  ownerEarnings?: any[];
+  balanceTTM?: any;
+  cashFlowTTM?: any;
   // Optional config
   sections?:  string[];    // which pages to include
   branding?:  PDFBranding;
@@ -142,6 +150,18 @@ function computeQualityScore(km: any, income: any[], balance: any[]): { scores: 
   return { scores, totalScore: total, rating };
 }
 
+// ── FMP fetch helper (client-side, through /api/fmp proxy) ─────────────
+async function fmpFetch(path: string, params: Record<string, string> = {}): Promise<any> {
+  try {
+    const search = new URLSearchParams();
+    search.set('path', path);
+    for (const [k, v] of Object.entries(params)) search.set(k, v);
+    const res = await fetch(`/api/fmp?${search.toString()}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return res.json();
+  } catch { return null; }
+}
+
 export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   const { default: jsPDF } = await import('jspdf');
   const atMod = await import('jspdf-autotable');
@@ -153,10 +173,13 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ── Sections & branding (from config or defaults) ─────────────────────
   const activeSections = new Set(
     d.sections ?? [
-      'cover', 'market_summary', 'income_statement', 'balance_sheet', 'cash_flow',
-      'key_metrics', 'dupont', 'quality_score', 'wacc_cagr', 'sgr',
-      'valuation_models', 'analyst_forecasts', 'price_target', 'ttm_snapshot',
-      'technical_52w', 'pivots_fibonacci', 'disclaimer',
+      'cover', 'company_overview', 'market_summary', 'income_statement', 'balance_sheet', 'cash_flow',
+      'key_metrics', 'dupont', 'quality_score', 'wacc_cagr', 'beta_capm', 'sgr',
+      'valuation_models', 'analyst_forecasts', 'revenue_forecast', 'price_target',
+      'growth_analysis', 'enterprise_value', 'dividends', 'owner_earnings',
+      'ttm_snapshot', 'technical_52w', 'pivots_fibonacci',
+      'competitors', 'industry_overview', 'holders', 'segmentation', 'news',
+      'analisis_final', 'disclaimer',
     ]
   );
   const FONT = d.branding?.fontFamily ?? 'helvetica';
@@ -184,7 +207,9 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
           priceTarget, sharedAverageVal, sharedWACC, sharedAvgCAPM,
           sharedForecasts, sharedAdvanceValueNet,
           sharedCompanyQualityNet, sharedCagrStats, sharedPivotAnalysis,
-          keyMetrics, keyMetricsTTM, ratios, ratiosTTM, estimates, dcfCustom } = d;
+          keyMetrics, keyMetricsTTM, ratios, ratiosTTM, estimates, dcfCustom,
+          dividends, incomeGrowth, financialGrowth, enterpriseValue, ownerEarnings,
+          balanceTTM, cashFlowTTM } = d;
 
   // ── Resolve key metrics: raw FMP > shared state ──────────────────────
   const km0  = (keyMetrics || [])[0] || keyMetricsTTM || {};
@@ -478,7 +503,73 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   } // end cover
 
   // ════════════════════════════════════════════════════════════════════════
-  // PAGE 2 — FINANCIAL HIGHLIGHTS
+  // COMPANY OVERVIEW (General tab)
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('company_overview') && profile) {
+    y = newPage();
+    y = section(y, 'Company Overview', 'Perfil corporativo, descripción y datos clave de la empresa.');
+
+    // Profile pills
+    const profPills: [string, string][] = [
+      ['Sector',    sect],
+      ['Industry',  ind],
+      ['Exchange',  exch],
+      ['Country',   profile.country || '-'],
+      ['CEO',       profile.ceo || '-'],
+      ['Employees', profile.fullTimeEmployees ? (+profile.fullTimeEmployees).toLocaleString() : '-'],
+      ['IPO Date',  profile.ipoDate || '-'],
+      ['Currency',  profile.currency || '-'],
+    ];
+    const ppW = (CW - 3*3) / 4;
+    profPills.forEach(([l, v], i) => {
+      const row = Math.floor(i/4), col = i%4;
+      pill(M + col*(ppW+3), y + row*16, ppW, l, v.length > 12 ? v.substring(0,11)+'…' : v);
+    });
+    y += 34;
+
+    // Description
+    if (profile.description) {
+      y = checkY(y, 50);
+      y = section(y, 'Business Description');
+      doc.setFont(FONT,'normal'); doc.setFontSize(7.5); st(TW);
+      const desc = profile.description.substring(0, 1200) + (profile.description.length > 1200 ? '...' : '');
+      const dl: string[] = doc.splitTextToSize(desc, CW - 4);
+      const maxLines = Math.min(dl.length, 28);
+      for (let i = 0; i < maxLines; i++) {
+        if (y > PH - 18) y = newPage();
+        doc.text(dl[i], M, y);
+        y += 4.5;
+      }
+      y += 4;
+    }
+
+    // Key financial highlights table
+    y = checkY(y, 40);
+    y = section(y, 'Key Financial Highlights');
+    const highRows = filterRows([
+      ['Market Cap',       fl(quote?.marketCap),          'Enterprise Value',  fl(KM.enterpriseValue)],
+      ['Revenue (TTM)',    fl(incomeTTM?.revenue),         'Net Income (TTM)',  fl(incomeTTM?.netIncome)],
+      ['EPS (Diluted)',    `$${f(quote?.eps)}`,            'P/E Ratio',         f(quote?.pe)],
+      ['52W High',         `$${f(quote?.yearHigh)}`,       '52W Low',           `$${f(quote?.yearLow)}`],
+      ['Dividend Yield',   fp((quote?.dividendYield||0)*100), 'Beta',           f(profile.beta)],
+      ['Avg Volume',       fl(quote?.avgVolume),           'Shares Out.',       fl(quote?.sharesOutstanding)],
+    ], [1, 3]);
+    if (highRows.length > 0) {
+      y = atable({
+        startY: y,
+        body: highRows,
+        columnStyles: {
+          0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:48},
+          1:{cellWidth:42},
+          2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:48},
+          3:{cellWidth:42},
+        },
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // PAGE — FINANCIAL HIGHLIGHTS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('market_summary')) {
   y = newPage();
@@ -1129,6 +1220,651 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
         3:{cellWidth:42},
       },
     });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // BETA & CAPM
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('beta_capm')) {
+    const beta = profile?.beta;
+    const riskFree = dcfCustom?.riskFreeRate ?? 4.25;
+    const erp = 5.5; // standard US ERP
+    if (beta != null) {
+      y = checkY(y, 60);
+      y = section(y, 'Beta & Cost of Equity (CAPM)', 'Análisis de riesgo sistemático y costo del capital propio.');
+
+      const capm = riskFree + beta * erp;
+
+      y = atable({
+        startY: y,
+        head: [['Parameter', 'Value']],
+        body: [
+          ['Levered Beta (FMP)',  f(beta)],
+          ['Risk-Free Rate',     fp(riskFree)],
+          ['Equity Risk Premium', fp(erp)],
+          ['Cost of Equity (CAPM)', fp(capm)],
+          ['CAPM Formula',       `Ke = ${f(riskFree,1)}% + ${f(beta)} × ${f(erp,1)}% = ${fp(capm)}`],
+        ],
+        columnStyles: {
+          0: { fontStyle: 'bold', fillColor: [14,14,14], cellWidth: 100 },
+          1: { cellWidth: 80 },
+        },
+      });
+
+      // Beta interpretation
+      y = checkY(y, 18);
+      const betaInt = beta > 1.3 ? 'High volatility — stock amplifies market moves' :
+                      beta > 0.8 ? 'Moderate volatility — moves roughly with the market' :
+                      beta > 0 ? 'Low volatility — defensive, less sensitive to market' :
+                      'Negative beta — inversely correlated with market';
+      doc.setFont(FONT,'italic'); doc.setFontSize(7); st(TG);
+      doc.text(`Interpretation: β = ${f(beta)} → ${betaInt}`, M, y);
+      y += 8;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // REVENUE FORECAST (Holt's + Regression)
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('revenue_forecast') && income?.length >= 3) {
+    y = newPage();
+    y = section(y, 'Revenue Forecast — Holt\'s & Regression', 'Proyección de ingresos usando suavizado exponencial y regresión lineal.');
+
+    // Compute Holt's forecast
+    const revSorted = [...income].filter((i:any) => i.revenue > 0)
+      .sort((a:any,b:any) => (a.date||'').localeCompare(b.date||''));
+    const revData = revSorted.map((i:any) => i.revenue);
+
+    if (revData.length >= 3) {
+      const alpha = 0.6, betaH = 0.3;
+      let level = revData[0], trend = revData[1] - revData[0];
+      const fitted: number[] = [level];
+      for (let t = 1; t < revData.length; t++) {
+        const prev = level + trend;
+        level = alpha * revData[t] + (1 - alpha) * prev;
+        trend = betaH * (level - (level + trend - trend)) + (1 - betaH) * trend;
+        fitted.push(level);
+      }
+      // Forecast 3 years
+      const holtForecast: number[] = [];
+      for (let h = 1; h <= 3; h++) holtForecast.push(level + trend * h);
+
+      // Linear regression
+      const n = revData.length;
+      const xMean = (n - 1) / 2, yMean = revData.reduce((a:number,b:number) => a+b, 0) / n;
+      let num = 0, den = 0;
+      for (let i = 0; i < n; i++) { num += (i - xMean) * (revData[i] - yMean); den += (i - xMean) ** 2; }
+      const slope = den ? num / den : 0, intercept = yMean - slope * xMean;
+      const regForecast: number[] = [];
+      for (let h = 0; h < 3; h++) regForecast.push(intercept + slope * (n + h));
+
+      // Build table
+      const lastYear = parseInt(revSorted[revSorted.length-1]?.date?.substring(0,4) || '2024');
+      const tBody: string[][] = [];
+      // Historical
+      revSorted.slice(-5).forEach((r:any) => {
+        tBody.push([r.date?.substring(0,4)||'', fl(r.revenue), '-', '-']);
+      });
+      // Forecasted
+      for (let h = 0; h < 3; h++) {
+        tBody.push([
+          String(lastYear + h + 1),
+          '-',
+          fl(holtForecast[h]),
+          fl(regForecast[h]),
+        ]);
+      }
+      y = atable({
+        startY: y,
+        head: [['Year', 'Actual Revenue', 'Holt\'s Forecast', 'Regression Forecast']],
+        body: tBody,
+        columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:35} },
+      });
+
+      // Bar chart: historical + Holt forecast
+      y = checkY(y, 55);
+      y = section(y, 'Revenue Projection Chart');
+      const allLabels = [...revSorted.slice(-5).map((r:any)=>r.date?.substring(0,4)||''), ...Array.from({length:3},(_,i)=>String(lastYear+i+1)+'E')];
+      const allValues = [...revSorted.slice(-5).map((r:any)=>r.revenue||0), ...holtForecast];
+      barChart(M, y, CW, 42, allLabels, allValues, G);
+      y += 50;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // GROWTH ANALYSIS
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('growth_analysis')) {
+    const fg = (financialGrowth || [])[0];
+    const ig = (incomeGrowth || [])[0];
+    const growthRows = filterRows([
+      ['Revenue Growth',        fp((fg?.revenueGrowth ?? ig?.growthRevenue ?? 0)*100),      'Net Income Growth',   fp((fg?.netIncomeGrowth ?? ig?.growthNetIncome ?? 0)*100)],
+      ['EPS Growth',            fp((fg?.epsgrowth ?? fg?.epsGrowth ?? 0)*100),               'EBITDA Growth',       fp((fg?.ebitdagrowth ?? 0)*100)],
+      ['Operating Income Gr.',  fp((fg?.operatingIncomeGrowth ?? ig?.growthOperatingIncome ?? 0)*100), 'Gross Profit Growth', fp((fg?.grossProfitGrowth ?? ig?.growthGrossProfit ?? 0)*100)],
+      ['FCF Growth',            fp((fg?.freeCashFlowGrowth ?? 0)*100),                       'Book Value Growth',   fp((fg?.bookValueperShareGrowth ?? 0)*100)],
+      ['Debt Growth',           fp((fg?.debtGrowth ?? 0)*100),                               'R&D Growth',          fp((fg?.rdexpenseGrowth ?? 0)*100)],
+      ['Dividend / Share Gr.',  fp((fg?.dividendsperShareGrowth ?? 0)*100),                   'SGA Growth',          fp((fg?.sgaexpensesGrowth ?? 0)*100)],
+      ['Asset Growth',          fp((fg?.assetGrowth ?? 0)*100),                               'Receivables Growth',  fp((fg?.receivablesGrowth ?? 0)*100)],
+      ['Inventory Growth',      fp((fg?.inventoryGrowth ?? 0)*100),                           'Operating CF Growth',  fp((fg?.operatingCashFlowGrowth ?? 0)*100)],
+    ], [1, 3]);
+    if (growthRows.length > 0) {
+      y = newPage();
+      y = section(y, 'Growth Analysis — Year-over-Year', 'Análisis de crecimiento interanual en métricas clave.');
+      y = atable({
+        startY: y,
+        head: [['Metric','YoY %','Metric','YoY %']],
+        body: growthRows,
+        columnStyles: {
+          0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:52},
+          1:{cellWidth:34},
+          2:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:52},
+          3:{cellWidth:42},
+        },
+      });
+
+      // CAGR summary
+      if (cagrStats?.avgCagr != null) {
+        y = checkY(y, 25);
+        y = section(y, 'Revenue CAGR Summary');
+        y = atable({
+          startY: y,
+          head: [['Metric', 'Value']],
+          body: [
+            ['Average CAGR (3/5/10Y)', fp(cagrStats.avgCagr)],
+            ['Min CAGR', fp(cagrStats.minCagr)],
+            ['Max CAGR', fp(cagrStats.maxCagr)],
+          ],
+          columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:120}, 1:{cellWidth:60} },
+        });
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ENTERPRISE VALUE
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('enterprise_value') && enterpriseValue?.length) {
+    const ev5 = (enterpriseValue || []).slice(0, 5).reverse();
+    if (ev5.length > 0) {
+      y = checkY(y, 50);
+      y = section(y, 'Enterprise Value Decomposition', 'Desglose del valor de empresa a lo largo del tiempo.');
+      const evYrs = ev5.map((e:any) => e.date?.substring(0,4)||'');
+      y = atable({
+        startY: y,
+        head: [['', ...evYrs]],
+        body: [
+          ['Market Cap',          ...ev5.map((e:any) => fl(e.marketCapitalization))],
+          ['+ Total Debt',        ...ev5.map((e:any) => fl(e.addTotalDebt))],
+          ['- Cash & Equiv.',     ...ev5.map((e:any) => fl(e.minusCashAndCashEquivalents))],
+          ['= Enterprise Value',  ...ev5.map((e:any) => fl(e.enterpriseValue))],
+          ['Shares Outstanding',  ...ev5.map((e:any) => fl(e.numberOfShares))],
+          ['Stock Price',         ...ev5.map((e:any) => `$${f(e.stockPrice)}`)],
+        ],
+        columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:48} },
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // DIVIDENDS
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('dividends') && dividends?.length) {
+    y = checkY(y, 50);
+    y = section(y, 'Dividend History', 'Historial de pagos de dividendos por acción.');
+    const divSlice = (dividends || []).slice(0, 12);
+    const divRows = divSlice.map((dv:any) => [
+      dv.date || dv.paymentDate || '-',
+      `$${f(dv.dividend ?? dv.adjDividend, 4)}`,
+      dv.recordDate || '-',
+      dv.declarationDate || '-',
+    ]);
+    if (divRows.length > 0) {
+      y = atable({
+        startY: y,
+        head: [['Date', 'Dividend/Share', 'Record Date', 'Declaration Date']],
+        body: divRows,
+        columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:42} },
+      });
+    }
+
+    // Dividend summary
+    const divYield = (quote?.dividendYield || 0) * 100;
+    const payoutR = (KM.payoutRatio || 0) * 100;
+    if (divYield > 0 || payoutR > 0) {
+      y = checkY(y, 25);
+      const divSumRows = [
+        ['Annual Dividend Yield', fp(divYield)],
+        ['Payout Ratio', fp(payoutR)],
+      ];
+      if (KM.dividendPerShare) divSumRows.push(['Dividend Per Share (TTM)', `$${f(KM.dividendPerShare)}`]);
+      y = atable({
+        startY: y,
+        head: [['Metric', 'Value']],
+        body: divSumRows,
+        columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:120}, 1:{cellWidth:60} },
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // OWNER EARNINGS (Buffett method)
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('owner_earnings') && ownerEarnings?.length) {
+    const oe5 = (ownerEarnings || []).slice(0, 5).reverse();
+    if (oe5.length > 0) {
+      y = newPage();
+      y = section(y, 'Owner Earnings — Buffett Method', 'Ganancias del propietario: flujo real de caja disponible.');
+      const oeYrs = oe5.map((o:any) => o.date?.substring(0,4)||'');
+      y = atable({
+        startY: y,
+        head: [['', ...oeYrs]],
+        body: filterRows([
+          ['Net Income',           ...oe5.map((o:any) => fl(o.netIncome))],
+          ['+ D&A',                ...oe5.map((o:any) => fl(o.depreciationAndAmortization))],
+          ['- Maintenance CapEx',  ...oe5.map((o:any) => fl(o.maintenanceCapex))],
+          ['- Working Capital Chg',...oe5.map((o:any) => fl(o.workingCapital))],
+          ['= Owner Earnings',     ...oe5.map((o:any) => fl(o.ownerEarnings))],
+          ['Owner Earnings / Share',...oe5.map((o:any) => `$${f(o.ownerEarningsPerShare)}`)],
+          ['Growth CapEx',         ...oe5.map((o:any) => fl(o.growthCapex))],
+        ], oeYrs.map((_:any,i:number) => i+1)),
+        columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:50} },
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // COMPETITORS (fetched from FMP)
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('competitors')) {
+    const peersRaw = await fmpFetch(`stable/stock-peers`, { symbol: ticker });
+    const peers: string[] = (Array.isArray(peersRaw) ? peersRaw[0]?.peersList : peersRaw?.peersList) || [];
+    if (peers.length > 0) {
+      // Fetch quotes for peers
+      const peerSymbols = peers.slice(0, 8).join(',');
+      const peerQuotes = await fmpFetch(`stable/quote`, { symbol: peerSymbols });
+      const allQuotes = Array.isArray(peerQuotes) ? peerQuotes : [peerQuotes];
+
+      if (allQuotes.length > 0) {
+        y = newPage();
+        y = section(y, 'Peer Comparison — Competitors', 'Comparación con empresas del mismo sector.');
+
+        const compRows = allQuotes.filter(Boolean).map((pq:any) => [
+          pq.symbol || '-',
+          pq.name?.substring(0, 25) || '-',
+          fl(pq.marketCap),
+          f(pq.pe),
+          `$${f(pq.price)}`,
+          fp(pq.changesPercentage),
+        ]);
+
+        // Add our company as first row
+        compRows.unshift([
+          ticker,
+          co.substring(0, 25),
+          fl(quote?.marketCap),
+          f(quote?.pe),
+          `$${f(price)}`,
+          fp(quote?.changesPercentage),
+        ]);
+
+        y = atable({
+          startY: y,
+          head: [['Symbol', 'Company', 'Market Cap', 'P/E', 'Price', 'Change %']],
+          body: compRows,
+          columnStyles: {
+            0:{fontStyle:'bold',cellWidth:22},
+            1:{cellWidth:50},
+          },
+          didParseCell: (data:any) => {
+            if (data.row.index === 0 && data.section === 'body') {
+              data.cell.styles.fillColor = [0, 40, 20];
+              data.cell.styles.textColor = G;
+            }
+          },
+        });
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // INDUSTRY OVERVIEW
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('industry_overview')) {
+    const [sectorPerf, sectorPE] = await Promise.all([
+      fmpFetch('stable/sector-performance'),
+      fmpFetch('stable/sector-pe-ratio', { exchange: 'NYSE' }),
+    ]);
+
+    const hasSector = Array.isArray(sectorPerf) && sectorPerf.length > 0;
+    const hasPE = Array.isArray(sectorPE) && sectorPE.length > 0;
+
+    if (hasSector || hasPE) {
+      y = newPage();
+      y = section(y, 'Industry & Sector Overview', 'Rendimiento y valoración relativa del sector.');
+
+      // Company sector info
+      y = checkY(y, 12);
+      doc.setFont(FONT,'bold'); doc.setFontSize(7.5); st(G);
+      doc.text(`Company Classification:  ${sect}  ·  ${ind}`, M, y);
+      y += 8;
+
+      if (hasSector) {
+        y = section(y, 'Sector Performance');
+        const sRows = (sectorPerf as any[]).sort((a:any,b:any) => {
+          const av = parseFloat(String(a.changesPercentage||'0').replace('%',''));
+          const bv = parseFloat(String(b.changesPercentage||'0').replace('%',''));
+          return bv - av;
+        }).map((s:any) => {
+          const ch = parseFloat(String(s.changesPercentage||'0').replace('%',''));
+          return [
+            s.sector || '-',
+            `${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%`,
+          ];
+        });
+        y = atable({
+          startY: y,
+          head: [['Sector', 'Performance']],
+          body: sRows,
+          columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:110} },
+          didParseCell: (data:any) => {
+            if (data.section === 'body' && data.row.raw?.[0] === sect) {
+              data.cell.styles.fillColor = [0, 40, 20];
+              data.cell.styles.textColor = G;
+            }
+          },
+        });
+      }
+
+      if (hasPE) {
+        y = checkY(y, 40);
+        y = section(y, 'Sector P/E Ratios');
+        const peRows = (sectorPE as any[]).slice(0, 15).map((s:any) => [
+          s.sector || '-',
+          f(s.pe),
+          s.exchange || '-',
+        ]);
+        y = atable({
+          startY: y,
+          head: [['Sector', 'P/E Ratio', 'Exchange']],
+          body: peRows,
+          columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:80} },
+        });
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // HOLDERS (Institutional + Insider)
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('holders')) {
+    const [instHolders, mutualHolders, insiderTrades] = await Promise.all([
+      fmpFetch(`stable/institutional-holder`, { symbol: ticker }),
+      fmpFetch(`stable/mutual-fund-holder`, { symbol: ticker }),
+      fmpFetch(`stable/insider-trading`, { symbol: ticker, limit: '15' }),
+    ]);
+
+    const hasInst = Array.isArray(instHolders) && instHolders.length > 0;
+    const hasMutual = Array.isArray(mutualHolders) && mutualHolders.length > 0;
+    const hasInsider = Array.isArray(insiderTrades) && insiderTrades.length > 0;
+
+    if (hasInst || hasMutual || hasInsider) {
+      y = newPage();
+      y = section(y, 'Ownership & Holders', 'Principales accionistas institucionales, fondos mutuos y operaciones de insiders.');
+
+      if (hasInst) {
+        y = section(y, 'Top Institutional Holders');
+        const instRows = (instHolders as any[]).slice(0, 10).map((h:any) => [
+          (h.holder || h.investorName || '-').substring(0, 30),
+          fl(h.shares),
+          fl(h.value),
+          h.dateReported?.substring(0,10) || '-',
+        ]);
+        y = atable({
+          startY: y,
+          head: [['Holder', 'Shares', 'Value', 'Date']],
+          body: instRows,
+          columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:60} },
+        });
+      }
+
+      if (hasMutual) {
+        y = checkY(y, 40);
+        y = section(y, 'Top Mutual Fund Holders');
+        const mfRows = (mutualHolders as any[]).slice(0, 10).map((h:any) => [
+          (h.holder || '-').substring(0, 30),
+          fl(h.shares),
+          fl(h.value),
+          fp((h.weightedAveragePercentage||0)),
+        ]);
+        y = atable({
+          startY: y,
+          head: [['Fund', 'Shares', 'Value', 'Weight %']],
+          body: mfRows,
+          columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:60} },
+        });
+      }
+
+      if (hasInsider) {
+        y = checkY(y, 40);
+        y = section(y, 'Recent Insider Trading');
+        const insRows = (insiderTrades as any[]).slice(0, 12).map((t:any) => [
+          t.reportingName?.substring(0, 22) || '-',
+          t.transactionType || '-',
+          fl(t.securitiesTransacted),
+          `$${f(t.price)}`,
+          t.transactionDate?.substring(0,10) || '-',
+        ]);
+        y = atable({
+          startY: y,
+          head: [['Insider', 'Type', 'Shares', 'Price', 'Date']],
+          body: insRows,
+          columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:45} },
+        });
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // SEGMENTATION (Revenue by product + geography)
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('segmentation')) {
+    const [prodSeg, geoSeg] = await Promise.all([
+      fmpFetch(`stable/revenue-product-segmentation`, { symbol: ticker }),
+      fmpFetch(`stable/revenue-geographic-segmentation`, { symbol: ticker }),
+    ]);
+
+    const hasProd = Array.isArray(prodSeg) && prodSeg.length > 0;
+    const hasGeo = Array.isArray(geoSeg) && geoSeg.length > 0;
+
+    if (hasProd || hasGeo) {
+      y = newPage();
+      y = section(y, 'Revenue Segmentation', 'Desglose de ingresos por producto/servicio y por región geográfica.');
+
+      if (hasProd) {
+        // Get latest period
+        const latest = prodSeg[0];
+        const segments = typeof latest === 'object' ? latest : {};
+        const dateKey = Object.keys(segments)[0];
+        const segData = dateKey ? segments[dateKey] : segments;
+        if (segData && typeof segData === 'object') {
+          y = section(y, 'Product / Business Segments');
+          const entries = Object.entries(segData).filter(([,v]) => typeof v === 'number' && (v as number) > 0);
+          const total = entries.reduce((s, [,v]) => s + (v as number), 0);
+          const segRows = entries
+            .sort(([,a],[,b]) => (b as number) - (a as number))
+            .map(([name, val]) => [
+              name.substring(0, 35),
+              fl(val),
+              total > 0 ? fp(((val as number) / total) * 100) : '-',
+            ]);
+          if (segRows.length > 0) {
+            y = atable({
+              startY: y,
+              head: [['Segment', 'Revenue', '% of Total']],
+              body: segRows,
+              columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:70} },
+            });
+          }
+        }
+      }
+
+      if (hasGeo) {
+        const latest = geoSeg[0];
+        const segments = typeof latest === 'object' ? latest : {};
+        const dateKey = Object.keys(segments)[0];
+        const segData = dateKey ? segments[dateKey] : segments;
+        if (segData && typeof segData === 'object') {
+          y = checkY(y, 40);
+          y = section(y, 'Geographic Segments');
+          const entries = Object.entries(segData).filter(([,v]) => typeof v === 'number' && (v as number) > 0);
+          const total = entries.reduce((s, [,v]) => s + (v as number), 0);
+          const geoRows = entries
+            .sort(([,a],[,b]) => (b as number) - (a as number))
+            .map(([name, val]) => [
+              name.substring(0, 35),
+              fl(val),
+              total > 0 ? fp(((val as number) / total) * 100) : '-',
+            ]);
+          if (geoRows.length > 0) {
+            y = atable({
+              startY: y,
+              head: [['Region', 'Revenue', '% of Total']],
+              body: geoRows,
+              columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:70} },
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // NEWS
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('news')) {
+    const newsData = await fmpFetch(`stable/news/stock`, { symbol: ticker, limit: '15' });
+    if (Array.isArray(newsData) && newsData.length > 0) {
+      y = newPage();
+      y = section(y, 'Latest News', 'Noticias recientes del mercado sobre la empresa.');
+
+      newsData.slice(0, 15).forEach((article:any, idx:number) => {
+        y = checkY(y, 18);
+        // Title
+        doc.setFont(FONT,'bold'); doc.setFontSize(7.5); st(TW);
+        const title = (article.title || 'No title').substring(0, 90);
+        doc.text(`${idx+1}. ${title}`, M, y);
+        y += 4.5;
+        // Meta
+        doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TG);
+        const meta = `${article.site || article.publishedDate?.substring(0,10) || '-'}  ·  ${article.publishedDate?.substring(0,10) || ''}`;
+        doc.text(meta, M + 3, y);
+        y += 3.5;
+        // Snippet
+        if (article.text) {
+          doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st([170,170,170] as RGB);
+          const snippet = article.text.substring(0, 150) + (article.text.length > 150 ? '...' : '');
+          const sl: string[] = doc.splitTextToSize(snippet, CW - 6);
+          sl.slice(0, 2).forEach((line:string) => {
+            doc.text(line, M + 3, y);
+            y += 3.5;
+          });
+        }
+        y += 3;
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // ANALISIS FINAL (Investment Verdict)
+  // ════════════════════════════════════════════════════════════════════════
+  if (activeSections.has('analisis_final') && avgVal && price) {
+    y = newPage();
+    y = section(y, 'Investment Analysis — Final Verdict', 'Veredicto final basado en la valuación promedio vs precio actual.');
+
+    const upside = ((avgVal - price) / price) * 100;
+    const marginOfSafety = 0.15;
+    const buyPrice = avgVal * (1 - marginOfSafety);
+    const verdict = upside > 30 ? 'SIGNIFICANTLY UNDERVALUED' :
+                    upside > 10 ? 'UNDERVALUED' :
+                    upside > -10 ? 'FAIRLY VALUED' :
+                    upside > -30 ? 'OVERVALUED' : 'SIGNIFICANTLY OVERVALUED';
+    const vColor: RGB = upside > 10 ? G : upside > -10 ? [200,180,0] : RD;
+
+    // Big verdict card
+    sf(D1); doc.roundedRect(M, y, CW, 28, 3, 3, 'F');
+    ss(vColor); doc.setLineWidth(0.5); doc.roundedRect(M, y, CW, 28, 3, 3, 'S');
+    doc.setFont(FONT,'black'); doc.setFontSize(14); st(vColor);
+    doc.text(verdict, PW/2, y+12, { align:'center' });
+    doc.setFont(FONT,'bold'); doc.setFontSize(9); st(TW);
+    doc.text(`Upside: ${upside >= 0 ? '+' : ''}${upside.toFixed(1)}%  ·  Avg Valuation: $${f(avgVal)}  ·  Current: $${f(price)}`, PW/2, y+21, { align:'center' });
+    y += 34;
+
+    // Key stats
+    const vW = (CW - 9) / 4;
+    [
+      { l:'Current Price',     v:`$${f(price)}`,    c:TW },
+      { l:'Avg Valuation',     v:`$${f(avgVal)}`,   c:G  },
+      { l:'Buy Price (15% MoS)',v:`$${f(buyPrice)}`, c:[100,200,150] as RGB },
+      { l:'Upside / Downside', v:`${upside>=0?'+':''}${upside.toFixed(1)}%`, c:vColor },
+    ].forEach((k, i) => {
+      pill(M + i*(vW+3), y, vW, k.l, k.v, k.c as RGB);
+    });
+    y += 18;
+
+    // Valuation models summary table
+    y = checkY(y, 40);
+    y = section(y, 'Valuation Models Summary');
+    const avnVals2 = sharedAdvanceValueNet?.valuations;
+    const modelList: {name:string; val:number}[] = [];
+    if (avnVals2) {
+      Object.entries(avnVals2).forEach(([k,v]) => {
+        if (typeof v==='number' && isFinite(v) && v>0) {
+          modelList.push({ name:k.replace(/_/g,' ').replace(/\b\w/g,(c:string)=>c.toUpperCase()), val:+v });
+        }
+      });
+    }
+    if (modelList.length === 0) {
+      const computed = computeValuationModels(dcfCustom, quote, KM);
+      modelList.push(...computed);
+    }
+    if (modelList.length > 0) {
+      const modelRows = modelList.map(m => {
+        const mUp = ((m.val - price) / price * 100);
+        return [m.name.substring(0, 25), `$${f(m.val)}`, `${mUp >= 0 ? '+' : ''}${mUp.toFixed(1)}%`];
+      });
+      modelRows.push(['AVERAGE', `$${f(avgVal)}`, `${upside >= 0 ? '+' : ''}${upside.toFixed(1)}%`]);
+      y = atable({
+        startY: y,
+        head: [['Model', 'Fair Value', 'vs Price']],
+        body: modelRows,
+        columnStyles: { 0:{fontStyle:'bold',fillColor:[14,14,14],cellWidth:65} },
+        didParseCell: (data:any) => {
+          if (data.row.index === modelRows.length - 1 && data.section === 'body') {
+            data.cell.styles.fillColor = [0, 40, 20];
+            data.cell.styles.textColor = G;
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
+      });
+    }
+
+    // Quality score summary
+    if (qualityNet?.totalScore != null) {
+      y = checkY(y, 25);
+      y = section(y, 'Quality Assessment');
+      doc.setFont(FONT,'bold'); doc.setFontSize(8); st(TW);
+      doc.text(`Overall Quality: ${(qualityNet.totalScore*100).toFixed(0)}/100 — ${qualityNet.rating}`, M, y);
+      y += 6;
+      if (qualityNet.scores) {
+        Object.entries(qualityNet.scores).forEach(([dim, score]:any) => {
+          const pct = typeof score==='number' ? +(score*100).toFixed(0) : 0;
+          const lbl = dim.replace(/_/g,' ').replace(/\b\w/g,(c:string)=>c.toUpperCase());
+          y = checkY(y, 9);
+          scoreBar(M, y, CW, lbl, pct);
+          y += 8;
+        });
+      }
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════
