@@ -82,6 +82,41 @@ export default function RootLayout({
         <body
           className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased`}
         >
+          {/* JSON-LD Structured Data */}
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'SoftwareApplication',
+                name: 'Prismo',
+                url: 'https://www.prismo.us',
+                applicationCategory: 'FinanceApplication',
+                operatingSystem: 'Web',
+                description: 'Plataforma de analisis de acciones con 20+ modelos de valuacion, Monte Carlo, analisis neural y clasificador hibrido.',
+                offers: [
+                  { '@type': 'Offer', name: 'Free', price: '0', priceCurrency: 'USD' },
+                  { '@type': 'Offer', name: 'Pro', price: '29', priceCurrency: 'USD', billingIncrement: 1, unitCode: 'MON' },
+                  { '@type': 'Offer', name: 'Elite', price: '59', priceCurrency: 'USD', billingIncrement: 1, unitCode: 'MON' },
+                  { '@type': 'Offer', name: 'Gold', price: '100', priceCurrency: 'USD', billingIncrement: 1, unitCode: 'MON' },
+                ],
+                aggregateRating: { '@type': 'AggregateRating', ratingValue: '4.8', ratingCount: '150' },
+              }),
+            }}
+          />
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Organization',
+                name: 'Prismo',
+                url: 'https://www.prismo.us',
+                logo: 'https://www.prismo.us/logo-prismo.jpg',
+                sameAs: ['https://twitter.com/prismo_us'],
+              }),
+            }}
+          />
           <LanguageProvider>
             {children}
           </LanguageProvider>

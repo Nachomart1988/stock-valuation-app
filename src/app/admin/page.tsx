@@ -212,6 +212,7 @@ export default function AdminPage() {
                           <option value="pro">Pro</option>
                           <option value="elite">Elite</option>
                           <option value="gold">Gold</option>
+                          <option value="godmode">GOD MODE 🔥</option>
                         </select>
                         {updating === u.id && (
                           <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />

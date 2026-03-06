@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'email and plan are required' }, { status: 400 });
   }
 
-  const validPlans = ['free', 'pro', 'elite', 'gold'];
+  const validPlans = ['free', 'pro', 'elite', 'gold', 'godmode'];
   if (!validPlans.includes(plan)) {
     return NextResponse.json({ error: `Invalid plan. Must be one of: ${validPlans.join(', ')}` }, { status: 400 });
   }

@@ -20,13 +20,14 @@
 // 15 - DRL Trading Simulator
 // 16 - Quantum Risk Model
 
-export type PlanTier = 'free' | 'pro' | 'elite' | 'gold';
+export type PlanTier = 'free' | 'pro' | 'elite' | 'gold' | 'godmode';
 
 export const PLAN_METADATA: Record<PlanTier, { name: string; price: number; color: string; badge: string }> = {
-  free:  { name: 'Free',  price: 0,   color: 'text-gray-400',   badge: 'bg-gray-700' },
-  pro:   { name: 'Pro',   price: 29,  color: 'text-emerald-400', badge: 'bg-emerald-700' },
-  elite: { name: 'Elite', price: 59,  color: 'text-violet-400',  badge: 'bg-violet-700' },
-  gold:  { name: 'Gold',  price: 100, color: 'text-yellow-400',  badge: 'bg-yellow-700' },
+  free:    { name: 'Free',     price: 0,   color: 'text-gray-400',   badge: 'bg-gray-700' },
+  pro:     { name: 'Pro',      price: 29,  color: 'text-emerald-400', badge: 'bg-emerald-700' },
+  elite:   { name: 'Elite',    price: 59,  color: 'text-violet-400',  badge: 'bg-violet-700' },
+  gold:    { name: 'Gold',     price: 100, color: 'text-yellow-400',  badge: 'bg-yellow-700' },
+  godmode: { name: 'GOD MODE', price: 0,   color: 'text-red-400',     badge: 'bg-red-700' },
 };
 
 // ── Main tab access ──────────────────────────────────────────
@@ -58,41 +59,45 @@ export interface TabSubAccess {
 
 // Tab 3 — Info General: [0=AnalisisGeneral, 1=KeyMetrics, 2=Analistas, 3=DuPont]
 export const GENERAL_INFO_ACCESS: TabSubAccess = {
-  free:  [0],      // Only Análisis General
-  pro:   'all',
-  elite: 'all',
-  gold:  'all',
+  free:    [0],      // Only Análisis General
+  pro:     'all',
+  elite:   'all',
+  gold:    'all',
+  godmode: 'all',
 };
 
 // Tab 4 — Company: [0=Competidores, 1=Industry, 2=Segmentation, 3=Holders]
 export const COMPANY_ACCESS: TabSubAccess = {
-  free:  [0],      // Only Competidores
-  pro:   'all',
-  elite: 'all',
-  gold:  'all',
+  free:    [0],      // Only Competidores
+  pro:     'all',
+  elite:   'all',
+  gold:    'all',
+  godmode: 'all',
 };
 
 // Tab 6 — Inputs: [0=SGR, 1=Beta, 2=CAGR, 3=WACC]
 // Free: only SGR top-down/bottom-up (=SGR tab index 0) and Beta (=index 1)
 export const INPUTS_ACCESS: TabSubAccess = {
-  free:  [0, 1],   // SGR and Beta only
-  pro:   'all',
-  elite: 'all',
-  gold:  'all',
+  free:    [0, 1],   // SGR and Beta only
+  pro:     'all',
+  elite:   'all',
+  gold:    'all',
+  godmode: 'all',
 };
 
 // Tab 8 — DCF: [0=Calculos, 1=DCF Models]
 // Free: only second sub-tab (DCF Models)
 export const DCF_ACCESS: TabSubAccess = {
-  free:  [1],      // Only DCF Models (2nd sub-tab)
-  pro:   'all',
-  elite: 'all',
-  gold:  'all',
+  free:    [1],      // Only DCF Models (2nd sub-tab)
+  pro:     'all',
+  elite:   'all',
+  gold:    'all',
+  godmode: 'all',
 };
 
 // ── Helpers ─────────────────────────────────────────────────
 
-const PLAN_ORDER: PlanTier[] = ['free', 'pro', 'elite', 'gold'];
+const PLAN_ORDER: PlanTier[] = ['free', 'pro', 'elite', 'gold', 'godmode'];
 
 export function planRank(plan: PlanTier): number {
   return PLAN_ORDER.indexOf(plan);

@@ -17,6 +17,7 @@ export default function LockedTab({ requiredPlan, currentPlan, tabName }: Locked
     pro: '⚡',
     elite: '💎',
     gold: '👑',
+    godmode: '🔥',
   };
 
   return (

@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { createCheckoutSession, PLANS, PlanType } from '@/lib/stripe';
 
 export async function POST(request: NextRequest) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { plan, billingPeriod } = await request.json();
 
     // Validate plan
@@ -41,7 +47,6 @@ export async function POST(request: NextRequest) {
 
     const checkoutSession = await createCheckoutSession({
       priceId,
-      // customerId, // Uncomment when auth is implemented
       successUrl: `${baseUrl}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${baseUrl}/pricing`,
     });
@@ -50,7 +55,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Checkout error:', error);
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: 'Failed to create checkout session' },
       { status: 500 }
     );
   }

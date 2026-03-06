@@ -3,10 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // GET /api/screener?[filters without apikey]
 // Server-side proxy to FMP — keeps API key server-only and avoids CORS/plan issues
 export async function GET(req: NextRequest) {
-  const apiKey =
-    process.env.FMP_API_KEY ??
-    process.env.NEXT_PUBLIC_FMP_API_KEY ??
-    '';
+  const apiKey = process.env.FMP_API_KEY ?? '';
 
   if (!apiKey) {
     return NextResponse.json({ error: 'API key not configured' }, { status: 500 });

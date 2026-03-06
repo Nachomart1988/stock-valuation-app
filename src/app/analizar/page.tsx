@@ -1068,7 +1068,7 @@ function AnalizarContent() {
           </div>
           {/* PDF Export Button — Elite/Gold plans only */}
           {isSignedIn && (
-            (user?.publicMetadata?.plan === 'elite' || user?.publicMetadata?.plan === 'gold') ? (
+            (user?.publicMetadata?.plan === 'elite' || user?.publicMetadata?.plan === 'gold' || user?.publicMetadata?.plan === 'godmode') ? (
               <button
                 onClick={() => setShowPDFModal(true)}
                 disabled={pdfExporting}

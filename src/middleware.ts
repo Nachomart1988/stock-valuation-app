@@ -1,18 +1,28 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-// Public paths — always accessible
+// Public paths — always accessible (no Clerk auth required)
 const isPublicPath = createRouteMatcher([
   '/',
   '/login(.*)',
   '/register(.*)',
-  '/admin(.*)',
   '/sso-callback(.*)',
   '/marketing(.*)',
   '/privacy(.*)',
   '/terms(.*)',
   '/cookies(.*)',
-  '/api/(.*)',
+  '/pricing(.*)',
+  '/docs(.*)',
+  '/faq(.*)',
+  '/guides(.*)',
+  '/blog(.*)',
+  '/careers(.*)',
+  '/press(.*)',
+  '/support(.*)',
+  '/licenses(.*)',
+  // Public API routes (auth handled internally or via webhook signature)
+  '/api/waitlist',
+  '/api/stripe/webhook',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

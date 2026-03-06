@@ -26,6 +26,12 @@ const BADGE_STYLES: Record<PlanTier, { background: string; color: string; border
     border: '1px solid #fbbf24',
     textShadow: '0 1px 0 rgba(255,255,255,0.5)',
   },
+  godmode: {
+    background: 'linear-gradient(180deg, #fca5a5 0%, #ef4444 25%, #991b1b 60%, #450a0a 100%)',
+    color: '#fff',
+    border: '1px solid #f87171',
+    textShadow: '0 0 8px rgba(239,68,68,0.8), 0 1px 1px rgba(0,0,0,0.5)',
+  },
 };
 
 const RELIEF_SHADOW = 'inset 0 1px 0 rgba(255,255,255,0.45), 0 2px 6px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3)';
