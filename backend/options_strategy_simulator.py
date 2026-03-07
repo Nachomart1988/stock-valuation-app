@@ -1343,7 +1343,7 @@ class OptionsStrategySimulator:
     # Sentiment Analysis
     # ────────────────────────────────────────────────────────────
 
-    def sentiment_analysis(self, ticker: str) -> Dict[str, Any]:
+    def sentiment_analysis(self, ticker: str, lang: str = 'en') -> Dict[str, Any]:
         """
         Compute comprehensive options sentiment metrics.
 
@@ -1357,6 +1357,8 @@ class OptionsStrategySimulator:
               insights: [{type, severity, message}, ...],
             }
         """
+        es = lang == 'es'
+
         if not YF_AVAILABLE:
             return {"error": "yfinance not installed on server", "ticker": ticker}
 
@@ -1506,7 +1508,8 @@ class OptionsStrategySimulator:
                                 "metric": "volume_spike",
                                 "value": v,
                                 "zScore": round(z, 2),
-                                "description": f"Unusual volume: {v:,} ({z:.1f}σ above mean)"
+                                "description": (f"Volumen inusual: {v:,} ({z:.1f}σ sobre la media)" if es else
+                                                f"Unusual volume: {v:,} ({z:.1f}σ above mean)")
                             })
 
                         # Vol/OI ratio > 3 (unusual activity)
@@ -1520,7 +1523,8 @@ class OptionsStrategySimulator:
                                     "metric": "vol_oi_ratio",
                                     "value": round(ratio, 2),
                                     "zScore": round(ratio, 2),
-                                    "description": f"Vol/OI ratio: {ratio:.1f}x (new positioning)"
+                                    "description": (f"Ratio Vol/OI: {ratio:.1f}x (nuevo posicionamiento)" if es else
+                                                    f"Vol/OI ratio: {ratio:.1f}x (new positioning)")
                                 })
 
             # Sort anomalies by z-score descending, limit to 20
@@ -1625,15 +1629,15 @@ class OptionsStrategySimulator:
             bias_score_val = max(-5, min(5, raw_score))
 
             if bias_score_val > 2.5:
-                label = "Strong Bullish"
+                label = "Fuertemente Alcista" if es else "Strong Bullish"
             elif bias_score_val > 1.0:
-                label = "Bullish"
+                label = "Alcista" if es else "Bullish"
             elif bias_score_val > -1.0:
                 label = "Neutral"
             elif bias_score_val > -2.5:
-                label = "Bearish"
+                label = "Bajista" if es else "Bearish"
             else:
-                label = "Strong Bearish"
+                label = "Fuertemente Bajista" if es else "Strong Bearish"
 
             bias_score = {
                 "score": round(bias_score_val, 2),
@@ -1651,46 +1655,59 @@ class OptionsStrategySimulator:
 
             if pcr_oi > 1.3:
                 insights.append({"type": "pcr", "severity": "warning",
-                    "message": f"Put/Call OI ratio is {pcr_oi:.2f} — elevated put hedging suggests bearish sentiment or downside protection."})
+                    "message": (f"El ratio Put/Call OI es {pcr_oi:.2f} — cobertura elevada con puts sugiere sentimiento bajista o proteccion a la baja." if es else
+                                f"Put/Call OI ratio is {pcr_oi:.2f} — elevated put hedging suggests bearish sentiment or downside protection.")})
             elif pcr_oi < 0.6:
                 insights.append({"type": "pcr", "severity": "info",
-                    "message": f"Put/Call OI ratio is {pcr_oi:.2f} — low put activity suggests complacency or bullish positioning."})
+                    "message": (f"El ratio Put/Call OI es {pcr_oi:.2f} — baja actividad de puts sugiere complacencia o posicionamiento alcista." if es else
+                                f"Put/Call OI ratio is {pcr_oi:.2f} — low put activity suggests complacency or bullish positioning.")})
 
             if atm_iv > 0 and rv30d > 0:
                 iv_premium = (atm_iv - rv30d) / rv30d
                 if iv_premium > 0.3:
                     insights.append({"type": "iv", "severity": "warning",
-                        "message": f"Implied vol ({atm_iv*100:.1f}%) is {iv_premium*100:.0f}% above 30d realized ({rv30d*100:.1f}%). Options are expensive — favor selling strategies."})
+                        "message": (f"Vol implicita ({atm_iv*100:.1f}%) esta {iv_premium*100:.0f}% por encima de la realizada 30d ({rv30d*100:.1f}%). Opciones caras — favorece estrategias de venta." if es else
+                                    f"Implied vol ({atm_iv*100:.1f}%) is {iv_premium*100:.0f}% above 30d realized ({rv30d*100:.1f}%). Options are expensive — favor selling strategies.")})
                 elif iv_premium < -0.15:
                     insights.append({"type": "iv", "severity": "info",
-                        "message": f"Implied vol ({atm_iv*100:.1f}%) is below 30d realized ({rv30d*100:.1f}%). Options are cheap — favor buying strategies."})
+                        "message": (f"Vol implicita ({atm_iv*100:.1f}%) esta por debajo de la realizada 30d ({rv30d*100:.1f}%). Opciones baratas — favorece estrategias de compra." if es else
+                                    f"Implied vol ({atm_iv*100:.1f}%) is below 30d realized ({rv30d*100:.1f}%). Options are cheap — favor buying strategies.")})
 
             if iv_rank > 0.8:
                 insights.append({"type": "ivRank", "severity": "warning",
-                    "message": f"IV Rank is {iv_rank*100:.0f}% — volatility is near 3-month highs. Consider premium-selling strategies."})
+                    "message": (f"IV Rank es {iv_rank*100:.0f}% — la volatilidad esta cerca de maximos de 3 meses. Considera estrategias de venta de prima." if es else
+                                f"IV Rank is {iv_rank*100:.0f}% — volatility is near 3-month highs. Consider premium-selling strategies.")})
             elif iv_rank < 0.2 and iv_rank > 0:
                 insights.append({"type": "ivRank", "severity": "info",
-                    "message": f"IV Rank is {iv_rank*100:.0f}% — volatility is near 3-month lows. Options are cheap, favor long strategies."})
+                    "message": (f"IV Rank es {iv_rank*100:.0f}% — la volatilidad esta cerca de minimos de 3 meses. Opciones baratas, favorece posiciones largas." if es else
+                                f"IV Rank is {iv_rank*100:.0f}% — volatility is near 3-month lows. Options are cheap, favor long strategies.")})
 
             if len(anomalies) >= 5:
                 insights.append({"type": "anomaly", "severity": "alert",
-                    "message": f"Detected {len(anomalies)} unusual activity signals — possible institutional positioning or event anticipation."})
+                    "message": (f"Detectadas {len(anomalies)} senales de actividad inusual — posible posicionamiento institucional o anticipacion de evento." if es else
+                                f"Detected {len(anomalies)} unusual activity signals — possible institutional positioning or event anticipation.")})
 
             if abs(skew_component) > 0.5:
                 direction = "puts" if skew_component < 0 else "calls"
+                side_es = "la baja" if direction == "puts" else "el alza"
+                side_en = "downside" if direction == "puts" else "upside"
                 insights.append({"type": "skew", "severity": "info",
-                    "message": f"Volatility skew is tilted toward OTM {direction} — market is pricing more risk to the {'downside' if direction == 'puts' else 'upside'}."})
+                    "message": (f"El skew de volatilidad esta inclinado hacia OTM {direction} — el mercado esta valorando mas riesgo a {side_es}." if es else
+                                f"Volatility skew is tilted toward OTM {direction} — market is pricing more risk to the {side_en}.")})
 
             if all_net_delta > total_oi * 0.02:
                 insights.append({"type": "delta", "severity": "info",
-                    "message": "Aggregate net delta is significantly positive — market makers are hedged for upside. Bullish flow dominance."})
+                    "message": ("Delta neto agregado es significativamente positivo — los market makers estan cubiertos al alza. Dominio de flujo alcista." if es else
+                                "Aggregate net delta is significantly positive — market makers are hedged for upside. Bullish flow dominance.")})
             elif all_net_delta < -total_oi * 0.02:
                 insights.append({"type": "delta", "severity": "warning",
-                    "message": "Aggregate net delta is significantly negative — market makers are hedged for downside. Bearish flow dominance."})
+                    "message": ("Delta neto agregado es significativamente negativo — los market makers estan cubiertos a la baja. Dominio de flujo bajista." if es else
+                                "Aggregate net delta is significantly negative — market makers are hedged for downside. Bearish flow dominance.")})
 
             if not insights:
                 insights.append({"type": "neutral", "severity": "info",
-                    "message": "Options flow and sentiment metrics are within normal ranges. No strong directional bias detected."})
+                    "message": ("El flujo de opciones y metricas de sentimiento estan dentro de rangos normales. No se detecta sesgo direccional fuerte." if es else
+                                "Options flow and sentiment metrics are within normal ranges. No strong directional bias detected.")})
 
             return {
                 "ticker": ticker,
@@ -2183,9 +2200,9 @@ def get_iv_surface(ticker: str) -> Dict[str, Any]:
     return options_simulator.iv_surface(ticker)
 
 
-def get_options_sentiment(ticker: str) -> Dict[str, Any]:
+def get_options_sentiment(ticker: str, lang: str = 'en') -> Dict[str, Any]:
     """Compute comprehensive options sentiment analysis."""
-    return options_simulator.sentiment_analysis(ticker)
+    return options_simulator.sentiment_analysis(ticker, lang=lang)
 
 
 def scan_options_combinations(

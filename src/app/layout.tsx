@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from "@/i18n/LanguageContext";
+import { ThemeProvider } from "./components/ThemeProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 import ServiceWorkerRegistrar from "./components/ServiceWorkerRegistrar";
 import { Analytics } from "@vercel/analytics/next";
@@ -117,9 +118,11 @@ export default function RootLayout({
               }),
             }}
           />
-          <LanguageProvider>
-            {children}
-          </LanguageProvider>
+          <ThemeProvider>
+            <LanguageProvider>
+              {children}
+            </LanguageProvider>
+          </ThemeProvider>
           <ServiceWorkerRegistrar />
           {/* Vercel Analytics + Speed Insights */}
           <Analytics />

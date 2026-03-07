@@ -512,3 +512,188 @@ body::after {
 .animate-fade-in-up { animation: fadeInUp 0.4s ease-out both; }
 .animate-blink { animation: terminalBlink 1s step-end infinite; }
 .animate-glow-pulse { animation: glowPulse 2s ease-in-out infinite; }
+
+
+/* ═══════════════════════════════════════════════════════
+   LIGHT MODE
+   Activated via html.light class from ThemeProvider
+═══════════════════════════════════════════════════════ */
+
+html.light body {
+  background-color: #f5f3ef;
+  color: #1a1a1a;
+}
+
+/* Scrollbar */
+html.light ::-webkit-scrollbar-track { background: #e8e4de; }
+html.light ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #c49746, #8b6914); }
+html.light ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #d4a94f, #a07a1c); }
+
+html.light ::selection { background: rgba(196, 151, 70, 0.25); color: #1a1a1a; }
+
+/* Scanline CRT overlay — hide in light mode */
+html.light body::after { opacity: 0; }
+
+/* Film grain — softer in light mode */
+html.light .film-grain::before { opacity: 0.015; }
+
+/* ── Base components ── */
+html.light .card {
+  background: #ffffff;
+  border-color: #e0dcd4;
+}
+
+html.light .input {
+  background: #ffffff;
+  border-color: #d4cfc6;
+  color: #1a1a1a;
+}
+html.light .input::placeholder { color: #999; }
+html.light .input:focus { border-color: #c49746; box-shadow: 0 0 0 2px rgba(196, 151, 70, 0.15); }
+
+html.light .btn-primary { background: #c49746; }
+html.light .btn-primary:hover { background: #d4a94f; }
+
+html.light .btn-secondary {
+  background: #ffffff;
+  color: #1a1a1a;
+  border-color: #d4cfc6;
+}
+html.light .btn-secondary:hover { border-color: #c49746; }
+
+/* ── Gradient text ── */
+html.light .text-gradient-green {
+  background: linear-gradient(to right, #8b6914, #c49746);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Glass ── */
+html.light .glass { backdrop-filter: blur(12px); }
+
+/* ── Dot grid background ── */
+html.light .bg-grid {
+  background-image: radial-gradient(circle, rgba(196, 151, 70, 0.08) 1px, transparent 1px);
+}
+
+/* ── Glow utilities ── */
+html.light .glow-green {
+  box-shadow: 0 0 20px rgba(196, 151, 70, 0.1), inset 0 0 20px rgba(196, 151, 70, 0.02);
+}
+html.light .border-glow {
+  border-color: rgba(196, 151, 70, 0.2);
+}
+html.light .border-glow:hover {
+  border-color: rgba(196, 151, 70, 0.4);
+  box-shadow: 0 0 24px rgba(196, 151, 70, 0.06);
+}
+
+/* ── Liquid Gold — Light mode ── */
+html.light .liquid-gold-card {
+  box-shadow: 0 2px 16px rgba(196, 151, 70, 0.12),
+              0 0 40px rgba(196, 151, 70, 0.04);
+}
+html.light .liquid-gold-card::after {
+  background: linear-gradient(160deg,
+    rgba(255, 252, 245, 0.97) 0%,
+    rgba(250, 247, 240, 0.98) 40%,
+    rgba(255, 252, 245, 0.97) 100%
+  );
+}
+html.light .liquid-gold-card:hover {
+  box-shadow: 0 4px 24px rgba(196, 151, 70, 0.18),
+              0 0 60px rgba(196, 151, 70, 0.06);
+}
+
+html.light .liquid-gold-tab-active {
+  box-shadow: 0 0 16px rgba(196, 151, 70, 0.12);
+}
+html.light .liquid-gold-tab-active::after {
+  background: rgba(250, 247, 240, 0.95);
+}
+
+html.light .glow-gold {
+  box-shadow: 0 0 16px rgba(196, 151, 70, 0.1),
+              0 0 32px rgba(196, 151, 70, 0.04);
+}
+
+html.light .section-gold-line {
+  background: linear-gradient(90deg,
+    rgba(196, 151, 70, 0.4),
+    rgba(196, 151, 70, 0.15),
+    transparent
+  );
+}
+
+/* ── Ambient glow — lighter ── */
+html.light .ambient-gold-glow::before {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(196, 151, 70, 0.04) 0%,
+    rgba(196, 151, 70, 0.01) 40%,
+    transparent 70%
+  );
+}
+
+/* ── Skeleton ── */
+html.light .skeleton { background: #e8e4de; }
+html.light .skeleton-shimmer {
+  background: linear-gradient(to right, #ede9e1 4%, #f5f3ef 25%, #ede9e1 36%);
+  background-size: 1000px 100%;
+}
+
+/* ── Header ── */
+html.light nav.fixed {
+  background: rgba(245, 243, 239, 0.92) !important;
+  border-bottom-color: rgba(196, 151, 70, 0.2) !important;
+}
+
+/* ── Common overrides for Tailwind dark-specific classes ──
+   These use broad selectors so all bg-black/*, text-gray-*, etc. adapt.
+   We target specific UI patterns rather than every single class. */
+
+/* Panel backgrounds */
+html.light [class*="bg-black/"] {
+  background-color: rgba(255, 255, 255, 0.6) !important;
+}
+html.light [class*="bg-black/80"] {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+}
+html.light [class*="bg-black/90"] {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Borders that use green-900 or amber-900 */
+html.light [class*="border-green-900/"],
+html.light [class*="border-amber-900/"] {
+  border-color: rgba(196, 151, 70, 0.15) !important;
+}
+
+html.light [class*="border-gray-700/"],
+html.light [class*="border-gray-800/"] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Text colors */
+html.light .text-gray-300 { color: #444 !important; }
+html.light .text-gray-400 { color: #666 !important; }
+html.light .text-gray-500 { color: #888 !important; }
+html.light .text-gray-200 { color: #333 !important; }
+
+/* Keep accent colors but slightly darken for contrast */
+html.light .text-amber-400 { color: #a07a1c !important; }
+html.light .text-amber-300 { color: #8b6914 !important; }
+html.light .text-amber-200 { color: #6b5010 !important; }
+
+/* Red/green stay the same but can be slightly deeper */
+html.light .text-red-300 { color: #dc2626 !important; }
+html.light .text-green-300 { color: #16a34a !important; }
+
+/* bg-red-900, bg-amber-900 notification boxes */
+html.light [class*="bg-red-900/"] {
+  background-color: rgba(254, 226, 226, 0.6) !important;
+}
+html.light [class*="bg-amber-900/"] {
+  background-color: rgba(254, 243, 199, 0.5) !important;
+}

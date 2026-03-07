@@ -1266,6 +1266,7 @@ class OptionsIVSurfaceRequest(BaseModel):
 class OptionsSentimentRequest(BaseModel):
     """Request body for options sentiment analysis"""
     ticker: str
+    lang: str = 'en'
 
 
 class OptionsEvaluateRequest(BaseModel):
@@ -1459,7 +1460,7 @@ async def options_sentiment(req: OptionsSentimentRequest):
     """
     try:
         print(f"[Options] Computing sentiment for {req.ticker}")
-        result = get_options_sentiment(req.ticker)
+        result = get_options_sentiment(req.ticker, lang=req.lang)
 
         if result.get('error'):
             raise HTTPException(status_code=500, detail=result['error'])

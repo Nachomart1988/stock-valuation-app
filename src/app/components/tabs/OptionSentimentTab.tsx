@@ -127,7 +127,7 @@ export default function OptionSentimentTab({ ticker, currentPrice, chainData }: 
         fetch(`${backendUrl}/options/sentiment`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ticker }),
+          body: JSON.stringify({ ticker, lang: locale }),
         }),
         fetch(`${backendUrl}/options/iv-surface`, {
           method: 'POST',
@@ -150,7 +150,7 @@ export default function OptionSentimentTab({ ticker, currentPrice, chainData }: 
     } finally {
       setLoading(false);
     }
-  }, [ticker, backendUrl]);
+  }, [ticker, backendUrl, locale]);
 
   // ── IV vs Moneyness scatter ──
   const ivMoneyness = useMemo(() => {
