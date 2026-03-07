@@ -227,18 +227,12 @@ body::after {
   box-shadow: 0 0 24px rgba(0, 166, 81, 0.08);
 }
 
-/* ── Liquid Gold system ─────────────────────────────────────────────── */
-.glow-gold {
-  box-shadow: 0 0 24px rgba(212,175,55,0.12),
-              inset 0 1px 0 rgba(255,215,0,0.08);
-}
-.border-glow-gold {
-  border-color: rgba(212,175,55,0.25);
-  transition: border-color 0.3s, box-shadow 0.3s;
-}
-.border-glow-gold:hover {
-  border-color: rgba(212,175,55,0.5);
-  box-shadow: 0 0 28px rgba(212,175,55,0.1);
+/* ── Liquid Gold system v2 — Rotating conic-gradient ring ────────── */
+
+/* Spin keyframe for the gold ring gradient */
+@keyframes liquidGoldSpin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
 @keyframes liquidGoldShimmer {
@@ -246,6 +240,187 @@ body::after {
   100% { background-position: 200% 0; }
 }
 
+/* Film grain noise overlay */
+@keyframes grainDrift {
+  0%, 100% { transform: translate(0, 0); }
+  10%  { transform: translate(-2%, -3%); }
+  30%  { transform: translate(3%, 2%); }
+  50%  { transform: translate(-1%, 4%); }
+  70%  { transform: translate(2%, -2%); }
+  90%  { transform: translate(-3%, 1%); }
+}
+
+.glow-gold {
+  box-shadow: 0 0 24px rgba(232,175,72,0.15),
+              0 0 48px rgba(212,175,55,0.06),
+              inset 0 1px 0 rgba(255,215,0,0.08);
+}
+
+.border-glow-gold {
+  border-color: rgba(212,175,55,0.25);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.border-glow-gold:hover {
+  border-color: rgba(212,175,55,0.5);
+  box-shadow: 0 0 28px rgba(212,175,55,0.12);
+}
+
+/*
+  Liquid Gold Card — 4-layer technique:
+  Layer 1 (box-shadow): Warm gold glow behind the element
+  Layer 2 (element itself): Clip container with overflow:hidden + border-radius
+  Layer 3 (::before): Rotating conic-gradient — gold-dominant, 2 white hotspots, subtle iridescence
+  Layer 4 (::after): Inner plate that covers center, leaving only 2px ring visible
+*/
+.liquid-gold-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: none;
+  backdrop-filter: blur(12px);
+  /* Layer 1: Glow */
+  box-shadow: 0 0 30px rgba(232,175,72,0.15),
+              0 0 60px rgba(212,175,55,0.05);
+}
+
+/* Layer 3: Rotating conic-gradient ring */
+.liquid-gold-card::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 200%; height: 200%;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    /* Gold arc 1 */
+    #533517 0%,
+    #8b6914 8%,
+    #c49746 16%,
+    #feeaa5 24%,
+    /* White hotspot 1 */
+    #ffffff 26%,
+    #feeaa5 29%,
+    /* Subtle iridescence: pink hint */
+    #ffc0cb 30%,
+    #feeaa5 31.5%,
+    /* Subtle iridescence: blue hint */
+    #a8c8f0 32.5%,
+    #feeaa5 34%,
+    /* Gold arc 2 */
+    #c49746 40%,
+    #8b6914 47%,
+    #533517 50%,
+    /* Gold arc 3 (repeat) */
+    #8b6914 58%,
+    #c49746 66%,
+    #feeaa5 74%,
+    /* White hotspot 2 */
+    #ffffff 76%,
+    #feeaa5 79%,
+    /* Subtle iridescence: pink hint */
+    #ffc0cb 80%,
+    #feeaa5 81.5%,
+    /* Subtle iridescence: blue hint */
+    #a8c8f0 82.5%,
+    #feeaa5 84%,
+    /* Gold arc 4 */
+    #c49746 90%,
+    #8b6914 97%,
+    #533517 100%
+  );
+  animation: liquidGoldSpin 4.5s linear infinite;
+  z-index: 0;
+}
+
+/* Layer 4: Inner plate — covers center, leaves 2px ring */
+.liquid-gold-card::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(160deg,
+    rgba(20, 14, 5, 0.97) 0%,
+    rgba(8, 6, 2, 0.98) 40%,
+    rgba(15, 11, 4, 0.97) 100%
+  );
+}
+
+/* All card children must be above the pseudo-elements */
+.liquid-gold-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Hover: brighten the glow */
+.liquid-gold-card:hover {
+  box-shadow: 0 0 36px rgba(232,175,72,0.22),
+              0 0 72px rgba(212,175,55,0.08);
+}
+.liquid-gold-card:hover::before {
+  animation-duration: 3s;
+}
+
+/* ── Liquid Gold Active Tab — same ring technique, thinner (1.5px) ── */
+.liquid-gold-tab-active {
+  position: relative;
+  overflow: hidden;
+  border: none !important;
+  box-shadow: 0 0 20px rgba(232,175,72,0.15);
+  transition: box-shadow 0.3s;
+}
+
+.liquid-gold-tab-active::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 200%; height: 200%;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    #533517 0%,
+    #c49746 16%,
+    #feeaa5 24%,
+    #ffffff 26%,
+    #feeaa5 29%,
+    #ffc0cb 30%,
+    #feeaa5 31.5%,
+    #a8c8f0 32.5%,
+    #feeaa5 34%,
+    #c49746 40%,
+    #533517 50%,
+    #c49746 66%,
+    #feeaa5 74%,
+    #ffffff 76%,
+    #feeaa5 79%,
+    #ffc0cb 80%,
+    #feeaa5 81.5%,
+    #a8c8f0 82.5%,
+    #feeaa5 84%,
+    #c49746 90%,
+    #533517 100%
+  );
+  animation: liquidGoldSpin 4.5s linear infinite;
+  z-index: 0;
+}
+
+.liquid-gold-tab-active::after {
+  content: '';
+  position: absolute;
+  inset: 1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  background: rgba(25, 15, 5, 0.95);
+}
+
+.liquid-gold-tab-active > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* ── Liquid Gold Shimmer (legacy, lighter effect for inline elements) ── */
 .liquid-gold-shimmer {
   position: relative;
   overflow: hidden;
@@ -268,37 +443,7 @@ body::after {
   animation: liquidGoldShimmer 6s ease-in-out infinite;
 }
 
-.liquid-gold-card {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(135deg,
-    rgba(212,175,55,0.08) 0%,
-    rgba(0,0,0,0.6) 50%,
-    rgba(212,175,55,0.04) 100%
-  );
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(212,175,55,0.2);
-  box-shadow: 0 0 24px rgba(212,175,55,0.08),
-              inset 0 1px 0 rgba(255,215,0,0.06);
-}
-.liquid-gold-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(
-    110deg,
-    transparent 25%,
-    rgba(255,215,0,0.04) 37%,
-    rgba(212,175,55,0.08) 50%,
-    rgba(255,215,0,0.04) 63%,
-    transparent 75%
-  );
-  background-size: 200% 100%;
-  animation: liquidGoldShimmer 6s ease-in-out infinite;
-}
-
+/* ── Section gold divider line ── */
 .section-gold-line {
   height: 1px;
   background: linear-gradient(90deg,
@@ -306,6 +451,42 @@ body::after {
     rgba(255,215,0,0.2),
     transparent
   );
+}
+
+/* ── Film grain noise overlay ── */
+.film-grain::before {
+  content: '';
+  position: fixed;
+  inset: -50%;
+  width: 200%; height: 200%;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  animation: grainDrift 8s steps(10) infinite;
+}
+
+/* ── Radial ambient gold glow ── */
+.ambient-gold-glow {
+  position: relative;
+}
+.ambient-gold-glow::before {
+  content: '';
+  position: absolute;
+  top: -20%; left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  height: 60%;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(212,175,55,0.06) 0%,
+    rgba(212,175,55,0.02) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* Terminal font for data displays */

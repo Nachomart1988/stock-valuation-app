@@ -1340,6 +1340,379 @@ class OptionsStrategySimulator:
             raise ValueError(f"Unknown strategy: {strategy_name}. Available: {self.STRATEGY_TEMPLATES}")
 
     # ────────────────────────────────────────────────────────────
+    # Sentiment Analysis
+    # ────────────────────────────────────────────────────────────
+
+    def sentiment_analysis(self, ticker: str) -> Dict[str, Any]:
+        """
+        Compute comprehensive options sentiment metrics.
+
+        Returns:
+            {
+              ticker, currentPrice,
+              greeksAggregation: [{expiration, netDelta, netGamma, netVega, netTheta, callOI, putOI, callVol, putVol}, ...],
+              anomalies: [{strike, expiration, type, metric, value, zScore, description}, ...],
+              historicalIV: {atmIV, realizedVol7d, realizedVol30d, ivRank, ivPercentile},
+              biasScore: {score, label, components: {pcrComponent, deltaComponent, skewComponent, anomalyComponent}},
+              insights: [{type, severity, message}, ...],
+            }
+        """
+        if not YF_AVAILABLE:
+            return {"error": "yfinance not installed on server", "ticker": ticker}
+
+        try:
+            stock = yf.Ticker(ticker)
+            expirations = list(stock.options)
+
+            if not expirations:
+                return {"error": f"No options data for {ticker}", "ticker": ticker}
+
+            # Get current price
+            try:
+                S = float(stock.fast_info.get('last_price') or stock.fast_info.get('lastPrice') or 0)
+            except Exception:
+                S = 0.0
+            if not S:
+                hist = stock.history(period="1d")
+                S = float(hist['Close'].iloc[-1]) if len(hist) > 0 else 0
+
+            # Fetch historical prices for realized vol
+            try:
+                hist_prices = stock.history(period="3mo")
+                closes = hist_prices['Close'].dropna().values if len(hist_prices) > 0 else np.array([])
+            except Exception:
+                closes = np.array([])
+
+            # Limit to first 6 expirations
+            expirations = expirations[:6]
+
+            # ── Fetch chains ──
+            chains = {}
+            for exp_date in expirations:
+                try:
+                    opt = stock.option_chain(exp_date)
+                    chains[exp_date] = opt
+                except Exception:
+                    continue
+
+            if not chains:
+                return {"error": f"Could not fetch any option chains for {ticker}", "ticker": ticker}
+
+            r = 0.042  # risk-free rate
+
+            # ── Greeks Aggregation per expiration ──
+            greeks_agg = []
+            all_call_oi = 0
+            all_put_oi = 0
+            all_call_vol = 0
+            all_put_vol = 0
+            all_net_delta = 0.0
+
+            for exp_date, opt in chains.items():
+                T = self._years_to_expiry(exp_date)
+                calls_df = opt.calls if opt.calls is not None and len(opt.calls) > 0 else None
+                puts_df = opt.puts if opt.puts is not None and len(opt.puts) > 0 else None
+
+                net_delta = 0.0
+                net_gamma = 0.0
+                net_vega = 0.0
+                net_theta = 0.0
+                call_oi = 0
+                put_oi = 0
+                call_vol = 0
+                put_vol = 0
+
+                if calls_df is not None:
+                    for _, row in calls_df.iterrows():
+                        oi = int(row.get('openInterest', 0)) if not _is_nan(row.get('openInterest')) else 0
+                        vol = int(row.get('volume', 0)) if not _is_nan(row.get('volume')) else 0
+                        iv = float(row.get('impliedVolatility', 0.3))
+                        strike = float(row.get('strike', 0))
+                        call_oi += oi
+                        call_vol += vol
+                        if oi > 0 and strike > 0 and iv > 0.001:
+                            g = self.bs.greeks(S, strike, T, r, iv, 'call', 0.0)
+                            net_delta += g.delta * oi
+                            net_gamma += g.gamma * oi
+                            net_vega += g.vega * oi
+                            net_theta += g.theta * oi
+
+                if puts_df is not None:
+                    for _, row in puts_df.iterrows():
+                        oi = int(row.get('openInterest', 0)) if not _is_nan(row.get('openInterest')) else 0
+                        vol = int(row.get('volume', 0)) if not _is_nan(row.get('volume')) else 0
+                        iv = float(row.get('impliedVolatility', 0.3))
+                        strike = float(row.get('strike', 0))
+                        put_oi += oi
+                        put_vol += vol
+                        if oi > 0 and strike > 0 and iv > 0.001:
+                            g = self.bs.greeks(S, strike, T, r, iv, 'put', 0.0)
+                            net_delta += g.delta * oi
+                            net_gamma += g.gamma * oi
+                            net_vega += g.vega * oi
+                            net_theta += g.theta * oi
+
+                greeks_agg.append({
+                    "expiration": exp_date,
+                    "netDelta": round(net_delta, 2),
+                    "netGamma": round(net_gamma, 4),
+                    "netVega": round(net_vega, 2),
+                    "netTheta": round(net_theta, 2),
+                    "callOI": call_oi,
+                    "putOI": put_oi,
+                    "callVol": call_vol,
+                    "putVol": put_vol,
+                })
+
+                all_call_oi += call_oi
+                all_put_oi += put_oi
+                all_call_vol += call_vol
+                all_put_vol += put_vol
+                all_net_delta += net_delta
+
+            # ── Anomaly Detection ──
+            anomalies = []
+            for exp_date, opt in chains.items():
+                for option_type, df in [('call', opt.calls), ('put', opt.puts)]:
+                    if df is None or len(df) == 0:
+                        continue
+                    volumes = []
+                    ois = []
+                    for _, row in df.iterrows():
+                        v = int(row.get('volume', 0)) if not _is_nan(row.get('volume')) else 0
+                        o = int(row.get('openInterest', 0)) if not _is_nan(row.get('openInterest')) else 0
+                        volumes.append(v)
+                        ois.append(o)
+
+                    vol_arr = np.array(volumes, dtype=float)
+                    oi_arr = np.array(ois, dtype=float)
+                    vol_mean = vol_arr.mean() if len(vol_arr) > 0 else 0
+                    vol_std = vol_arr.std() if len(vol_arr) > 0 else 1
+                    if vol_std < 1:
+                        vol_std = 1
+
+                    for idx, (_, row) in enumerate(df.iterrows()):
+                        v = volumes[idx]
+                        o = ois[idx]
+                        strike = float(row.get('strike', 0))
+
+                        # Volume spike (Z-score > 2.5)
+                        z = (v - vol_mean) / vol_std
+                        if z > 2.5 and v > 100:
+                            anomalies.append({
+                                "strike": strike,
+                                "expiration": exp_date,
+                                "type": option_type,
+                                "metric": "volume_spike",
+                                "value": v,
+                                "zScore": round(z, 2),
+                                "description": f"Unusual volume: {v:,} ({z:.1f}σ above mean)"
+                            })
+
+                        # Vol/OI ratio > 3 (unusual activity)
+                        if o > 50 and v > 0:
+                            ratio = v / o
+                            if ratio > 3.0:
+                                anomalies.append({
+                                    "strike": strike,
+                                    "expiration": exp_date,
+                                    "type": option_type,
+                                    "metric": "vol_oi_ratio",
+                                    "value": round(ratio, 2),
+                                    "zScore": round(ratio, 2),
+                                    "description": f"Vol/OI ratio: {ratio:.1f}x (new positioning)"
+                                })
+
+            # Sort anomalies by z-score descending, limit to 20
+            anomalies.sort(key=lambda x: abs(x['zScore']), reverse=True)
+            anomalies = anomalies[:20]
+
+            # ── Historical IV ──
+            # ATM IV: average IV of nearest-strike calls and puts for front-month
+            atm_iv = 0.0
+            front_exp = list(chains.keys())[0]
+            front_opt = chains[front_exp]
+            if front_opt.calls is not None and len(front_opt.calls) > 0:
+                calls_sorted = front_opt.calls.copy()
+                calls_sorted['dist'] = abs(calls_sorted['strike'] - S)
+                nearest = calls_sorted.nsmallest(2, 'dist')
+                atm_iv = float(nearest['impliedVolatility'].mean())
+
+            # Realized vol
+            rv7d = 0.0
+            rv30d = 0.0
+            if len(closes) >= 8:
+                log_ret = np.diff(np.log(closes))
+                rv7d = float(np.std(log_ret[-7:]) * np.sqrt(252)) if len(log_ret) >= 7 else 0
+                rv30d = float(np.std(log_ret[-30:]) * np.sqrt(252)) if len(log_ret) >= 30 else 0
+
+            # IV rank / percentile (approximate: use 3mo data)
+            # Simplified: compare ATM IV to range of historical ATM-ish IVs
+            iv_rank = 0.0
+            iv_percentile = 0.0
+            if atm_iv > 0 and len(closes) >= 30:
+                # Use rolling 30-day realized vol as proxy for historical IV range
+                if len(closes) >= 60:
+                    log_ret_all = np.diff(np.log(closes))
+                    rolling_vols = []
+                    for i in range(20, len(log_ret_all)):
+                        window = log_ret_all[max(0, i-20):i]
+                        rolling_vols.append(float(np.std(window) * np.sqrt(252)))
+                    if rolling_vols:
+                        min_v = min(rolling_vols)
+                        max_v = max(rolling_vols)
+                        if max_v > min_v:
+                            iv_rank = (atm_iv - min_v) / (max_v - min_v)
+                            iv_rank = max(0, min(1, iv_rank))
+                        below = sum(1 for v in rolling_vols if v < atm_iv)
+                        iv_percentile = below / len(rolling_vols)
+
+            historical_iv = {
+                "atmIV": round(atm_iv, 4),
+                "realizedVol7d": round(rv7d, 4),
+                "realizedVol30d": round(rv30d, 4),
+                "ivRank": round(iv_rank, 4),
+                "ivPercentile": round(iv_percentile, 4),
+            }
+
+            # ── Bias Score (-5 to +5) ──
+            # Components: PCR, net delta, skew, anomaly flow
+            pcr_oi = (all_put_oi / all_call_oi) if all_call_oi > 0 else 1.0
+            pcr_vol = (all_put_vol / all_call_vol) if all_call_vol > 0 else 1.0
+
+            # PCR component: >1.2 bearish, <0.7 bullish
+            pcr_avg = (pcr_oi + pcr_vol) / 2
+            if pcr_avg > 1.5:
+                pcr_component = -2.0
+            elif pcr_avg > 1.2:
+                pcr_component = -1.0
+            elif pcr_avg < 0.5:
+                pcr_component = 2.0
+            elif pcr_avg < 0.7:
+                pcr_component = 1.0
+            else:
+                pcr_component = 0.0
+
+            # Delta component: positive net delta = bullish positioning
+            total_oi = all_call_oi + all_put_oi
+            delta_norm = all_net_delta / (total_oi + 1) if total_oi > 0 else 0
+            delta_component = max(-2, min(2, delta_norm * 50))
+
+            # Skew component: compare OTM put IV vs OTM call IV
+            skew_component = 0.0
+            if front_opt.calls is not None and front_opt.puts is not None:
+                otm_calls = front_opt.calls[front_opt.calls['strike'] > S * 1.05]
+                otm_puts = front_opt.puts[front_opt.puts['strike'] < S * 0.95]
+                if len(otm_calls) > 0 and len(otm_puts) > 0:
+                    avg_call_iv = float(otm_calls['impliedVolatility'].mean())
+                    avg_put_iv = float(otm_puts['impliedVolatility'].mean())
+                    if avg_call_iv > 0:
+                        skew_ratio = avg_put_iv / avg_call_iv
+                        if skew_ratio > 1.3:
+                            skew_component = -1.0  # Fear/bearish skew
+                        elif skew_ratio < 0.8:
+                            skew_component = 1.0   # Complacency/bullish skew
+
+            # Anomaly component: net direction of anomalous activity
+            anomaly_component = 0.0
+            call_anomaly_count = sum(1 for a in anomalies if a['type'] == 'call')
+            put_anomaly_count = sum(1 for a in anomalies if a['type'] == 'put')
+            if call_anomaly_count + put_anomaly_count > 0:
+                anomaly_bias = (call_anomaly_count - put_anomaly_count) / (call_anomaly_count + put_anomaly_count)
+                anomaly_component = anomaly_bias * 1.0  # max +/-1
+
+            raw_score = pcr_component + delta_component + skew_component + anomaly_component
+            bias_score_val = max(-5, min(5, raw_score))
+
+            if bias_score_val > 2.5:
+                label = "Strong Bullish"
+            elif bias_score_val > 1.0:
+                label = "Bullish"
+            elif bias_score_val > -1.0:
+                label = "Neutral"
+            elif bias_score_val > -2.5:
+                label = "Bearish"
+            else:
+                label = "Strong Bearish"
+
+            bias_score = {
+                "score": round(bias_score_val, 2),
+                "label": label,
+                "components": {
+                    "pcrComponent": round(pcr_component, 2),
+                    "deltaComponent": round(delta_component, 2),
+                    "skewComponent": round(skew_component, 2),
+                    "anomalyComponent": round(anomaly_component, 2),
+                }
+            }
+
+            # ── Insights Generator ──
+            insights = []
+
+            if pcr_oi > 1.3:
+                insights.append({"type": "pcr", "severity": "warning",
+                    "message": f"Put/Call OI ratio is {pcr_oi:.2f} — elevated put hedging suggests bearish sentiment or downside protection."})
+            elif pcr_oi < 0.6:
+                insights.append({"type": "pcr", "severity": "info",
+                    "message": f"Put/Call OI ratio is {pcr_oi:.2f} — low put activity suggests complacency or bullish positioning."})
+
+            if atm_iv > 0 and rv30d > 0:
+                iv_premium = (atm_iv - rv30d) / rv30d
+                if iv_premium > 0.3:
+                    insights.append({"type": "iv", "severity": "warning",
+                        "message": f"Implied vol ({atm_iv*100:.1f}%) is {iv_premium*100:.0f}% above 30d realized ({rv30d*100:.1f}%). Options are expensive — favor selling strategies."})
+                elif iv_premium < -0.15:
+                    insights.append({"type": "iv", "severity": "info",
+                        "message": f"Implied vol ({atm_iv*100:.1f}%) is below 30d realized ({rv30d*100:.1f}%). Options are cheap — favor buying strategies."})
+
+            if iv_rank > 0.8:
+                insights.append({"type": "ivRank", "severity": "warning",
+                    "message": f"IV Rank is {iv_rank*100:.0f}% — volatility is near 3-month highs. Consider premium-selling strategies."})
+            elif iv_rank < 0.2 and iv_rank > 0:
+                insights.append({"type": "ivRank", "severity": "info",
+                    "message": f"IV Rank is {iv_rank*100:.0f}% — volatility is near 3-month lows. Options are cheap, favor long strategies."})
+
+            if len(anomalies) >= 5:
+                insights.append({"type": "anomaly", "severity": "alert",
+                    "message": f"Detected {len(anomalies)} unusual activity signals — possible institutional positioning or event anticipation."})
+
+            if abs(skew_component) > 0.5:
+                direction = "puts" if skew_component < 0 else "calls"
+                insights.append({"type": "skew", "severity": "info",
+                    "message": f"Volatility skew is tilted toward OTM {direction} — market is pricing more risk to the {'downside' if direction == 'puts' else 'upside'}."})
+
+            if all_net_delta > total_oi * 0.02:
+                insights.append({"type": "delta", "severity": "info",
+                    "message": "Aggregate net delta is significantly positive — market makers are hedged for upside. Bullish flow dominance."})
+            elif all_net_delta < -total_oi * 0.02:
+                insights.append({"type": "delta", "severity": "warning",
+                    "message": "Aggregate net delta is significantly negative — market makers are hedged for downside. Bearish flow dominance."})
+
+            if not insights:
+                insights.append({"type": "neutral", "severity": "info",
+                    "message": "Options flow and sentiment metrics are within normal ranges. No strong directional bias detected."})
+
+            return {
+                "ticker": ticker,
+                "currentPrice": S,
+                "greeksAggregation": greeks_agg,
+                "anomalies": anomalies,
+                "historicalIV": historical_iv,
+                "biasScore": bias_score,
+                "insights": insights,
+                "pcrOI": round(pcr_oi, 4),
+                "pcrVolume": round(pcr_vol, 4),
+                "totalCallOI": all_call_oi,
+                "totalPutOI": all_put_oi,
+                "totalCallVol": all_call_vol,
+                "totalPutVol": all_put_vol,
+            }
+
+        except Exception as e:
+            logger.error(f"Error computing sentiment for {ticker}: {e}")
+            return {"error": str(e), "ticker": ticker}
+
+    # ────────────────────────────────────────────────────────────
     # IV Surface
     # ────────────────────────────────────────────────────────────
 
@@ -1808,6 +2181,11 @@ def suggest_options_strategies(ticker: str, outlook: str, lang: str = 'en', **kw
 def get_iv_surface(ticker: str) -> Dict[str, Any]:
     """Build IV surface data for 3D visualization."""
     return options_simulator.iv_surface(ticker)
+
+
+def get_options_sentiment(ticker: str) -> Dict[str, Any]:
+    """Compute comprehensive options sentiment analysis."""
+    return options_simulator.sentiment_analysis(ticker)
 
 
 def scan_options_combinations(

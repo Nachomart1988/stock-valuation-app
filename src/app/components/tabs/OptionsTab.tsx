@@ -4,6 +4,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Tab } from '@headlessui/react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import OptionSentimentTab from './OptionSentimentTab';
 
 interface OptionsTabProps {
   ticker: string;
@@ -549,6 +550,7 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
     es ? 'Simulador de Estrategias' : 'Strategy Simulator',
     es ? 'Sugerencias' : 'Suggestions',
     'Custom',
+    es ? 'Sentimiento' : 'Sentiment',
   ];
 
   // ── Render ─────────────────────────────────────────────────────
@@ -566,17 +568,17 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
       )}
 
       <Tab.Group>
-        <Tab.List className="flex gap-2 bg-black/40 p-2 rounded-lg">
+        <Tab.List className="flex gap-2 bg-black/40 backdrop-blur-md p-2 rounded-xl border border-amber-900/20">
           {subtabs.map((tab) => (
             <Tab
               key={tab}
               className={({ selected }) =>
-                `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
-                  selected ? 'bg-amber-600 text-white shadow-lg' : 'text-gray-500 hover:text-green-400/70 hover:bg-green-900/10'
+                `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all duration-300 ${
+                  selected ? 'liquid-gold-tab-active text-amber-200' : 'text-gray-500 hover:text-amber-400/60 hover:bg-amber-900/10'
                 }`
               }
             >
-              {tab}
+              <span>{tab}</span>
             </Tab>
           ))}
         </Tab.List>
@@ -1544,6 +1546,11 @@ export default function OptionsTab({ ticker, currentPrice }: OptionsTabProps) {
               )}
 
             </div>
+          </Tab.Panel>
+
+          {/* == Sentiment ======================================================= */}
+          <Tab.Panel>
+            <OptionSentimentTab ticker={ticker} currentPrice={currentPrice} chainData={chain} />
           </Tab.Panel>
 
         </Tab.Panels>

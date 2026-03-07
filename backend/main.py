@@ -19,7 +19,7 @@ from ml_prediction_engine import predict_price, MLPredictionEngine, TORCH_AVAILA
 from options_strategy_simulator import (
     options_simulator, fetch_options_chain, analyze_options_strategy,
     auto_analyze_options_strategy, suggest_options_strategies, get_iv_surface,
-    scan_options_combinations,
+    scan_options_combinations, get_options_sentiment,
 )
 import asyncio
 
@@ -1263,6 +1263,11 @@ class OptionsIVSurfaceRequest(BaseModel):
     ticker: str
 
 
+class OptionsSentimentRequest(BaseModel):
+    """Request body for options sentiment analysis"""
+    ticker: str
+
+
 class OptionsEvaluateRequest(BaseModel):
     """Request body for AI-style strategy evaluation"""
     ticker: str
@@ -1439,6 +1444,34 @@ async def options_iv_surface(req: OptionsIVSurfaceRequest):
         raise
     except Exception as e:
         print(f"[Options] Error building IV surface: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/options/sentiment")
+async def options_sentiment(req: OptionsSentimentRequest):
+    """
+    Comprehensive options sentiment analysis.
+
+    Returns Greeks aggregation, volume/OI anomalies, historical IV metrics,
+    bias score, and AI-generated insights.
+    """
+    try:
+        print(f"[Options] Computing sentiment for {req.ticker}")
+        result = get_options_sentiment(req.ticker)
+
+        if result.get('error'):
+            raise HTTPException(status_code=500, detail=result['error'])
+
+        print(f"[Options] Sentiment done for {req.ticker}: bias={result.get('biasScore', {}).get('label', 'N/A')}, "
+              f"{len(result.get('anomalies', []))} anomalies, {len(result.get('insights', []))} insights")
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Options] Error computing sentiment: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

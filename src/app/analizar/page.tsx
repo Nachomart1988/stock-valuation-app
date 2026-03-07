@@ -1117,15 +1117,16 @@ function AnalizarContent() {
                     key={category}
                     className={({ selected }) =>
                       classNames(
-                        'shrink-0 rounded-lg py-2 px-3 sm:py-2.5 sm:px-4 text-xs sm:text-sm font-semibold transition-all whitespace-nowrap',
-                        'focus:outline-none focus:ring-1 focus:ring-amber-500/40',
+                        'shrink-0 rounded-lg py-2 px-3 sm:py-2.5 sm:px-4 text-xs sm:text-sm font-semibold whitespace-nowrap',
+                        'focus:outline-none',
+                        'transition-all duration-300',
                         selected
-                          ? 'bg-amber-900/15 backdrop-blur-md text-amber-300 border border-amber-500/30 shadow-[0_0_16px_rgba(212,175,55,0.15)] liquid-gold-shimmer'
+                          ? 'liquid-gold-tab-active text-amber-200'
                           : 'text-gray-500 hover:text-amber-400/60 hover:bg-amber-900/10 border border-transparent'
                       )
                     }
                   >
-                    {category}
+                    <span>{category}</span>
                   </Tab>
                 ))}
               </Tab.List>
@@ -1817,7 +1818,7 @@ function InicioTab({
       </div>
 
       {/* Price Hero Section */}
-      <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-4">
+      <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-4 ambient-gold-glow">
         <div className="col-span-3 sm:col-span-1 liquid-gold-card p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
           <p className="text-amber-200/80 text-xs mb-1 relative z-10">{t('analysis.precio.actual')}</p>
           <p className="text-2xl sm:text-3xl md:text-4xl font-bold text-white relative z-10">${currentPrice?.toFixed(2) || 'N/A'}</p>

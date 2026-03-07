@@ -80,7 +80,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="es" suppressHydrationWarning>
         <body
-          className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased`}
+          className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased film-grain`}
         >
           {/* JSON-LD Structured Data */}
           <script
