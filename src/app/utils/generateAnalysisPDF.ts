@@ -1,5 +1,6 @@
 // src/app/utils/generateAnalysisPDF.ts
-// Professional Financial Analysis PDF — Black + Deutsche Bank Green #00A651
+// Institutional-Grade Investment Analysis PDF — Prismo v2
+// Redesigned for hedge-fund level presentation
 
 export interface PDFBranding {
   bgColor?:          [number, number, number];  // default [0,0,0]
@@ -184,16 +185,24 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   );
   const FONT = d.branding?.fontFamily ?? 'helvetica';
 
-  // ── Palette ────────────────────────────────────────────────────────────
+  // ── Palette (v2 — richer, more nuanced) ──────────────────────────────
   const G:  RGB = d.branding?.accentColor ?? [0,  166, 81];  // accent (default: #00A651)
-  const G2: RGB = [Math.max(0, G[0]-0), Math.max(0, Math.round(G[1]*0.6)), Math.max(0, Math.round(G[2]*0.54))]; // darker accent
+  const G2: RGB = [Math.max(0, Math.round(G[0]*0.7)), Math.max(0, Math.round(G[1]*0.55)), Math.max(0, Math.round(G[2]*0.45))]; // darker accent
+  const GL: RGB = [Math.min(255, G[0]+60), Math.min(255, G[1]+40), Math.min(255, G[2]+40)]; // lighter accent
   const W:  RGB = [255,255,255];
   const BK: RGB = d.branding?.bgColor    ?? [0,  0,  0];     // background (default: black)
-  const D1: RGB = BK[0]+BK[1]+BK[2] === 0 ? [8,8,8]   : [Math.min(255,BK[0]+8), Math.min(255,BK[1]+8), Math.min(255,BK[2]+8)];
-  const D3: RGB = BK[0]+BK[1]+BK[2] === 0 ? [22,22,22] : [Math.min(255,BK[0]+22),Math.min(255,BK[1]+22),Math.min(255,BK[2]+22)];
-  const TW: RGB = [220,220,220];   // main text
-  const TG: RGB = [130,130,130];   // muted text
-  const RD: RGB = [220, 50, 50];   // negative/red
+  const isBlack = BK[0]+BK[1]+BK[2] < 30;
+  const D1: RGB = isBlack ? [10,10,10]  : [Math.min(255,BK[0]+10), Math.min(255,BK[1]+10), Math.min(255,BK[2]+10)];
+  const D2: RGB = isBlack ? [16,16,16]  : [Math.min(255,BK[0]+16), Math.min(255,BK[1]+16), Math.min(255,BK[2]+16)];
+  const D3: RGB = isBlack ? [24,24,24]  : [Math.min(255,BK[0]+24), Math.min(255,BK[1]+24), Math.min(255,BK[2]+24)];
+  const D4: RGB = isBlack ? [32,32,32]  : [Math.min(255,BK[0]+32), Math.min(255,BK[1]+32), Math.min(255,BK[2]+32)];
+  const TW: RGB = [230,230,230];   // main text (brighter)
+  const TG: RGB = [120,120,120];   // muted text
+  const TL: RGB = [170,170,170];   // light secondary text
+  const RD: RGB = [230, 60, 60];   // negative/red
+  const GN: RGB = [60, 210, 120];  // positive/green (for values)
+  const YW: RGB = [220, 180, 40];  // caution/yellow
+  const BL: RGB = [70, 160, 230];  // info/blue
 
   const sf = (c: RGB) => doc.setFillColor(c[0], c[1], c[2]);
   const ss = (c: RGB) => doc.setDrawColor(c[0], c[1], c[2]);
@@ -246,30 +255,46 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
 
   let pg = 1;
 
-  // ── App Logo (green square "P") ────────────────────────────────────────
+  // ── App Logo (accent rounded square "P") ───────────────────────────────
   function appLogo(x: number, y: number, sz = 8) {
-    sf(G); doc.roundedRect(x, y, sz, sz, 1.2, 1.2, 'F');
-    doc.setFont(FONT,'bold'); doc.setFontSize(sz * 0.8);
-    st(W); doc.text('P', x + sz/2, y + sz*0.72, { align:'center' });
+    sf(G); doc.roundedRect(x, y, sz, sz, 1.5, 1.5, 'F');
+    doc.setFont(FONT,'bold'); doc.setFontSize(sz * 0.75);
+    st(W); doc.text('P', x + sz/2, y + sz*0.7, { align:'center' });
   }
 
-  // ── Page header ────────────────────────────────────────────────────────
+  // ── Page header (v2: accent strip + ticker bar) ────────────────────────
   const userCo = d.branding?.userCompany?.trim() || '';
   function pageHeader() {
-    sf(BK); doc.rect(0, 0, PW, 11, 'F');
-    ss(G);  doc.setLineWidth(0.25); doc.line(0, 11, PW, 11);
-    doc.setFont(FONT,'bold'); doc.setFontSize(7); st(G);
-    doc.text(`${ticker}  ·  ${co}`, M, 7);
-    doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TG);
+    // Accent top strip
+    sf(G); doc.rect(0, 0, PW, 1.2, 'F');
+    // Dark header bar
+    sf(D2); doc.rect(0, 1.2, PW, 10.5, 'F');
+    // Bottom accent line
+    ss(G); doc.setLineWidth(0.3); doc.line(0, 11.7, PW, 11.7);
+
+    // Left: logo + ticker
+    appLogo(M-1, 2.2, 7.5);
+    doc.setFont(FONT,'bold'); doc.setFontSize(7.5); st(G);
+    doc.text(ticker, M+9, 7.8);
+    doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
+    const coShort = co.length > 40 ? co.substring(0, 38) + '…' : co;
+    doc.text(`  ${coShort}`, M+9+doc.getTextWidth(ticker)+1, 7.8);
+
+    // Right: page + date + firm
+    doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
     const headerRight = userCo ? `${userCo}  ·  p.${pg}  ·  ${date}` : `p.${pg}  ·  ${date}`;
-    doc.text(headerRight, PW-M, 7, { align:'right' });
+    doc.text(headerRight, PW-M, 7.8, { align:'right' });
   }
 
-  // ── Page footer ────────────────────────────────────────────────────────
+  // ── Page footer (v2: subtle with accent) ───────────────────────────────
   function pageFooter() {
-    ss(D3); doc.setLineWidth(0.2); doc.line(M, PH-11, PW-M, PH-11);
-    doc.setFont(FONT,'normal'); doc.setFontSize(5.5); st(TG);
-    doc.text('Analysis by Prismo  ·  prismo.us  ·  For informational purposes only', PW/2, PH-6.5, { align:'center' });
+    const fy = PH - 9;
+    sf(D2); doc.rect(0, fy, PW, 9, 'F');
+    sf(G); doc.rect(0, fy, PW, 0.4, 'F');
+    doc.setFont(FONT,'normal'); doc.setFontSize(5); st(TG);
+    doc.text('Analysis by Prismo  ·  prismo.us  ·  For informational purposes only', PW/2, fy+5.5, { align:'center' });
+    doc.setFontSize(4.5);
+    doc.text(`Generated ${date}`, PW-M, fy+5.5, { align:'right' });
   }
 
   function newPage(): number {
@@ -281,129 +306,221 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   }
 
   function checkY(y: number, need = 28): number {
-    return y+need > PH-15 ? newPage() : y;
+    return y+need > PH-14 ? newPage() : y;
   }
 
-  // ── Section heading ────────────────────────────────────────────────────
+  // ── Section heading (v2: accent bar + optional subtitle) ───────────────
   function section(y: number, title: string, summary?: string): number {
-    doc.setFont(FONT,'bold'); doc.setFontSize(7.5); st(G);
-    doc.text(title.toUpperCase(), M, y);
-    ss(G); doc.setLineWidth(0.25); doc.line(M, y+1.8, PW-M, y+1.8);
+    // Accent bar left of title
+    sf(G); doc.rect(M, y-1, 2, summary ? 9 : 6, 'F');
+    doc.setFont(FONT,'bold'); doc.setFontSize(8); st(TW);
+    doc.text(title.toUpperCase(), M+5, y+3);
+    // Subtle underline
+    ss(D4); doc.setLineWidth(0.15); doc.line(M+5, y+5, PW-M, y+5);
     if (summary) {
-      doc.setFont(FONT,'italic'); doc.setFontSize(6.5); st(TG);
-      doc.text(summary, M, y+6);
-      return y+11;
+      doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TG);
+      doc.text(summary, M+5, y+9.5);
+      return y+15;
     }
+    return y+9;
+  }
+
+  // ── Subsection heading (lighter, no bar) ───────────────────────────────
+  function subsection(y: number, title: string): number {
+    doc.setFont(FONT,'bold'); doc.setFontSize(7); st(G);
+    doc.text(title, M+2, y+2.5);
+    ss(D3); doc.setLineWidth(0.1); doc.line(M+2, y+4, PW-M, y+4);
     return y+7;
   }
 
-  // ── Small metric pill ──────────────────────────────────────────────────
-  function pill(x: number, y: number, w: number, label: string, val: string, vc?: RGB) {
-    sf(D1); doc.roundedRect(x, y, w, 13, 1.5, 1.5, 'F');
-    ss(D3); doc.setLineWidth(0.15); doc.roundedRect(x, y, w, 13, 1.5, 1.5, 'S');
-    doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
-    doc.text(label, x+w/2, y+5, { align:'center' });
-    doc.setFont(FONT,'bold'); doc.setFontSize(9); st(vc||TW);
-    doc.text(val, x+w/2, y+11, { align:'center' });
+  // ── Small metric pill (v2: accent border option) ───────────────────────
+  function pill(x: number, y: number, w: number, label: string, val: string, vc?: RGB, accent = false) {
+    sf(D1); doc.roundedRect(x, y, w, 14, 2, 2, 'F');
+    ss(accent ? G : D3); doc.setLineWidth(accent ? 0.4 : 0.15);
+    doc.roundedRect(x, y, w, 14, 2, 2, 'S');
+    doc.setFont(FONT,'normal'); doc.setFontSize(5.5); st(TG);
+    doc.text(label.toUpperCase(), x+w/2, y+5, { align:'center' });
+    doc.setFont(FONT,'bold'); doc.setFontSize(10); st(vc||TW);
+    doc.text(val, x+w/2, y+12, { align:'center' });
   }
 
-  // ── Bar chart ─────────────────────────────────────────────────────────
+  // ── Value color helper (green for positive, red for negative) ──────────
+  function valColor(v: any): RGB {
+    if (v == null || isNaN(+v)) return TW;
+    const n = typeof v === 'string' ? parseFloat(v.replace(/[%$,]/g, '')) : +v;
+    if (isNaN(n)) return TW;
+    return n > 0 ? GN : n < 0 ? RD : TW;
+  }
+
+  // ── Bar chart (v2: gradient fills, cleaner labels) ─────────────────────
   function barChart(x: number, y: number, w: number, h: number,
                     labels: string[], values: number[], color: RGB, isPct = false) {
-    const n   = labels.length;
+    const n = labels.length;
     if (n === 0) return;
-    const bw  = (w - (n-1)*1.5) / n;
+    const gap = Math.max(1, Math.min(2, 20/n));
+    const bw  = (w - (n-1)*gap) / n;
     const maxV = Math.max(...values.filter(isFinite), 1);
     const minV = Math.min(...values.filter(isFinite), 0);
     const span = maxV - Math.min(minV, 0) || 1;
 
-    // Grid
-    ss(D3); doc.setLineWidth(0.12);
+    // Background panel
+    sf(D1); doc.roundedRect(x-2, y-3, w+4, h+12, 2, 2, 'F');
+
+    // Grid lines with labels
+    ss(D3); doc.setLineWidth(0.08);
     for (let i=0; i<=4; i++) {
       const gy = y + h*(1 - i/4);
       doc.line(x, gy, x+w, gy);
+      // Grid value labels
+      if (i > 0 && i < 4) {
+        const gv = (minV < 0 ? Math.min(minV,0) : 0) + span * (i/4);
+        doc.setFont(FONT,'normal'); doc.setFontSize(4); st(D4);
+        doc.text(isPct ? fp(gv) : fl(gv), x-1, gy+1, { align:'right' });
+      }
     }
 
     labels.forEach((lbl, i) => {
       const v  = isFinite(values[i]) ? values[i] : 0;
-      const bh = Math.max(0.5, (Math.abs(v) / span) * h);
-      const bx = x + i*(bw+1.5);
+      const bh = Math.max(1, (Math.abs(v) / span) * h);
+      const bx = x + i*(bw+gap);
       const by = v >= 0 ? y+h-bh : y+h;
+      const isNeg = v < 0;
 
-      sf(v < 0 ? RD : color);
-      doc.roundedRect(bx, by, bw, bh, 0.8, 0.8, 'F');
+      // Bar with slightly rounded top
+      sf(isNeg ? RD : color);
+      doc.roundedRect(bx, by, bw, bh, Math.min(1, bw/4), Math.min(1, bw/4), 'F');
 
-      doc.setFont(FONT,'bold'); doc.setFontSize(5); st(v<0 ? RD : G);
+      // Value above bar
+      doc.setFont(FONT,'bold'); doc.setFontSize(5); st(isNeg ? RD : GL);
       const lv = isPct ? fp(v) : fl(v);
-      doc.text(lv, bx+bw/2, by-(v>=0?1.5:-1.5), { align:'center' });
+      doc.text(lv, bx+bw/2, by - (v>=0 ? 1.5 : -(bh+4)), { align:'center' });
 
-      doc.setFont(FONT,'normal'); doc.setFontSize(5.5); st(TG);
-      doc.text(lbl, bx+bw/2, y+h+4, { align:'center' });
+      // Label below
+      doc.setFont(FONT,'normal'); doc.setFontSize(5); st(TG);
+      doc.text(lbl, bx+bw/2, y+h+5, { align:'center' });
     });
   }
 
-  // ── Horizontal score bar ──────────────────────────────────────────────
+  // ── Horizontal score bar (v2: smoother, with score text) ───────────────
   function scoreBar(x: number, y: number, w: number, label: string, pct: number) {
-    const c: RGB = pct>=70 ? G : pct>=45 ? [190,140,0] : RD;
-    doc.setFont(FONT,'normal'); doc.setFontSize(7); st(TW);
+    const c: RGB = pct>=70 ? G : pct>=45 ? YW : RD;
+    doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TL);
     doc.text(label, x, y+3.5);
-    const bx = x+55, bw = w-65;
-    sf(D3); doc.roundedRect(bx, y, bw, 4.5, 1, 1, 'F');
-    const fw = Math.max(1.5, bw*pct/100);
-    sf(c); doc.roundedRect(bx, y, fw, 4.5, 1, 1, 'F');
+    const bx = x+58, bw = w-72;
+    // Track background
+    sf(D3); doc.roundedRect(bx, y+0.5, bw, 4, 1.2, 1.2, 'F');
+    // Filled portion
+    const fw = Math.max(2, bw*Math.min(pct, 100)/100);
+    sf(c); doc.roundedRect(bx, y+0.5, fw, 4, 1.2, 1.2, 'F');
+    // Score text
     doc.setFont(FONT,'bold'); doc.setFontSize(6.5); st(c);
-    doc.text(`${pct.toFixed(0)}%`, bx+bw+3, y+3.5);
+    doc.text(`${pct.toFixed(0)}%`, bx+bw+3, y+3.8);
   }
 
-  // ── autoTable helper ───────────────────────────────────────────────────
+  // ── autoTable helper (v2: cleaner styling, accent header) ──────────────
   function atable(opts: any): number {
     doc.autoTable({
       theme: 'plain',
-      styles: { fontSize: 7.5, cellPadding:[1.8,3], textColor:TW, fillColor:D1 },
-      headStyles: { fillColor:G, textColor:W, fontStyle:'bold', fontSize:7.5, cellPadding:[2,3] },
-      alternateRowStyles: { fillColor:[12,12,12] },
-      tableLineColor: D3, tableLineWidth: 0,
-      margin: { left:M, right:M },
+      styles: {
+        fontSize: 7,
+        cellPadding: [2, 3],
+        textColor: TW,
+        fillColor: D1,
+        lineColor: D3,
+        lineWidth: 0,
+      },
+      headStyles: {
+        fillColor: G2,
+        textColor: W,
+        fontStyle: 'bold',
+        fontSize: 7,
+        cellPadding: [2.5, 3],
+      },
+      alternateRowStyles: { fillColor: D2 },
+      tableLineColor: D3,
+      tableLineWidth: 0,
+      margin: { left: M, right: M },
+      // Conditional coloring for value cells
+      didParseCell: (data: any) => {
+        if (data.section === 'body') {
+          const txt = data.cell.raw;
+          if (typeof txt === 'string') {
+            const num = parseFloat(txt.replace(/[%$,]/g, ''));
+            if (!isNaN(num) && txt.includes('%')) {
+              data.cell.styles.textColor = num > 0 ? GN : num < 0 ? RD : TW;
+            }
+          }
+        }
+      },
       ...opts,
+      // Merge user didParseCell with default
+      ...(opts.didParseCell ? {
+        didParseCell: (data: any) => {
+          // Default: color % values
+          if (data.section === 'body') {
+            const txt = data.cell.raw;
+            if (typeof txt === 'string') {
+              const num = parseFloat(txt.replace(/[%$,]/g, ''));
+              if (!isNaN(num) && txt.includes('%')) {
+                data.cell.styles.textColor = num > 0 ? GN : num < 0 ? RD : TW;
+              }
+            }
+          }
+          // User override
+          opts.didParseCell(data);
+        },
+      } : {}),
     });
     return (doc.lastAutoTable?.finalY || opts.startY+20) + 6;
+  }
+
+  // ── KPI card row (horizontal metric cards) ─────────────────────────────
+  function kpiRow(y: number, items: { label: string; value: string; color?: RGB; accent?: boolean }[]): number {
+    const count = items.length;
+    const gap = 3;
+    const cardW = (CW - (count-1)*gap) / count;
+    items.forEach((item, i) => {
+      pill(M + i*(cardW+gap), y, cardW, item.label, item.value, item.color, item.accent);
+    });
+    return y + 18;
   }
 
   let y = 0; // shared Y cursor across pages
 
   // ════════════════════════════════════════════════════════════════════════
-  // PAGE 1 — COVER
+  // PAGE 1 — COVER (v2: institutional-grade design)
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('cover')) {
   sf(BK); doc.rect(0, 0, PW, PH, 'F');
-  // Green left edge
-  sf(G); doc.rect(0, 0, 2.5, PH, 'F');
-  // Green top edge
-  sf(G); doc.rect(0, 0, PW, 1.5, 'F');
 
-  // Top-left: user firm name or just "Investment Analysis Report"
+  // Top accent bar
+  sf(G); doc.rect(0, 0, PW, 2, 'F');
+
+  // Left accent strip
+  sf(G); doc.rect(0, 0, 3, PH, 'F');
+
+  // ── Top section: Report type + logo ───────────────────────────────────
+  const topY = 14;
   if (userCo) {
-    doc.setFont(FONT,'black'); doc.setFontSize(14); st(G);
-    doc.text(userCo, M+2, 21.5);
-    doc.setFont(FONT,'normal'); doc.setFontSize(7.5); st(TG);
-    doc.text('Investment Analysis Report', M+2, 27);
+    // User firm branding
+    doc.setFont(FONT,'bold'); doc.setFontSize(9); st(G);
+    doc.text(userCo.toUpperCase(), M+4, topY);
+    doc.setFont(FONT,'normal'); doc.setFontSize(7); st(TG);
+    doc.text('EQUITY RESEARCH  ·  INVESTMENT ANALYSIS REPORT', M+4, topY+6);
   } else {
-    doc.setFont(FONT,'bold'); doc.setFontSize(10); st(TG);
-    doc.text('Investment Analysis Report', M+2, 22);
+    doc.setFont(FONT,'bold'); doc.setFontSize(8); st(TG);
+    doc.text('EQUITY RESEARCH  ·  INVESTMENT ANALYSIS REPORT', M+4, topY);
   }
 
-  // Thin divider
-  ss(D3); doc.setLineWidth(0.3); doc.line(M+2, 32, PW-M, 32);
-
-  // User uploaded logo (top-right, replaces company logo)
+  // Logo (right side)
+  const logoY = 10;
   if (d.branding?.logoBase64) {
     try {
-      sf(D3); doc.circle(PW-M-15, 22, 14, 'F');
-      ss(G); doc.setLineWidth(0.3); doc.circle(PW-M-15, 22, 14, 'S');
-      doc.addImage(d.branding.logoBase64, PW-M-26, 11, 22, 22, '', 'FAST');
+      sf(D2); doc.roundedRect(PW-M-24, logoY, 22, 22, 2, 2, 'F');
+      ss(G); doc.setLineWidth(0.3); doc.roundedRect(PW-M-24, logoY, 22, 22, 2, 2, 'S');
+      doc.addImage(d.branding.logoBase64, PW-M-23, logoY+1, 20, 20, '', 'FAST');
     } catch { /* skip */ }
   } else if (profile?.image) {
-    // Company logo (right side) — dark bg for white/transparent logos
     try {
       const res = await fetch(profile.image);
       if (res.ok) {
@@ -414,92 +531,103 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
           r.onerror = reject;
           r.readAsDataURL(blob);
         });
-        sf(D3); doc.circle(PW-M-15, 22, 14, 'F');
-        ss(G); doc.setLineWidth(0.3); doc.circle(PW-M-15, 22, 14, 'S');
-        doc.addImage(url, 'JPEG', PW-M-26, 11, 22, 22, '', 'FAST');
+        sf(D2); doc.roundedRect(PW-M-24, logoY, 22, 22, 2, 2, 'F');
+        ss(G); doc.setLineWidth(0.3); doc.roundedRect(PW-M-24, logoY, 22, 22, 2, 2, 'S');
+        doc.addImage(url, 'JPEG', PW-M-23, logoY+1, 20, 20, '', 'FAST');
       }
     } catch { /* skip */ }
   }
 
-  // Company name
-  doc.setFont(FONT,'black'); doc.setFontSize(24); st(W);
-  const nameLn: string[] = doc.splitTextToSize(co, 140);
-  doc.text(nameLn, M+2, 47);
-  const afterName = 47 + nameLn.length*11;
+  // Divider line
+  const divY = userCo ? topY + 12 : topY + 6;
+  sf(D3); doc.rect(M+4, divY, CW-8, 0.3, 'F');
+  sf(G); doc.rect(M+4, divY, 40, 0.3, 'F'); // accent portion
 
-  // Ticker + exchange
-  sf(G); doc.roundedRect(M+2, afterName, 30, 10, 2, 2, 'F');
-  sf([28,28,28]); doc.roundedRect(M+35, afterName, 26, 10, 2, 2, 'F');
+  // ── Company name (large, bold) ────────────────────────────────────────
+  const nameY = divY + 12;
+  doc.setFont(FONT,'bold'); doc.setFontSize(28); st(W);
+  const nameLn: string[] = doc.splitTextToSize(co, CW - 10);
+  doc.text(nameLn.slice(0, 2), M+4, nameY);
+  const afterName = nameY + Math.min(nameLn.length, 2) * 12;
+
+  // ── Ticker badge + Exchange badge + Date ──────────────────────────────
+  const badgeY = afterName + 2;
+  // Ticker pill
+  sf(G); doc.roundedRect(M+4, badgeY, 32, 9, 2, 2, 'F');
   doc.setFont(FONT,'bold'); doc.setFontSize(10); st(W);
-  doc.text(ticker, M+17, afterName+7, { align:'center' });
-  doc.setFontSize(8); st(TG);
-  doc.text(exch, M+48, afterName+7, { align:'center' });
+  doc.text(ticker, M+20, badgeY+6.5, { align:'center' });
+  // Exchange pill
+  sf(D3); doc.roundedRect(M+40, badgeY, 26, 9, 2, 2, 'F');
+  doc.setFont(FONT,'bold'); doc.setFontSize(7.5); st(TL);
+  doc.text(exch, M+53, badgeY+6, { align:'center' });
+  // Date
+  doc.setFont(FONT,'normal'); doc.setFontSize(7); st(TG);
+  doc.text(date, M+72, badgeY+6);
 
-  // Sector / industry
+  // Sector / Industry line
   doc.setFont(FONT,'normal'); doc.setFontSize(7.5); st(TG);
-  doc.text(`${sect}  ·  ${ind}`, M+2, afterName+17);
+  doc.text(`${sect}  ·  ${ind}`, M+4, badgeY + 16);
 
   // ── 4 KPI cards ──────────────────────────────────────────────────────
-  const kY  = afterName+23;
-  const kW  = (CW-9)/4;
-  [
-    { l:'Current Price',  v:`$${f(price)}`,                           c:TW },
-    { l:'Market Cap',     v:fl(quote?.marketCap),                     c:TW },
-    { l:'P/E Ratio',      v:f(quote?.pe),                             c:TW },
-    { l:'Avg Valuation',  v:avgVal?`$${f(avgVal)}`:'-', c:G },
-  ].forEach((k, i) => {
-    const bx = M + i*(kW+3);
-    sf(D1); doc.roundedRect(bx, kY, kW, 20, 2, 2, 'F');
-    ss(i===3 ? G : D3); doc.setLineWidth(i===3 ? 0.4 : 0.15);
-    doc.roundedRect(bx, kY, kW, 20, 2, 2, 'S');
-    doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
-    doc.text(k.l, bx+kW/2, kY+6, { align:'center' });
-    doc.setFont(FONT,'black'); doc.setFontSize(11); st(k.c as RGB);
-    doc.text(k.v, bx+kW/2, kY+14.5, { align:'center' });
-  });
+  const kY = badgeY + 25;
+  y = kpiRow(kY, [
+    { label: 'Current Price', value: `$${f(price)}` },
+    { label: 'Market Cap',    value: fl(quote?.marketCap) },
+    { label: 'P/E Ratio',     value: f(quote?.pe) },
+    { label: 'Avg Valuation', value: avgVal ? `$${f(avgVal)}` : '-', color: G, accent: true },
+  ]);
 
-  // ── Upside/downside ───────────────────────────────────────────────────
+  // ── Upside/Downside highlight card ────────────────────────────────────
   if (avgVal && price) {
     const up   = (avgVal - price) / price * 100;
     const isUp = up >= 0;
-    const uy   = kY + 26;
-    sf(isUp ? [0,45,22] as RGB : [60,5,5] as RGB);
-    doc.roundedRect(M+2, uy, 58, 14, 2, 2, 'F');
-    doc.setFont(FONT,'bold'); doc.setFontSize(6.5); st(TG);
-    doc.text(isUp ? 'POTENTIAL UPSIDE' : 'POTENTIAL DOWNSIDE', M+31, uy+4.5, { align:'center' });
-    doc.setFont(FONT,'black'); doc.setFontSize(13);
-    st(isUp ? [90,255,150] as RGB : [255,110,110] as RGB);
-    doc.text(`${isUp?'+':''}${up.toFixed(1)}%`, M+31, uy+12, { align:'center' });
-    doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TG);
-    doc.text(`vs avg model valuation $${f(avgVal)}`, M+64, uy+9);
+    const uColor: RGB = isUp ? G : RD;
+    const ubg: RGB = isUp ? [0, 50, 25] : [60, 8, 8];
+
+    sf(ubg); doc.roundedRect(M, y, CW, 16, 2.5, 2.5, 'F');
+    ss(uColor); doc.setLineWidth(0.4); doc.roundedRect(M, y, CW, 16, 2.5, 2.5, 'S');
+
+    // Left: label
+    doc.setFont(FONT,'bold'); doc.setFontSize(7); st(TL);
+    doc.text(isUp ? 'POTENTIAL UPSIDE' : 'POTENTIAL DOWNSIDE', M+8, y+7);
+    doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
+    doc.text(`vs avg model valuation $${f(avgVal)}`, M+8, y+12.5);
+
+    // Right: big percentage
+    doc.setFont(FONT,'bold'); doc.setFontSize(18); st(uColor);
+    doc.text(`${isUp?'+':''}${up.toFixed(1)}%`, PW-M-8, y+11, { align:'right' });
+
+    y += 22;
   }
 
-  // ── Revenue preview chart on cover ───────────────────────────────────
+  // ── Revenue preview chart ─────────────────────────────────────────────
   const covInc = (income||[]).slice(0,5).reverse();
   if (covInc.length >= 2) {
-    const cchY = kY + 48;
     doc.setFont(FONT,'bold'); doc.setFontSize(6.5); st(TG);
-    doc.text('REVENUE TREND', M+2, cchY-2);
-    barChart(M+2, cchY, CW-4, 36,
+    doc.text('REVENUE TREND', M+4, y+1);
+    barChart(M+4, y+4, CW-8, 34,
       covInc.map((i:any) => i.date?.substring(0,4)||''),
       covInc.map((i:any) => i.revenue||0), G);
+    y += 52;
   }
 
   // ── Description ──────────────────────────────────────────────────────
   if (profile?.description) {
-    const dY = kY + 93;
-    const desc = profile.description.substring(0, 350)+(profile.description.length>350?'...':'');
-    doc.setFont(FONT,'normal'); doc.setFontSize(7); st(TG);
-    const dl:string[] = doc.splitTextToSize(desc, CW-4);
-    doc.text(dl.slice(0,5), M+2, dY);
+    const desc = profile.description.substring(0, 400)+(profile.description.length>400?'…':'');
+    doc.setFont(FONT,'normal'); doc.setFontSize(6.5); st(TG);
+    const dl:string[] = doc.splitTextToSize(desc, CW-8);
+    doc.text(dl.slice(0,6), M+4, y);
   }
 
-  // Cover footer
-  ss(G); doc.setLineWidth(0.5); doc.line(M, PH-20, PW-M, PH-20);
-  doc.setFont(FONT,'normal'); doc.setFontSize(6); st(TG);
-  doc.text('For informational purposes only · Not financial advice · Generated by Prismo', PW/2, PH-14, { align:'center' });
-  doc.setFontSize(7); st(TG);
-  doc.text(date, PW/2, PH-8.5, { align:'center' });
+  // ── Cover footer ──────────────────────────────────────────────────────
+  // Bottom accent bar
+  sf(G); doc.rect(0, PH-2, PW, 2, 'F');
+  // Footer text
+  sf(D2); doc.rect(M, PH-18, CW, 14, 'F');
+  doc.setFont(FONT,'normal'); doc.setFontSize(5.5); st(TG);
+  doc.text('For informational purposes only  ·  Not financial advice  ·  Generated by Prismo', PW/2, PH-10, { align:'center' });
+  appLogo(PW/2 - 4, PH-24, 8);
+
   } // end cover
 
   // ════════════════════════════════════════════════════════════════════════
