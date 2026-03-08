@@ -737,16 +737,22 @@ html.light .text-gray-700 { color: #555 !important; }
 html.light .text-gray-800 { color: #333 !important; }
 html.light .text-gray-900 { color: #1a1a1a !important; }
 
-/* EXCEPTION: text inside liquid-gold (dark plate) stays light */
+/* EXCEPTION: ALL text inside liquid-gold (dark plate) stays light */
 html.light .liquid-gold-card .text-white,
 html.light .liquid-gold-card .text-gray-100,
 html.light .liquid-gold-card .text-gray-200,
-html.light .liquid-gold-card .text-gray-300 {
+html.light .liquid-gold-card .text-gray-300,
+html.light .liquid-gold-card .text-gray-400,
+html.light .liquid-gold-card .text-gray-500,
+html.light .liquid-gold-card .text-gray-600 {
   color: inherit;
 }
 html.light .liquid-gold-tab-active .text-white,
 html.light .liquid-gold-tab-active .text-gray-100,
-html.light .liquid-gold-tab-active .text-gray-200 {
+html.light .liquid-gold-tab-active .text-gray-200,
+html.light .liquid-gold-tab-active .text-gray-300,
+html.light .liquid-gold-tab-active .text-gray-400,
+html.light .liquid-gold-tab-active .text-gray-500 {
   color: inherit;
 }
 /* Amber text inside dark-plate liquid gold elements stays light */
@@ -1007,4 +1013,51 @@ html.light button[class*="bg-gradient-to-r"],
 html.light a[class*="bg-linear-to-r"],
 html.light button[class*="bg-linear-to-r"] {
   color: white !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — Liquid Gold + Layout
+   Optimize animations, sizing, and layout for small screens
+══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Liquid Gold ring — smaller, less intense on mobile */
+  .liquid-gold-card::before {
+    width: 160% !important;
+    height: 160% !important;
+    animation-duration: 8s !important;
+  }
+  .liquid-gold-tab-active::before {
+    width: 160% !important;
+    height: 160% !important;
+  }
+
+  /* Reduce heavy shadows on mobile for performance */
+  .liquid-gold-card {
+    box-shadow: 0 2px 12px rgba(196, 151, 70, 0.12) !important;
+  }
+  .glow-gold {
+    box-shadow: 0 0 12px rgba(212, 175, 55, 0.08) !important;
+  }
+  .ambient-gold-glow::before {
+    display: none !important;
+  }
+
+  /* Shimmer — simpler on mobile */
+  .liquid-gold-shimmer::after {
+    animation-duration: 10s !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Extra small screens — further reduce */
+  .liquid-gold-card::before {
+    width: 140% !important;
+    height: 140% !important;
+  }
+
+  /* Prevent horizontal overflow from fixed-width elements */
+  .min-w-max {
+    min-width: 0 !important;
+  }
 }

@@ -43,6 +43,9 @@ export interface PDFData {
   ownerEarnings?: any[];
   balanceTTM?: any;
   cashFlowTTM?: any;
+  // Pre-loaded data (avoids live fmpFetch during PDF generation)
+  newsData?: any[];
+  holdersData?: any;       // { institutionalHolders, positionsSummary, etc. }
   // Optional config
   sections?:  string[];    // which pages to include
   branding?:  PDFBranding;
@@ -73,13 +76,17 @@ function filterRows(rows: string[][], valueCols?: number[]): string[][] {
 
 // ── Self-sufficient computation helpers (no tab dependency) ──────────────
 function computeCAGR(income: any[]): { avgCagr: number|null; minCagr: number|null; maxCagr: number|null } {
-  const sorted = [...income].filter((i: any) => i.revenue > 0).sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
+  if (!income?.length) return { avgCagr: null, minCagr: null, maxCagr: null };
+  const sorted = [...income].filter((i: any) => i?.revenue > 0).sort((a: any, b: any) => (a.date || '').localeCompare(b.date || ''));
   const cagrs: number[] = [];
   for (const span of [3, 5, 10]) {
-    if (sorted.length >= span) {
-      const old = sorted[sorted.length - span]?.revenue;
+    if (sorted.length >= span + 1) {
+      const old = sorted[sorted.length - span - 1]?.revenue;
       const cur = sorted[sorted.length - 1]?.revenue;
-      if (old > 0 && cur > 0) cagrs.push((Math.pow(cur / old, 1 / span) - 1) * 100);
+      if (old > 0 && cur > 0) {
+        const cagr = (Math.pow(cur / old, 1 / span) - 1) * 100;
+        if (isFinite(cagr)) cagrs.push(cagr);
+      }
     }
   }
   if (cagrs.length === 0) return { avgCagr: null, minCagr: null, maxCagr: null };
@@ -93,15 +100,20 @@ function computeCAGR(income: any[]): { avgCagr: number|null; minCagr: number|nul
 function computeValuationModels(dcfCustom: any, quote: any, km: any): { name: string; val: number }[] {
   const models: { name: string; val: number }[] = [];
   if (dcfCustom?.dcf > 0) models.push({ name: 'DCF Intrinsic', val: +dcfCustom.dcf });
-  const eps = quote?.eps, bvps = km.bookValuePerShare, fcfps = km.freeCashFlowPerShare;
+  const eps = quote?.eps, bvps = km?.bookValuePerShare, fcfps = km?.freeCashFlowPerShare;
   if (eps > 0 && bvps > 0) models.push({ name: 'Graham Number', val: Math.sqrt(22.5 * eps * bvps) });
-  if (eps > 0) models.push({ name: 'PE Fair Value', val: eps * 15 });
+  // Use sector-appropriate PE (actual PE or 15 as floor)
+  const sectorPE = Math.max(km?.peRatio ?? quote?.pe ?? 15, 10);
+  if (eps > 0) models.push({ name: `PE Fair Value (${sectorPE.toFixed(0)}x)`, val: eps * sectorPE });
   if (bvps > 0) models.push({ name: 'Book Value x1.5', val: bvps * 1.5 });
   if (fcfps > 0) models.push({ name: 'FCF Yield (6%)', val: fcfps / 0.06 });
   const div = quote?.dividendYield && quote.price ? quote.price * quote.dividendYield : 0;
   const wacc = dcfCustom?.wacc;
-  if (div > 0 && wacc > 2) models.push({ name: 'DDM', val: div / (wacc / 100 - 0.03) });
-  return models;
+  // DDM: guard against division by zero (wacc/100 - growth must be > 0.005)
+  const ddmDenom = wacc ? (wacc / 100 - 0.03) : 0;
+  if (div > 0 && ddmDenom > 0.005) models.push({ name: 'DDM', val: div / ddmDenom });
+  // Filter out any Infinity/NaN values
+  return models.filter(m => isFinite(m.val) && m.val > 0);
 }
 
 function computeAverageValuation(dcfCustom: any, quote: any, km: any): number | null {
@@ -111,7 +123,8 @@ function computeAverageValuation(dcfCustom: any, quote: any, km: any): number | 
 }
 
 function computeQualityScore(km: any, income: any[], balance: any[]): { scores: Record<string, number>; totalScore: number; rating: string } | null {
-  const inc = income?.[0], bal = balance?.[0];
+  if (!km || !income?.length || !balance?.length) return null;
+  const inc = income[0], bal = balance[0];
   if (!inc || !bal) return null;
   const s = (v: number, lo: number, hi: number) => Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
 
@@ -123,7 +136,7 @@ function computeQualityScore(km: any, income: any[], balance: any[]): { scores: 
   ) / 4;
 
   const financial_strength = (
-    s(1 / Math.max(km.debtToEquity ?? km.debtEquityRatio ?? 1, 0.01), 0, 2) +
+    s(1 / Math.max(Math.abs(km.debtToEquity ?? km.debtEquityRatio ?? 1), 0.01), 0, 2) +
     s(Math.min(km.currentRatio ?? 0, 4) / 4, 0, 1) +
     s(Math.min(km.interestCoverage ?? 0, 20) / 20, 0, 1)
   ) / 3;
@@ -158,9 +171,15 @@ async function fmpFetch(path: string, params: Record<string, string> = {}): Prom
     search.set('path', path);
     for (const [k, v] of Object.entries(params)) search.set(k, v);
     const res = await fetch(`/api/fmp?${search.toString()}`, { cache: 'no-store' });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[PDF] fmpFetch ${path} failed: HTTP ${res.status}`);
+      return null;
+    }
     return res.json();
-  } catch { return null; }
+  } catch (err) {
+    console.warn(`[PDF] fmpFetch ${path} error:`, err);
+    return null;
+  }
 }
 
 export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
@@ -218,7 +237,8 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
           sharedCompanyQualityNet, sharedCagrStats, sharedPivotAnalysis,
           keyMetrics, keyMetricsTTM, ratios, ratiosTTM, estimates, dcfCustom,
           dividends, incomeGrowth, financialGrowth, enterpriseValue, ownerEarnings,
-          balanceTTM, cashFlowTTM } = d;
+          balanceTTM, cashFlowTTM,
+          newsData: preloadedNews, holdersData: preloadedHolders } = d;
 
   // ── Resolve key metrics: raw FMP > shared state ──────────────────────
   const km0  = (keyMetrics || [])[0] || keyMetricsTTM || {};
@@ -699,7 +719,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ════════════════════════════════════════════════════════════════════════
   // PAGE — FINANCIAL HIGHLIGHTS
   // ════════════════════════════════════════════════════════════════════════
-  if (activeSections.has('market_summary')) {
+  if (activeSections.has('market_summary') && quote) {
   y = newPage();
 
   // Market summary pills
@@ -1408,9 +1428,10 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
       let level = revData[0], trend = revData[1] - revData[0];
       const fitted: number[] = [level];
       for (let t = 1; t < revData.length; t++) {
-        const prev = level + trend;
-        level = alpha * revData[t] + (1 - alpha) * prev;
-        trend = betaH * (level - (level + trend - trend)) + (1 - betaH) * trend;
+        const prevLevel = level;
+        const prevTrend = trend;
+        level = alpha * revData[t] + (1 - alpha) * (prevLevel + prevTrend);
+        trend = betaH * (level - prevLevel) + (1 - betaH) * prevTrend;
         fitted.push(level);
       }
       // Forecast 3 years
@@ -1725,11 +1746,12 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // HOLDERS (Institutional + Insider)
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('holders')) {
-    const [instHolders, mutualHolders, insiderTrades] = await Promise.all([
-      fmpFetch(`stable/institutional-holder`, { symbol: ticker }),
-      fmpFetch(`stable/mutual-fund-holder`, { symbol: ticker }),
-      fmpFetch(`stable/insider-trading`, { symbol: ticker, limit: '15' }),
-    ]);
+    // Use pre-loaded holders from page.tsx when available
+    const instHolders = preloadedHolders?.institutionalHolders?.length
+      ? preloadedHolders.institutionalHolders
+      : await fmpFetch(`stable/institutional-holder`, { symbol: ticker });
+    const mutualHolders = await fmpFetch(`stable/mutual-fund-holder`, { symbol: ticker });
+    const insiderTrades = await fmpFetch(`stable/insider-trading`, { symbol: ticker, limit: '15' });
 
     const hasInst = Array.isArray(instHolders) && instHolders.length > 0;
     const hasMutual = Array.isArray(mutualHolders) && mutualHolders.length > 0;
@@ -1870,8 +1892,10 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // NEWS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('news')) {
-    const newsData = await fmpFetch(`stable/news/stock`, { symbol: ticker, limit: '15' });
-    if (Array.isArray(newsData) && newsData.length > 0) {
+    // Use pre-loaded news from page.tsx (avoids live fetch failures)
+    const newsRaw = preloadedNews?.length ? preloadedNews : await fmpFetch(`stable/news/stock`, { symbol: ticker, limit: '15' });
+    const newsData = Array.isArray(newsRaw) ? newsRaw : [];
+    if (newsData.length > 0) {
       y = newPage();
       y = section(y, 'Latest News', 'Noticias recientes del mercado sobre la empresa.');
 

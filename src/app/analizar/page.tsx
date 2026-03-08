@@ -1010,6 +1010,9 @@ function AnalizarContent() {
         ownerEarnings:   ownerEarnings || [],
         balanceTTM:      balanceTTM || null,
         cashFlowTTM:     cashFlowTTM || null,
+        // Pre-loaded data (avoids live fmpFetch failures)
+        newsData:        sharedNews || [],
+        holdersData:     sharedHoldersData || null,
         sections:       config.sections,
         branding:       config.branding,
         preview:        config.preview,
