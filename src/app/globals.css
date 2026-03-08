@@ -660,26 +660,46 @@ html.light nav.fixed hr {
    for panels, sections, inputs, table headers etc.
 ══════════════════════════════════════════════════════════════ */
 
-/* Catch-all for any bg-black with opacity */
+/* Catch-all for any bg-black with opacity — MORE OPAQUE for solid feel */
 html.light [class*="bg-black/"] {
-  background-color: rgba(255, 255, 255, 0.65) !important;
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-/* More specific overrides by opacity level */
+/* More specific overrides by opacity level — all high opacity */
 html.light [class*="bg-black/90"] {
-  background-color: rgba(255, 255, 255, 0.95) !important;
+  background-color: rgba(255, 255, 255, 0.98) !important;
 }
 html.light [class*="bg-black/80"] {
-  background-color: rgba(255, 255, 255, 0.88) !important;
+  background-color: rgba(255, 255, 255, 0.95) !important;
 }
 html.light [class*="bg-black/60"] {
-  background-color: rgba(255, 255, 255, 0.78) !important;
+  background-color: rgba(255, 255, 255, 0.92) !important;
 }
 html.light [class*="bg-black/50"] {
-  background-color: rgba(255, 255, 255, 0.7) !important;
+  background-color: rgba(255, 255, 255, 0.88) !important;
 }
 html.light [class*="bg-black/40"] {
-  background-color: rgba(255, 255, 255, 0.6) !important;
+  background-color: rgba(255, 255, 255, 0.82) !important;
+}
+
+/* Solid bg-black → white card */
+html.light .bg-black {
+  background-color: #ffffff !important;
+}
+
+/* bg-gray-900/800/700 → light cream panels */
+html.light [class*="bg-gray-900"] {
+  background-color: #f0ece5 !important;
+}
+html.light [class*="bg-gray-800"] {
+  background-color: #f3efe8 !important;
+}
+html.light [class*="bg-gray-700"] {
+  background-color: #f5f1eb !important;
+}
+html.light [class*="bg-gray-600"] {
+  background-color: #e8e4de !important;
 }
 
 /* Liquid Gold elements inside bg-black panels: keep their text light */
@@ -706,13 +726,16 @@ html.light [class*="from-black"][class*="via-slate-900"][class*="to-black"] {
 /* White text → near-black */
 html.light .text-white { color: #1a1a1a !important; }
 
-/* Gray scale text → darker for legibility on light bg */
-html.light .text-gray-100 { color: #222 !important; }
-html.light .text-gray-200 { color: #333 !important; }
-html.light .text-gray-300 { color: #444 !important; }
-html.light .text-gray-400 { color: #666 !important; }
-html.light .text-gray-500 { color: #888 !important; }
-html.light .text-gray-600 { color: #999 !important; }
+/* Gray scale text → DARK values for strong legibility on light bg */
+html.light .text-gray-100 { color: #1a1a1a !important; }
+html.light .text-gray-200 { color: #222 !important; }
+html.light .text-gray-300 { color: #333 !important; }
+html.light .text-gray-400 { color: #444 !important; }
+html.light .text-gray-500 { color: #555 !important; }
+html.light .text-gray-600 { color: #666 !important; }
+html.light .text-gray-700 { color: #555 !important; }
+html.light .text-gray-800 { color: #333 !important; }
+html.light .text-gray-900 { color: #1a1a1a !important; }
 
 /* EXCEPTION: text inside liquid-gold (dark plate) stays light */
 html.light .liquid-gold-card .text-white,
@@ -761,24 +784,57 @@ html.light [class*="from-white"][class*="to-gray-400"] {
    Border overrides
 ══════════════════════════════════════════════════════════════ */
 
-/* Borders with green-900 or amber-900 opacity → warm gold */
+/* Borders with green-900 or amber-900 opacity → warm gold STRONGER */
 html.light [class*="border-green-900/"],
 html.light [class*="border-amber-900/"] {
-  border-color: rgba(196, 151, 70, 0.18) !important;
+  border-color: rgba(196, 151, 70, 0.30) !important;
 }
 
-/* Gray borders */
+/* Gray borders — MUCH STRONGER for visibility */
 html.light [class*="border-gray-700/"],
 html.light [class*="border-gray-800/"] {
-  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+html.light .border-gray-700,
+html.light [class*="border-gray-700"] {
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+html.light .border-gray-800,
+html.light [class*="border-gray-800"] {
+  border-color: rgba(0, 0, 0, 0.12) !important;
 }
 html.light .border-gray-900,
 html.light [class*="border-gray-900"] {
-  border-color: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+html.light .border-gray-500,
+html.light [class*="border-gray-500"] {
+  border-color: rgba(0, 0, 0, 0.18) !important;
+}
+html.light .border-gray-600,
+html.light [class*="border-gray-600"] {
+  border-color: rgba(0, 0, 0, 0.15) !important;
 }
 
 /* White opacity borders (invisible on light bg) → visible */
 html.light [class*="border-white/"] {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Dividers — row separators must be visible */
+html.light [class*="divide-gray-900"] > * + * {
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+html.light [class*="divide-green-900"] > * + * {
+  border-color: rgba(196, 151, 70, 0.18) !important;
+}
+html.light [class*="divide-gray-700"] > * + * {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+html.light [class*="divide-gray-800"] > * + * {
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+html.light [class*="divide-white"] > * + * {
   border-color: rgba(0, 0, 0, 0.08) !important;
 }
 
@@ -794,28 +850,34 @@ html.light .border-emerald-600 {
    Background accent overrides
 ══════════════════════════════════════════════════════════════ */
 
-/* Emerald / green tinted backgrounds */
+/* Emerald / green tinted backgrounds — stronger tints */
 html.light [class*="bg-emerald-900/"] {
-  background-color: rgba(209, 250, 229, 0.4) !important;
+  background-color: rgba(209, 250, 229, 0.55) !important;
 }
 html.light [class*="bg-green-900/"] {
-  background-color: rgba(209, 250, 229, 0.3) !important;
+  background-color: rgba(209, 250, 229, 0.45) !important;
 }
 
-/* Red / danger notification boxes */
+/* Red / danger notification boxes — richer */
 html.light [class*="bg-red-900/"] {
-  background-color: rgba(254, 226, 226, 0.6) !important;
+  background-color: rgba(254, 226, 226, 0.75) !important;
 }
 
-/* Amber notification boxes */
+/* Amber notification boxes — richer */
 html.light [class*="bg-amber-900/"] {
-  background-color: rgba(254, 243, 199, 0.5) !important;
+  background-color: rgba(254, 243, 199, 0.65) !important;
 }
 
 /* Green buttons stay green but adapt */
 html.light .bg-green-600 { background-color: #16a34a !important; }
 html.light .bg-green-600:hover { background-color: #15803d !important; }
 html.light .bg-emerald-600 { background-color: #059669 !important; }
+
+/* Disabled state buttons — visible in light mode */
+html.light [class*="disabled:bg-gray-600"]:disabled {
+  background-color: #d4cfc6 !important;
+  color: #888 !important;
+}
 
 /* ══════════════════════════════════════════════════════════════
    Input / form elements on light bg
@@ -831,16 +893,27 @@ html.light textarea[class*="bg-black"] {
 }
 html.light input[class*="bg-black"]::placeholder,
 html.light textarea[class*="bg-black"]::placeholder {
-  color: #999 !important;
+  color: #888 !important;
 }
 html.light input[class*="bg-black"]:focus,
 html.light textarea[class*="bg-black"]:focus {
   border-color: #c49746 !important;
+  box-shadow: 0 0 0 2px rgba(196, 151, 70, 0.12);
 }
 
-/* Placeholder text */
-html.light .placeholder-gray-500::placeholder {
-  color: #999 !important;
+/* Placeholder text — all gray variants */
+html.light .placeholder-gray-500::placeholder,
+html.light .placeholder-gray-600::placeholder,
+html.light [class*="placeholder-gray"]::placeholder {
+  color: #888 !important;
+}
+
+/* Select elements */
+html.light select[class*="bg-gray"],
+html.light select[class*="bg-black"] {
+  background-color: #ffffff !important;
+  color: #1a1a1a !important;
+  border-color: #d4cfc6 !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -860,10 +933,26 @@ html.light thead.sticky {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Shadow overrides — soften dark shadows
+   Shadow overrides — warm, visible shadows for light bg
 ══════════════════════════════════════════════════════════════ */
 html.light .shadow-2xl {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+  box-shadow: 0 4px 24px rgba(120, 90, 30, 0.08), 0 1px 6px rgba(0, 0, 0, 0.05) !important;
+}
+html.light .shadow-lg {
+  box-shadow: 0 3px 16px rgba(120, 90, 30, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+}
+html.light .shadow-xl {
+  box-shadow: 0 4px 20px rgba(120, 90, 30, 0.07), 0 1px 5px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Ring overrides (focus rings)
+══════════════════════════════════════════════════════════════ */
+html.light [class*="ring-green"] {
+  --tw-ring-color: rgba(196, 151, 70, 0.3) !important;
+}
+html.light [class*="ring-emerald"] {
+  --tw-ring-color: rgba(196, 151, 70, 0.3) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -872,6 +961,28 @@ html.light .shadow-2xl {
 html.light canvas {
   filter: none;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Slate/Zinc/Neutral gray backgrounds (some components use these)
+══════════════════════════════════════════════════════════════ */
+html.light [class*="bg-slate-900"],
+html.light [class*="bg-zinc-900"],
+html.light [class*="bg-neutral-900"] {
+  background-color: #f0ece5 !important;
+}
+html.light [class*="bg-slate-800"],
+html.light [class*="bg-zinc-800"],
+html.light [class*="bg-neutral-800"] {
+  background-color: #f3efe8 !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Scrollbar for panels inside light mode
+══════════════════════════════════════════════════════════════ */
+html.light [class*="overflow-y-auto"]::-webkit-scrollbar-track { background: #ede9e1; }
+html.light [class*="overflow-y-auto"]::-webkit-scrollbar-thumb { background: #c49746; border-radius: 4px; }
+html.light [class*="overflow-x-auto"]::-webkit-scrollbar-track { background: #ede9e1; }
+html.light [class*="overflow-x-auto"]::-webkit-scrollbar-thumb { background: #c49746; border-radius: 4px; }
 
 /* ══════════════════════════════════════════════════════════════
    Misc badge / pill overrides
