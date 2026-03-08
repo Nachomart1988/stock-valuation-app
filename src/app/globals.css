@@ -517,10 +517,13 @@ body::after {
 /* ═══════════════════════════════════════════════════════
    LIGHT MODE
    Activated via html.light class from ThemeProvider
+
+   KEY PRINCIPLE: Liquid Gold elements keep BLACK inner
+   plates even in light mode (matching reference design).
 ═══════════════════════════════════════════════════════ */
 
 html.light body {
-  background-color: #f5f3ef;
+  background-color: #f5f1eb;
   color: #1a1a1a;
 }
 
@@ -535,12 +538,12 @@ html.light ::selection { background: rgba(196, 151, 70, 0.25); color: #1a1a1a; }
 html.light body::after { opacity: 0; }
 
 /* Film grain — softer in light mode */
-html.light .film-grain::before { opacity: 0.015; }
+html.light .film-grain::before { opacity: 0.012; }
 
 /* ── Base components ── */
 html.light .card {
   background: #ffffff;
-  border-color: #e0dcd4;
+  border-color: #ddd8cf;
 }
 
 html.light .input {
@@ -551,7 +554,7 @@ html.light .input {
 html.light .input::placeholder { color: #999; }
 html.light .input:focus { border-color: #c49746; box-shadow: 0 0 0 2px rgba(196, 151, 70, 0.15); }
 
-html.light .btn-primary { background: #c49746; }
+html.light .btn-primary { background: #c49746; color: white; }
 html.light .btn-primary:hover { background: #d4a94f; }
 
 html.light .btn-secondary {
@@ -569,12 +572,9 @@ html.light .text-gradient-green {
   color: transparent;
 }
 
-/* ── Glass ── */
-html.light .glass { backdrop-filter: blur(12px); }
-
 /* ── Dot grid background ── */
 html.light .bg-grid {
-  background-image: radial-gradient(circle, rgba(196, 151, 70, 0.08) 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgba(160, 130, 70, 0.07) 1px, transparent 1px);
 }
 
 /* ── Glow utilities ── */
@@ -589,38 +589,35 @@ html.light .border-glow:hover {
   box-shadow: 0 0 24px rgba(196, 151, 70, 0.06);
 }
 
-/* ── Liquid Gold — Light mode ── */
+/* ══════════════════════════════════════════════════════════════
+   Liquid Gold — Light mode: KEEP DARK inner plates
+   The gold ring stays identical; only the glow softens.
+   Inner plates remain black so the gold ring pops on light bg.
+══════════════════════════════════════════════════════════════ */
 html.light .liquid-gold-card {
-  box-shadow: 0 2px 16px rgba(196, 151, 70, 0.12),
-              0 0 40px rgba(196, 151, 70, 0.04);
-}
-html.light .liquid-gold-card::after {
-  background: linear-gradient(160deg,
-    rgba(255, 252, 245, 0.97) 0%,
-    rgba(250, 247, 240, 0.98) 40%,
-    rgba(255, 252, 245, 0.97) 100%
-  );
-}
-html.light .liquid-gold-card:hover {
   box-shadow: 0 4px 24px rgba(196, 151, 70, 0.18),
-              0 0 60px rgba(196, 151, 70, 0.06);
+              0 0 48px rgba(196, 151, 70, 0.06);
+}
+/* ::after stays dark — DO NOT override to cream/white */
+
+html.light .liquid-gold-card:hover {
+  box-shadow: 0 6px 32px rgba(196, 151, 70, 0.25),
+              0 0 64px rgba(196, 151, 70, 0.08);
 }
 
 html.light .liquid-gold-tab-active {
-  box-shadow: 0 0 16px rgba(196, 151, 70, 0.12);
+  box-shadow: 0 0 20px rgba(196, 151, 70, 0.18);
 }
-html.light .liquid-gold-tab-active::after {
-  background: rgba(250, 247, 240, 0.95);
-}
+/* Tab inner plate also stays dark — no override */
 
 html.light .glow-gold {
-  box-shadow: 0 0 16px rgba(196, 151, 70, 0.1),
-              0 0 32px rgba(196, 151, 70, 0.04);
+  box-shadow: 0 0 20px rgba(196, 151, 70, 0.12),
+              0 0 40px rgba(196, 151, 70, 0.05);
 }
 
 html.light .section-gold-line {
   background: linear-gradient(90deg,
-    rgba(196, 151, 70, 0.4),
+    rgba(196, 151, 70, 0.45),
     rgba(196, 151, 70, 0.15),
     transparent
   );
@@ -630,8 +627,8 @@ html.light .section-gold-line {
 html.light .ambient-gold-glow::before {
   background: radial-gradient(
     ellipse at center,
-    rgba(196, 151, 70, 0.04) 0%,
-    rgba(196, 151, 70, 0.01) 40%,
+    rgba(196, 151, 70, 0.05) 0%,
+    rgba(196, 151, 70, 0.015) 40%,
     transparent 70%
   );
 }
@@ -643,57 +640,260 @@ html.light .skeleton-shimmer {
   background-size: 1000px 100%;
 }
 
-/* ── Header ── */
+/* ══════════════════════════════════════════════════════════════
+   Header / Navigation
+══════════════════════════════════════════════════════════════ */
 html.light nav.fixed {
-  background: rgba(245, 243, 239, 0.92) !important;
+  background: rgba(245, 241, 235, 0.94) !important;
   border-bottom-color: rgba(196, 151, 70, 0.2) !important;
+  backdrop-filter: blur(16px);
 }
 
-/* ── Common overrides for Tailwind dark-specific classes ──
-   These use broad selectors so all bg-black/*, text-gray-*, etc. adapt.
-   We target specific UI patterns rather than every single class. */
-
-/* Panel backgrounds */
-html.light [class*="bg-black/"] {
-  background-color: rgba(255, 255, 255, 0.6) !important;
-}
-html.light [class*="bg-black/80"] {
-  background-color: rgba(255, 255, 255, 0.85) !important;
-}
-html.light [class*="bg-black/90"] {
-  background-color: rgba(255, 255, 255, 0.92) !important;
-}
-
-/* Borders that use green-900 or amber-900 */
-html.light [class*="border-green-900/"],
-html.light [class*="border-amber-900/"] {
+/* Mobile menu border */
+html.light nav.fixed hr {
   border-color: rgba(196, 151, 70, 0.15) !important;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   Tailwind class overrides — bg-black/* panels
+   The app uses bg-black/80, bg-black/60, bg-black/50, bg-black/40
+   for panels, sections, inputs, table headers etc.
+══════════════════════════════════════════════════════════════ */
+
+/* Catch-all for any bg-black with opacity */
+html.light [class*="bg-black/"] {
+  background-color: rgba(255, 255, 255, 0.65) !important;
+}
+
+/* More specific overrides by opacity level */
+html.light [class*="bg-black/90"] {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+html.light [class*="bg-black/80"] {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+}
+html.light [class*="bg-black/60"] {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+}
+html.light [class*="bg-black/50"] {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+}
+html.light [class*="bg-black/40"] {
+  background-color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Liquid Gold elements inside bg-black panels: keep their text light */
+html.light .liquid-gold-card [class*="text-gray-"],
+html.light .liquid-gold-tab-active [class*="text-gray-"] {
+  color: inherit;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Gradient page backgrounds
+══════════════════════════════════════════════════════════════ */
+html.light [class*="from-black"][class*="via-gray-800"][class*="to-black"] {
+  background: linear-gradient(to bottom, #f5f1eb, #ede8e0, #f5f1eb) !important;
+}
+html.light [class*="from-black"][class*="via-slate-900"][class*="to-black"] {
+  background: linear-gradient(135deg, #f5f1eb, #eae5dc, #f5f1eb) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Text color overrides
+   Dark mode uses light text; light mode needs dark text
+══════════════════════════════════════════════════════════════ */
+
+/* White text → near-black */
+html.light .text-white { color: #1a1a1a !important; }
+
+/* Gray scale text → darker for legibility on light bg */
+html.light .text-gray-100 { color: #222 !important; }
+html.light .text-gray-200 { color: #333 !important; }
+html.light .text-gray-300 { color: #444 !important; }
+html.light .text-gray-400 { color: #666 !important; }
+html.light .text-gray-500 { color: #888 !important; }
+html.light .text-gray-600 { color: #999 !important; }
+
+/* EXCEPTION: text inside liquid-gold (dark plate) stays light */
+html.light .liquid-gold-card .text-white,
+html.light .liquid-gold-card .text-gray-100,
+html.light .liquid-gold-card .text-gray-200,
+html.light .liquid-gold-card .text-gray-300 {
+  color: inherit;
+}
+html.light .liquid-gold-tab-active .text-white,
+html.light .liquid-gold-tab-active .text-gray-100,
+html.light .liquid-gold-tab-active .text-gray-200 {
+  color: inherit;
+}
+/* Amber text inside dark-plate liquid gold elements stays light */
+html.light .liquid-gold-tab-active.text-amber-200,
+html.light .liquid-gold-card .text-amber-200,
+html.light .liquid-gold-card .text-amber-300,
+html.light .liquid-gold-card .text-amber-400 {
+  color: #feeaa5 !important;
+}
+html.light .liquid-gold-tab-active.text-amber-200 {
+  color: #fde68a !important;
+}
+
+/* Accent colors — darken for contrast on light */
+html.light .text-amber-200 { color: #6b5010 !important; }
+html.light .text-amber-300 { color: #8b6914 !important; }
+html.light .text-amber-400 { color: #a07a1c !important; }
+
+/* Emerald / green accents — deeper for light bg */
+html.light .text-green-300 { color: #16a34a !important; }
+html.light .text-green-400 { color: #15803d !important; }
+html.light .text-emerald-400 { color: #059669 !important; }
+
+/* Red accent */
+html.light .text-red-300 { color: #dc2626 !important; }
+html.light .text-red-400 { color: #b91c1c !important; }
+
+/* bg-clip-text gradient titles (e.g. "PRISMO" landing) */
+html.light [class*="from-white"][class*="to-gray-400"] {
+  --tw-gradient-from: #1a1a1a !important;
+  --tw-gradient-to: #555 !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Border overrides
+══════════════════════════════════════════════════════════════ */
+
+/* Borders with green-900 or amber-900 opacity → warm gold */
+html.light [class*="border-green-900/"],
+html.light [class*="border-amber-900/"] {
+  border-color: rgba(196, 151, 70, 0.18) !important;
+}
+
+/* Gray borders */
 html.light [class*="border-gray-700/"],
 html.light [class*="border-gray-800/"] {
   border-color: rgba(0, 0, 0, 0.08) !important;
 }
+html.light .border-gray-900,
+html.light [class*="border-gray-900"] {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
 
-/* Text colors */
-html.light .text-gray-300 { color: #444 !important; }
-html.light .text-gray-400 { color: #666 !important; }
-html.light .text-gray-500 { color: #888 !important; }
-html.light .text-gray-200 { color: #333 !important; }
+/* White opacity borders (invisible on light bg) → visible */
+html.light [class*="border-white/"] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
 
-/* Keep accent colors but slightly darken for contrast */
-html.light .text-amber-400 { color: #a07a1c !important; }
-html.light .text-amber-300 { color: #8b6914 !important; }
-html.light .text-amber-200 { color: #6b5010 !important; }
+/* Green border on active sections */
+html.light .border-green-600 {
+  border-color: #c49746 !important;
+}
+html.light .border-emerald-600 {
+  border-color: #c49746 !important;
+}
 
-/* Red/green stay the same but can be slightly deeper */
-html.light .text-red-300 { color: #dc2626 !important; }
-html.light .text-green-300 { color: #16a34a !important; }
+/* ══════════════════════════════════════════════════════════════
+   Background accent overrides
+══════════════════════════════════════════════════════════════ */
 
-/* bg-red-900, bg-amber-900 notification boxes */
+/* Emerald / green tinted backgrounds */
+html.light [class*="bg-emerald-900/"] {
+  background-color: rgba(209, 250, 229, 0.4) !important;
+}
+html.light [class*="bg-green-900/"] {
+  background-color: rgba(209, 250, 229, 0.3) !important;
+}
+
+/* Red / danger notification boxes */
 html.light [class*="bg-red-900/"] {
   background-color: rgba(254, 226, 226, 0.6) !important;
 }
+
+/* Amber notification boxes */
 html.light [class*="bg-amber-900/"] {
   background-color: rgba(254, 243, 199, 0.5) !important;
+}
+
+/* Green buttons stay green but adapt */
+html.light .bg-green-600 { background-color: #16a34a !important; }
+html.light .bg-green-600:hover { background-color: #15803d !important; }
+html.light .bg-emerald-600 { background-color: #059669 !important; }
+
+/* ══════════════════════════════════════════════════════════════
+   Input / form elements on light bg
+══════════════════════════════════════════════════════════════ */
+
+/* Inputs with inline bg-black classes */
+html.light input[class*="bg-black"],
+html.light select[class*="bg-black"],
+html.light textarea[class*="bg-black"] {
+  background-color: #ffffff !important;
+  color: #1a1a1a !important;
+  border-color: #d4cfc6 !important;
+}
+html.light input[class*="bg-black"]::placeholder,
+html.light textarea[class*="bg-black"]::placeholder {
+  color: #999 !important;
+}
+html.light input[class*="bg-black"]:focus,
+html.light textarea[class*="bg-black"]:focus {
+  border-color: #c49746 !important;
+}
+
+/* Placeholder text */
+html.light .placeholder-gray-500::placeholder {
+  color: #999 !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Table overrides (sticky headers, hover rows)
+══════════════════════════════════════════════════════════════ */
+html.light thead[class*="bg-black"],
+html.light th[class*="bg-black"],
+html.light td[class*="bg-black"] {
+  background-color: rgba(245, 241, 235, 0.95) !important;
+  color: #1a1a1a !important;
+}
+html.light tr[class*="hover:bg-black"]:hover {
+  background-color: rgba(196, 151, 70, 0.06) !important;
+}
+html.light thead.sticky {
+  background-color: rgba(245, 241, 235, 0.98) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Shadow overrides — soften dark shadows
+══════════════════════════════════════════════════════════════ */
+html.light .shadow-2xl {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Chart.js and SVG — ensure readable on light bg
+══════════════════════════════════════════════════════════════ */
+html.light canvas {
+  filter: none;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Misc badge / pill overrides
+══════════════════════════════════════════════════════════════ */
+html.light .badge-success { background: rgba(0,166,81,0.08); color: #16a34a; border-color: rgba(0,166,81,0.2); }
+html.light .badge-warning  { background: rgba(245,158,11,0.08); color: #d97706; border-color: rgba(245,158,11,0.2); }
+html.light .badge-danger   { background: rgba(239,68,68,0.08);  color: #dc2626; border-color: rgba(239,68,68,0.2); }
+
+/* Emerald badge/pill elements */
+html.light [class*="bg-emerald-500/"] {
+  background-color: rgba(5, 150, 105, 0.1) !important;
+}
+html.light [class*="border-emerald-500/"] {
+  border-color: rgba(5, 150, 105, 0.2) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CTA / gradient buttons — keep white text in light mode
+══════════════════════════════════════════════════════════════ */
+html.light a[class*="bg-gradient-to-r"],
+html.light button[class*="bg-gradient-to-r"],
+html.light a[class*="bg-linear-to-r"],
+html.light button[class*="bg-linear-to-r"] {
+  color: white !important;
 }
