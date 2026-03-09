@@ -226,12 +226,13 @@ export default function OptionSentimentTab({ ticker, currentPrice, chainData }: 
 
   // ── Bias gauge SVG ──
   const BiasGauge = ({ score, label }: { score: number; label: string }) => {
-    // score: -5 to +5 → angle: 180° to 0°
-    const angle = 180 - ((score + 5) / 10) * 180;
-    const rad = (angle * Math.PI) / 180;
-    const cx = 150, cy = 130, r = 100;
-    const nx = cx + r * 0.85 * Math.cos(rad);
-    const ny = cy - r * 0.85 * Math.sin(rad);
+    // score: -5 to +5 → normalized 0..1
+    const norm = (score + 5) / 10;
+    const cx = 150, cy = 130, r = 105;
+    const arcLen = Math.PI * r;
+    const needleAngle = Math.PI - norm * Math.PI;
+    const nx = cx + r * 0.72 * Math.cos(needleAngle);
+    const ny = cy - r * 0.72 * Math.sin(needleAngle);
 
     const color =
       score > 2 ? '#10b981' :
@@ -240,24 +241,46 @@ export default function OptionSentimentTab({ ticker, currentPrice, chainData }: 
       score > -2 ? '#f87171' :
       '#ef4444';
 
+    const gaugeId = `biasGrad-${label.replace(/\s/g, '')}`;
+    const glowId = `biasGlow-${label.replace(/\s/g, '')}`;
+
     return (
-      <svg viewBox="0 0 300 160" className="w-full max-w-[300px] mx-auto">
-        {/* Background arc */}
-        <path d="M 30 130 A 120 120 0 0 1 270 130" fill="none" stroke="#333" strokeWidth="18" strokeLinecap="round" />
-        {/* Gradient segments */}
-        <path d="M 30 130 A 120 120 0 0 1 90 42" fill="none" stroke="#ef4444" strokeWidth="16" strokeLinecap="round" />
-        <path d="M 90 42 A 120 120 0 0 1 150 10" fill="none" stroke="#f87171" strokeWidth="16" />
-        <path d="M 150 10 A 120 120 0 0 1 210 42" fill="none" stroke="#fbbf24" strokeWidth="16" />
-        <path d="M 210 42 A 120 120 0 0 1 270 130" fill="none" stroke="#10b981" strokeWidth="16" strokeLinecap="round" />
+      <svg viewBox="0 0 300 155" className="w-full max-w-[300px] mx-auto">
+        <defs>
+          <linearGradient id={gaugeId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#ef4444" />
+            <stop offset="30%" stopColor="#f87171" />
+            <stop offset="50%" stopColor="#fbbf24" />
+            <stop offset="75%" stopColor="#34d399" />
+            <stop offset="100%" stopColor="#10b981" />
+          </linearGradient>
+          <filter id={glowId}>
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+        {/* Background track */}
+        <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+          fill="none" stroke="#1f2937" strokeWidth="16" strokeLinecap="round" />
+        {/* Gradient arc (dim) */}
+        <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+          fill="none" stroke={`url(#${gaugeId})`} strokeWidth="16" strokeLinecap="round"
+          opacity="0.35" />
+        {/* Active fill up to score */}
+        <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+          fill="none" stroke={`url(#${gaugeId})`} strokeWidth="16" strokeLinecap="round"
+          strokeDasharray={arcLen} strokeDashoffset={arcLen * (1 - norm)}
+          filter={`url(#${glowId})`} />
         {/* Needle */}
-        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={color} strokeWidth="3" strokeLinecap="round" />
-        <circle cx={cx} cy={cy} r="6" fill={color} />
+        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx={cx} cy={cy} r="5.5" fill={color} />
+        <circle cx={cx} cy={cy} r="2.5" fill="#0a0a0a" />
         {/* Labels */}
-        <text x={30} y={155} fill="#888" fontSize="10" textAnchor="middle">-5</text>
-        <text x={150} y={8} fill="#888" fontSize="10" textAnchor="middle">0</text>
-        <text x={270} y={155} fill="#888" fontSize="10" textAnchor="middle">+5</text>
-        <text x={150} y={145} fill={color} fontSize="16" fontWeight="bold" textAnchor="middle">{score.toFixed(1)}</text>
-        <text x={150} y={160} fill="#aaa" fontSize="11" textAnchor="middle">{label}</text>
+        <text x={cx - r - 2} y={cy + 18} fill="#6b7280" fontSize="10" textAnchor="middle">-5</text>
+        <text x={cx} y={cy - r - 6} fill="#6b7280" fontSize="10" textAnchor="middle">0</text>
+        <text x={cx + r + 2} y={cy + 18} fill="#6b7280" fontSize="10" textAnchor="middle">+5</text>
+        <text x={cx} y={cy + 2} fill={color} fontSize="18" fontWeight="bold" textAnchor="middle">{score.toFixed(1)}</text>
+        <text x={cx} y={cy + 18} fill="#9ca3af" fontSize="11" textAnchor="middle">{label}</text>
       </svg>
     );
   };

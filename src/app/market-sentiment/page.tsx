@@ -91,40 +91,57 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
 
 function FearGreedGauge({ score, label }: { score: number; label: string }) {
   const getColor = (s: number) => {
-    if (s >= 75) return '#ef4444';   // Extreme Greed = red
-    if (s >= 60) return '#f97316';   // Greed = orange
-    if (s >= 45) return '#eab308';   // Neutral = yellow
-    if (s >= 30) return '#3b82f6';   // Fear = blue
-    return '#8b5cf6';                // Extreme Fear = purple
+    if (s >= 75) return '#ef4444';
+    if (s >= 60) return '#f97316';
+    if (s >= 45) return '#eab308';
+    if (s >= 30) return '#3b82f6';
+    return '#8b5cf6';
   };
   const color = getColor(score);
-  const rotation = (score / 100) * 180 - 90; // -90° to +90°
 
-  // Arc points for score thresholds (center=80,80, r=70, angle=180*(1-score/100))
-  // score 30 → (39, 23), 45 → (69, 11), 60 → (102, 13), 75 → (130, 31)
+  // Gauge geometry: semicircle from 180° (left) to 0° (right)
+  const cx = 100, cy = 100, r = 80;
+  const arcLength = Math.PI * r; // half-circumference
+  const needleAngle = Math.PI - (score / 100) * Math.PI; // 180°→0° as score 0→100
+  const nx = cx + r * 0.72 * Math.cos(needleAngle);
+  const ny = cy - r * 0.72 * Math.sin(needleAngle);
 
   return (
     <div className="flex flex-col items-center">
-      <div className="relative w-32 h-16 sm:w-40 sm:h-20">
-        <svg viewBox="0 0 160 80" className="w-full h-full">
+      <div className="relative w-36 h-20 sm:w-44 sm:h-24">
+        <svg viewBox="0 0 200 110" className="w-full h-full">
+          <defs>
+            <linearGradient id="fgGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#8b5cf6" />
+              <stop offset="30%" stopColor="#3b82f6" />
+              <stop offset="50%" stopColor="#eab308" />
+              <stop offset="70%" stopColor="#f97316" />
+              <stop offset="100%" stopColor="#ef4444" />
+            </linearGradient>
+            <filter id="fgGlow">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
           {/* Background track */}
-          <path d="M 10 80 A 70 70 0 0 1 150 80" fill="none" stroke="#374151" strokeWidth="12" strokeLinecap="round" />
-          {/* 5 color zones matching getColor thresholds */}
-          <path d="M 10 80 A 70 70 0 0 1 39 23"   fill="none" stroke="#8b5cf6" strokeWidth="12" strokeLinecap="round" opacity="0.45" />
-          <path d="M 39 23 A 70 70 0 0 1 69 11"   fill="none" stroke="#3b82f6" strokeWidth="12" strokeLinecap="round" opacity="0.45" />
-          <path d="M 69 11 A 70 70 0 0 1 102 13"  fill="none" stroke="#eab308" strokeWidth="12" strokeLinecap="round" opacity="0.45" />
-          <path d="M 102 13 A 70 70 0 0 1 130 31" fill="none" stroke="#f97316" strokeWidth="12" strokeLinecap="round" opacity="0.45" />
-          <path d="M 130 31 A 70 70 0 0 1 150 80" fill="none" stroke="#ef4444" strokeWidth="12" strokeLinecap="round" opacity="0.45" />
+          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+            fill="none" stroke="#1f2937" strokeWidth="14" strokeLinecap="round" />
+          {/* Gradient arc */}
+          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+            fill="none" stroke="url(#fgGrad)" strokeWidth="14" strokeLinecap="round"
+            strokeDasharray={arcLength} strokeDashoffset={0} opacity="0.7" />
+          {/* Active fill up to score */}
+          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+            fill="none" stroke="url(#fgGrad)" strokeWidth="14" strokeLinecap="round"
+            strokeDasharray={arcLength} strokeDashoffset={arcLength * (1 - score / 100)}
+            filter="url(#fgGlow)" />
           {/* Needle */}
-          <line
-            x1="80" y1="80" x2="80" y2="18"
-            stroke={color} strokeWidth="3" strokeLinecap="round"
-            transform={`rotate(${rotation}, 80, 80)`}
-          />
-          <circle cx="80" cy="80" r="5" fill={color} />
+          <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+          <circle cx={cx} cy={cy} r="5" fill={color} />
+          <circle cx={cx} cy={cy} r="2.5" fill="#0a0a0a" />
         </svg>
       </div>
-      <div className="text-center -mt-2">
+      <div className="text-center -mt-3">
         <div className="text-2xl sm:text-3xl font-black" style={{ color }}>{score.toFixed(0)}</div>
         <div className="text-xs font-semibold" style={{ color }}>{label}</div>
       </div>
@@ -355,87 +372,82 @@ export default function MarketSentimentPage() {
   if (!data) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-slate-900 to-black pb-16">
+    <div className="min-h-screen bg-[#050507] pb-16">
       <Header />
 
       {/* Sub-header */}
-      <header className="border-b border-green-900/20 bg-black/70 backdrop-blur-lg mt-16">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
+      <header className="border-b border-white/[0.06] bg-[#0a0a0c]/80 backdrop-blur-2xl mt-14">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2 sm:gap-4">
-              <Logo size="sm" />
+            <div className="flex items-center gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base sm:text-xl font-bold text-white">Market Pulse</span>
-                  <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-900/60 text-cyan-400 border border-cyan-700/50 uppercase tracking-wider">Beta</span>
+                  <span className="text-sm sm:text-base font-semibold text-white tracking-tight">Market Pulse</span>
+                  <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-white/[0.06] text-gray-400 border border-white/[0.08] uppercase tracking-wider">Beta</span>
                 </div>
-                <div className="text-[9px] sm:text-[10px] text-emerald-400 font-data tracking-[2px] sm:tracking-[3px] uppercase">
-                  NEURAL v{data.version}
+                <div className="text-[9px] text-gray-600 font-mono tracking-wider uppercase">
+                  v{data.version} {backendStatus === 'connected' && <span className="text-emerald-600">&#x2022; connected</span>}
                 </div>
               </div>
-              <span className={`hidden sm:flex px-2 py-1 text-xs rounded-full border ${backendStatus === 'connected' ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'}`}>
-                {backendStatus === 'connected' ? '🟢 Neural Engine' : '⚠️ Fallback'}
-              </span>
             </div>
-            <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3">
               {lastUpdate && (
-                <span className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">
+                <span className="text-[10px] text-gray-600 hidden sm:block font-mono">
                   {lastUpdate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                   {data.processingTime > 0 && ` · ${data.processingTime}s`}
                 </span>
               )}
               <button
                 onClick={() => setAutoRefresh(!autoRefresh)}
-                className={`px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs rounded-full border transition-all ${autoRefresh ? 'bg-green-500/10 border-green-500 text-green-400' : 'bg-black/60 border-white/[0.06] text-gray-500'}`}
+                className={`px-3 py-1.5 text-[11px] rounded-lg border transition-all font-medium ${autoRefresh ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-white/[0.03] border-white/[0.08] text-gray-500'}`}
               >
-                {autoRefresh ? '🔄 Auto' : '⏸️ Off'}
+                {autoRefresh ? 'Auto-refresh' : 'Paused'}
               </button>
               <button
                 onClick={fetchMarketData}
                 disabled={loading}
-                className="bg-gradient-to-r from-emerald-600 to-emerald-600 hover:from-emerald-500 hover:to-emerald-500 disabled:opacity-50 px-3 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all active:scale-95"
+                className="bg-white text-black hover:bg-gray-200 disabled:opacity-50 px-4 py-1.5 rounded-lg text-[11px] font-semibold transition-all active:scale-[0.97]"
               >
-                {loading ? '⏳' : `🔄 ${t('marketSentiment.update')}`}
+                {loading ? 'Loading...' : t('marketSentiment.update')}
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 pt-6 sm:pt-10 space-y-6 sm:space-y-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 pt-8 sm:pt-12 space-y-6 sm:space-y-10">
 
         {/* ── HERO ── */}
-        <div className={`rounded-2xl sm:rounded-[2rem] p-6 sm:p-10 md:p-14 border-2 bg-gradient-to-br ${sentimentBg(data.overallSentiment)} relative overflow-hidden`}>
-          <div className="absolute inset-0 bg-[radial-gradient(at_top_right,#ffffff06_0%,transparent_60%)]" />
+        <div className={`rounded-2xl sm:rounded-3xl p-6 sm:p-10 md:p-14 border bg-gradient-to-br ${sentimentBg(data.overallSentiment)} relative overflow-hidden`}>
+          <div className="absolute inset-0 bg-[radial-gradient(at_top_right,#ffffff04_0%,transparent_60%)]" />
           <div className="relative z-10">
-            {/* Mobile: stacked. Desktop: centered */}
             <div className="text-center">
               <div className="text-5xl sm:text-7xl mb-3">{data.sentimentEmoji}</div>
-              <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white mb-2 tracking-tight leading-tight">
+              <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white mb-2 tracking-tight leading-tight">
                 {tl(data.recommendation)}
               </h1>
-              <p className="text-sm sm:text-lg text-gray-300 max-w-xl mx-auto leading-relaxed">
+              <p className="text-sm sm:text-base text-gray-400 max-w-xl mx-auto leading-relaxed">
                 {tl(data.recommendationDescription)}
               </p>
             </div>
 
             {/* Composite + VIX + Fear/Greed row */}
-            <div className="mt-8 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-6">
+            <div className="mt-8 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-5">
               {/* Composite Score */}
-              <div className="bg-black/40 backdrop-blur-xl rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border border-white/10 text-center">
-                <div className="text-xs text-gray-400 mb-1 uppercase tracking-wider">{t('marketSentiment.compositeScore')}</div>
-                <div className={`text-5xl sm:text-6xl font-black ${scoreColor(data.compositeScore)}`}>{data.compositeScore}</div>
-                <div className="text-[10px] text-gray-500 mt-1">/ 100</div>
+              <div className="bg-black/50 backdrop-blur-xl rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border border-white/[0.08] text-center min-w-[140px]">
+                <div className="text-[11px] text-gray-500 mb-1 uppercase tracking-wider font-medium">{t('marketSentiment.compositeScore')}</div>
+                <div className={`text-5xl sm:text-6xl font-bold tabular-nums ${scoreColor(data.compositeScore)}`}>{data.compositeScore}</div>
+                <div className="text-[10px] text-gray-600 mt-1 font-mono">/ 100</div>
               </div>
 
               {/* VIX */}
               {data.vixValue != null && (
-                <div className="bg-black/40 backdrop-blur-xl rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border border-white/10 text-center">
-                  <div className="text-xs text-gray-400 mb-1 uppercase tracking-wider">VIX</div>
-                  <div className={`text-4xl sm:text-5xl font-black ${data.vixValue < 20 ? 'text-green-400' : data.vixValue < 30 ? 'text-yellow-400' : 'text-red-400'}`}>
+                <div className="bg-black/50 backdrop-blur-xl rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border border-white/[0.08] text-center min-w-[140px]">
+                  <div className="text-[11px] text-gray-500 mb-1 uppercase tracking-wider font-medium">VIX</div>
+                  <div className={`text-4xl sm:text-5xl font-bold tabular-nums ${data.vixValue < 20 ? 'text-emerald-400' : data.vixValue < 30 ? 'text-amber-400' : 'text-red-400'}`}>
                     {data.vixValue.toFixed(1)}
                   </div>
-                  <div className="text-[10px] text-gray-400 mt-1">{tl(data.macroAnalysis?.vixRegime || '')}</div>
+                  <div className="text-[10px] text-gray-500 mt-1">{tl(data.macroAnalysis?.vixRegime || '')}</div>
                 </div>
               )}
 
