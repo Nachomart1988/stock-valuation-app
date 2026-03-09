@@ -7,6 +7,7 @@ const isPublicPath = createRouteMatcher([
   '/login(.*)',
   '/register(.*)',
   '/sso-callback(.*)',
+  '/market-sentiment(.*)',
   '/marketing(.*)',
   '/privacy(.*)',
   '/terms(.*)',
@@ -20,8 +21,12 @@ const isPublicPath = createRouteMatcher([
   '/press(.*)',
   '/support(.*)',
   '/licenses(.*)',
-  // Public API routes (auth handled internally or via webhook signature)
+  '/api-info(.*)',
+  // Public API routes
   '/api/waitlist',
+  '/api/fmp',
+  '/api/screener',
+  '/api/prismo-top',
   '/api/stripe/webhook',
 ]);
 

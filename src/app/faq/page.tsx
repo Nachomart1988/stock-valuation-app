@@ -59,7 +59,7 @@ const sections = [
       },
       {
         q: '¿Qué es el Resumen Maestro Neural?',
-        a: 'Un análisis de 12 capas que combina NLP de noticias, flujo institucional, análisis técnico, valuaciones, análisis de calidad, forecasts de analistas, Monte Carlo y más para generar una recomendación final con precio objetivo.',
+        a: 'Un análisis de 12 capas que combina NLP de noticias, flujo institucional, análisis técnico, valuaciones, análisis de calidad, forecasts de analistas, Monte Carlo y más para generar una conclusión final con precio objetivo.',
       },
       {
         q: '¿Cómo funciona el Diario del Inversor?',

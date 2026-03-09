@@ -4,21 +4,18 @@
 // Tab indices (from analizar/page.tsx categories array):
 //  0 - Inicio
 //  1 - Financial Statements
-//  2 - Forecasts        (sub-tabs: Analyst, Revenue, ML Prediction)
-//  3 - Info General     (sub-tabs: AnalisisGeneral, KeyMetrics, Analistas, DuPont)
-//  4 - Company          (sub-tabs: Competidores, Industry, Segmentation, Holders)
-//  5 - News
-//  6 - Inputs           (sub-tabs: SGR, Beta, CAGR, WACC)
-//  7 - Intraday         (sub-tabs: Pivots, Gaps)
-//  8 - DCF              (sub-tabs: Calculos, DCF Models)
-//  9 - Valuaciones
-// 10 - Probability
-// 11 - Options          (sub-tabs: Chain, Strategy Simulator, Suggestions)
-// 12 - Resumen Maestro
-// 13 - Diario Inversor  (sub-tabs: Diario, Portfolio Optimization)
-// 14 - Quantum Portfolio (QAOA)
-// 15 - DRL Trading Simulator
-// 16 - Quantum Risk Model
+//  2 - Forecasts          (sub-tabs: Analyst, Revenue, ML Prediction)
+//  3 - General Analysis   (merged: Analysis + Company + News — sub-tab gating inline)
+//  4 - Inputs & DCF       (merged: Inputs + DCF — sub-tab gating inline)
+//  5 - Intraday           (sub-tabs: Pivots, Gaps, Momentum)
+//  6 - Valuaciones
+//  7 - Probability
+//  8 - Options            (sub-tabs: Chain, Strategy Simulator, Suggestions)
+//  9 - Resumen Maestro
+// 10 - Quantum Risk Model
+// 11 - Quantum Portfolio  (GOD MODE only — hidden for other plans)
+// 12 - DRL Trading        (GOD MODE only — hidden for other plans)
+// last - Investor Journal (sub-tabs: Diario, Portfolio Optimization) — dynamic index
 
 export type PlanTier = 'free' | 'pro' | 'elite' | 'gold' | 'godmode';
 
@@ -35,15 +32,13 @@ export const PLAN_METADATA: Record<PlanTier, { name: string; price: number; colo
 // Tabs NOT listed are accessible to all (free+)
 export const TAB_MIN_PLAN: Record<number, PlanTier> = {
   2:  'pro',   // Forecasts (incl. ML Prediction)
-  5:  'pro',   // News
-  7:  'pro',   // Intraday (Pivots + Gaps)
-  10: 'pro',   // Probability
-  11: 'pro',   // Options
-  12: 'elite', // Resumen Maestro
-  13: 'elite', // Diario Inversor + Portfolio Optimization
-  14: 'gold',  // Quantum Portfolio (QAOA)
-  15: 'gold',  // DRL Trading Simulator
-  16: 'gold',  // Quantum Risk Model
+  5:  'pro',   // Intraday (Pivots + Gaps + Momentum)
+  7:  'pro',   // Probability
+  8:  'pro',   // Options
+  9:  'elite', // Resumen Maestro
+  10: 'gold',  // Quantum Risk Model
+  // Quantum Portfolio & DRL Trading are hidden (not in categories) for non-GODMODE
+  // Investor Journal (elite) is gated inline since its index is dynamic
 };
 
 // ── Sub-tab access ───────────────────────────────────────────
@@ -57,7 +52,7 @@ export interface TabSubAccess {
   [plan: string]: SubTabAccess;
 }
 
-// Tab 3 — Info General: [0=AnalisisGeneral, 1=KeyMetrics, 2=Analistas, 3=DuPont]
+// Tab 3 (sub-tab: Analysis) — General Info: [0=AnalisisGeneral, 1=KeyMetrics, 2=Analistas, 3=DuPont]
 export const GENERAL_INFO_ACCESS: TabSubAccess = {
   free:    [0],      // Only Análisis General
   pro:     'all',
@@ -66,7 +61,7 @@ export const GENERAL_INFO_ACCESS: TabSubAccess = {
   godmode: 'all',
 };
 
-// Tab 4 — Company: [0=Competidores, 1=Industry, 2=Segmentation, 3=Holders]
+// Tab 3 (sub-tab: Company) — Company: [0=Competidores, 1=Industry, 2=Segmentation, 3=Holders]
 export const COMPANY_ACCESS: TabSubAccess = {
   free:    [0],      // Only Competidores
   pro:     'all',
@@ -75,7 +70,7 @@ export const COMPANY_ACCESS: TabSubAccess = {
   godmode: 'all',
 };
 
-// Tab 6 — Inputs: [0=SGR, 1=Beta, 2=CAGR, 3=WACC]
+// Tab 4 (sub-tab: Inputs) — Inputs: [0=SGR, 1=Beta, 2=CAGR, 3=WACC]
 // Free: only SGR top-down/bottom-up (=SGR tab index 0) and Beta (=index 1)
 export const INPUTS_ACCESS: TabSubAccess = {
   free:    [0, 1],   // SGR and Beta only
@@ -85,7 +80,7 @@ export const INPUTS_ACCESS: TabSubAccess = {
   godmode: 'all',
 };
 
-// Tab 8 — DCF: [0=Calculos, 1=DCF Models]
+// Tab 4 (sub-tab: DCF) — DCF: [0=Calculos, 1=DCF Models]
 // Free: only second sub-tab (DCF Models)
 export const DCF_ACCESS: TabSubAccess = {
   free:    [1],      // Only DCF Models (2nd sub-tab)

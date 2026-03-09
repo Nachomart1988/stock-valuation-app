@@ -7,6 +7,7 @@ import Header from '../components/Header';
 import { LogoLoader } from '../components/ui/LogoLoader';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { fetchFmp } from '@/lib/fmpClient';
+import { useUser } from '@clerk/nextjs';
 
 interface MarketSignal {
   source: string;
@@ -140,6 +141,8 @@ export default function MarketSentimentPage() {
   const [backendStatus, setBackendStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
   const [showReasoning, setShowReasoning] = useState(false);
   const { t, locale } = useLanguage();
+  const { user } = useUser();
+  const isGodMode = (user?.publicMetadata?.plan as string) === 'godmode';
 
   // Translate finite-set backend labels to Spanish
   const tl = (text: string | undefined): string => {
@@ -760,8 +763,8 @@ export default function MarketSentimentPage() {
           </div>
         )}
 
-        {/* ── REASONING CHAIN (collapsible) ── */}
-        {data.reasoningChain && data.reasoningChain.length > 0 && (
+        {/* ── REASONING CHAIN (GODMODE only, collapsible) ── */}
+        {isGodMode && data.reasoningChain && data.reasoningChain.length > 0 && (
           <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl overflow-hidden">
             <button
               onClick={() => setShowReasoning(!showReasoning)}

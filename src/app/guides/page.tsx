@@ -14,7 +14,7 @@ const guides = [
       { title: 'Ingresa un ticker', body: 'En la página principal, escribe el símbolo de la acción (ej: AAPL, MSFT, TSLA) y haz clic en "Analizar". No necesitas una cuenta para el análisis básico.' },
       { title: 'Explora los tabs', body: 'Verás tabs organizados por categoría: General, Métricas, Valuaciones, Técnico, etc. Navega entre ellos para ver distintas perspectivas del mismo activo.' },
       { title: 'Edita los inputs', body: 'Casi todos los campos son editables. Cambia la tasa de crecimiento, el WACC, o el horizonte de tiempo para ver cómo cambia la valuación en tiempo real.' },
-      { title: 'Lee el resumen', body: 'En el tab "Análisis Final" → "Resumen Maestro" encontrarás la recomendación consolidada (requiere plan Elite o Gold).' },
+      { title: 'Lee el resumen', body: 'En el tab "Análisis Final" → "Resumen Maestro" encontrarás la conclusión consolidada del análisis (requiere plan Elite o Gold).' },
     ],
   },
   {

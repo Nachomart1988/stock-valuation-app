@@ -237,6 +237,7 @@ interface Props {
   ownerEarnings?: any[]; // Owner Earnings (Buffett method) from FMP
   cagrStats?: { avgCagr: number | null; minCagr: number | null; maxCagr: number | null } | null;
   dcfFromCalculos?: number | null; // Intrinsic value from Calculo tab
+  currencyInfo?: { original: string; target: string; rate: number; marketRate: number } | null;
 }
 
 // ────────────────────────────────────────────────
@@ -384,6 +385,7 @@ export default function ValuacionesTab({
   ownerEarnings,
   cagrStats,
   dcfFromCalculos,
+  currencyInfo,
 }: Props) {
   const { t } = useLanguage();
 
@@ -398,6 +400,7 @@ export default function ValuacionesTab({
     getOptimalWeights(profile?.industry, paysDividends)
   );
   const [weightsCustomized, setWeightsCustomized] = useState(false);
+  const [averageMode, setAverageMode] = useState<'weighted' | 'selected'>('weighted');
 
   // Auto-reset weights when industry or dividend status changes (only if not customized)
   useEffect(() => {
@@ -1006,6 +1009,10 @@ export default function ValuacionesTab({
           d0 = dividendsPaid / sharesForDividend;
           console.log(`[Valuaciones] Fallback D0: $${d0.toFixed(4)} (Total: $${(dividendsPaid / 1e9).toFixed(2)}B / ${(sharesForDividend / 1e9).toFixed(2)}B shares)`);
         }
+
+        // NOTE: D0 is already in the target currency — dividends are converted via cxArr() in page.tsx
+        // (dividend/adjDividend are in MONETARY_FIELDS, so convertObjectToUSD applies the FX rate)
+
         // Use SGR from SustainableGrowthTab if available, otherwise calculate fallback
         // NOTE: gs CAN be > ks in multi-stage models because it's only for a finite period (n years)
         // Only the terminal growth rate (glong) must be < ks for the perpetuity formula
@@ -1718,19 +1725,23 @@ export default function ValuacionesTab({
   };
 
   const averageVal = (() => {
-    // Build weighted items: each enabled model + optional Prismo
+    if (averageMode === 'selected') {
+      // User-selection mode: simple average of all enabled (checked) models
+      const vals = enabledMethods.map(m => m.value!);
+      if (includePrismoValue && advanceValueNet?.fair_value && advanceValueNet.fair_value > 0) vals.push(advanceValueNet.fair_value);
+      return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    }
+    // Weighted mode (default): build weighted items
     const items: Array<{ value: number; weight: number }> = [];
     enabledMethods.forEach(m => {
       const w = modelWeights[m.name] ?? 0;
       if (w > 0) items.push({ value: m.value!, weight: w });
     });
     if (includePrismoValue && advanceValueNet?.fair_value && advanceValueNet.fair_value > 0) {
-      // Prismo uses the same weight as Advance DCF (API) or a minimum of 10
       const prismoW = Math.max(modelWeights[MN.ADCF] ?? 0, 10);
       items.push({ value: advanceValueNet.fair_value, weight: prismoW });
     }
     if (items.length === 0) {
-      // Fallback: if all weights are 0, use equal-weight arithmetic mean
       const vals = enabledMethods.map(m => m.value!);
       if (includePrismoValue && advanceValueNet?.fair_value && advanceValueNet.fair_value > 0) vals.push(advanceValueNet.fair_value);
       return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
@@ -2777,7 +2788,7 @@ export default function ValuacionesTab({
                 <>
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <p className="text-xs text-emerald-400 uppercase tracking-wide mb-1">Fair Value (AI)</p>
+                      <p className="text-xs text-emerald-400 uppercase tracking-wide mb-1">Fair Value</p>
                       <p className="text-4xl font-black text-emerald-300">
                         ${advanceValueNet.fair_value.toFixed(2)}
                       </p>
@@ -2827,45 +2838,66 @@ export default function ValuacionesTab({
       {/* ═══════════════════════════════════════════════════
           FINAL VALUATION SUMMARY - Premium Design
           ═══════════════════════════════════════════════════ */}
-      <div className="liquid-gold-card p-8 rounded-3xl shadow-2xl">
+      <div className="liquid-gold-card p-4 sm:p-5 rounded-2xl shadow-xl">
         {/* Background decoration — gold orbs */}
         <div className="absolute inset-0 bg-gradient-to-r from-amber-600/5 via-yellow-600/5 to-amber-600/5"></div>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-yellow-500/8 rounded-full blur-3xl"></div>
 
         <div className="relative z-10">
-          <div className="text-center mb-6">
-            <h4 className="text-lg font-medium text-gray-400 mb-2">{t('valuacionesTab.avgIntrinsicValue')}</h4>
-            <p className="text-7xl font-black bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 bg-clip-text text-transparent tracking-tight">
+          <div className="text-center mb-3">
+            <h4 className="text-sm font-medium text-gray-400 mb-1">{t('valuacionesTab.avgIntrinsicValue')}</h4>
+            <p className="text-4xl sm:text-5xl font-black bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 bg-clip-text text-transparent tracking-tight">
               {averageVal !== null ? `$${averageVal.toFixed(2)}` : '—'}
             </p>
-            <p className="text-sm text-gray-500 mt-2">
-              Promedio ponderado · {enabledMethods.filter(m => (modelWeights[m.name] ?? 0) > 0).length} modelos con peso &gt; 0
+            <p className="text-xs text-gray-500 mt-1">
+              {averageMode === 'weighted'
+                ? `Promedio ponderado · ${enabledMethods.filter(m => (modelWeights[m.name] ?? 0) > 0).length} modelos con peso > 0`
+                : `Promedio simple · ${enabledMethods.length}${includePrismoValue && advanceValueNet?.fair_value ? ' + PrismoValue' : ''} modelos seleccionados`
+              }
             </p>
+
+            {/* Toggle: Weighted vs User Selection */}
+            <div className="flex items-center justify-center gap-3 mt-3">
+              <span className={`text-xs font-medium ${averageMode === 'weighted' ? 'text-amber-400' : 'text-gray-500'}`}>
+                Ponderado
+              </span>
+              <button
+                onClick={() => setAverageMode(prev => prev === 'weighted' ? 'selected' : 'weighted')}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  averageMode === 'selected' ? 'bg-emerald-600' : 'bg-amber-600/60'
+                }`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  averageMode === 'selected' ? 'translate-x-5.5' : 'translate-x-0.5'
+                }`} />
+              </button>
+              <span className={`text-xs font-medium ${averageMode === 'selected' ? 'text-emerald-400' : 'text-gray-500'}`}>
+                Seleccion usuario
+              </span>
+            </div>
           </div>
 
           {/* Comparison Grid */}
           {quote?.price && averageVal && (
-            <div className="grid grid-cols-3 gap-4 mt-8">
-              <div className="bg-black/60 backdrop-blur p-5 rounded-2xl border border-white/[0.06] text-center">
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Precio de Mercado</p>
-                <p className="text-3xl font-bold text-gray-100">${quote.price.toFixed(2)}</p>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-3">
+              <div className="bg-black/60 backdrop-blur p-3 rounded-xl border border-white/[0.06] text-center">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Precio de Mercado</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-100">${quote.price.toFixed(2)}</p>
               </div>
-              <div className="liquid-gold-card backdrop-blur p-5 rounded-2xl text-center">
-                <p className="text-xs text-amber-400 uppercase tracking-wide mb-1 relative z-10">Valor Intrínseco</p>
-                <p className="text-3xl font-bold text-amber-400 relative z-10">${averageVal.toFixed(2)}</p>
+              <div className="liquid-gold-card backdrop-blur p-3 rounded-xl text-center">
+                <p className="text-[10px] text-amber-400 uppercase tracking-wide mb-0.5 relative z-10">Valor Intrínseco</p>
+                <p className="text-xl sm:text-2xl font-bold text-amber-400 relative z-10">${averageVal.toFixed(2)}</p>
               </div>
-              <div className={`backdrop-blur p-5 rounded-2xl border text-center ${
+              <div className={`backdrop-blur p-3 rounded-xl border text-center ${
                 averageVal > quote.price
                   ? 'bg-green-900/40 border-green-500/50'
                   : 'bg-red-900/40 border-red-500/50'
               }`}>
-                <p className={`text-xs uppercase tracking-wide mb-1 ${
+                <p className={`text-[10px] uppercase tracking-wide mb-0.5 ${
                   averageVal > quote.price ? 'text-green-400' : 'text-red-400'
                 }`}>
                   {averageVal > quote.price ? t('valuacionesTab.upside') : 'Downside'}
                 </p>
-                <p className={`text-3xl font-bold ${
+                <p className={`text-xl sm:text-2xl font-bold ${
                   averageVal > quote.price ? 'text-green-400' : 'text-red-400'
                 }`}>
                   {((averageVal / quote.price - 1) * 100).toFixed(1)}%
@@ -2876,14 +2908,14 @@ export default function ValuacionesTab({
 
           {/* Signal Indicator */}
           {quote?.price && averageVal && (
-            <div className={`mt-6 p-4 rounded-xl border text-center ${
+            <div className={`mt-3 p-2.5 rounded-lg border text-center ${
               averageVal > quote.price * 1.2
                 ? 'bg-green-900/30 border-green-600'
                 : averageVal < quote.price * 0.8
                   ? 'bg-red-900/30 border-red-600'
                   : 'bg-yellow-900/30 border-yellow-600'
             }`}>
-              <p className={`text-sm font-semibold ${
+              <p className={`text-xs font-semibold ${
                 averageVal > quote.price * 1.2
                   ? 'text-green-400'
                   : averageVal < quote.price * 0.8

@@ -31,7 +31,7 @@ export default function ApiInfoPage() {
           {[
             { method: 'GET', path: '/v1/valuation/{ticker}', desc: 'Full 20+ model valuation suite for any US stock' },
             { method: 'GET', path: '/v1/quality/{ticker}', desc: '5-dimension company quality score' },
-            { method: 'GET', path: '/v1/summary/{ticker}', desc: 'Neural 12-layer master summary and recommendation' },
+            { method: 'GET', path: '/v1/summary/{ticker}', desc: 'Neural 12-layer master summary and analysis' },
             { method: 'GET', path: '/v1/momentum/{ticker}', desc: 'Prismo momentum score + breakout probability' },
             { method: 'GET', path: '/v1/screener', desc: 'Stock screener with 50+ filters' },
             { method: 'POST', path: '/v1/dcf/custom', desc: 'Custom DCF calculation with your inputs' },

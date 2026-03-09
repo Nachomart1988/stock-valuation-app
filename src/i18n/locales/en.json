@@ -63,7 +63,7 @@
     "description": "Professional financial analysis tools accessible to everyone",
     "neuralEngine": {
       "title": "12-Layer Neural Engine",
-      "description": "Deep analysis combining NLP, Monte Carlo, institutional flow and more for accurate recommendations."
+      "description": "Deep analysis combining NLP, Monte Carlo, institutional flow and more for accurate insights."
     },
     "valuations": {
       "title": "Multiple Valuations",
@@ -110,8 +110,8 @@
       "description": "Our neural engine processes 12 layers of analysis in seconds."
     },
     "step3": {
-      "title": "Final Recommendation",
-      "description": "Receive a clear recommendation with target price, risks and catalysts."
+      "title": "Final Conclusion",
+      "description": "Get a clear analysis with target price, risks and catalysts."
     }
   },
   "modules": {
@@ -163,7 +163,7 @@
     "title": "About Us",
     "description1": "We are a team of financial engineers and software developers passionate about democratizing access to professional analysis tools.",
     "description2": "Our mission is to provide individual investors with the same analytical tools used by institutional investment funds, but in an accessible and easy-to-understand way.",
-    "description3": "We combine artificial intelligence, fundamental and technical analysis to offer investment recommendations backed by data and proven methodologies.",
+    "description3": "We combine artificial intelligence, fundamental and technical analysis to offer investment analysis backed by data and proven methodologies.",
     "mission": {
       "title": "Mission",
       "description": "Democratize professional financial analysis"
@@ -222,7 +222,7 @@
       "inicio": "Home",
       "financialStatements": "Financial Statements",
       "forecasts": "Forecasts",
-      "generalInfo": "General Info",
+      "generalInfo": "General Analysis",
       "company": "Company",
       "news": "News",
       "inputs": "Inputs",
@@ -946,7 +946,7 @@
     "loading": "Processing neural analysis...",
     "executingEngine": "Executing Reasoning Engine...",
     "noData": "No data available for summary",
-    "recommendation": "Recommendation",
+    "recommendation": "Conclusion",
     "targetPrice": "Target Price",
     "confidence": "Confidence",
     "engineConfidence": "Engine Confidence",
@@ -1065,6 +1065,54 @@
       "efficiency": "Efficiency",
       "growth": "Growth",
       "perShare": "Per Share"
+    }
+  },
+  "screener": {
+    "title": "Find your",
+    "titleHighlight": "next investment",
+    "subtitle": "Filter thousands of companies using fundamental metrics. Click any ticker to analyze it instantly.",
+    "searchBtn": "Search Stocks",
+    "searching": "Searching…",
+    "sector": "Sector",
+    "exchange": "Exchange",
+    "country": "Country",
+    "priceMin": "Price min ($)",
+    "priceMax": "Price max ($)",
+    "mktCapMin": "Mkt Cap min ($)",
+    "mktCapMax": "Mkt Cap max ($)",
+    "betaMin": "Beta min",
+    "betaMax": "Beta max",
+    "volMin": "Vol. min",
+    "divYieldMin": "Div. Yield min",
+    "industry": "Industry (keyword)",
+    "results": "results",
+    "result": "result",
+    "page": "Page",
+    "prev": "Previous",
+    "next": "Next",
+    "analyze": "Analyze",
+    "ticker": "Ticker",
+    "company": "Company",
+    "price": "Price",
+    "mktCap": "Mkt Cap",
+    "beta": "Beta",
+    "div": "Div.",
+    "volume": "Volume",
+    "emptyState": "Set up your filters and click",
+    "emptyStateCta": "Search Stocks",
+    "prismo": {
+      "title": "Prismo Top Opportunities",
+      "subtitle": "Discover the top 25 undervalued stocks from the screener — where current price is below intrinsic value, ranked by highest upside potential.",
+      "discover": "Discover",
+      "discovering": "Analyzing stocks…",
+      "scanning": "Loading all stocks from screener…",
+      "progress": "Analyzed {current} of {total} stocks",
+      "noResults": "No undervalued opportunities found with the current filters. Try broadening your search.",
+      "stats": "Scanned {total} stocks, {analyzed} with DCF data available",
+      "intrinsicValue": "Intrinsic Value",
+      "currentPrice": "Current Price",
+      "upside": "Upside",
+      "rank": "#"
     }
   }
 }

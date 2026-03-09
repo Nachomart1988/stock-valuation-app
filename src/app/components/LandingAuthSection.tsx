@@ -4,26 +4,22 @@ import { useUser, useClerk } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import Link from 'next/link';
-import { PrismoIcon } from './Logo';
 
 /**
- * Lightweight client island for the landing page.
+ * Lightweight client island for auth-aware landing page elements.
  * Only this component ships Clerk's client JS — the rest of the page is server-rendered.
  */
 export default function LandingAuthSection({ section }: { section: 'header' | 'cta' }) {
   const { user, isLoaded } = useUser();
   const { signOut } = useClerk();
   const router = useRouter();
-  const plan = (user?.publicMetadata?.plan as string) ?? 'free';
-  const hasAccess = plan !== 'free';
 
+  // Authenticated users visiting the landing page get redirected to the app
   useEffect(() => {
-    if (isLoaded && user && hasAccess) {
+    if (isLoaded && user) {
       router.replace('/analizar');
     }
-  }, [isLoaded, user, hasAccess, router]);
-
-  const isWaitlisted = isLoaded && user && !hasAccess;
+  }, [isLoaded, user, router]);
 
   if (section === 'header') {
     return (
@@ -49,31 +45,13 @@ export default function LandingAuthSection({ section }: { section: 'header' | 'c
   }
 
   // section === 'cta'
-  return isWaitlisted ? (
-    <div className="bg-black/80 border border-green-900/20 rounded-2xl p-8 text-center">
-      <div className="w-12 h-12 mx-auto mb-4">
-        <PrismoIcon className="w-12 h-12" innerClassName="text-base" />
-      </div>
-      <p className="text-white font-semibold mb-1">
-        Hola, {user.firstName || user.emailAddresses[0]?.emailAddress}
-      </p>
-      <p className="text-gray-400 text-sm mb-6">
-        Estas en la lista de espera. Te notificaremos cuando tu acceso este listo.
-      </p>
-      <button
-        onClick={() => signOut()}
-        className="text-xs text-gray-600 hover:text-gray-400 transition"
-      >
-        Cerrar sesion
-      </button>
-    </div>
-  ) : (
+  return (
     <div className="flex flex-col items-center gap-4">
       <Link
         href="/register"
         className="px-8 py-3.5 bg-linear-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-semibold rounded-xl transition text-sm shadow-lg shadow-emerald-500/20"
       >
-        Unirse a la lista de espera
+        Crear cuenta
       </Link>
       {isLoaded && !user && (
         <Link

@@ -70,6 +70,7 @@ import {
   DCF_ACCESS,
   canAccessTab,
   canAccessSubTab,
+  planRank,
 } from '@/lib/plans';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -182,23 +183,23 @@ function convertArrayToUSD(arr: any[], rate: number): any[] {
   return arr.map(item => convertObjectToUSD(item, rate));
 }
 
-async function fetchExchangeRate(fromCurrency: string, _apiKey: string): Promise<number> {
-  if (!fromCurrency || fromCurrency === 'USD') return 1;
-
-  const from = fromCurrency.toUpperCase();
+async function fetchExchangeRate(fromCurrency: string, toCurrency: string = 'USD'): Promise<number> {
+  const from = (fromCurrency || 'USD').toUpperCase();
+  const to = (toCurrency || 'USD').toUpperCase();
+  if (from === to) return 1;
 
   // Strategy 1: open.er-api.com — free, CORS-enabled, no API key, highly reliable
   try {
     const res = await fetch(`https://open.er-api.com/v6/latest/${from}`, { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
-      if (data?.result === 'success' && data.rates?.USD && data.rates.USD > 0) {
-        console.log(`[Currency] ${from}/USD rate (open.er-api): ${data.rates.USD}`);
-        return data.rates.USD;
+      if (data?.result === 'success' && data.rates?.[to] && data.rates[to] > 0) {
+        console.log(`[Currency] ${from}/${to} rate (open.er-api): ${data.rates[to]}`);
+        return data.rates[to];
       }
     }
   } catch (e) {
-    console.warn(`[Currency] open.er-api.com failed for ${from}:`, e);
+    console.warn(`[Currency] open.er-api.com failed for ${from}/${to}:`, e);
   }
 
   // Strategy 2: exchangerate-api.com — another free, reliable FX API
@@ -206,31 +207,34 @@ async function fetchExchangeRate(fromCurrency: string, _apiKey: string): Promise
     const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${from}`, { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
-      if (data?.rates?.USD && data.rates.USD > 0) {
-        console.log(`[Currency] ${from}/USD rate (exchangerate-api): ${data.rates.USD}`);
-        return data.rates.USD;
+      if (data?.rates?.[to] && data.rates[to] > 0) {
+        console.log(`[Currency] ${from}/${to} rate (exchangerate-api): ${data.rates[to]}`);
+        return data.rates[to];
       }
     }
   } catch (e) {
-    console.warn(`[Currency] exchangerate-api.com failed for ${from}:`, e);
+    console.warn(`[Currency] exchangerate-api.com failed for ${from}/${to}:`, e);
   }
 
-  // Strategy 3: Hardcoded major currency fallbacks (approximate, last resort)
-  const FALLBACK_RATES: Record<string, number> = {
+  // Strategy 3: Hardcoded fallbacks (X→USD). For other pairs, chain: FROM→USD→TO
+  const FALLBACK_TO_USD: Record<string, number> = {
     EUR: 1.08, GBP: 1.27, JPY: 0.0067, CHF: 1.13, CAD: 0.74, AUD: 0.65,
     NZD: 0.61, SEK: 0.096, NOK: 0.094, DKK: 0.145, HKD: 0.128, SGD: 0.75,
     CNY: 0.138, KRW: 0.00073, INR: 0.012, BRL: 0.17, MXN: 0.058, ZAR: 0.055,
     TRY: 0.029, PLN: 0.25, CZK: 0.043, HUF: 0.0027, ILS: 0.28, TWD: 0.031,
     THB: 0.029, MYR: 0.22, IDR: 0.000063, PHP: 0.018, CLP: 0.001,
     COP: 0.00024, PEN: 0.27, ARS: 0.00094, SAR: 0.267, AED: 0.272,
+    USD: 1,
   };
-  const fallback = FALLBACK_RATES[from];
-  if (fallback) {
-    console.warn(`[Currency] Using approximate fallback rate for ${from}/USD: ${fallback}`);
-    return fallback;
+  const fromToUsd = FALLBACK_TO_USD[from];
+  const toToUsd = FALLBACK_TO_USD[to];
+  if (fromToUsd && toToUsd) {
+    const rate = fromToUsd / toToUsd;
+    console.warn(`[Currency] Using approximate fallback rate for ${from}/${to}: ${rate}`);
+    return rate;
   }
 
-  console.warn(`[Currency] Could not find FX rate for ${from}/USD — no conversion applied`);
+  console.warn(`[Currency] Could not find FX rate for ${from}/${to} — no conversion applied`);
   return 1;
 }
 
@@ -461,7 +465,7 @@ function AnalizarContent() {
   const [sharedKeyMetricsSummary, setSharedKeyMetricsSummary] = useState<any>(null);
   const [sharedMonteCarlo, setSharedMonteCarlo] = useState<any>(null);
   const [selectedTabIndex, setSelectedTabIndex] = useState(0);
-  const [currencyInfo, setCurrencyInfo] = useState<{ original: string; rate: number; marketRate: number } | null>(null);
+  const [currencyInfo, setCurrencyInfo] = useState<{ original: string; target: string; rate: number; marketRate: number } | null>(null);
 
   // Cargar ticker desde URL solo al inicio
   useEffect(() => {
@@ -641,36 +645,45 @@ function AnalizarContent() {
         console.log('[AnalizarContent] Owner Earnings records:', ownerEarningsData?.length || 0);
 
         // ===== Currency Conversion =====
-        // Profile/quote currency — used for market prices (quote, priceTarget, profile)
+        // Target currency = the currency the stock trades in.
+        // US exchange → target is USD. Non-US exchange → target is the exchange's trading currency.
+        const US_EXCHANGES = new Set(['NYSE', 'NASDAQ', 'AMEX', 'BATS', 'CBOE', 'NYQ', 'NMS', 'NCM', 'NGM', 'PCX']);
+        const exchange = (profileData[0]?.exchangeShortName || profileData[0]?.exchange || '').toUpperCase();
+        const isUSExchange = US_EXCHANGES.has(exchange);
+
+        // Profile/quote currency — the currency the stock trades in
         const profileCurrency = (profileData[0]?.currency || 'USD').toUpperCase();
-        // Statement-level currency — may differ from profile (e.g. ADRs report in home currency)
+        // Statement-level currency — the currency financial statements are reported in
         const statementCurrency = (
           incomeData[0]?.reportedCurrency ||
           incomeData[0]?.currency ||
           profileCurrency
         ).toUpperCase();
 
-        let profileFxRate = 1;
-        let stmtFxRate = 1;
+        // Target currency: USD for US exchanges, trading currency for foreign exchanges
+        const targetCurrency = isUSExchange ? 'USD' : profileCurrency;
 
-        if (profileCurrency !== 'USD') {
-          console.log(`[Currency] Profile currency: ${profileCurrency}, fetching rate...`);
-          profileFxRate = await fetchExchangeRate(profileCurrency, '');
+        let profileFxRate = 1; // converts profile/market prices → targetCurrency
+        let stmtFxRate = 1;    // converts financial statements → targetCurrency
+
+        if (profileCurrency !== targetCurrency) {
+          console.log(`[Currency] Profile currency ${profileCurrency} → ${targetCurrency}, fetching rate...`);
+          profileFxRate = await fetchExchangeRate(profileCurrency, targetCurrency);
         }
-        if (statementCurrency !== 'USD') {
+        if (statementCurrency !== targetCurrency) {
           if (statementCurrency === profileCurrency) {
             stmtFxRate = profileFxRate;
           } else {
-            console.log(`[Currency] Statement currency: ${statementCurrency} (differs from profile ${profileCurrency}), fetching rate...`);
-            stmtFxRate = await fetchExchangeRate(statementCurrency, '');
+            console.log(`[Currency] Statement currency ${statementCurrency} → ${targetCurrency}, fetching rate...`);
+            stmtFxRate = await fetchExchangeRate(statementCurrency, targetCurrency);
           }
         }
 
-        if (statementCurrency !== 'USD' || profileCurrency !== 'USD') {
-          const displayCurrency = statementCurrency !== 'USD' ? statementCurrency : profileCurrency;
-          const displayRate = statementCurrency !== 'USD' ? stmtFxRate : profileFxRate;
-          // marketRate: rate for market prices (quote/historical) — always profileFxRate
-          setCurrencyInfo({ original: displayCurrency, rate: displayRate, marketRate: profileFxRate });
+        // Set currencyInfo for UI badges and downstream components
+        const needsConversion = profileFxRate !== 1 || stmtFxRate !== 1;
+        if (needsConversion) {
+          const fromCurrency = stmtFxRate !== 1 ? statementCurrency : profileCurrency;
+          setCurrencyInfo({ original: fromCurrency, target: targetCurrency, rate: stmtFxRate, marketRate: profileFxRate });
         } else {
           setCurrencyInfo(null);
         }
@@ -866,10 +879,10 @@ function AnalizarContent() {
     fetchResumenData();
   }, [activeTicker]);
 
-  // Convert pivot analysis data to USD if needed
+  // Convert pivot analysis data to target currency if needed (pivots are price-based → use marketRate)
   const convertedPivotAnalysis = useMemo(() => {
-    if (!sharedPivotAnalysis || !currencyInfo?.rate || currencyInfo.rate === 1) return sharedPivotAnalysis;
-    const r = currencyInfo.rate;
+    const r = currencyInfo?.marketRate ?? 1;
+    if (!sharedPivotAnalysis || r === 1) return sharedPivotAnalysis;
     return {
       ...sharedPivotAnalysis,
       currentPrice: (sharedPivotAnalysis.currentPrice || 0) * r,
@@ -895,7 +908,7 @@ function AnalizarContent() {
       priceVsHigh: sharedPivotAnalysis.priceVsHigh,
       priceVsLow: sharedPivotAnalysis.priceVsLow,
     };
-  }, [sharedPivotAnalysis, currencyInfo?.rate]);
+  }, [sharedPivotAnalysis, currencyInfo?.marketRate]);
 
   // Estado inicial - mostrar formulario de búsqueda
   if (!activeTicker || !data) {
@@ -1029,25 +1042,25 @@ function AnalizarContent() {
     }
   };
 
-  // New simplified category structure
+  // Restructured categories — merged groups, GODMODE-only tabs hidden
+  const isGodMode = userPlan === 'godmode';
   const categories = [
-    t('analysis.categories.inicio'),
-    t('analysis.categories.financialStatements'),
-    t('analysis.categories.forecasts'),
-    t('analysis.categories.generalInfo'),
-    t('analysis.categories.company'),
-    t('analysis.categories.news'),
-    t('analysis.categories.inputs'),
-    t('analysis.categories.intraday'),
-    t('analysis.categories.dcf'),
-    t('analysis.categories.valuations'),
-    t('analysis.categories.probability'),
-    t('analysis.categories.options'),
-    `${t('analysis.categories.summary')} (Beta)`,
-    t('analysis.categories.investorJournal'),
-    `${t('analysis.categories.quantumPortfolio')} (Beta)`,
-    `${t('analysis.categories.drlTrading')} (Beta)`,
-    `${t('analysis.categories.quantumRisk')} (Beta)`,
+    t('analysis.categories.inicio'),                         // 0
+    t('analysis.categories.financialStatements'),            // 1
+    t('analysis.categories.forecasts'),                      // 2
+    t('analysis.categories.generalInfo'),                    // 3  — merged: Analysis + Company + News
+    `${t('analysis.categories.inputs')} & DCF`,             // 4  — merged: Inputs + DCF
+    t('analysis.categories.intraday'),                       // 5
+    t('analysis.categories.valuations'),                     // 6
+    t('analysis.categories.probability'),                    // 7
+    t('analysis.categories.options'),                        // 8
+    `${t('analysis.categories.summary')} (Beta)`,            // 9
+    `${t('analysis.categories.quantumRisk')} (Beta)`,        // 10
+    ...(isGodMode ? [
+      `${t('analysis.categories.quantumPortfolio')} (Beta)`, // 11 (GOD MODE only)
+      `${t('analysis.categories.drlTrading')} (Beta)`,       // 12 (GOD MODE only)
+    ] : []),
+    t('analysis.categories.investorJournal'),                // last — always detached
   ];
 
   return (
@@ -1137,7 +1150,7 @@ function AnalizarContent() {
           </div>
 
 <Tab.Panels className="mt-2">
-  {/* 1. Inicio */}
+  {/* 0. Inicio */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     <InicioTab
       ticker={activeTicker}
@@ -1151,7 +1164,7 @@ function AnalizarContent() {
     />
   </Tab.Panel>
 
-  {/* 2. Financial Statements (Income, Balance, CashFlow) */}
+  {/* 1. Financial Statements */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     <FinancialStatementsGroup
       IncomeTab={<FinancialStatementTab title="Income Statement" data={income} type="income" ttmData={incomeTTM} secData={secData} growthData={incomeGrowth?.length > 0 ? incomeGrowth : financialGrowth} asReportedData={incomeAsReported} financialGrowth={financialGrowth} secReportsRaw={secReportsRaw} keyMetrics={keyMetrics} keyMetricsTTM={keyMetricsTTM} ratios={ratios} ratiosTTM={ratiosTTM} currencyInfo={currencyInfo} />}
@@ -1160,7 +1173,7 @@ function AnalizarContent() {
     />
   </Tab.Panel>
 
-  {/* 3. Forecasts (Forecasts + Revenue Forecast) */}
+  {/* 2. Forecasts */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 2) ? (
       <ForecastsGroup
@@ -1173,120 +1186,145 @@ function AnalizarContent() {
     )}
   </Tab.Panel>
 
-  {/* 4. Info General (Analisis General, Key Metrics, Analistas, DuPont) */}
+  {/* 3. General Analysis — merged: Analysis + Company + News */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    <GeneralInfoGroup
-      AnalisisGeneralTab={<GeneralTab profile={profile} quote={quote} ticker={activeTicker} />}
-      KeyMetricsTab={<KeyMetricsTab ticker={activeTicker} industry={profile?.industry} onCompanyQualityNetChange={setSharedCompanyQualityNet} ownerEarnings={ownerEarnings} />}
-      AnalistasTab={<AnalistasTab priceTarget={priceTarget} ticker={activeTicker} />}
-      DuPontTab={<DuPontTab income={income} balance={balance} ticker={activeTicker} />}
-      lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, GENERAL_INFO_ACCESS)(i))}
-      requiredPlan="pro"
-      currentPlan={userPlan}
-    />
+    <Tab.Group>
+      <Tab.List className="flex gap-2 bg-black/40 p-2 rounded-lg mb-4">
+        <Tab className={({ selected }) => `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${selected ? 'bg-emerald-600 text-white shadow-lg' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>
+          {t('analysis.categories.generalInfo')}
+        </Tab>
+        <Tab className={({ selected }) => `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${selected ? 'bg-blue-600 text-white shadow-lg' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>
+          {t('analysis.categories.company')}
+        </Tab>
+        <Tab className={({ selected }) => `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${selected ? 'bg-amber-600 text-white shadow-lg' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>
+          {t('analysis.categories.news')}
+        </Tab>
+      </Tab.List>
+      <Tab.Panels>
+        <Tab.Panel unmount={false}>
+          <GeneralInfoGroup
+            AnalisisGeneralTab={<GeneralTab profile={profile} quote={quote} ticker={activeTicker} />}
+            KeyMetricsTab={<KeyMetricsTab ticker={activeTicker} industry={profile?.industry} onCompanyQualityNetChange={setSharedCompanyQualityNet} ownerEarnings={ownerEarnings} />}
+            AnalistasTab={<AnalistasTab priceTarget={priceTarget} ticker={activeTicker} />}
+            DuPontTab={<DuPontTab income={income} balance={balance} ticker={activeTicker} />}
+            lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, GENERAL_INFO_ACCESS)(i))}
+            requiredPlan="pro"
+            currentPlan={userPlan}
+          />
+        </Tab.Panel>
+        <Tab.Panel unmount={false}>
+          <CompanyGroup
+            CompetidoresTab={<CompetidoresTab ticker={ticker} />}
+            IndustryTab={<IndustryTab ticker={activeTicker} />}
+            SegmentationTab={<SegmentationTab ticker={activeTicker} />}
+            HoldersTab={<HoldersTab ticker={activeTicker} />}
+            lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, COMPANY_ACCESS)(i))}
+            requiredPlan="pro"
+            currentPlan={userPlan}
+          />
+        </Tab.Panel>
+        <Tab.Panel unmount={false}>
+          {planRank(userPlan) >= planRank('pro') ? (
+            <NoticiasTab ticker={activeTicker} />
+          ) : (
+            <LockedTab requiredPlan="pro" currentPlan={userPlan} tabName="News" />
+          )}
+        </Tab.Panel>
+      </Tab.Panels>
+    </Tab.Group>
   </Tab.Panel>
 
-  {/* 5. Compañía (Competidores, Industry, Segmentation, Holders) */}
+  {/* 4. Inputs & DCF — merged */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    <CompanyGroup
-      CompetidoresTab={<CompetidoresTab ticker={ticker} />}
-      IndustryTab={<IndustryTab ticker={activeTicker} />}
-      SegmentationTab={<SegmentationTab ticker={activeTicker} />}
-      HoldersTab={<HoldersTab ticker={activeTicker} />}
-      lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, COMPANY_ACCESS)(i))}
-      requiredPlan="pro"
-      currentPlan={userPlan}
-    />
+    <Tab.Group>
+      <Tab.List className="flex gap-2 bg-black/40 p-2 rounded-lg mb-4">
+        <Tab className={({ selected }) => `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${selected ? 'bg-emerald-600 text-white shadow-lg' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>
+          {t('analysis.categories.inputs')}
+        </Tab>
+        <Tab className={({ selected }) => `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${selected ? 'bg-violet-600 text-white shadow-lg' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>
+          {t('analysis.categories.dcf')}
+        </Tab>
+      </Tab.List>
+      <Tab.Panels>
+        <Tab.Panel unmount={false}>
+          <InputsGroup
+            SustainableGrowthTab={
+              <SustainableGrowthTab
+                ticker={activeTicker}
+                income={income}
+                balance={balance}
+                cashFlow={cashFlow}
+                cashFlowAsReported={cashFlowAsReported}
+                estimates={estimates}
+                dcfCustom={dcfCustom}
+                calculatedWacc={sharedWACC !== null ? sharedWACC * 100 : undefined}
+                onSGRChange={setSharedSGR}
+              />
+            }
+            BetaTab={<BetaTab ticker={ticker} onAvgCAPMChange={setSharedAvgCAPM} />}
+            CAGRTab={<CAGRTab ticker={activeTicker} onCagrStatsChange={setSharedCagrStats} />}
+            WACCTab={
+              <WACCTab
+                ticker={activeTicker}
+                income={income}
+                balance={balance}
+                quote={quote}
+                profile={profile}
+                onWACCChange={setSharedWACC}
+              />
+            }
+            lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, INPUTS_ACCESS)(i))}
+            requiredPlan="pro"
+            currentPlan={userPlan}
+          />
+        </Tab.Panel>
+        <Tab.Panel unmount={false}>
+          <DCFGroup
+            CalculosTab={
+              <CalculosTab
+                ticker={ticker}
+                quote={quote}
+                profile={profile}
+                income={income}
+                balance={balance}
+                cashFlow={cashFlow}
+                dcfCustom={dcfCustom}
+                estimates={estimates}
+                keyMetricsTTM={keyMetricsTTM}
+                onValorIntrinsecoChange={setSharedValorIntrinseco}
+              />
+            }
+            DCFTab={<DCFTab dcfStandard={dcfStandard} dcfCustom={dcfCustom} quote={quote} income={income} />}
+            dcfStandard={dcfStandard}
+            dcfCustom={dcfCustom}
+            quote={quote}
+            valorIntrinseco={sharedValorIntrinseco}
+            income={income}
+            balance={balance}
+            cashFlow={cashFlow}
+            lockedSubtabs={[0,1].filter(i => !canAccessSubTab(userPlan, DCF_ACCESS)(i))}
+            requiredPlan="pro"
+            currentPlan={userPlan}
+          />
+        </Tab.Panel>
+      </Tab.Panels>
+    </Tab.Group>
   </Tab.Panel>
 
-  {/* 6. Noticias */}
+  {/* 5. Intraday */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 5) ? (
-      <NoticiasTab ticker={activeTicker} />
-    ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[5]} currentPlan={userPlan} tabName="Noticias" />
-    )}
-  </Tab.Panel>
-
-  {/* 7. Inputs (Sustainable Growth, Beta, CAGR, WACC) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    <InputsGroup
-      SustainableGrowthTab={
-        <SustainableGrowthTab
-          ticker={activeTicker}
-          income={income}
-          balance={balance}
-          cashFlow={cashFlow}
-          cashFlowAsReported={cashFlowAsReported}
-          estimates={estimates}
-          dcfCustom={dcfCustom}
-          calculatedWacc={sharedWACC !== null ? sharedWACC * 100 : undefined}
-          onSGRChange={setSharedSGR}
-        />
-      }
-      BetaTab={<BetaTab ticker={ticker} onAvgCAPMChange={setSharedAvgCAPM} />}
-      CAGRTab={<CAGRTab ticker={activeTicker} onCagrStatsChange={setSharedCagrStats} />}
-      WACCTab={
-        <WACCTab
-          ticker={activeTicker}
-          income={income}
-          balance={balance}
-          quote={quote}
-          profile={profile}
-          onWACCChange={setSharedWACC}
-        />
-      }
-      lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, INPUTS_ACCESS)(i))}
-      requiredPlan="pro"
-      currentPlan={userPlan}
-    />
-  </Tab.Panel>
-
-  {/* 8. Intraday (Pivots + Gaps) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    {canAccessTab(userPlan, 7) ? (
       <IntradayGroup
         PivotsTab={<PivotsTab ticker={activeTicker} />}
         GapsTab={<GapsTab ticker={activeTicker} />}
         MomentumTab={<MomentumTab ticker={activeTicker} />}
       />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[7]} currentPlan={userPlan} tabName="Intraday" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[5]} currentPlan={userPlan} tabName="Intraday" />
     )}
   </Tab.Panel>
 
-  {/* 9. DCF (Cálculos, DCF Models) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    <DCFGroup
-      CalculosTab={
-        <CalculosTab
-          ticker={ticker}
-          quote={quote}
-          profile={profile}
-          income={income}
-          balance={balance}
-          cashFlow={cashFlow}
-          dcfCustom={dcfCustom}
-          estimates={estimates}
-          keyMetricsTTM={keyMetricsTTM}
-          onValorIntrinsecoChange={setSharedValorIntrinseco}
-        />
-      }
-      DCFTab={<DCFTab dcfStandard={dcfStandard} dcfCustom={dcfCustom} quote={quote} income={income} />}
-      dcfStandard={dcfStandard}
-      dcfCustom={dcfCustom}
-      quote={quote}
-      valorIntrinseco={sharedValorIntrinseco}
-      income={income}
-      balance={balance}
-      cashFlow={cashFlow}
-      lockedSubtabs={[0,1].filter(i => !canAccessSubTab(userPlan, DCF_ACCESS)(i))}
-      requiredPlan="pro"
-      currentPlan={userPlan}
-    />
-  </Tab.Panel>
-
-  {/* 10. Valuaciones */}
+  {/* 6. Valuaciones */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     <ValuacionesTab
       ticker={activeTicker}
@@ -1307,12 +1345,13 @@ function AnalizarContent() {
       ownerEarnings={ownerEarnings}
       cagrStats={sharedCagrStats}
       dcfFromCalculos={sharedValorIntrinseco}
+      currencyInfo={currencyInfo}
     />
   </Tab.Panel>
 
-  {/* 11. Probability */}
+  {/* 7. Probability */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    {canAccessTab(userPlan, 10) ? (
+    {canAccessTab(userPlan, 7) ? (
       <ProbabilityTab
         ticker={activeTicker}
         quote={quote}
@@ -1322,22 +1361,22 @@ function AnalizarContent() {
         dividends={dividends}
       />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[10]} currentPlan={userPlan} tabName="Probability" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[7]} currentPlan={userPlan} tabName="Probability" />
     )}
   </Tab.Panel>
 
-  {/* 12. Options */}
+  {/* 8. Options */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    {canAccessTab(userPlan, 11) ? (
+    {canAccessTab(userPlan, 8) ? (
       <OptionsTab ticker={activeTicker} currentPrice={quote?.price || 0} />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[11]} currentPlan={userPlan} tabName="Options" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[8]} currentPlan={userPlan} tabName="Options" />
     )}
   </Tab.Panel>
 
-  {/* 13. Resumen Maestro */}
+  {/* 9. Resumen Maestro */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    {canAccessTab(userPlan, 12) ? (
+    {canAccessTab(userPlan, 9) ? (
       <ResumenTab
         ticker={activeTicker}
         currentPrice={quote?.price || 0}
@@ -1357,13 +1396,36 @@ function AnalizarContent() {
         ratiosTTM={ratiosTTM}
       />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[12]} currentPlan={userPlan} tabName="Resumen Maestro" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[9]} currentPlan={userPlan} tabName="Resumen Maestro" />
     )}
   </Tab.Panel>
 
-  {/* 14. Diario Inversor + Portfolio Optimizer */}
+  {/* 10. Quantum Risk Model */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    {canAccessTab(userPlan, 13) ? (
+    {canAccessTab(userPlan, 10) ? (
+      <QuantumRiskTab ticker={activeTicker} />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[10]} currentPlan={userPlan} tabName="Quantum Risk" />
+    )}
+  </Tab.Panel>
+
+  {/* 11. Quantum Portfolio — GOD MODE only (hidden for other plans) */}
+  {isGodMode && (
+    <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
+      <QuantumPortfolioTab ticker={activeTicker} />
+    </Tab.Panel>
+  )}
+
+  {/* 12. DRL Trading — GOD MODE only (hidden for other plans) */}
+  {isGodMode && (
+    <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
+      <DRLTradingTab ticker={activeTicker} />
+    </Tab.Panel>
+  )}
+
+  {/* Last. Investor Journal + Portfolio Optimization — always last, detached */}
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
+    {planRank(userPlan) >= planRank('elite') ? (
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-black/40 p-2 rounded-lg mb-4">
           <Tab className={({ selected }) => `flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${selected ? 'bg-emerald-600 text-white shadow-lg' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'}`}>
@@ -1379,34 +1441,7 @@ function AnalizarContent() {
         </Tab.Panels>
       </Tab.Group>
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[13]} currentPlan={userPlan} tabName="Diario Inversor" />
-    )}
-  </Tab.Panel>
-
-  {/* 15. Quantum Portfolio Optimizer (QAOA) */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    {canAccessTab(userPlan, 14) ? (
-      <QuantumPortfolioTab ticker={activeTicker} />
-    ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[14]} currentPlan={userPlan} tabName="Quantum Portfolio" />
-    )}
-  </Tab.Panel>
-
-  {/* 16. DRL Trading Simulator */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    {canAccessTab(userPlan, 15) ? (
-      <DRLTradingTab ticker={activeTicker} />
-    ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[15]} currentPlan={userPlan} tabName="DRL Trading" />
-    )}
-  </Tab.Panel>
-
-  {/* 17. Quantum Risk Model + Alt Data */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-black/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    {canAccessTab(userPlan, 16) ? (
-      <QuantumRiskTab ticker={activeTicker} />
-    ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[16]} currentPlan={userPlan} tabName="Quantum Risk" />
+      <LockedTab requiredPlan="elite" currentPlan={userPlan} tabName="Investor Journal" />
     )}
   </Tab.Panel>
 </Tab.Panels>
@@ -1505,7 +1540,7 @@ function InicioTab({
   dividends: any[];
   sharedAverageVal: number | null;
   onAnalizar: (ticker: string) => void;
-  currencyInfo?: { original: string; rate: number; marketRate?: number } | null;
+  currencyInfo?: { original: string; target: string; rate: number; marketRate?: number } | null;
 }) {
   const [inputTicker, setInputTicker] = useState(ticker);
   const [margenSeguridad, setMargenSeguridad] = useState('15');
@@ -1791,8 +1826,13 @@ function InicioTab({
             {profile?.industry && <span className="px-2 sm:px-4 py-1 sm:py-2 bg-emerald-600/30 text-emerald-400 rounded-full text-xs sm:text-sm">{(locale === 'es' && INDUSTRY_ES[profile.industry]) ? INDUSTRY_ES[profile.industry] : profile.industry}</span>}
             {profile?.exchangeShortName && <span className="px-2 sm:px-4 py-1 sm:py-2 bg-green-600/30 text-green-400 rounded-full text-xs sm:text-sm">{profile.exchangeShortName}</span>}
             {currencyInfo && (
-              <span className="px-2 sm:px-4 py-1 sm:py-2 bg-amber-600/30 text-amber-400 rounded-full text-xs sm:text-sm" title={`Original: ${currencyInfo.original} → USD (rate: ${currencyInfo.rate.toFixed(4)})`}>
-                {currencyInfo.original} → USD
+              <span className="px-2 sm:px-4 py-1 sm:py-2 bg-amber-600/30 text-amber-400 rounded-full text-xs sm:text-sm" title={`Convertido: ${currencyInfo.original} → ${currencyInfo.target} (tasa: ${currencyInfo.rate.toFixed(4)})`}>
+                {currencyInfo.original} → {currencyInfo.target}
+              </span>
+            )}
+            {!currencyInfo && profile?.currency && profile.currency !== 'USD' && (
+              <span className="px-2 sm:px-4 py-1 sm:py-2 bg-blue-600/30 text-blue-400 rounded-full text-xs sm:text-sm">
+                {profile.currency}
               </span>
             )}
           </div>
@@ -2343,7 +2383,7 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
   ratiosTTM?: any;
   enterpriseValue?: any[];
   ownerEarnings?: any[];
-  currencyInfo?: { original: string; rate: number; marketRate?: number } | null;
+  currencyInfo?: { original: string; target: string; rate: number; marketRate?: number } | null;
 }) {
   const [showSecDetails, setShowSecDetails] = useState(false);
   const [showKeyMetrics, setShowKeyMetrics] = useState(false);
@@ -2664,18 +2704,21 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
   }
 
   // Función para formatear valores inteligentemente
+  // Currency symbol for display — uses the target currency after conversion
+  const displayCurrency = currencyInfo?.target || data?.[0]?.reportedCurrency || data?.[0]?.currency || 'USD';
+  const currSymbol = displayCurrency === 'USD' ? '$' : displayCurrency === 'EUR' ? '\u20AC' : displayCurrency === 'GBP' ? '\u00A3' : displayCurrency === 'JPY' ? '\u00A5' : `${displayCurrency} `;
+
   const formatValue = (value: number | null | undefined, metric: { key: string; isRatio?: boolean; isPerShare?: boolean }): string => {
     if (value === undefined || value === null) return '—';
 
     // Para ratios (márgenes), convertir a porcentaje
     if (metric.isRatio || metric.key.toLowerCase().includes('ratio') || metric.key.toLowerCase().includes('margin')) {
-      // Los ratios vienen como decimales (0.45 = 45%)
       return (value * 100).toFixed(1) + '%';
     }
 
     // Para EPS y valores por acción, mostrar con 2 decimales sin escalar
     if (metric.isPerShare || metric.key.includes('eps') || metric.key.includes('PerShare')) {
-      return `$${value.toFixed(2)}`;
+      return `${currSymbol}${value.toFixed(2)}`;
     }
 
     // Para shares outstanding, mostrar en millones/billones
@@ -2691,10 +2734,10 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
     }
 
     // Para valores monetarios grandes
-    if (Math.abs(value) >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-    if (Math.abs(value) >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
-    if (Math.abs(value) >= 1e3) return `$${(value / 1e3).toFixed(0)}K`;
-    return `$${value.toFixed(0)}`;
+    if (Math.abs(value) >= 1e9) return `${currSymbol}${(value / 1e9).toFixed(2)}B`;
+    if (Math.abs(value) >= 1e6) return `${currSymbol}${(value / 1e6).toFixed(1)}M`;
+    if (Math.abs(value) >= 1e3) return `${currSymbol}${(value / 1e3).toFixed(0)}K`;
+    return `${currSymbol}${value.toFixed(0)}`;
   };
 
   // ── Inline YoY Growth computation from raw data ──
@@ -2748,16 +2791,19 @@ function FinancialStatementTab({ title, data, type, ttmData, secData, cashFlowAs
     <div className="space-y-8">
       <div className="flex flex-wrap items-center gap-4 mb-8">
         <h3 className="text-4xl font-bold text-gray-100">{title}</h3>
-        {currencyInfo && currencyInfo.original !== 'USD' && (
-          <span className="px-3 py-1 bg-amber-600/20 text-amber-400 border border-amber-500/40 rounded-full text-sm" title={`Valores convertidos de ${currencyInfo.original} a USD (tasa: ${currencyInfo.rate.toFixed(4)})`}>
-            {currencyInfo.original} → USD
+        {currencyInfo && (
+          <span className="px-3 py-1 bg-amber-600/20 text-amber-400 border border-amber-500/40 rounded-full text-sm" title={`Valores convertidos de ${currencyInfo.original} a ${currencyInfo.target} (tasa: ${currencyInfo.rate.toFixed(4)})`}>
+            {currencyInfo.original} → {currencyInfo.target}
           </span>
         )}
-        {(!currencyInfo || currencyInfo.original === 'USD') && (
-          <span className="px-3 py-1 bg-black/50/40 text-gray-500 border border-amber-900/15/30 rounded-full text-xs">
-            Valores en USD
-          </span>
-        )}
+        {(() => {
+          const displayCurrency = currencyInfo?.target || data?.[0]?.reportedCurrency || data?.[0]?.currency || 'USD';
+          return (
+            <span className="px-3 py-1 bg-black/50/40 text-gray-500 border border-amber-900/15/30 rounded-full text-xs">
+              Valores en {displayCurrency}
+            </span>
+          );
+        })()}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">

@@ -3004,6 +3004,26 @@ class NeuralResumenEngine:
 
         upside_pct = ((target_price - current_price) / current_price) * 100 if current_price > 0 else 0
 
+        # ── HARD CONSTRAINT: override recommendation based on upside ──
+        # A stock priced above its intrinsic value cannot be a Buy regardless of quality scores
+        if upside_pct < -20:
+            if recommendation in ("Strong Buy", "Buy", "Hold"):
+                recommendation = "Strong Sell"
+                conviction = min(85, int(65 + abs(upside_pct) * 0.5))
+        elif upside_pct < -10:
+            if recommendation in ("Strong Buy", "Buy", "Hold"):
+                recommendation = "Sell"
+                conviction = min(75, int(55 + abs(upside_pct) * 0.5))
+        elif upside_pct < 0:
+            if recommendation in ("Strong Buy", "Buy"):
+                recommendation = "Hold"
+                conviction = min(60, int(45 + abs(upside_pct)))
+        elif upside_pct < 5:
+            # Marginal upside — cap at Buy (no Strong Buy)
+            if recommendation == "Strong Buy":
+                recommendation = "Buy"
+                conviction = min(70, conviction)
+
         # Target range from Monte Carlo
         mc_layer = next((l for l in self.layer_results if l.layer_name == "Monte Carlo Simulation"), None)
         if mc_layer and 'prob_target' in mc_layer.sub_scores:

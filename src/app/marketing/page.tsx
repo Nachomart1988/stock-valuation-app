@@ -618,7 +618,7 @@ export default function Home() {
                 { title: 'Experiencia Institucional', desc: 'Metodologías usadas en fondos de inversión y asset managers de primer nivel.' },
                 { title: 'Enfoque Retail', desc: 'Diseñado para ser claro, accesible y accionable para el inversor individual.' },
                 { title: 'Rigor Analítico', desc: 'Cada modelo fue validado contra datos reales para garantizar precisión.' },
-                { title: 'Sin Conflictos', desc: 'No vendemos recomendaciones. Solo proveemos las herramientas para que decidas vos.' },
+                { title: 'Sin Conflictos', desc: 'No damos consejos de inversión. Solo proveemos las herramientas para que decidas vos.' },
               ].map((item) => (
                 <div key={item.title} className="p-4 rounded-xl bg-black/40 border border-green-900/20">
                   <div className="w-6 h-0.5 bg-gradient-to-r from-emerald-400 to-teal-400 rounded-full mb-3"></div>

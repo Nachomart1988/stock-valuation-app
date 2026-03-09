@@ -63,7 +63,7 @@
     "description": "Herramientas profesionales de análisis financiero al alcance de todos",
     "neuralEngine": {
       "title": "Motor Neural de 12 Capas",
-      "description": "Análisis profundo que combina NLP, Monte Carlo, flujo institucional y más para recomendaciones precisas."
+      "description": "Análisis profundo que combina NLP, Monte Carlo, flujo institucional y más para conclusiones precisas."
     },
     "valuations": {
       "title": "Valuaciones Múltiples",
@@ -110,8 +110,8 @@
       "description": "Nuestro motor neural procesa 12 capas de análisis en segundos."
     },
     "step3": {
-      "title": "Recomendación Final",
-      "description": "Recibe una recomendación clara con precio objetivo, riesgos y catalizadores."
+      "title": "Conclusión Final",
+      "description": "Obtén un análisis claro con precio objetivo, riesgos y catalizadores."
     }
   },
   "modules": {
@@ -163,7 +163,7 @@
     "title": "Quiénes Somos",
     "description1": "Somos un equipo de ingenieros financieros y desarrolladores de software apasionados por democratizar el acceso a herramientas de análisis profesional.",
     "description2": "Nuestra misión es proporcionar a inversores individuales las mismas herramientas analíticas que utilizan los fondos de inversión institucionales, pero de una manera accesible y fácil de entender.",
-    "description3": "Combinamos inteligencia artificial, análisis fundamental y técnico para ofrecer recomendaciones de inversión respaldadas por datos y metodologías probadas.",
+    "description3": "Combinamos inteligencia artificial, análisis fundamental y técnico para ofrecer análisis de inversión respaldados por datos y metodologías probadas.",
     "mission": {
       "title": "Misión",
       "description": "Democratizar el análisis financiero profesional"
@@ -222,7 +222,7 @@
       "inicio": "Inicio",
       "financialStatements": "Estados Financieros",
       "forecasts": "Predicciones",
-      "generalInfo": "Info General",
+      "generalInfo": "Análisis General",
       "company": "Compañía",
       "news": "Noticias",
       "inputs": "Inputs",
@@ -946,7 +946,7 @@
     "loading": "Procesando análisis neural...",
     "executingEngine": "Ejecutando Motor de Razonamiento...",
     "noData": "No hay datos disponibles para el resumen",
-    "recommendation": "Recomendación",
+    "recommendation": "Conclusión",
     "targetPrice": "Precio Objetivo",
     "confidence": "Confianza",
     "engineConfidence": "Confianza Motor",
@@ -1065,6 +1065,54 @@
       "efficiency": "Eficiencia",
       "growth": "Crecimiento",
       "perShare": "Por Acción"
+    }
+  },
+  "screener": {
+    "title": "Encuentra tu",
+    "titleHighlight": "próxima inversión",
+    "subtitle": "Filtra entre miles de empresas usando métricas fundamentales. Haz clic en cualquier ticker para analizarlo al instante.",
+    "searchBtn": "Buscar Acciones",
+    "searching": "Buscando…",
+    "sector": "Sector",
+    "exchange": "Exchange",
+    "country": "País",
+    "priceMin": "Precio min ($)",
+    "priceMax": "Precio max ($)",
+    "mktCapMin": "Mkt Cap min ($)",
+    "mktCapMax": "Mkt Cap max ($)",
+    "betaMin": "Beta min",
+    "betaMax": "Beta max",
+    "volMin": "Vol. min",
+    "divYieldMin": "Div. Yield min",
+    "industry": "Industria (keyword)",
+    "results": "resultados",
+    "result": "resultado",
+    "page": "Página",
+    "prev": "Anterior",
+    "next": "Siguiente",
+    "analyze": "Analizar",
+    "ticker": "Ticker",
+    "company": "Empresa",
+    "price": "Precio",
+    "mktCap": "Mkt Cap",
+    "beta": "Beta",
+    "div": "Div.",
+    "volume": "Volumen",
+    "emptyState": "Configura los filtros y haz clic en",
+    "emptyStateCta": "Buscar Acciones",
+    "prismo": {
+      "title": "Top Oportunidades de Prismo",
+      "subtitle": "Descubre las 25 acciones más subvaluadas del screener — donde el precio actual está por debajo del valor intrínseco, ordenadas por mayor potencial de subida.",
+      "discover": "Descubrir",
+      "discovering": "Analizando acciones…",
+      "scanning": "Cargando todas las acciones del screener…",
+      "progress": "Analizadas {current} de {total} acciones",
+      "noResults": "No se encontraron oportunidades subvaluadas con los filtros actuales. Intenta ampliar tu búsqueda.",
+      "stats": "Escaneadas {total} acciones, {analyzed} con datos DCF disponibles",
+      "intrinsicValue": "Valor Intrínseco",
+      "currentPrice": "Precio Actual",
+      "upside": "Upside",
+      "rank": "#"
     }
   }
 }
