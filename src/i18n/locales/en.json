@@ -235,7 +235,8 @@
       "summary": "Summary",
       "quantumPortfolio": "Quantum Portfolio",
       "drlTrading": "DRL Trading",
-      "quantumRisk": "Quantum Risk"
+      "quantumRisk": "Quantum Risk",
+      "supplyChain": "Supply Chain"
     },
     "precio": {
       "actual": "Current Price",

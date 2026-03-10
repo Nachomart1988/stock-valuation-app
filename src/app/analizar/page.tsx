@@ -45,6 +45,7 @@ import PortfolioOptimizerTab from '@/app/components/tabs/PortfolioOptimizerTab';
 import OptionsTab from '@/app/components/tabs/OptionsTab';
 import QuantumPortfolioTab from '@/app/components/tabs/QuantumPortfolioTab';
 import DRLTradingTab from '@/app/components/tabs/DRLTradingTab';
+import SupplyChainTab from '@/app/components/tabs/SupplyChainTab';
 import QuantumRiskTab from '@/app/components/tabs/QuantumRiskTab';
 import PDFConfigModal, { PDFConfig } from '@/app/components/PDFConfigModal';
 import { fetchFmp } from '@/lib/fmpClient';
@@ -1059,6 +1060,7 @@ function AnalizarContent() {
     ...(isGodMode ? [
       `${t('analysis.categories.quantumPortfolio')} (Beta)`, // 11 (GOD MODE only)
       `${t('analysis.categories.drlTrading')} (Beta)`,       // 12 (GOD MODE only)
+      `${t('analysis.categories.supplyChain')} (Beta)`,      // 13 (GOD MODE only)
     ] : []),
     t('analysis.categories.investorJournal'),                // last — always detached
   ];
@@ -1420,6 +1422,13 @@ function AnalizarContent() {
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <DRLTradingTab ticker={activeTicker} />
+    </Tab.Panel>
+  )}
+
+  {/* 13. Supply Chain — GOD MODE only (hidden for other plans) */}
+  {isGodMode && (
+    <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
+      <SupplyChainTab ticker={activeTicker} profile={profile} />
     </Tab.Panel>
   )}
 
