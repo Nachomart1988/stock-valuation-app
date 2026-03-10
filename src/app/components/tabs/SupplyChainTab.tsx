@@ -30,59 +30,100 @@ interface SupplyChainTabProps {
   profile?: any;
 }
 
-// ── Industry supply chain classification ──
-// Maps industry → typical position in the supply chain
-const UPSTREAM_INDUSTRIES = new Set([
-  'Semiconductors', 'Semiconductor Equipment & Materials',
-  'Electronic Components', 'Steel', 'Aluminum', 'Copper',
-  'Chemicals', 'Specialty Chemicals', 'Industrial Gases',
-  'Farm Products', 'Lumber & Wood Production',
-  'Oil & Gas Exploration & Production', 'Oil & Gas Refining & Marketing',
-  'Gold', 'Silver', 'Other Precious Metals & Mining',
-  'Auto Parts', 'Building Materials',
-  'Packaging & Containers', 'Paper & Paper Products',
-]);
+// ── Industry-level supply chain map ──
+// Maps each FMP industry to its typical supplier and customer industries.
+// Used to query FMP screener for companies in related industries.
+const SUPPLY_CHAIN_MAP: Record<string, { suppliers: string[]; customers: string[] }> = {
+  // TECHNOLOGY
+  'Software—Application': { suppliers: ['Semiconductors', 'Software—Infrastructure', 'Information Technology Services'], customers: ['Banks—Diversified', 'Healthcare Plans', 'Telecom Services', 'Insurance—Diversified'] },
+  'Software—Infrastructure': { suppliers: ['Semiconductors', 'Electronic Components'], customers: ['Software—Application', 'Banks—Diversified', 'Internet Content & Information', 'Information Technology Services'] },
+  'Semiconductors': { suppliers: ['Semiconductor Equipment & Materials', 'Specialty Chemicals'], customers: ['Consumer Electronics', 'Communication Equipment', 'Auto Manufacturers', 'Aerospace & Defense'] },
+  'Semiconductor Equipment & Materials': { suppliers: ['Specialty Chemicals', 'Scientific & Technical Instruments'], customers: ['Semiconductors'] },
+  'Consumer Electronics': { suppliers: ['Semiconductors', 'Electronic Components', 'Communication Equipment'], customers: ['Specialty Retail', 'Internet Retail', 'Telecom Services'] },
+  'Communication Equipment': { suppliers: ['Semiconductors', 'Electronic Components'], customers: ['Telecom Services', 'Aerospace & Defense', 'Internet Content & Information'] },
+  'Information Technology Services': { suppliers: ['Software—Infrastructure', 'Semiconductors'], customers: ['Banks—Diversified', 'Oil & Gas Integrated', 'Drug Manufacturers—General', 'Insurance—Diversified'] },
+  'Electronic Components': { suppliers: ['Specialty Chemicals', 'Copper', 'Aluminum'], customers: ['Semiconductors', 'Consumer Electronics', 'Auto Manufacturers', 'Medical Devices'] },
+  'Solar': { suppliers: ['Semiconductors', 'Specialty Chemicals', 'Electronic Components'], customers: ['Utilities—Regulated Electric', 'Utilities—Renewable'] },
+  // COMMUNICATION SERVICES
+  'Telecom Services': { suppliers: ['Communication Equipment', 'Semiconductors', 'Software—Infrastructure', 'Information Technology Services'], customers: ['Internet Content & Information', 'Entertainment', 'Advertising Agencies'] },
+  'Internet Content & Information': { suppliers: ['Software—Infrastructure', 'Information Technology Services', 'Semiconductors'], customers: ['Advertising Agencies', 'Internet Retail', 'Entertainment'] },
+  'Entertainment': { suppliers: ['Software—Application', 'Internet Content & Information'], customers: ['Internet Retail', 'Specialty Retail', 'Telecom Services'] },
+  'Advertising Agencies': { suppliers: ['Internet Content & Information', 'Entertainment', 'Software—Application'], customers: ['Packaged Foods', 'Auto Manufacturers', 'Household & Personal Products'] },
+  // CONSUMER CYCLICAL
+  'Auto Manufacturers': { suppliers: ['Auto Parts', 'Semiconductors', 'Steel', 'Specialty Chemicals', 'Aluminum'], customers: ['Auto & Truck Dealerships', 'Rental & Leasing Services'] },
+  'Auto Parts': { suppliers: ['Steel', 'Specialty Chemicals', 'Electronic Components', 'Aluminum'], customers: ['Auto Manufacturers'] },
+  'Internet Retail': { suppliers: ['Software—Infrastructure', 'Integrated Freight & Logistics', 'Information Technology Services'], customers: ['Packaged Foods', 'Consumer Electronics', 'Household & Personal Products'] },
+  'Specialty Retail': { suppliers: ['Packaged Foods', 'Apparel Manufacturing', 'Household & Personal Products'], customers: [] },
+  'Restaurants': { suppliers: ['Farm Products', 'Packaged Foods', 'Packaging & Containers', 'Food Distribution'], customers: [] },
+  'Apparel Manufacturing': { suppliers: ['Specialty Chemicals', 'Textile Manufacturing'], customers: ['Specialty Retail', 'Internet Retail', 'Department Stores'] },
+  'Lodging': { suppliers: ['Software—Application', 'Food Distribution', 'Building Materials'], customers: [] },
+  // HEALTHCARE
+  'Drug Manufacturers—General': { suppliers: ['Specialty Chemicals', 'Diagnostics & Research', 'Scientific & Technical Instruments'], customers: ['Medical Distribution', 'Pharmaceutical Retailers', 'Healthcare Plans'] },
+  'Drug Manufacturers—Specialty & Generic': { suppliers: ['Specialty Chemicals', 'Diagnostics & Research'], customers: ['Medical Distribution', 'Healthcare Plans'] },
+  'Biotechnology': { suppliers: ['Diagnostics & Research', 'Scientific & Technical Instruments', 'Specialty Chemicals'], customers: ['Drug Manufacturers—General', 'Medical Distribution'] },
+  'Medical Devices': { suppliers: ['Electronic Components', 'Semiconductors', 'Specialty Chemicals'], customers: ['Healthcare Plans', 'Medical Care Facilities'] },
+  'Healthcare Plans': { suppliers: ['Software—Application', 'Information Technology Services'], customers: [] },
+  'Diagnostics & Research': { suppliers: ['Scientific & Technical Instruments', 'Specialty Chemicals'], customers: ['Drug Manufacturers—General', 'Biotechnology', 'Medical Devices'] },
+  // FINANCIAL SERVICES
+  'Banks—Diversified': { suppliers: ['Software—Application', 'Software—Infrastructure', 'Information Technology Services'], customers: ['Real Estate Services', 'Capital Markets', 'Insurance—Diversified'] },
+  'Banks—Regional': { suppliers: ['Software—Application', 'Information Technology Services'], customers: ['Real Estate Services'] },
+  'Insurance—Diversified': { suppliers: ['Software—Application', 'Information Technology Services'], customers: [] },
+  'Capital Markets': { suppliers: ['Software—Infrastructure', 'Information Technology Services'], customers: ['Banks—Diversified', 'Insurance—Diversified'] },
+  'Financial Data & Stock Exchanges': { suppliers: ['Software—Infrastructure', 'Information Technology Services'], customers: ['Banks—Diversified', 'Capital Markets', 'Insurance—Diversified'] },
+  // ENERGY
+  'Oil & Gas Integrated': { suppliers: ['Oil & Gas Equipment & Services', 'Steel', 'Engineering & Construction'], customers: ['Oil & Gas Refining & Marketing', 'Utilities—Regulated Electric', 'Airlines', 'Specialty Chemicals'] },
+  'Oil & Gas Exploration & Production': { suppliers: ['Oil & Gas Equipment & Services', 'Oil & Gas Drilling'], customers: ['Oil & Gas Midstream', 'Oil & Gas Refining & Marketing'] },
+  'Oil & Gas Refining & Marketing': { suppliers: ['Oil & Gas Integrated', 'Oil & Gas Exploration & Production'], customers: ['Airlines', 'Trucking', 'Specialty Chemicals', 'Utilities—Regulated Electric'] },
+  'Oil & Gas Equipment & Services': { suppliers: ['Steel', 'Electronic Components', 'Specialty Chemicals'], customers: ['Oil & Gas Integrated', 'Oil & Gas Exploration & Production'] },
+  'Oil & Gas Midstream': { suppliers: ['Steel', 'Engineering & Construction'], customers: ['Oil & Gas Refining & Marketing', 'Utilities—Regulated Electric'] },
+  // INDUSTRIALS
+  'Aerospace & Defense': { suppliers: ['Semiconductors', 'Steel', 'Electronic Components', 'Specialty Chemicals'], customers: ['Airlines'] },
+  'Airlines': { suppliers: ['Aerospace & Defense', 'Oil & Gas Refining & Marketing'], customers: [] },
+  'Trucking': { suppliers: ['Auto Manufacturers', 'Oil & Gas Refining & Marketing'], customers: ['Internet Retail', 'Packaged Foods', 'Specialty Retail'] },
+  'Integrated Freight & Logistics': { suppliers: ['Airlines', 'Trucking', 'Software—Application'], customers: ['Internet Retail', 'Auto Manufacturers', 'Specialty Retail'] },
+  'Engineering & Construction': { suppliers: ['Steel', 'Building Materials', 'Specialty Chemicals'], customers: ['Oil & Gas Integrated', 'Utilities—Regulated Electric'] },
+  'Farm & Heavy Construction Machinery': { suppliers: ['Steel', 'Electronic Components', 'Semiconductors'], customers: ['Farm Products', 'Engineering & Construction'] },
+  'Industrial Distribution': { suppliers: ['Steel', 'Electronic Components', 'Specialty Chemicals'], customers: ['Engineering & Construction', 'Auto Manufacturers'] },
+  // BASIC MATERIALS
+  'Steel': { suppliers: ['Coal'], customers: ['Auto Manufacturers', 'Aerospace & Defense', 'Engineering & Construction', 'Auto Parts'] },
+  'Specialty Chemicals': { suppliers: ['Oil & Gas Refining & Marketing'], customers: ['Semiconductors', 'Drug Manufacturers—General', 'Auto Parts', 'Packaged Foods'] },
+  'Aluminum': { suppliers: ['Utilities—Regulated Electric'], customers: ['Auto Manufacturers', 'Aerospace & Defense', 'Packaging & Containers'] },
+  'Copper': { suppliers: [], customers: ['Electronic Components', 'Engineering & Construction', 'Auto Parts'] },
+  'Gold': { suppliers: [], customers: ['Capital Markets', 'Specialty Retail'] },
+  'Building Materials': { suppliers: ['Steel', 'Specialty Chemicals'], customers: ['Engineering & Construction'] },
+  'Packaging & Containers': { suppliers: ['Aluminum', 'Paper & Paper Products', 'Specialty Chemicals'], customers: ['Packaged Foods', 'Beverages—Non-Alcoholic', 'Household & Personal Products'] },
+  // CONSUMER DEFENSIVE
+  'Packaged Foods': { suppliers: ['Farm Products', 'Packaging & Containers', 'Specialty Chemicals'], customers: ['Grocery Stores', 'Discount Stores', 'Internet Retail'] },
+  'Household & Personal Products': { suppliers: ['Specialty Chemicals', 'Packaging & Containers'], customers: ['Grocery Stores', 'Discount Stores', 'Internet Retail'] },
+  'Beverages—Non-Alcoholic': { suppliers: ['Packaging & Containers', 'Farm Products', 'Specialty Chemicals'], customers: ['Grocery Stores', 'Restaurants', 'Discount Stores'] },
+  'Beverages—Brewers': { suppliers: ['Packaging & Containers', 'Farm Products'], customers: ['Grocery Stores', 'Restaurants'] },
+  'Discount Stores': { suppliers: ['Packaged Foods', 'Household & Personal Products', 'Apparel Manufacturing'], customers: [] },
+  'Grocery Stores': { suppliers: ['Packaged Foods', 'Farm Products', 'Beverages—Non-Alcoholic'], customers: [] },
+  'Farm Products': { suppliers: ['Farm & Heavy Construction Machinery', 'Specialty Chemicals'], customers: ['Packaged Foods', 'Restaurants', 'Grocery Stores'] },
+  // UTILITIES
+  'Utilities—Regulated Electric': { suppliers: ['Oil & Gas Integrated', 'Solar', 'Engineering & Construction'], customers: [] },
+  'Utilities—Renewable': { suppliers: ['Solar', 'Engineering & Construction'], customers: ['Utilities—Regulated Electric'] },
+  'Utilities—Regulated Gas': { suppliers: ['Oil & Gas Midstream', 'Engineering & Construction'], customers: [] },
+  // REAL ESTATE
+  'REIT—Specialty': { suppliers: ['Engineering & Construction', 'Building Materials'], customers: ['Telecom Services'] },
+  'REIT—Industrial': { suppliers: ['Engineering & Construction', 'Building Materials'], customers: ['Internet Retail', 'Integrated Freight & Logistics'] },
+  'REIT—Retail': { suppliers: ['Engineering & Construction', 'Building Materials'], customers: ['Specialty Retail', 'Restaurants'] },
+};
 
-const DOWNSTREAM_INDUSTRIES = new Set([
-  'Auto Manufacturers', 'Auto & Truck Dealerships',
-  'Specialty Retail', 'Internet Retail', 'Department Stores',
-  'Discount Stores', 'Home Improvement Retail',
-  'Restaurants', 'Lodging', 'Airlines', 'Trucking',
-  'Consumer Electronics', 'Personal Products',
-  'Household Products', 'Packaged Foods',
-  'Beverages - Non-Alcoholic', 'Beverages - Alcoholic',
-]);
-
-function classifyRelationship(
-  targetIndustry: string,
-  targetSector: string,
-  peerIndustry: string,
-  peerSector: string,
-): 'supplier' | 'customer' | 'competitor' {
-  if (peerIndustry === targetIndustry && peerSector === targetSector) return 'competitor';
-
-  // If peer is in an upstream industry relative to target → supplier
-  if (UPSTREAM_INDUSTRIES.has(peerIndustry) && !UPSTREAM_INDUSTRIES.has(targetIndustry)) return 'supplier';
-  // If peer is in a downstream industry relative to target → customer
-  if (DOWNSTREAM_INDUSTRIES.has(peerIndustry) && !DOWNSTREAM_INDUSTRIES.has(targetIndustry)) return 'customer';
-
-  // Same sector but different industry → competitor
-  if (peerSector === targetSector) return 'competitor';
-
-  // Cross-sector: use heuristic based on sector ordering
-  const sectorOrder: Record<string, number> = {
-    'Basic Materials': 1, 'Energy': 2, 'Industrials': 3,
-    'Technology': 4, 'Consumer Cyclical': 5, 'Consumer Defensive': 6,
-    'Healthcare': 7, 'Financial Services': 8, 'Communication Services': 9,
-    'Real Estate': 10, 'Utilities': 11,
-  };
-  const targetPos = sectorOrder[targetSector] ?? 5;
-  const peerPos = sectorOrder[peerSector] ?? 5;
-  if (peerPos < targetPos - 1) return 'supplier';
-  if (peerPos > targetPos + 1) return 'customer';
-
-  return 'competitor';
-}
+// Sector-level fallback for industries not in the map
+const SECTOR_FALLBACK: Record<string, { supplierSectors: string[]; customerSectors: string[] }> = {
+  'Technology': { supplierSectors: ['Basic Materials'], customerSectors: ['Financial Services', 'Healthcare', 'Communication Services'] },
+  'Communication Services': { supplierSectors: ['Technology'], customerSectors: ['Consumer Cyclical'] },
+  'Consumer Cyclical': { supplierSectors: ['Technology', 'Industrials', 'Basic Materials'], customerSectors: [] },
+  'Consumer Defensive': { supplierSectors: ['Basic Materials', 'Industrials'], customerSectors: [] },
+  'Healthcare': { supplierSectors: ['Technology', 'Basic Materials'], customerSectors: [] },
+  'Financial Services': { supplierSectors: ['Technology'], customerSectors: ['Real Estate'] },
+  'Industrials': { supplierSectors: ['Basic Materials', 'Energy'], customerSectors: ['Consumer Cyclical'] },
+  'Basic Materials': { supplierSectors: ['Energy'], customerSectors: ['Industrials', 'Technology'] },
+  'Energy': { supplierSectors: ['Industrials'], customerSectors: ['Utilities', 'Basic Materials'] },
+  'Utilities': { supplierSectors: ['Energy', 'Industrials'], customerSectors: [] },
+  'Real Estate': { supplierSectors: ['Industrials', 'Basic Materials', 'Financial Services'], customerSectors: [] },
+};
 
 function fmtMktCap(v: number): string {
   if (!v) return '–';
@@ -129,10 +170,14 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
       setError(null);
 
       try {
-        // Fetch peers and company profile
+        // 1. Fetch company profile and peers in parallel
         const [peersData, profileData] = await Promise.all([
           fetchFmp('stable/stock-peers', { symbol: ticker }).catch(() => []),
-          profile ? [profile] : fetchFmp('stable/profile', { symbol: ticker }).catch(() => []),
+          profile
+            ? Promise.resolve(profile)
+            : fetchFmp('stable/profile', { symbol: ticker })
+                .then((d: any) => (Array.isArray(d) ? d[0] : d))
+                .catch(() => null),
         ]);
 
         if (cancelled) return;
@@ -158,81 +203,131 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
         };
         setCenterCompany(center);
 
-        // Get peer tickers
+        // 2. Peers → Competitors (same industry)
         const peerSymbols: string[] = peersData?.[0]?.peersList || [];
-        if (peerSymbols.length === 0) {
-          setSuppliers([]);
-          setCustomers([]);
-          setCompetitors([]);
-          setLoading(false);
-          return;
+        const comps: CompanyNode[] = [];
+        if (peerSymbols.length > 0) {
+          const batchSymbols = peerSymbols.slice(0, 10).join(',');
+          const peerProfiles = await fetchFmp(`stable/profile/${batchSymbols}`).catch(() => []);
+          if (!cancelled && Array.isArray(peerProfiles)) {
+            for (const p of peerProfiles) {
+              if (p?.symbol && p.symbol !== ticker) {
+                comps.push({
+                  symbol: p.symbol,
+                  name: p.companyName || p.symbol,
+                  sector: p.sector || '',
+                  industry: p.industry || '',
+                  mktCap: p.mktCap || 0,
+                  price: p.price || 0,
+                  change: p.changes || 0,
+                  country: p.country || '',
+                  relationship: 'competitor',
+                });
+              }
+            }
+          }
         }
-
-        // Fetch profiles for all peers (batch quote for speed)
-        const symbolsBatch = peerSymbols.slice(0, 20).join(',');
-        const [peerQuotes, peerProfiles] = await Promise.all([
-          fetchFmp(`stable/quote/${symbolsBatch}`).catch(() => []),
-          fetchFmp(`stable/profile/${symbolsBatch}`).catch(() => []),
-        ]);
-
         if (cancelled) return;
 
-        // Build profile map
-        const profileMap: Record<string, any> = {};
-        for (const p of (peerProfiles || [])) {
-          if (p?.symbol) profileMap[p.symbol] = p;
-        }
-        for (const q of (peerQuotes || [])) {
-          if (q?.symbol) {
-            profileMap[q.symbol] = { ...profileMap[q.symbol], ...q };
+        // 3. Determine supplier & customer industries from supply chain map
+        const chainEntry = SUPPLY_CHAIN_MAP[center.industry];
+        const useSectorFallback = !chainEntry;
+
+        const sups: CompanyNode[] = [];
+        const custs: CompanyNode[] = [];
+        const seenSymbols = new Set([ticker, ...comps.map(c => c.symbol)]);
+        const minMktCap = Math.max(2e9, (center.mktCap || 1e10) * 0.005);
+
+        const buildNode = (p: any, rel: 'supplier' | 'customer'): CompanyNode => ({
+          symbol: p.symbol,
+          name: p.companyName || p.symbol,
+          sector: p.sector || '',
+          industry: p.industry || '',
+          mktCap: p.marketCap || p.mktCap || 0,
+          price: p.price || 0,
+          change: p.changes || p.changesPercentage || 0,
+          country: p.country || '',
+          relationship: rel,
+        });
+
+        if (!useSectorFallback) {
+          // 4a. Industry-level search — query FMP screener for each related industry
+          const [supResults, custResults] = await Promise.all([
+            Promise.all(
+              chainEntry.suppliers.map(ind =>
+                fetchFmp('stable/stock-screener', { industry: ind, marketCapMoreThan: minMktCap, limit: 5 }).catch(() => [])
+              )
+            ),
+            Promise.all(
+              chainEntry.customers.map(ind =>
+                fetchFmp('stable/stock-screener', { industry: ind, marketCapMoreThan: minMktCap, limit: 5 }).catch(() => [])
+              )
+            ),
+          ]);
+
+          if (cancelled) return;
+
+          for (const batch of supResults) {
+            for (const p of (batch || [])) {
+              if (p?.symbol && !seenSymbols.has(p.symbol)) {
+                seenSymbols.add(p.symbol);
+                sups.push(buildNode(p, 'supplier'));
+              }
+            }
+          }
+          for (const batch of custResults) {
+            for (const p of (batch || [])) {
+              if (p?.symbol && !seenSymbols.has(p.symbol)) {
+                seenSymbols.add(p.symbol);
+                custs.push(buildNode(p, 'customer'));
+              }
+            }
+          }
+        } else {
+          // 4b. Sector-level fallback — query screener by sector
+          const sectorEntry = SECTOR_FALLBACK[center.sector];
+          if (sectorEntry) {
+            const [supResults, custResults] = await Promise.all([
+              Promise.all(
+                sectorEntry.supplierSectors.slice(0, 2).map(sec =>
+                  fetchFmp('stable/stock-screener', { sector: sec, marketCapMoreThan: minMktCap, limit: 10 }).catch(() => [])
+                )
+              ),
+              Promise.all(
+                sectorEntry.customerSectors.slice(0, 2).map(sec =>
+                  fetchFmp('stable/stock-screener', { sector: sec, marketCapMoreThan: minMktCap, limit: 10 }).catch(() => [])
+                )
+              ),
+            ]);
+
+            if (cancelled) return;
+
+            for (const batch of supResults) {
+              for (const p of (batch || [])) {
+                if (p?.symbol && !seenSymbols.has(p.symbol)) {
+                  seenSymbols.add(p.symbol);
+                  sups.push(buildNode(p, 'supplier'));
+                }
+              }
+            }
+            for (const batch of custResults) {
+              for (const p of (batch || [])) {
+                if (p?.symbol && !seenSymbols.has(p.symbol)) {
+                  seenSymbols.add(p.symbol);
+                  custs.push(buildNode(p, 'customer'));
+                }
+              }
+            }
           }
         }
 
-        // Classify relationships
-        const sups: CompanyNode[] = [];
-        const custs: CompanyNode[] = [];
-        const comps: CompanyNode[] = [];
+        // Sort by market cap (largest = most relevant first)
+        sups.sort((a, b) => (b.mktCap || 0) - (a.mktCap || 0));
+        custs.sort((a, b) => (b.mktCap || 0) - (a.mktCap || 0));
+        comps.sort((a, b) => (b.mktCap || 0) - (a.mktCap || 0));
 
-        for (const sym of peerSymbols.slice(0, 20)) {
-          const p = profileMap[sym];
-          if (!p) continue;
-
-          const rel = classifyRelationship(
-            center.industry, center.sector,
-            p.industry || '', p.sector || ''
-          );
-
-          const node: CompanyNode = {
-            symbol: sym,
-            name: p.companyName || p.name || sym,
-            sector: p.sector || '',
-            industry: p.industry || '',
-            mktCap: p.mktCap || p.marketCap || 0,
-            price: p.price || 0,
-            change: p.changesPercentage || p.changes || 0,
-            country: p.country || '',
-            relationship: rel,
-            relevance: Math.round(50 + Math.random() * 50), // Simulated relevance
-          };
-
-          if (rel === 'supplier') sups.push(node);
-          else if (rel === 'customer') custs.push(node);
-          else comps.push(node);
-        }
-
-        // Ensure at least some in each category for visual balance
-        // If too many competitors, redistribute
-        if (comps.length > 6 && sups.length < 3) {
-          const toMove = comps.splice(0, Math.min(3, comps.length - 3));
-          toMove.forEach(n => { n.relationship = 'supplier'; sups.push(n); });
-        }
-        if (comps.length > 6 && custs.length < 3) {
-          const toMove = comps.splice(0, Math.min(3, comps.length - 3));
-          toMove.forEach(n => { n.relationship = 'customer'; custs.push(n); });
-        }
-
-        setSuppliers(sups.slice(0, 10));
-        setCustomers(custs.slice(0, 10));
+        setSuppliers(sups.slice(0, 8));
+        setCustomers(custs.slice(0, 8));
         setCompetitors(comps.slice(0, 6));
       } catch (err: any) {
         if (!cancelled) setError(err.message || 'Failed to load supply chain data');
@@ -743,8 +838,8 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
 
       {/* Disclaimer */}
       <p className="text-[10px] text-gray-700 text-center">
-        Supply chain relationships are inferred from sector/industry classification and peer analysis.
-        Actual contractual relationships may differ. Click any company to analyze it.
+        Supply chain relationships are derived from GICS industry classification. Companies shown are major
+        players in related industries ranked by market cap. Actual contractual relationships may differ.
       </p>
     </div>
   );
