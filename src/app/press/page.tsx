@@ -32,7 +32,7 @@ export default function PressPage() {
 
         {/* Media Contact */}
         <div className="grid md:grid-cols-2 gap-6 mb-12">
-          <div className="p-6 rounded-2xl bg-black/50 border border-green-900/15">
+          <div className="p-6 rounded-2xl bg-gray-900/50 border border-green-900/15">
             <h2 className="text-xl font-bold mb-4">Media Contact</h2>
             <div className="space-y-3">
               <div>
@@ -53,7 +53,7 @@ export default function PressPage() {
             </div>
           </div>
 
-          <div className="p-6 rounded-2xl bg-black/50 border border-green-900/15">
+          <div className="p-6 rounded-2xl bg-gray-900/50 border border-green-900/15">
             <h2 className="text-xl font-bold mb-4">Company Facts</h2>
             <div className="space-y-2">
               {pressKit.map((item) => (
@@ -75,7 +75,7 @@ export default function PressPage() {
               href={s.url}
               target="_blank"
               rel="noopener noreferrer"
-              className={`p-5 rounded-2xl bg-black/40 border ${s.color} hover:scale-[1.02] transition`}
+              className={`p-5 rounded-2xl bg-gray-900/40 border ${s.color} hover:scale-[1.02] transition`}
             >
               <div className={`font-bold mb-1 ${s.color.split(' ')[0]}`}>{s.name}</div>
               <div className="text-sm text-gray-400">{s.handle}</div>

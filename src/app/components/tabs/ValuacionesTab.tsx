@@ -81,6 +81,30 @@ function CollapsibleSection({
   );
 }
 
+// Model description tooltips for hover
+const MODEL_TOOLTIPS: Record<string, string> = {
+  'DDM 2-Stage': 'Dividend Discount Model with high-growth and stable phases. Best for stable dividend payers.',
+  'DDM 3-Stage': 'DDM with high-growth, transition, and mature phases. More realistic for growing companies.',
+  'H-Model': 'Linear decline from high to stable growth. Simpler than 3-stage, better than 2-stage.',
+  '2-Stage FCF': 'Free Cash Flow model with growth + terminal phases. Best for cash-generative firms.',
+  '3-Stage FCF': 'FCF with growth, transition, and terminal phases. Higher precision for complex growth paths.',
+  '2-Stage FCFF': 'Free Cash Flow to Firm. Values the entire firm, debt + equity. Capital-structure neutral.',
+  '3-Stage FCFF': 'Three-phase FCFF. Most detailed firm-level DCF available.',
+  '2-Stage FCFE': 'Free Cash Flow to Equity. Values only the equity portion, after debt service.',
+  '3-Stage FCFE': 'Three-phase FCFE. Captures equity value through complex growth transitions.',
+  'DCF Multi-Etapa': 'Multi-stage DCF with custom year-by-year assumptions. Maximum flexibility.',
+  'Monte Carlo DCF': 'Simulates 5000+ DCF scenarios with random inputs. Shows probability distribution.',
+  'Stochastic DCF': 'DCF with stochastic growth and discount rates. Captures uncertainty.',
+  'Graham Method': 'Benjamin Graham\'s formula: V = EPS × (8.5 + 2g). Classic value investing.',
+  'Graham Number': 'sqrt(22.5 × EPS × BVPS). Maximum price a defensive investor should pay.',
+  'Graham Net-Net': 'Net Current Asset Value. Extreme value: current assets minus ALL liabilities.',
+  'RIM (Ohlson)': 'Residual Income Model. Values excess returns above cost of equity.',
+  'Bayesian NK DSGE': 'Macro-financial model integrating business cycle dynamics with valuation.',
+  'HJM (Yield)': 'Heath-Jarrow-Morton framework adapted for equity. Interest rate-sensitive valuation.',
+  'PrismoValue Neural': 'Neural network ensemble combining all models with learned weights.',
+  'EPS × P/E Benchmark': 'Forward EPS × sector average P/E. Simple relative valuation.',
+};
+
 // Model Card Component with explanation for null values AND collapsible inputs editor
 function ModelCard({
   name,
@@ -113,14 +137,14 @@ function ModelCard({
 
   return (
     <div
-      className={`relative p-5 rounded-2xl border-2 transition-all duration-200 ${
+      className={`relative group p-5 rounded-2xl border-2 transition-all duration-200 ${
         enabled
           ? isOutlier
             ? 'bg-red-950/20 border-red-500/60 shadow-lg shadow-red-900/20'
             : highlight
-            ? 'bg-black/80 border-green-500 shadow-lg shadow-green-500/20'
-            : 'bg-black/80 border-white/[0.08] hover:border-gray-500'
-          : 'bg-black/40 border-green-900/20 opacity-60'
+            ? 'bg-gray-950/80 border-green-500 shadow-lg shadow-green-500/20'
+            : 'bg-gray-950/80 border-white/[0.08] hover:border-gray-500'
+          : 'bg-gray-900/40 border-white/[0.06] opacity-60'
       }`}
     >
       {/* Outlier badge */}
@@ -152,10 +176,15 @@ function ModelCard({
         />
       </div>
 
-      {/* Name */}
+      {/* Name + tooltip */}
       <h4 className={`text-sm font-medium mb-3 pr-16 ${enabled ? 'text-gray-200' : 'text-gray-500'}`}>
         {name}
       </h4>
+      {MODEL_TOOLTIPS[name] && (
+        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 px-3 py-2 bg-gray-900/95 text-gray-300 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 border border-white/[0.08] max-w-[260px] whitespace-normal text-center backdrop-blur-sm shadow-lg">
+          {MODEL_TOOLTIPS[name]}
+        </div>
+      )}
 
       {/* Value */}
       <p className={`text-3xl font-bold ${enabled ? isValidValue ? 'text-green-400' : 'text-gray-600' : 'text-gray-700'}`}>
@@ -2856,23 +2885,29 @@ export default function ValuacionesTab({
             </p>
 
             {/* Toggle: Weighted vs User Selection */}
-            <div className="flex items-center justify-center gap-3 mt-3">
-              <span className={`text-xs font-medium ${averageMode === 'weighted' ? 'text-amber-400' : 'text-gray-500'}`}>
-                Ponderado
-              </span>
-              <button
-                onClick={() => setAverageMode(prev => prev === 'weighted' ? 'selected' : 'weighted')}
-                className={`relative w-11 h-6 rounded-full transition-colors ${
-                  averageMode === 'selected' ? 'bg-emerald-600' : 'bg-amber-600/60'
-                }`}
-              >
-                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                  averageMode === 'selected' ? 'translate-x-5.5' : 'translate-x-0.5'
-                }`} />
-              </button>
-              <span className={`text-xs font-medium ${averageMode === 'selected' ? 'text-emerald-400' : 'text-gray-500'}`}>
-                Seleccion usuario
-              </span>
+            <div className="flex items-center justify-center mt-3">
+              <div className="inline-flex rounded-lg border border-white/[0.08] bg-black/40 p-0.5">
+                <button
+                  onClick={() => setAverageMode('weighted')}
+                  className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    averageMode === 'weighted'
+                      ? 'bg-white/[0.12] text-white shadow-sm'
+                      : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  Ponderado
+                </button>
+                <button
+                  onClick={() => setAverageMode('selected')}
+                  className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    averageMode === 'selected'
+                      ? 'bg-white/[0.12] text-white shadow-sm'
+                      : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  Seleccionados
+                </button>
+              </div>
             </div>
           </div>
 

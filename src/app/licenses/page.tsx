@@ -63,7 +63,7 @@ export default function LicensesPage() {
         <div className="overflow-hidden rounded-2xl border border-green-900/15">
           <table className="w-full">
             <thead>
-              <tr className="bg-black/50 border-b border-green-900/15">
+              <tr className="bg-gray-900/50 border-b border-green-900/15">
                 <th className="text-left p-4 text-gray-400 font-semibold text-sm">Package</th>
                 <th className="text-left p-4 text-gray-400 font-semibold text-sm">Version</th>
                 <th className="text-left p-4 text-gray-400 font-semibold text-sm">License</th>
@@ -72,11 +72,11 @@ export default function LicensesPage() {
             </thead>
             <tbody>
               {openSourceLibs.map((lib, i) => (
-                <tr key={lib.name} className={`border-b border-green-900/20/30 ${i % 2 === 0 ? '' : 'bg-black/60/20'}`}>
+                <tr key={lib.name} className={`border-b border-green-900/20/30 ${i % 2 === 0 ? '' : 'bg-gray-900/60/20'}`}>
                   <td className="p-4 font-semibold text-sm">{lib.name}</td>
                   <td className="p-4 text-gray-500 text-sm font-data">{lib.version}</td>
                   <td className="p-4">
-                    <span className={`text-xs font-bold px-2 py-1 rounded border ${licenseColors[lib.license] ?? 'text-gray-400 bg-black/60 border-green-900/20'}`}>
+                    <span className={`text-xs font-bold px-2 py-1 rounded border ${licenseColors[lib.license] ?? 'text-gray-400 bg-gray-900/60 border-green-900/20'}`}>
                       {lib.license}
                     </span>
                   </td>

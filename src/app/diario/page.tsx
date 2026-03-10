@@ -13,7 +13,7 @@ export default function DiarioPage() {
   const es = locale === 'es';
 
   return (
-    <div className="min-h-screen bg-black/80 text-white">
+    <div className="min-h-screen bg-gray-900/80 text-white">
       <Header />
       <SignedOut>
         <RedirectToSignIn redirectUrl="/diario" />
@@ -27,7 +27,7 @@ export default function DiarioPage() {
               className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
                 activeTab === 'diario'
                   ? 'bg-emerald-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-black/60'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-900/60'
               }`}
             >
               {es ? '📓 Diario del Inversor' : '📓 Investor Journal'}
@@ -37,7 +37,7 @@ export default function DiarioPage() {
               className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
                 activeTab === 'portfolio'
                   ? 'bg-blue-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-black/60'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-900/60'
               }`}
             >
               {es ? '📊 Optimizador de Portfolio' : '📊 Portfolio Optimizer'}

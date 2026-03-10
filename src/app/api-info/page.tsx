@@ -36,7 +36,7 @@ export default function ApiInfoPage() {
             { method: 'GET', path: '/v1/screener', desc: 'Stock screener with 50+ filters' },
             { method: 'POST', path: '/v1/dcf/custom', desc: 'Custom DCF calculation with your inputs' },
           ].map((ep) => (
-            <div key={ep.path} className="flex items-start gap-4 p-4 rounded-xl bg-black/40 border border-green-900/15">
+            <div key={ep.path} className="flex items-start gap-4 p-4 rounded-xl bg-gray-900/40 border border-green-900/15">
               <span className="text-xs font-bold font-data px-2 py-1 rounded bg-emerald-900/40 text-emerald-400 border border-emerald-700/40 flex-shrink-0">
                 {ep.method}
               </span>
@@ -56,7 +56,7 @@ export default function ApiInfoPage() {
             { name: 'TradingView', desc: 'Display Prismo scores and valuation ranges as custom indicators.' },
             { name: 'Notion', desc: 'Embed analysis cards in your investment thesis workspace.' },
           ].map((i) => (
-            <div key={i.name} className="p-5 rounded-2xl bg-black/40 border border-green-900/15">
+            <div key={i.name} className="p-5 rounded-2xl bg-gray-900/40 border border-green-900/15">
               <div className="font-bold mb-2">{i.name}</div>
               <div className="text-sm text-gray-400">{i.desc}</div>
             </div>

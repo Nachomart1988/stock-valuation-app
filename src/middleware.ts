@@ -22,6 +22,8 @@ const isPublicPath = createRouteMatcher([
   '/support(.*)',
   '/licenses(.*)',
   '/api-info(.*)',
+  '/screener(.*)',
+  '/diario(.*)',
   // Public API routes
   '/api/waitlist',
   '/api/fmp',

@@ -175,25 +175,25 @@ export default function ScreenerPage() {
   }, [prismoFilters, t]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-black via-gray-800 to-black text-white">
+    <div className="min-h-screen bg-gray-950 text-white">
       <Header />
       <div className="max-w-7xl mx-auto px-4 pt-28 pb-20">
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
-            <span className="text-emerald-400 text-xs font-semibold tracking-widest uppercase">Stock Screener</span>
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] mb-6">
+            <span className="text-gray-400 text-[11px] font-medium tracking-widest uppercase">Stock Screener</span>
           </div>
-          <h1 className="text-3xl sm:text-5xl font-black mb-4">
+          <h1 className="text-3xl sm:text-5xl font-black mb-3">
             {t('screener.title')}{' '}
-            <span className="bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">{t('screener.titleHighlight')}</span>
+            <span className="text-white">{t('screener.titleHighlight')}</span>
           </h1>
-          <p className="text-gray-400 max-w-2xl mx-auto">
+          <p className="text-gray-500 max-w-xl mx-auto text-sm">
             {t('screener.subtitle')}
           </p>
         </div>
 
         {/* ═══════ Prismo Top Opportunities ═══════ */}
-        <div className="relative mb-8 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-900/10 via-black/60 to-amber-900/5 overflow-hidden">
+        <div className="relative mb-8 rounded-xl border border-amber-500/20 bg-gray-900/60 overflow-hidden">
           {/* Shimmer overlay */}
           <div className="absolute inset-0 pointer-events-none liquid-gold-shimmer" />
           <div className="relative p-6 sm:p-8">
@@ -229,14 +229,14 @@ export default function ScreenerPage() {
             </div>
 
             {/* Prismo filters */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 p-3 bg-black/30 rounded-xl border border-amber-900/15">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-amber-900/15">
               <div>
                 <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1">{t('screener.priceMin')}</label>
                 <input type="number" min="0" placeholder="5"
                   value={prismoFilters.priceMin}
                   onChange={e => setPrismoFilters(f => ({ ...f, priceMin: e.target.value }))}
                   disabled={prismoLoading}
-                  className="w-full bg-black/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
                 />
               </div>
               <div>
@@ -245,7 +245,7 @@ export default function ScreenerPage() {
                   value={prismoFilters.priceMax}
                   onChange={e => setPrismoFilters(f => ({ ...f, priceMax: e.target.value }))}
                   disabled={prismoLoading}
-                  className="w-full bg-black/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
                 />
               </div>
               <div>
@@ -254,7 +254,7 @@ export default function ScreenerPage() {
                   value={prismoFilters.marketCapMin}
                   onChange={e => setPrismoFilters(f => ({ ...f, marketCapMin: e.target.value }))}
                   disabled={prismoLoading}
-                  className="w-full bg-black/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
                 >
                   <option value="100000000">$100M+</option>
                   <option value="500000000">$500M+</option>
@@ -270,7 +270,7 @@ export default function ScreenerPage() {
                   value={prismoFilters.country}
                   onChange={e => setPrismoFilters(f => ({ ...f, country: e.target.value }))}
                   disabled={prismoLoading}
-                  className="w-full bg-black/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
                 >
                   {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
                 </select>
@@ -285,7 +285,7 @@ export default function ScreenerPage() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
                 <span className="text-xs text-amber-400/70">{t('screener.prismo.discovering')}</span>
-                <div className="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden ml-2">
+                <div className="flex-1 h-1.5 bg-gray-900/40 rounded-full overflow-hidden ml-2">
                   <div className="h-full bg-amber-500/50 animate-pulse rounded-full w-full" />
                 </div>
               </div>
@@ -327,7 +327,7 @@ export default function ScreenerPage() {
                       {topOpportunities.map((opp, i) => (
                         <tr
                           key={opp.symbol}
-                          className={`border-t border-amber-900/15 hover:bg-amber-900/10 transition-colors ${i % 2 === 0 ? '' : 'bg-black/20'}`}
+                          className={`border-t border-amber-900/15 hover:bg-amber-900/10 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-900/20'}`}
                         >
                           <td className="text-center px-3 py-2.5">
                             <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
@@ -374,14 +374,14 @@ export default function ScreenerPage() {
         </div>
 
         {/* ═══════ Filter Panel ═══════ */}
-        <div className="bg-black/50 rounded-2xl border border-white/[0.06] p-6 mb-6">
+        <div className="bg-gray-900/50 rounded-xl border border-white/[0.06] p-6 mb-6">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <div className="col-span-2 md:col-span-1">
               <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1">{t('screener.sector')}</label>
               <select
                 value={screenerFilters.sector}
                 onChange={e => setScreenerFilters(f => ({ ...f, sector: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               >
                 {SECTORS.map(s => <option key={s} value={s}>{s || 'All Sectors'}</option>)}
               </select>
@@ -391,7 +391,7 @@ export default function ScreenerPage() {
               <select
                 value={screenerFilters.exchange}
                 onChange={e => setScreenerFilters(f => ({ ...f, exchange: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               >
                 {EXCHANGES.map(e => <option key={e} value={e}>{e || 'All'}</option>)}
               </select>
@@ -401,7 +401,7 @@ export default function ScreenerPage() {
               <select
                 value={screenerFilters.country}
                 onChange={e => setScreenerFilters(f => ({ ...f, country: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               >
                 {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
               </select>
@@ -411,7 +411,7 @@ export default function ScreenerPage() {
               <input type="number" min="0" placeholder="0"
                 value={screenerFilters.priceMoreThan}
                 onChange={e => setScreenerFilters(f => ({ ...f, priceMoreThan: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div>
@@ -419,7 +419,7 @@ export default function ScreenerPage() {
               <input type="number" min="0" placeholder="∞"
                 value={screenerFilters.priceLowerThan}
                 onChange={e => setScreenerFilters(f => ({ ...f, priceLowerThan: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div>
@@ -427,7 +427,7 @@ export default function ScreenerPage() {
               <input type="number" min="0" placeholder="e.g. 1000000000"
                 value={screenerFilters.marketCapMoreThan}
                 onChange={e => setScreenerFilters(f => ({ ...f, marketCapMoreThan: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div>
@@ -435,7 +435,7 @@ export default function ScreenerPage() {
               <input type="number" min="0" placeholder="∞"
                 value={screenerFilters.marketCapLowerThan}
                 onChange={e => setScreenerFilters(f => ({ ...f, marketCapLowerThan: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div>
@@ -443,7 +443,7 @@ export default function ScreenerPage() {
               <input type="number" step="0.1" placeholder="0"
                 value={screenerFilters.betaMoreThan}
                 onChange={e => setScreenerFilters(f => ({ ...f, betaMoreThan: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div>
@@ -451,7 +451,7 @@ export default function ScreenerPage() {
               <input type="number" step="0.1" placeholder="∞"
                 value={screenerFilters.betaLowerThan}
                 onChange={e => setScreenerFilters(f => ({ ...f, betaLowerThan: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div>
@@ -459,7 +459,7 @@ export default function ScreenerPage() {
               <input type="number" min="0" placeholder="e.g. 100000"
                 value={screenerFilters.volumeMoreThan}
                 onChange={e => setScreenerFilters(f => ({ ...f, volumeMoreThan: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div>
@@ -467,7 +467,7 @@ export default function ScreenerPage() {
               <input type="number" step="0.1" min="0" placeholder="e.g. 1"
                 value={screenerFilters.dividendMoreThan}
                 onChange={e => setScreenerFilters(f => ({ ...f, dividendMoreThan: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <div className="col-span-2">
@@ -475,7 +475,7 @@ export default function ScreenerPage() {
               <input type="text" placeholder="e.g. Semiconductors"
                 value={screenerFilters.industry}
                 onChange={e => setScreenerFilters(f => ({ ...f, industry: e.target.value }))}
-                className="w-full bg-black/80 border border-green-900/20 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-gray-900/80 border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
           </div>
@@ -513,11 +513,11 @@ export default function ScreenerPage() {
 
         {/* ═══════ Screener Results Table ═══════ */}
         {screenerResults.length > 0 && (
-          <div className="bg-black/50 rounded-2xl border border-white/[0.06] overflow-hidden">
+          <div className="bg-gray-900/50 rounded-xl border border-white/[0.06] overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-black/50 text-gray-500 text-xs uppercase tracking-wider">
+                  <tr className="bg-gray-900/50 text-gray-500 text-xs uppercase tracking-wider">
                     <th className="text-left px-4 py-3">{t('screener.ticker')}</th>
                     <th className="text-left px-4 py-3">{t('screener.company')}</th>
                     <th className="text-right px-4 py-3">{t('screener.price')}</th>
@@ -534,7 +534,7 @@ export default function ScreenerPage() {
                   {screenerResults.map((stock, i) => (
                     <tr
                       key={stock.symbol}
-                      className={`border-t border-green-900/20 hover:bg-emerald-900/10 transition-colors ${i % 2 === 0 ? '' : 'bg-black/20'}`}
+                      className={`border-t border-white/[0.06] hover:bg-emerald-900/10 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-900/20'}`}
                     >
                       <td className="px-4 py-3">
                         <span className="font-data font-bold text-emerald-400">{stock.symbol}</span>
@@ -568,11 +568,11 @@ export default function ScreenerPage() {
                 </tbody>
               </table>
             </div>
-            <div className="flex items-center justify-between px-4 py-3 border-t border-green-900/20">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-white/[0.06]">
               <button
                 onClick={() => runScreener(screenerPage - 1)}
                 disabled={screenerPage === 0 || screenerLoading}
-                className="flex items-center gap-1.5 px-4 py-2 bg-black/40 hover:bg-black/50 disabled:opacity-40 rounded-lg text-sm transition"
+                className="flex items-center gap-1.5 px-4 py-2 bg-gray-900/40 hover:bg-gray-900/50 disabled:opacity-40 rounded-lg text-sm transition"
               >
                 ← {t('screener.prev')}
               </button>
@@ -580,7 +580,7 @@ export default function ScreenerPage() {
               <button
                 onClick={() => runScreener(screenerPage + 1)}
                 disabled={screenerResults.length < SCREENER_LIMIT || screenerLoading}
-                className="flex items-center gap-1.5 px-4 py-2 bg-black/40 hover:bg-black/50 disabled:opacity-40 rounded-lg text-sm transition"
+                className="flex items-center gap-1.5 px-4 py-2 bg-gray-900/40 hover:bg-gray-900/50 disabled:opacity-40 rounded-lg text-sm transition"
               >
                 {t('screener.next')} →
               </button>

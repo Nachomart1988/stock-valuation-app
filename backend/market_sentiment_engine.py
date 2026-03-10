@@ -295,13 +295,14 @@ class NeuralReasoningMarketSentimentEngine:
         'default': 300,    # Fallback
     }
 
-    def __init__(self, db_path: str = 'sentiment.db'):
-        self.version = "6.0"
+    def __init__(self, db_path: str = 'sentiment.db', learn_alpha: float = 0.3):
+        self.version = "7.0"
         self.news_analyzer = AdvancedNewsSentimentAnalyzer()
         self._cache: Dict[str, Any] = {}
         self._cache_ttl = 300  # default 5 min cache (used by _fetch_stable/_fetch_v3)
         self._session = requests.Session()
         self._db_path = db_path
+        self._learn_alpha = learn_alpha  # EMA smoothing factor
         self._init_db()
 
     def _init_db(self):
@@ -352,35 +353,60 @@ class NeuralReasoningMarketSentimentEngine:
             logger.warning(f"[MSE] Snapshot store failed: {e}")
 
     def _load_history(self, days: int = 30) -> List[Dict]:
-        """Load recent snapshots from SQLite (last N days)."""
+        """Load recent snapshots from SQLite (last N days) with per-layer scores."""
         try:
             cutoff = (datetime.now() - timedelta(days=days)).isoformat()
             with sqlite3.connect(self._db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    """SELECT ts, composite, ema FROM sentiment_snapshots
+                    """SELECT ts, composite, ema, news, movers, sectors, indices, vix, fg
+                       FROM sentiment_snapshots
                        WHERE ts >= ? ORDER BY ts DESC LIMIT 720""",
                     (cutoff,)
                 ).fetchall()
-            return [{"ts": r["ts"], "composite": r["composite"], "ema": r["ema"]} for r in rows]
+            return [{
+                "ts": r["ts"], "composite": r["composite"], "ema": r["ema"],
+                "news": r["news"], "movers": r["movers"], "sectors": r["sectors"],
+                "indices": r["indices"], "vix": r["vix"], "fg": r["fg"],
+            } for r in rows]
         except Exception as e:
             logger.warning(f"[MSE] History load failed: {e}")
             return []
 
-    def _compute_trends(self, history: List[Dict], current: float) -> Dict:
+    def _purge_old_snapshots(self, max_days: int = 90):
+        """Purge snapshots older than max_days to keep DB lean."""
+        try:
+            cutoff = (datetime.now() - timedelta(days=max_days)).isoformat()
+            with sqlite3.connect(self._db_path) as conn:
+                conn.execute("DELETE FROM sentiment_snapshots WHERE ts < ?", (cutoff,))
+                conn.commit()
+        except Exception:
+            pass
+
+    def _compute_trends(self, history: List[Dict], current: float, current_scores: Dict[str, float] = None) -> Dict:
         """
         Compute temporal trends from historical snapshots.
-        Returns daily_delta, weekly_mean, monthly_delta, weekly_trend, ema_score.
+        Returns daily_delta, weekly_mean, monthly_delta, weekly_trend, ema_score,
+        plus per-layer trends and regime classification for adaptive advice.
         """
+        alpha = self._learn_alpha  # EMA smoothing factor
+
         if not history:
             return {
                 "daily_delta": None,
                 "weekly_mean": None,
+                "monthly_mean": None,
                 "monthly_delta": None,
                 "weekly_trend": None,
+                "monthly_trend": None,
                 "ema_score": current,
+                "smoothed_score": current,
                 "momentum_streak": 0,
                 "anomaly": False,
+                "regime": "unknown",
+                "regime_confidence": 0,
+                "breadth_trend": None,
+                "vix_trend": None,
                 "note": "Inicial — trends disponibles post 2+ runs",
             }
 
@@ -389,25 +415,35 @@ class NeuralReasoningMarketSentimentEngine:
         for h in history:
             try:
                 ts = datetime.fromisoformat(h["ts"])
-                snapshots.append({"ts": ts, "composite": h["composite"], "ema": h.get("ema", h["composite"])})
+                snapshots.append({
+                    "ts": ts, "composite": h["composite"],
+                    "ema": h.get("ema", h["composite"]),
+                    "movers": h.get("movers"), "vix": h.get("vix"),
+                    "news": h.get("news"), "sectors": h.get("sectors"),
+                })
             except Exception:
                 continue
 
         if not snapshots:
-            return {"daily_delta": None, "weekly_mean": None, "monthly_delta": None,
-                    "weekly_trend": None, "ema_score": current, "momentum_streak": 0,
-                    "anomaly": False, "note": "Sin historial válido"}
+            return {"daily_delta": None, "weekly_mean": None, "monthly_mean": None,
+                    "monthly_delta": None, "weekly_trend": None, "monthly_trend": None,
+                    "ema_score": current, "smoothed_score": current, "momentum_streak": 0,
+                    "anomaly": False, "regime": "unknown", "regime_confidence": 0,
+                    "breadth_trend": None, "vix_trend": None, "note": "Sin historial válido"}
 
         # Sort newest first (already from DB ORDER BY ts DESC)
         snapshots.sort(key=lambda x: x["ts"], reverse=True)
 
-        # EMA smoothing: alpha=0.3
+        # EMA smoothing
         prev_ema = snapshots[0]["ema"] if snapshots[0]["ema"] else snapshots[0]["composite"]
-        ema_score = round(0.3 * current + 0.7 * prev_ema, 1)
+        ema_score = round(alpha * current + (1 - alpha) * prev_ema, 1)
+
+        # Smoothed score: weighted blend of raw + EMA for stability
+        smoothed_score = round(0.6 * current + 0.4 * ema_score, 1)
 
         # Daily delta: vs the most recent snapshot before now
         daily_delta = None
-        one_day_ago = now - timedelta(hours=20)  # flexible: within 20h–28h
+        one_day_ago = now - timedelta(hours=20)
         day_old = [s for s in snapshots if s["ts"] < one_day_ago]
         if day_old:
             daily_delta = round(current - day_old[0]["composite"], 1)
@@ -438,13 +474,53 @@ class NeuralReasoningMarketSentimentEngine:
             else:
                 weekly_trend = "estable"
 
-        # Monthly delta: vs oldest snapshot within last 30 days
+        # Monthly stats
         thirty_days_ago = now - timedelta(days=30)
         month_snaps = [s for s in snapshots if s["ts"] >= thirty_days_ago]
         monthly_delta = None
+        monthly_mean = None
+        monthly_trend = None
         if month_snaps:
             oldest_month = min(month_snaps, key=lambda x: x["ts"])
             monthly_delta = round(current - oldest_month["composite"], 1)
+            monthly_vals = [s["composite"] for s in month_snaps]
+            monthly_mean = round(float(np.mean(monthly_vals)), 1) if len(monthly_vals) >= 2 else None
+            if monthly_mean is not None:
+                mdiff = current - monthly_mean
+                if mdiff > 5:
+                    monthly_trend = "alcista"
+                elif mdiff < -5:
+                    monthly_trend = "bajista"
+                else:
+                    monthly_trend = "lateral"
+
+        # Per-layer trends: breadth (movers) and VIX
+        breadth_trend = None
+        vix_trend = None
+        if len(week_snaps) >= 2:
+            week_movers = [s.get("movers") for s in snapshots if s["ts"] >= seven_days_ago and s.get("movers") is not None]
+            if len(week_movers) >= 2:
+                movers_mean = float(np.mean(week_movers))
+                current_movers = current_scores.get("movers", 50) if current_scores else 50
+                movers_diff = current_movers - movers_mean
+                if movers_diff > 5:
+                    breadth_trend = "mejorando"
+                elif movers_diff < -5:
+                    breadth_trend = "deteriorando"
+                else:
+                    breadth_trend = "estable"
+
+            week_vix = [s.get("vix") for s in snapshots if s["ts"] >= seven_days_ago and s.get("vix") is not None]
+            if len(week_vix) >= 2:
+                vix_mean = float(np.mean(week_vix))
+                current_vix = current_scores.get("vix", 50) if current_scores else 50
+                vix_diff = current_vix - vix_mean
+                if vix_diff > 5:
+                    vix_trend = "calm_trending"  # VIX score rising = VIX falling = calmer
+                elif vix_diff < -5:
+                    vix_trend = "fear_rising"
+                else:
+                    vix_trend = "estable"
 
         # Momentum streak: consecutive sessions moving same direction
         streak = 0
@@ -457,14 +533,52 @@ class NeuralReasoningMarketSentimentEngine:
                 else:
                     break
 
+        # Regime classification: use multi-timeframe weighted score
+        # Short-term: 40%, Weekly: 30%, Monthly: 30%
+        regime = "unknown"
+        regime_confidence = 0
+        if weekly_mean is not None and monthly_mean is not None:
+            blended = 0.4 * current + 0.3 * weekly_mean + 0.3 * monthly_mean
+            if blended >= 70:
+                regime = "bull_sustained"
+                regime_confidence = min(95, int(50 + (blended - 70)))
+            elif blended >= 58:
+                regime = "bull_moderate"
+                regime_confidence = min(85, int(40 + (blended - 58)))
+            elif blended >= 45:
+                regime = "neutral_range"
+                regime_confidence = min(75, int(30 + abs(blended - 50)))
+            elif blended >= 35:
+                regime = "bear_moderate"
+                regime_confidence = min(85, int(40 + (45 - blended)))
+            else:
+                regime = "bear_sustained"
+                regime_confidence = min(95, int(50 + (35 - blended)))
+        elif weekly_mean is not None:
+            blended = 0.5 * current + 0.5 * weekly_mean
+            if blended >= 60:
+                regime = "bull_moderate"
+            elif blended >= 45:
+                regime = "neutral_range"
+            else:
+                regime = "bear_moderate"
+            regime_confidence = 50
+
         return {
             "daily_delta": daily_delta,
             "weekly_mean": weekly_mean,
+            "monthly_mean": monthly_mean,
             "monthly_delta": monthly_delta,
             "weekly_trend": weekly_trend,
+            "monthly_trend": monthly_trend,
             "ema_score": ema_score,
+            "smoothed_score": smoothed_score,
             "momentum_streak": streak,
             "anomaly": anomaly,
+            "regime": regime,
+            "regime_confidence": regime_confidence,
+            "breadth_trend": breadth_trend,
+            "vix_trend": vix_trend,
         }
 
     # ====================== FMP FETCH HELPERS ======================
@@ -920,20 +1034,27 @@ class NeuralReasoningMarketSentimentEngine:
         )
         full_reasoning.extend(fusion_reasoning)
 
-        # CONCLUSION
-        rec, emoji, sentiment, desc, action = self._generate_conclusion(composite, vix_value, breadth_ratio)
-
-        process_time = (datetime.now() - start).total_seconds()
-        logger.info(f"Done in {process_time:.3f}s → {rec} (score: {composite:.1f})")
-
-        # TEMPORAL ANALYSIS + EMA LEARNING
+        # TEMPORAL ANALYSIS + EMA LEARNING (must happen BEFORE conclusion)
         scores_dict = {
             "news": news_score, "movers": movers_score, "sectors": sector_score,
             "indices": index_score, "vix": vix_score, "fearGreed": fg_score,
         }
         history = self._load_history(days=30)
-        trends = self._compute_trends(history, composite)
+        trends = self._compute_trends(history, composite, current_scores=scores_dict)
         self._store_snapshot(composite, scores_dict, trends["ema_score"])
+
+        # Purge old snapshots periodically (every ~100th run)
+        import random
+        if random.random() < 0.01:
+            self._purge_old_snapshots(max_days=90)
+
+        # CONCLUSION — now temporal-aware
+        rec, emoji, sentiment, desc, action = self._generate_conclusion(
+            composite, vix_value, breadth_ratio, trends=trends
+        )
+
+        process_time = (datetime.now() - start).total_seconds()
+        logger.info(f"Done in {process_time:.3f}s → {rec} (score: {composite:.1f}, regime: {trends.get('regime', 'unknown')})")
 
         return {
             "version": self.version,
@@ -990,7 +1111,7 @@ class NeuralReasoningMarketSentimentEngine:
                 composite, news_score, movers_score, breadth_ratio,
                 sector_rotation, rec, real_advancing, real_declining,
                 hot_sectors, cold_sectors, action, vix_value, fg_score, fg_label,
-                language=language
+                language=language, trends=trends
             ),
             "trends": trends,
         }
@@ -1761,45 +1882,128 @@ class NeuralReasoningMarketSentimentEngine:
         if ratio >= 0.32: return "Negative"
         return "Extreme Weakness"
 
-    def _generate_conclusion(self, composite, vix_val, breadth_ratio):
+    def _generate_conclusion(self, composite, vix_val, breadth_ratio, trends=None):
+        """
+        Temporal-aware conclusion generator.
+        Uses trend data to adjust advice: avoids selling quality on a red day
+        if weekly/monthly trends are bullish, and avoids buying blindly on a
+        green day if the broader trend is bearish.
+        """
         # Adjust for VIX regime
         vix_regime = ""
         if vix_val:
             if vix_val > 35 and composite > 50:
-                composite = min(composite, 50)  # cap at neutral in crisis
+                composite = min(composite, 50)
                 vix_regime = " | High VIX caution"
             elif vix_val < 14 and composite < 60:
-                composite = max(composite, 45)  # floor at near-neutral in ultra-calm markets
+                composite = max(composite, 45)
 
-        if composite >= 80:
-            return ("BULL MARKET — FULL RISK ON", "🚀", "very_bullish",
-                    f"All neural layers aligned bullish. Maximum conviction{vix_regime}.",
-                    "AGGRESSIVE BUY: Add to winners, focus on hot sectors & momentum plays. Tight 2% stops.")
-        elif composite >= 67:
-            return ("BULLISH — SOLID MOMENTUM", "📈", "bullish",
-                    f"Market on the offensive with broad participation{vix_regime}.",
-                    "GO LONG: Rotate into strength. Sector leaders and breakouts. Monitor VIX for regime shift.")
-        elif composite >= 54:
-            return ("NEUTRAL — MIXED SIGNALS", "⚖️", "neutral",
-                    f"Balanced data — no clear directional conviction{vix_regime}.",
-                    "SELECTIVE: Quality over quantity. 30-40% cash buffer. Wait for volume confirmation.")
-        elif composite >= 40:
-            return ("BEARISH — SELLING PRESSURE", "📉", "bearish",
-                    f"Macro deteriorating. Reduce risk exposure{vix_regime}.",
-                    "REDUCE: Trim longs 30-50%. Sector rotation to defensives. Hedge with inverse ETFs.")
-        elif composite >= 25:
-            return ("RISK OFF — DEFENSIVE MODE", "🛡️", "very_bearish",
-                    f"Bear market conditions emerging. Capital preservation{vix_regime}.",
-                    "SELL: Move 60%+ to cash/bonds. Wait for VIX<25 and breadth>55% before re-entering.")
+        # Extract trend context
+        weekly_trend = trends.get("weekly_trend") if trends else None
+        monthly_trend = trends.get("monthly_trend") if trends else None
+        regime = trends.get("regime", "unknown") if trends else "unknown"
+        daily_delta = trends.get("daily_delta") if trends else None
+        weekly_mean = trends.get("weekly_mean") if trends else None
+        monthly_mean = trends.get("monthly_mean") if trends else None
+        smoothed = trends.get("smoothed_score", composite) if trends else composite
+        streak = trends.get("momentum_streak", 0) if trends else 0
+        breadth_trend_str = trends.get("breadth_trend") if trends else None
+
+        # Use smoothed score for more stable advice (reduces whipsaw)
+        effective_score = smoothed if trends and weekly_mean is not None else composite
+
+        # --- TEMPORAL-AWARE ADAPTIVE ADVICE ---
+        # The key insight: if today is bearish but weekly/monthly is bullish,
+        # this is a DIP in an uptrend — not a reason to sell quality holdings.
+        # Conversely, if today is bullish but trend is bearish, it's a bounce — not a buy.
+
+        trend_context = ""
+        if daily_delta is not None and weekly_mean is not None:
+            if daily_delta < -5 and weekly_trend in ("mejorando", "estable") and regime in ("bull_sustained", "bull_moderate"):
+                trend_context = " | Dip in uptrend — hold quality"
+            elif daily_delta > 5 and weekly_trend == "deteriorando" and regime in ("bear_sustained", "bear_moderate"):
+                trend_context = " | Bounce in downtrend — don't chase"
+            elif daily_delta < -8 and monthly_trend == "alcista":
+                trend_context = " | Short-term noise in bullish regime"
+            elif daily_delta > 8 and monthly_trend == "bajista":
+                trend_context = " | Dead cat bounce — stay cautious"
+
+        context = f"{vix_regime}{trend_context}"
+
+        if effective_score >= 80:
+            rec = "BULL MARKET — FULL RISK ON"
+            emoji = "🚀"
+            sentiment = "very_bullish"
+            desc = f"All neural layers aligned bullish. Maximum conviction{context}."
+            if regime == "bull_sustained" and streak >= 3:
+                action = "AGGRESSIVE BUY: Sustained bull regime confirmed. Add to winners, ride momentum. Tight 2% trailing stops."
+            else:
+                action = "AGGRESSIVE BUY: Add to winners, focus on hot sectors & momentum plays. Tight 2% stops."
+
+        elif effective_score >= 67:
+            rec = "BULLISH — SOLID MOMENTUM"
+            emoji = "📈"
+            sentiment = "bullish"
+            desc = f"Market on the offensive with broad participation{context}."
+            if regime in ("bear_moderate", "bear_sustained") and daily_delta and daily_delta > 5:
+                action = "CAUTIOUS LONG: Bounce in bearish regime — select high-quality only. Don't chase, wait for trend confirmation."
+            else:
+                action = "GO LONG: Rotate into strength. Sector leaders and breakouts. Monitor VIX for regime shift."
+
+        elif effective_score >= 54:
+            rec = "NEUTRAL — MIXED SIGNALS"
+            emoji = "⚖️"
+            sentiment = "neutral"
+            desc = f"Balanced data — no clear directional conviction{context}."
+            if regime in ("bull_sustained", "bull_moderate"):
+                action = "HOLD QUALITY: Trend still bullish — maintain quality holdings, selective adds on pullbacks. 20-30% cash buffer."
+            elif regime in ("bear_sustained", "bear_moderate"):
+                action = "STAY DEFENSIVE: Trend bearish despite neutral reading — don't add risk. 40-50% cash buffer."
+            else:
+                action = "SELECTIVE: Quality over quantity. 30-40% cash buffer. Wait for volume confirmation."
+
+        elif effective_score >= 40:
+            rec = "BEARISH — SELLING PRESSURE"
+            emoji = "📉"
+            sentiment = "bearish"
+            desc = f"Macro deteriorating. Reduce risk exposure{context}."
+            if regime in ("bull_sustained", "bull_moderate") and breadth_trend_str == "mejorando":
+                # KEY: don't sell quality holdings on a red day in a bull market
+                action = ("DIP OPPORTUNITY: Daily bearish BUT weekly/monthly trend is bullish and breadth improving. "
+                          "Hold quality moat stocks, reduce speculative positions only. Accumulate high-conviction names on weakness.")
+            elif regime == "bull_moderate" and weekly_trend == "estable":
+                action = "CAUTIOUS HOLD: Short-term weakness in otherwise stable trend. Trim speculative longs but hold quality. Watch breadth."
+            else:
+                action = "REDUCE: Trim longs 30-50%. Sector rotation to defensives. Hedge with inverse ETFs."
+
+        elif effective_score >= 25:
+            rec = "RISK OFF — DEFENSIVE MODE"
+            emoji = "🛡️"
+            sentiment = "very_bearish"
+            desc = f"Bear market conditions emerging. Capital preservation{context}."
+            if regime in ("bull_sustained",) and monthly_trend == "alcista":
+                action = ("TEMPORARY FEAR: Monthly trend still bullish — this may be a sharp but temporary correction. "
+                          "Don't panic sell quality holdings. Reduce leverage, add hedges, but DON'T sell your best positions.")
+            else:
+                action = "SELL: Move 60%+ to cash/bonds. Wait for VIX<25 and breadth>55% before re-entering."
+
         else:
-            return ("EXTREME FEAR — POSSIBLE CAPITULATION", "🆘", "very_bearish",
-                    f"Panic conditions. Maximum fear = possible contrarian bottom{vix_regime}.",
-                    "SURVIVE FIRST: 80%+ cash. Watch for VIX spike + reversal as capitulation signal → aggressive re-entry.")
+            rec = "EXTREME FEAR — POSSIBLE CAPITULATION"
+            emoji = "🆘"
+            sentiment = "very_bearish"
+            desc = f"Panic conditions. Maximum fear = possible contrarian bottom{context}."
+            if regime in ("bull_sustained", "bull_moderate") and monthly_trend == "alcista":
+                action = ("CAPITULATION IN BULL TREND: Extreme fear in a long-term bullish regime is historically a BUYING opportunity. "
+                          "Protect capital but prepare watchlist for aggressive re-entry when VIX peaks.")
+            else:
+                action = "SURVIVE FIRST: 80%+ cash. Watch for VIX spike + reversal as capitulation signal → aggressive re-entry."
+
+        return (rec, emoji, sentiment, desc, action)
 
     def _generate_briefing(self, composite, news_score, movers_score, breadth,
                            sector_rotation, recommendation, gainers_count, losers_count,
                            hot_sectors, cold_sectors, action, vix_val, fg_score, fg_label,
-                           language: str = 'en') -> str:
+                           language: str = 'en', trends: Dict = None) -> str:
         parts = []
         es = (language == 'es')
 
@@ -1813,6 +2017,57 @@ class NeuralReasoningMarketSentimentEngine:
             parts.append(f"📉 **{'Mercado bajo presión' if es else 'Market under pressure'}** — {'postura defensiva recomendada' if es else 'defensive posture recommended'} ({'puntuación' if es else 'score'}: {composite:.0f}/100).")
         else:
             parts.append(f"🔻 **{'Presión vendedora dominante' if es else 'Dominant selling pressure'}** — {'extrema cautela' if es else 'extreme caution'} ({'puntuación' if es else 'score'}: {composite:.0f}/100).")
+
+        # TREND CONTEXT — the key differentiator from snapshot-only advice
+        if trends:
+            daily_delta = trends.get("daily_delta")
+            weekly_mean = trends.get("weekly_mean")
+            weekly_trend = trends.get("weekly_trend")
+            monthly_trend = trends.get("monthly_trend")
+            regime = trends.get("regime", "unknown")
+            smoothed = trends.get("smoothed_score")
+            breadth_trend = trends.get("breadth_trend")
+
+            regime_labels = {
+                "bull_sustained": ("Alcista sostenido" if es else "Sustained bull"),
+                "bull_moderate": ("Alcista moderado" if es else "Moderate bull"),
+                "neutral_range": ("Rango neutral" if es else "Neutral range"),
+                "bear_moderate": ("Bajista moderado" if es else "Moderate bear"),
+                "bear_sustained": ("Bajista sostenido" if es else "Sustained bear"),
+            }
+            regime_label = regime_labels.get(regime, "")
+
+            if regime != "unknown" and regime_label:
+                if es:
+                    parts.append(f"Régimen de mercado: **{regime_label}**.")
+                else:
+                    parts.append(f"Market regime: **{regime_label}**.")
+
+            # The most important insight: daily vs weekly/monthly divergence
+            if daily_delta is not None and weekly_mean is not None:
+                if daily_delta < -5 and weekly_trend in ("mejorando", "estable") and regime in ("bull_sustained", "bull_moderate"):
+                    if es:
+                        parts.append(f"⚡ Mercado rojo hoy ({daily_delta:+.1f}pts), pero tendencia semanal {weekly_trend} (media {weekly_mean:.0f}) — "
+                                     f"**no vender buenos holdings**, oportunidad para acumular quality con moat alto.")
+                    else:
+                        parts.append(f"⚡ Market red today ({daily_delta:+.1f}pts), but weekly trend {weekly_trend} (avg {weekly_mean:.0f}) — "
+                                     f"**don't sell quality holdings**, opportunity to accumulate high-moat stocks.")
+                elif daily_delta > 5 and regime in ("bear_sustained", "bear_moderate"):
+                    if es:
+                        parts.append(f"⚠️ Rebote hoy ({daily_delta:+.1f}pts) en régimen {regime_label.lower()} — no perseguir, esperar confirmación.")
+                    else:
+                        parts.append(f"⚠️ Bounce today ({daily_delta:+.1f}pts) in {regime_label.lower()} regime — don't chase, wait for confirmation.")
+                elif daily_delta is not None and abs(daily_delta) < 3 and weekly_trend == "estable":
+                    if es:
+                        parts.append(f"Estabilidad: cambio mínimo vs ayer ({daily_delta:+.1f}pts), tendencia semanal estable.")
+                    else:
+                        parts.append(f"Stability: minimal change vs yesterday ({daily_delta:+.1f}pts), weekly trend stable.")
+
+            if breadth_trend and breadth_trend != "estable":
+                if es:
+                    parts.append(f"Amplitud semanal: {'mejorando' if breadth_trend == 'mejorando' else 'deteriorando'}.")
+                else:
+                    parts.append(f"Weekly breadth: {'improving' if breadth_trend == 'mejorando' else 'deteriorating'}.")
 
         if es:
             parts.append(f"Amplitud: {breadth:.0%} avanzando ({gainers_count} ganadores vs {losers_count} perdedores).")

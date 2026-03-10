@@ -2044,6 +2044,52 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
   );
 }
 
+// Metric descriptions for hover tooltips
+const METRIC_TOOLTIPS: Record<string, string> = {
+  'P/E Ratio': 'Price / Earnings. How much investors pay per $1 of earnings. Lower = cheaper.',
+  'PEG Ratio': 'P/E divided by growth rate. <1 = undervalued relative to growth.',
+  'P/B Ratio': 'Price / Book Value. Compares market price to net asset value.',
+  'P/S Ratio': 'Price / Sales. Useful for unprofitable companies. Lower = cheaper.',
+  'P/FCF Ratio': 'Price / Free Cash Flow. Measures price vs actual cash generated.',
+  'EV/EBITDA': 'Enterprise Value / EBITDA. Capital-structure-neutral valuation.',
+  'EV/Sales': 'Enterprise Value / Revenue. Useful for comparing across industries.',
+  'EV/FCF': 'Enterprise Value / Free Cash Flow. Higher quality than EV/EBITDA.',
+  'Earnings Yield': 'Inverse of P/E (E/P). Compare to bond yields for relative value.',
+  'FCF Yield': 'Free Cash Flow / Market Cap. Higher = more cash return potential.',
+  'Dividend Yield': 'Annual dividends / Price. Cash return from holding the stock.',
+  'Dividend Payout': '% of earnings paid as dividends. High = less room for growth.',
+  'Gross Margin': 'Gross Profit / Revenue. Measures pricing power and COGS efficiency.',
+  'Operating Margin': 'Operating Income / Revenue. Profitability from core operations.',
+  'Net Margin': 'Net Income / Revenue. Bottom-line profitability after all costs.',
+  'EBITDA Margin': 'EBITDA / Revenue. Operational cash profitability, ignores D&A.',
+  'ROA': 'Return on Assets. Net Income / Total Assets. Asset efficiency.',
+  'ROE': 'Return on Equity. Net Income / Equity. Shareholder return efficiency.',
+  'ROIC': 'Return on Invested Capital. How well capital generates returns.',
+  'ROCE': 'Return on Capital Employed. Similar to ROIC, includes all capital.',
+  'Current Ratio': 'Current Assets / Current Liabilities. >1 = can pay short-term debts.',
+  'Quick Ratio': '(Current Assets - Inventory) / Current Liabilities. Stricter liquidity.',
+  'Cash Ratio': 'Cash / Current Liabilities. Most conservative liquidity measure.',
+  'Debt/Equity': 'Total Debt / Equity. Financial leverage. Lower = less risky.',
+  'Debt/Assets': 'Total Debt / Total Assets. % of assets funded by debt.',
+  'Net Debt/EBITDA': 'Net Debt / EBITDA. Years to repay debt from operations. <3x is healthy.',
+  'Interest Coverage': 'EBIT / Interest Expense. Ability to cover interest payments. >3x is safe.',
+  'Financial Leverage': 'Assets / Equity. Amplifies returns and risk. Lower = safer.',
+  'Asset Turnover': 'Revenue / Assets. How efficiently assets generate sales.',
+  'Inventory Turnover': 'COGS / Inventory. How fast inventory sells. Higher = better.',
+  'Receivables Turnover': 'Revenue / Receivables. How fast customers pay. Higher = better.',
+  'Payables Turnover': 'COGS / Payables. How fast the company pays suppliers.',
+  'Days Sales Out': 'Average days to collect payment after a sale. Lower = faster.',
+  'Days Inventory': 'Average days to sell inventory. Lower = more efficient.',
+  'Days Payables': 'Average days to pay suppliers. Higher = better cash management.',
+  'Cash Conversion': 'Days to convert investments into cash flows. Lower = better.',
+  'Revenue/Share': 'Total revenue divided by shares outstanding.',
+  'EPS': 'Earnings Per Share. Net income available to each share.',
+  'Book Value/Share': 'Total equity divided by shares outstanding. Liquidation value.',
+  'FCF/Share': 'Free Cash Flow per share. Cash available per share after capex.',
+  'Tangible BV/Share': 'Book value excluding intangible assets, per share.',
+  'Capex/Share': 'Capital expenditures per share. Investment in future growth.',
+};
+
 function MetricCard({
   label,
   value,
@@ -2064,10 +2110,17 @@ function MetricCard({
     emerald: 'text-emerald-400',
   };
 
+  const tip = METRIC_TOOLTIPS[label];
+
   return (
-    <div className="bg-black/60 p-4 rounded-lg border border-white/[0.06]">
+    <div className="bg-black/60 p-4 rounded-lg border border-white/[0.06] relative group">
       <p className="text-xs text-gray-400 mb-1">{label}</p>
       <p className={`text-xl font-bold ${colorClasses[color]}`}>{value}</p>
+      {tip && (
+        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900/95 text-gray-300 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 border border-white/[0.08] max-w-[240px] whitespace-normal text-center backdrop-blur-sm">
+          {tip}
+        </div>
+      )}
     </div>
   );
 }
@@ -2094,6 +2147,9 @@ function MetricCardWithBenchmark({
     emerald: 'text-emerald-400',
   };
 
+  const tip = METRIC_TOOLTIPS[label];
+  const tooltipText = tip ? `${tip}\n${comparison.tooltip}` : comparison.tooltip;
+
   return (
     <div className="bg-black/60 p-4 rounded-lg border border-white/[0.06] relative group">
       <div className="flex items-center justify-between">
@@ -2105,9 +2161,10 @@ function MetricCardWithBenchmark({
         )}
       </div>
       <p className={`text-xl font-bold ${colorClasses[color]}`}>{value}</p>
-      {/* Tooltip on hover */}
-      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-black/80 text-gray-300 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 border border-white/[0.08]">
-        {comparison.tooltip}
+      {/* Tooltip on hover — shows metric description + benchmark comparison */}
+      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900/95 text-gray-300 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 border border-white/[0.08] max-w-[260px] whitespace-normal text-center backdrop-blur-sm">
+        {tip && <div className="mb-1">{tip}</div>}
+        <div className={tip ? 'text-gray-500 border-t border-white/[0.06] pt-1 mt-1' : ''}>{comparison.tooltip}</div>
       </div>
     </div>
   );

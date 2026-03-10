@@ -245,7 +245,7 @@ export default function OptionSentimentTab({ ticker, currentPrice, chainData }: 
     const glowId = `biasGlow-${label.replace(/\s/g, '')}`;
 
     return (
-      <svg viewBox="0 0 300 155" className="w-full max-w-[300px] mx-auto">
+      <svg viewBox="0 0 300 180" className="w-full max-w-[300px] mx-auto">
         <defs>
           <linearGradient id={gaugeId} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor="#ef4444" />
@@ -275,12 +275,13 @@ export default function OptionSentimentTab({ ticker, currentPrice, chainData }: 
         <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={color} strokeWidth="2.5" strokeLinecap="round" />
         <circle cx={cx} cy={cy} r="5.5" fill={color} />
         <circle cx={cx} cy={cy} r="2.5" fill="#0a0a0a" />
-        {/* Labels */}
-        <text x={cx - r - 2} y={cy + 18} fill="#6b7280" fontSize="10" textAnchor="middle">-5</text>
-        <text x={cx} y={cy - r - 6} fill="#6b7280" fontSize="10" textAnchor="middle">0</text>
-        <text x={cx + r + 2} y={cy + 18} fill="#6b7280" fontSize="10" textAnchor="middle">+5</text>
-        <text x={cx} y={cy + 2} fill={color} fontSize="18" fontWeight="bold" textAnchor="middle">{score.toFixed(1)}</text>
-        <text x={cx} y={cy + 18} fill="#9ca3af" fontSize="11" textAnchor="middle">{label}</text>
+        {/* Scale labels */}
+        <text x={cx - r + 5} y={cy + 20} fill="#4b5563" fontSize="9" textAnchor="middle">-5</text>
+        <text x={cx} y={cy - r - 8} fill="#4b5563" fontSize="9" textAnchor="middle">0</text>
+        <text x={cx + r - 5} y={cy + 20} fill="#4b5563" fontSize="9" textAnchor="middle">+5</text>
+        {/* Score + label below gauge */}
+        <text x={cx} y={cy + 32} fill={color} fontSize="20" fontWeight="bold" textAnchor="middle">{score.toFixed(1)}</text>
+        <text x={cx} y={cy + 46} fill="#6b7280" fontSize="10" textAnchor="middle">{label}</text>
       </svg>
     );
   };

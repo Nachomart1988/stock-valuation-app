@@ -32,11 +32,18 @@ interface MacroAnalysis {
 interface SentimentTrends {
   daily_delta: number | null;
   weekly_mean: number | null;
+  monthly_mean: number | null;
   monthly_delta: number | null;
   weekly_trend: 'mejorando' | 'deteriorando' | 'estable' | null;
+  monthly_trend: 'alcista' | 'bajista' | 'lateral' | null;
   ema_score: number;
+  smoothed_score: number;
   momentum_streak: number;
   anomaly: boolean;
+  regime: string;
+  regime_confidence: number;
+  breadth_trend: 'mejorando' | 'deteriorando' | 'estable' | null;
+  vix_trend: string | null;
   note?: string;
 }
 
@@ -82,7 +89,7 @@ function ScoreBar({ score, label }: { score: number; label: string }) {
         <span className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider">{label}</span>
         <span className={`text-xs sm:text-sm font-bold ${textColor}`}>{score.toFixed(0)}</span>
       </div>
-      <div className="h-1.5 bg-black/60 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-gray-900/60 rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${score}%` }} />
       </div>
     </div>
@@ -372,11 +379,11 @@ export default function MarketSentimentPage() {
   if (!data) return null;
 
   return (
-    <div className="min-h-screen bg-[#050507] pb-16">
+    <div className="min-h-screen bg-gray-950 pb-16">
       <Header />
 
       {/* Sub-header */}
-      <header className="border-b border-white/[0.06] bg-[#0a0a0c]/80 backdrop-blur-2xl mt-14">
+      <header className="border-b border-white/[0.06] bg-gray-900/80 backdrop-blur-2xl mt-14">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-3">
@@ -434,7 +441,7 @@ export default function MarketSentimentPage() {
             {/* Composite + VIX + Fear/Greed row */}
             <div className="mt-8 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-5">
               {/* Composite Score */}
-              <div className="bg-black/50 backdrop-blur-xl rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border border-white/[0.08] text-center min-w-[140px]">
+              <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border border-white/[0.08] text-center min-w-[140px]">
                 <div className="text-[11px] text-gray-500 mb-1 uppercase tracking-wider font-medium">{t('marketSentiment.compositeScore')}</div>
                 <div className={`text-5xl sm:text-6xl font-bold tabular-nums ${scoreColor(data.compositeScore)}`}>{data.compositeScore}</div>
                 <div className="text-[10px] text-gray-600 mt-1 font-mono">/ 100</div>
@@ -442,7 +449,7 @@ export default function MarketSentimentPage() {
 
               {/* VIX */}
               {data.vixValue != null && (
-                <div className="bg-black/50 backdrop-blur-xl rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border border-white/[0.08] text-center min-w-[140px]">
+                <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl px-6 sm:px-8 py-4 sm:py-5 border border-white/[0.08] text-center min-w-[140px]">
                   <div className="text-[11px] text-gray-500 mb-1 uppercase tracking-wider font-medium">VIX</div>
                   <div className={`text-4xl sm:text-5xl font-bold tabular-nums ${data.vixValue < 20 ? 'text-emerald-400' : data.vixValue < 30 ? 'text-amber-400' : 'text-red-400'}`}>
                     {data.vixValue.toFixed(1)}
@@ -453,7 +460,7 @@ export default function MarketSentimentPage() {
 
               {/* Fear & Greed */}
               {data.fearGreedScore != null && (
-                <div className="bg-black/40 backdrop-blur-xl rounded-2xl px-4 py-4 border border-white/10">
+                <div className="bg-gray-900/40 backdrop-blur-xl rounded-2xl px-4 py-4 border border-white/10">
                   <div className="text-xs text-gray-400 mb-1 uppercase tracking-wider text-center">Fear & Greed</div>
                   <FearGreedGauge score={data.fearGreedScore} label={tl(data.fearGreedLabel || '')} />
                 </div>
@@ -463,7 +470,7 @@ export default function MarketSentimentPage() {
         </div>
 
         {/* ── BRIEFING ── */}
-        <div className="bg-black/80/70 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+        <div className="bg-gray-900/80/70 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
           <h3 className="text-base sm:text-lg font-bold text-emerald-400 mb-3 sm:mb-4 flex items-center gap-2">
             🧠 {t('marketSentiment.neuralAnalysis')}
           </h3>
@@ -472,26 +479,48 @@ export default function MarketSentimentPage() {
 
         {/* ── TEMPORAL TRENDS ── */}
         {data.trends && !data.trends.note && (
-          <div className="bg-black/50 border border-cyan-800/30 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
-            <h3 className="text-base sm:text-lg font-bold text-cyan-400 mb-4 flex items-center gap-2">
-              📈 {locale === 'es' ? 'Tendencia Histórica' : 'Historical Trend'}
-              {data.trends.anomaly && (
-                <span className="ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-900/60 text-red-400 border border-red-700/50 uppercase">⚠️ {locale === 'es' ? 'Anomalía' : 'Anomaly'}</span>
+          <div className="bg-gray-900/50 border border-cyan-800/30 rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h3 className="text-base sm:text-lg font-bold text-cyan-400 flex items-center gap-2">
+                📈 {locale === 'es' ? 'Tendencia Histórica' : 'Historical Trend'}
+                {data.trends.anomaly && (
+                  <span className="ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-900/60 text-red-400 border border-red-700/50 uppercase">⚠️ {locale === 'es' ? 'Anomalía' : 'Anomaly'}</span>
+                )}
+              </h3>
+              {/* Regime badge */}
+              {data.trends.regime && data.trends.regime !== 'unknown' && data.trends.regime_confidence !== undefined && (
+                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                  data.trends.regime.startsWith('bull') ? 'bg-emerald-900/40 text-emerald-400 border-emerald-700/40' :
+                  data.trends.regime.startsWith('bear') ? 'bg-red-900/40 text-red-400 border-red-700/40' :
+                  'bg-yellow-900/40 text-yellow-400 border-yellow-700/40'
+                }`}>
+                  {(() => {
+                    const labels: Record<string, string> = locale === 'es' ? {
+                      bull_sustained: 'Alcista Sostenido', bull_moderate: 'Alcista Moderado',
+                      neutral_range: 'Rango Neutral', bear_moderate: 'Bajista Moderado', bear_sustained: 'Bajista Sostenido',
+                    } : {
+                      bull_sustained: 'Sustained Bull', bull_moderate: 'Moderate Bull',
+                      neutral_range: 'Neutral Range', bear_moderate: 'Moderate Bear', bear_sustained: 'Sustained Bear',
+                    };
+                    return labels[data.trends.regime] || data.trends.regime;
+                  })()}
+                  {data.trends.regime_confidence > 0 && <span className="ml-1 opacity-60">{data.trends.regime_confidence}%</span>}
+                </span>
               )}
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {/* EMA Score */}
-              <div className="bg-black/40 rounded-xl p-3 sm:p-4 text-center border border-cyan-800/20">
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {/* Smoothed Score */}
+              <div className="bg-gray-900/40 rounded-xl p-3 sm:p-4 text-center border border-cyan-800/20">
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
-                  {locale === 'es' ? 'Score EMA' : 'EMA Score'}
+                  {locale === 'es' ? 'Score Suavizado' : 'Smoothed Score'}
                 </div>
-                <div className={`text-2xl sm:text-3xl font-black ${data.trends.ema_score >= 60 ? 'text-emerald-400' : data.trends.ema_score >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
-                  {data.trends.ema_score.toFixed(1)}
+                <div className={`text-2xl sm:text-3xl font-black ${(data.trends.smoothed_score ?? data.trends.ema_score) >= 60 ? 'text-emerald-400' : (data.trends.smoothed_score ?? data.trends.ema_score) >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {(data.trends.smoothed_score ?? data.trends.ema_score).toFixed(1)}
                 </div>
-                <div className="text-[9px] text-gray-600 mt-0.5">α=0.3 EMA</div>
+                <div className="text-[9px] text-gray-600 mt-0.5">EMA α=0.3</div>
               </div>
               {/* Daily delta */}
-              <div className="bg-black/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+              <div className="bg-gray-900/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
                   {locale === 'es' ? 'Δ Día' : 'Δ Day'}
                 </div>
@@ -501,7 +530,7 @@ export default function MarketSentimentPage() {
                 <div className="text-[9px] text-gray-600 mt-0.5">{locale === 'es' ? 'vs ayer' : 'vs yesterday'}</div>
               </div>
               {/* Weekly mean */}
-              <div className="bg-black/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+              <div className="bg-gray-900/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
                   {locale === 'es' ? 'Media 7d' : '7d Mean'}
                 </div>
@@ -518,8 +547,26 @@ export default function MarketSentimentPage() {
                     : ''}
                 </div>
               </div>
+              {/* Monthly mean */}
+              <div className="bg-gray-900/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                  {locale === 'es' ? 'Media 30d' : '30d Mean'}
+                </div>
+                <div className={`text-2xl sm:text-3xl font-black ${data.trends.monthly_mean == null ? 'text-gray-500' : data.trends.monthly_mean >= 60 ? 'text-green-400' : data.trends.monthly_mean >= 45 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {data.trends.monthly_mean == null ? '—' : data.trends.monthly_mean.toFixed(1)}
+                </div>
+                <div className={`text-[9px] mt-0.5 ${data.trends.monthly_trend === 'alcista' ? 'text-green-500' : data.trends.monthly_trend === 'bajista' ? 'text-red-500' : 'text-gray-500'}`}>
+                  {data.trends.monthly_trend
+                    ? locale === 'es'
+                      ? data.trends.monthly_trend
+                      : data.trends.monthly_trend === 'alcista' ? 'bullish'
+                        : data.trends.monthly_trend === 'bajista' ? 'bearish'
+                        : 'sideways'
+                    : ''}
+                </div>
+              </div>
               {/* Monthly delta */}
-              <div className="bg-black/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+              <div className="bg-gray-900/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
                   {locale === 'es' ? 'Δ 30d' : 'Δ 30d'}
                 </div>
@@ -530,6 +577,35 @@ export default function MarketSentimentPage() {
                   {data.trends.momentum_streak > 0 ? `${data.trends.momentum_streak}d ${locale === 'es' ? 'racha' : 'streak'}` : ''}
                 </div>
               </div>
+              {/* Breadth trend */}
+              {data.trends.breadth_trend !== undefined && (
+              <div className="bg-gray-900/40 rounded-xl p-3 sm:p-4 text-center border border-white/[0.06]">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                  {locale === 'es' ? 'Amplitud 7d' : 'Breadth 7d'}
+                </div>
+                <div className={`text-xl sm:text-2xl font-black ${
+                  data.trends.breadth_trend === 'mejorando' ? 'text-green-400' :
+                  data.trends.breadth_trend === 'deteriorando' ? 'text-red-400' :
+                  'text-gray-500'
+                }`}>
+                  {data.trends.breadth_trend
+                    ? data.trends.breadth_trend === 'mejorando' ? '↑' : data.trends.breadth_trend === 'deteriorando' ? '↓' : '→'
+                    : '—'}
+                </div>
+                <div className={`text-[9px] mt-0.5 ${
+                  data.trends.breadth_trend === 'mejorando' ? 'text-green-500' :
+                  data.trends.breadth_trend === 'deteriorando' ? 'text-red-500' : 'text-gray-500'
+                }`}>
+                  {data.trends.breadth_trend
+                    ? locale === 'es'
+                      ? data.trends.breadth_trend
+                      : data.trends.breadth_trend === 'mejorando' ? 'improving'
+                        : data.trends.breadth_trend === 'deteriorando' ? 'weakening'
+                        : 'stable'
+                    : ''}
+                </div>
+              </div>
+              )}
             </div>
           </div>
         )}
@@ -545,16 +621,16 @@ export default function MarketSentimentPage() {
         )}
 
         {/* ── SCORE BREAKDOWN ── */}
-        <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+        <div className="bg-gray-900/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
           <h3 className="text-base sm:text-lg font-bold text-teal-400 mb-4 sm:mb-6 flex items-center gap-2">
             📊 {t('marketSentiment.neuralLayers')}
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {Object.entries(data.scores).map(([key, value]) => (
-              <div key={key} className="bg-black/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center border border-white/[0.06]/50">
+              <div key={key} className="bg-gray-900/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center border border-white/[0.06]/50">
                 <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{scoreLabels[key] || key}</div>
                 <div className={`text-2xl sm:text-3xl font-bold ${scoreColor(value)}`}>{value.toFixed(0)}</div>
-                <div className="h-1 bg-black/50 rounded-full mt-2 overflow-hidden">
+                <div className="h-1 bg-gray-900/50 rounded-full mt-2 overflow-hidden">
                   <div className={`h-full rounded-full ${value >= 60 ? 'bg-green-500' : value >= 45 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${value}%` }} />
                 </div>
               </div>
@@ -564,17 +640,17 @@ export default function MarketSentimentPage() {
 
         {/* ── MACRO ANALYSIS ── */}
         {data.macroAnalysis && (
-          <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+          <div className="bg-gray-900/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
             <h3 className="text-base sm:text-lg font-bold text-teal-400 mb-4 sm:mb-6 flex items-center gap-2">
               🌐 {t('marketSentiment.macroAnalysis')}
             </h3>
             <div className="space-y-4 sm:space-y-6">
               {/* Breadth bars */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div className="bg-black/40 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/[0.06]">
+                <div className="bg-gray-900/40 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/[0.06]">
                   <ScoreBar score={data.macroAnalysis.sectorBreadth} label={t('marketSentiment.sectorBreadth') + ' %'} />
                 </div>
-                <div className="bg-black/40 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/[0.06]">
+                <div className="bg-gray-900/40 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-white/[0.06]">
                   <ScoreBar score={data.macroAnalysis.industryBreadth} label={t('marketSentiment.industryBreadth') + ' %'} />
                 </div>
               </div>
@@ -630,7 +706,7 @@ export default function MarketSentimentPage() {
 
         {/* ── SIGNALS ── */}
         {data.signals.length > 0 && (
-          <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+          <div className="bg-gray-900/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
             <h3 className="text-base sm:text-lg font-bold text-emerald-400 mb-4 sm:mb-6 flex items-center gap-2">
               📡 {t('marketSentiment.signalsDetected')} ({data.signals.length})
             </h3>
@@ -640,7 +716,7 @@ export default function MarketSentimentPage() {
                   signal.type === 'bullish' ? 'bg-emerald-900/25 border-emerald-700/50' :
                   signal.type === 'bearish' ? 'bg-red-900/25 border-red-700/50' :
                   signal.type === 'cautionary' ? 'bg-amber-900/25 border-amber-700/50' :
-                  'bg-black/40 border-white/[0.06]'
+                  'bg-gray-900/40 border-white/[0.06]'
                 }`}>
                   <div className="flex items-start gap-2">
                     <span className="text-lg sm:text-xl shrink-0">{signal.emoji}</span>
@@ -661,11 +737,11 @@ export default function MarketSentimentPage() {
         )}
 
         {/* ── BREADTH BAR ── */}
-        <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+        <div className="bg-gray-900/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
           <h3 className="text-base sm:text-lg font-bold text-amber-400 mb-4">📊 {t('marketSentiment.marketBreadth')}</h3>
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
             <div className="flex-1 w-full">
-              <div className="h-5 sm:h-6 bg-black/60 rounded-full overflow-hidden flex">
+              <div className="h-5 sm:h-6 bg-gray-900/60 rounded-full overflow-hidden flex">
                 <div className="h-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all" style={{ width: `${data.moversAnalysis.breadthRatio * 100}%` }} />
                 <div className="h-full bg-gradient-to-r from-red-500 to-rose-400" style={{ width: `${(1 - data.moversAnalysis.breadthRatio) * 100}%` }} />
               </div>
@@ -695,7 +771,7 @@ export default function MarketSentimentPage() {
               <div className="space-y-1.5 sm:space-y-2">
                 {data.moversAnalysis.topGainers.slice(0, 8).map((stock, idx) => (
                   <Link key={idx} href={`/analizar?ticker=${stock.symbol}`}
-                    className="flex items-center justify-between bg-black/40 p-2.5 sm:p-3 rounded-xl hover:bg-black/50 transition">
+                    className="flex items-center justify-between bg-gray-900/40 p-2.5 sm:p-3 rounded-xl hover:bg-gray-900/50 transition">
                     <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       <span className="text-gray-600 text-xs w-4 shrink-0">{idx + 1}</span>
                       <div className="min-w-0">
@@ -724,7 +800,7 @@ export default function MarketSentimentPage() {
               <div className="space-y-1.5 sm:space-y-2">
                 {data.moversAnalysis.topLosers.slice(0, 8).map((stock, idx) => (
                   <Link key={idx} href={`/analizar?ticker=${stock.symbol}`}
-                    className="flex items-center justify-between bg-black/40 p-2.5 sm:p-3 rounded-xl hover:bg-black/50 transition">
+                    className="flex items-center justify-between bg-gray-900/40 p-2.5 sm:p-3 rounded-xl hover:bg-gray-900/50 transition">
                     <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       <span className="text-gray-600 text-xs w-4 shrink-0">{idx + 1}</span>
                       <div className="min-w-0">
@@ -746,7 +822,7 @@ export default function MarketSentimentPage() {
         {/* ── SECTOR ROTATION ── */}
         {(data.moversAnalysis.sectorRotation.hot.length > 0 || data.moversAnalysis.sectorRotation.cold.length > 0) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
-            <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-4 sm:p-6">
+            <div className="bg-gray-900/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-4 sm:p-6">
               <h3 className="text-green-400 font-bold mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                 🔥 {t('marketSentiment.hotSectorsRotation')}
               </h3>
@@ -759,7 +835,7 @@ export default function MarketSentimentPage() {
                 ))}
               </div>
             </div>
-            <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-4 sm:p-6">
+            <div className="bg-gray-900/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-4 sm:p-6">
               <h3 className="text-red-400 font-bold mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                 ❄️ {t('marketSentiment.coldSectorsRotation')}
               </h3>
@@ -777,10 +853,10 @@ export default function MarketSentimentPage() {
 
         {/* ── REASONING CHAIN (GODMODE only, collapsible) ── */}
         {isGodMode && data.reasoningChain && data.reasoningChain.length > 0 && (
-          <div className="bg-black/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl overflow-hidden">
+          <div className="bg-gray-900/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl overflow-hidden">
             <button
               onClick={() => setShowReasoning(!showReasoning)}
-              className="w-full px-5 sm:px-8 py-4 sm:py-5 flex items-center justify-between hover:bg-black/60/30 transition"
+              className="w-full px-5 sm:px-8 py-4 sm:py-5 flex items-center justify-between hover:bg-gray-900/60/30 transition"
             >
               <h3 className="text-sm sm:text-lg font-bold text-amber-400 flex items-center gap-2">
                 🔗 {t('marketSentiment.reasoningChain')} ({data.reasoningChain.length} steps)
@@ -808,7 +884,7 @@ export default function MarketSentimentPage() {
             Neural Market Pulse v{data.version} · {t('marketSentiment.footerText')}
           </p>
           <div className="flex justify-center gap-3 sm:gap-4 flex-wrap">
-            <Link href="/" className="px-4 sm:px-6 py-2 bg-black/60 hover:bg-black/50 text-gray-300 rounded-lg transition text-xs sm:text-sm">
+            <Link href="/" className="px-4 sm:px-6 py-2 bg-gray-900/60 hover:bg-gray-900/50 text-gray-300 rounded-lg transition text-xs sm:text-sm">
               ← {t('marketSentiment.backToHome')}
             </Link>
             <Link href="/analizar" className="px-4 sm:px-6 py-2 bg-gradient-to-r from-emerald-600 to-emerald-600 hover:from-emerald-500 hover:to-emerald-500 text-white rounded-lg transition text-xs sm:text-sm">

@@ -108,7 +108,7 @@ function GuideCard({ guide }: { guide: typeof guides[0] }) {
     <div className="rounded-2xl border border-green-900/15 overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-4 p-5 text-left hover:bg-black/60/30 transition"
+        className="w-full flex items-center gap-4 p-5 text-left hover:bg-gray-900/60/30 transition"
       >
         <span className="text-2xl">{guide.icon}</span>
         <div className="flex-1">
@@ -119,7 +119,7 @@ function GuideCard({ guide }: { guide: typeof guides[0] }) {
       </button>
 
       {open && (
-        <div className="px-6 pb-6 bg-black/60/20 border-t border-green-900/20/30">
+        <div className="px-6 pb-6 bg-gray-900/60/20 border-t border-green-900/20/30">
           <div className="space-y-4 pt-4">
             {guide.steps.map((step, i) => (
               <div key={i} className="flex gap-4">
@@ -161,7 +161,7 @@ export default function GuidesPage() {
         <div className="mt-10 flex flex-col sm:flex-row gap-4">
           <Link
             href="/docs"
-            className="flex-1 p-5 rounded-2xl bg-black/40 border border-green-900/15 hover:border-emerald-500/40 transition text-center"
+            className="flex-1 p-5 rounded-2xl bg-gray-900/40 border border-green-900/15 hover:border-emerald-500/40 transition text-center"
           >
             <div className="text-2xl mb-2">📋</div>
             <div className="font-bold">Documentación Técnica</div>
@@ -169,7 +169,7 @@ export default function GuidesPage() {
           </Link>
           <Link
             href="/faq"
-            className="flex-1 p-5 rounded-2xl bg-black/40 border border-green-900/15 hover:border-emerald-500/40 transition text-center"
+            className="flex-1 p-5 rounded-2xl bg-gray-900/40 border border-green-900/15 hover:border-emerald-500/40 transition text-center"
           >
             <div className="text-2xl mb-2">❓</div>
             <div className="font-bold">Preguntas Frecuentes</div>
@@ -177,7 +177,7 @@ export default function GuidesPage() {
           </Link>
           <Link
             href="/support"
-            className="flex-1 p-5 rounded-2xl bg-black/40 border border-green-900/15 hover:border-emerald-500/40 transition text-center"
+            className="flex-1 p-5 rounded-2xl bg-gray-900/40 border border-green-900/15 hover:border-emerald-500/40 transition text-center"
           >
             <div className="text-2xl mb-2">💬</div>
             <div className="font-bold">Soporte</div>

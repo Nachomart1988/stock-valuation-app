@@ -5,31 +5,31 @@
 @import "tailwindcss";
 
 /* ────────────────────────────────────────────────────────────────
-   BLACK + DEUTSCHE BANK GREEN DESIGN SYSTEM
-   Deutsche Bank Green: #00A651
+   PRISMO — PROFESSIONAL FINTECH DESIGN SYSTEM
+   Primary accent: #00A651 (green)  •  Premium accent: Liquid Gold
    ──────────────────────────────────────────────────────────────── */
 @theme {
-  /* Override gray scale to be true black */
-  --color-gray-950: #000000;
-  --color-gray-900: #030303;
-  --color-gray-800: #0a0a0a;
-  --color-gray-750: #0f0f0f;
-  --color-gray-700: #161616;
-  --color-gray-600: #222222;
-  --color-gray-500: #555555;
-  --color-gray-400: #888888;
-  --color-gray-300: #aaaaaa;
-  --color-gray-200: #cccccc;
-  --color-gray-100: #eeeeee;
+  /* Cool navy gray scale — professional dark UI */
+  --color-gray-950: #050507;
+  --color-gray-900: #0a0c14;
+  --color-gray-800: #111320;
+  --color-gray-750: #161928;
+  --color-gray-700: #1c1f30;
+  --color-gray-600: #282c42;
+  --color-gray-500: #4a4e65;
+  --color-gray-400: #7c8098;
+  --color-gray-300: #a0a4b8;
+  --color-gray-200: #c8cad6;
+  --color-gray-100: #e4e6ed;
 
-  /* Deutsche Bank Green palette */
+  /* Green accent palette */
   --color-green-400: #34d97b;
   --color-green-500: #00c05a;
   --color-green-600: #00A651;
   --color-green-700: #008040;
   --color-green-800: #005c2e;
-  --color-green-900: #003319;
-  --color-green-950: #001a0d;
+  --color-green-900: #0a1a12;
+  --color-green-950: #060f0a;
 
   /* Emerald (secondary accent) */
   --color-emerald-400: #4ade80;
@@ -44,9 +44,9 @@
   --color-danger: #ef4444;
   --color-warning: #f59e0b;
 
-  /* Shadows */
-  --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.6), 0 2px 4px -2px rgb(0 0 0 / 0.6);
-  --shadow-hard: 0 10px 15px -3px rgb(0 0 0 / 0.7), 0 4px 6px -4px rgb(0 0 0 / 0.7);
+  /* Shadows — softer, more diffuse */
+  --shadow-medium: 0 4px 12px -2px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-hard: 0 10px 25px -5px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -57,28 +57,28 @@ html {
 }
 
 body {
-  background-color: #000000;
-  color: #e5e7eb;
+  background-color: #050507;
+  color: #c8cad6;
   font-family: 'Space Grotesk', var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 0.4rem; }
-::-webkit-scrollbar-track { background: #000; }
-::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #00A651, #005c2e); border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #00c05a, #008040); }
+::-webkit-scrollbar { width: 0.35rem; }
+::-webkit-scrollbar-track { background: #0a0c14; }
+::-webkit-scrollbar-thumb { background: #282c42; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3f58; }
 
-::selection { background: rgba(0, 166, 81, 0.25); color: #fff; }
+::selection { background: rgba(100, 120, 200, 0.25); color: #fff; }
 
 /* ═══════════════════════════════════════════════════════
    COMPONENT DEFAULTS
 ═══════════════════════════════════════════════════════ */
 .btn {
-  padding: 0.75rem 1.5rem;
-  border-radius: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
   font-weight: 600;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
 
 .btn-primary {
@@ -88,30 +88,30 @@ body {
 .btn-primary:hover { background: #00c05a; }
 
 .btn-secondary {
-  background: #0a0a0a;
-  color: #e5e7eb;
-  border: 1px solid #161616;
+  background: #111320;
+  color: #c8cad6;
+  border: 1px solid #1c1f30;
 }
-.btn-secondary:hover { border-color: #00A651; }
+.btn-secondary:hover { border-color: #3a3f58; }
 
 .card {
-  background: #0a0a0a;
-  border-radius: 0.75rem;
-  border: 1px solid #161616;
-  padding: 1.5rem;
+  background: #0a0c14;
+  border-radius: 0.625rem;
+  border: 1px solid rgba(255,255,255,0.07);
+  padding: 1.25rem;
 }
 
 .input {
   width: 100%;
-  padding: 0.75rem 1rem;
-  background: #030303;
-  border: 1px solid #222222;
-  border-radius: 0.5rem;
-  color: #e5e7eb;
-  transition: all 0.2s;
+  padding: 0.625rem 0.875rem;
+  background: #0a0c14;
+  border: 1px solid #1c1f30;
+  border-radius: 0.375rem;
+  color: #c8cad6;
+  transition: all 0.15s;
 }
-.input::placeholder { color: #555; }
-.input:focus { border-color: #00A651; outline: none; box-shadow: 0 0 0 2px rgba(0,166,81,0.15); }
+.input::placeholder { color: #4a4e65; }
+.input:focus { border-color: #00A651; outline: none; box-shadow: 0 0 0 2px rgba(0,166,81,0.12); }
 
 .badge {
   display: inline-flex;
@@ -128,7 +128,7 @@ body {
 
 .skeleton {
   animation: pulse 2s cubic-bezier(0.4,0,0.6,1) infinite;
-  background: #0a0a0a;
+  background: #111320;
   border-radius: 0.25rem;
 }
 
@@ -161,7 +161,7 @@ body {
 
 .skeleton-shimmer {
   animation: shimmer 2s infinite;
-  background: linear-gradient(to right, #030303 4%, #0f0f0f 25%, #030303 36%);
+  background: linear-gradient(to right, #0a0c14 4%, #161928 25%, #0a0c14 36%);
   background-size: 1000px 100%;
 }
 @keyframes shimmer {
@@ -188,43 +188,27 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════
-   TERMINAL AGI EFFECTS
+   SUBTLE BACKGROUND EFFECTS
 ═══════════════════════════════════════════════════════ */
 
-/* Scanline CRT overlay */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 166, 81, 0.012) 2px,
-    rgba(0, 166, 81, 0.012) 4px
-  );
-}
-
-/* Dot grid background for panels */
+/* Dot grid background for panels — very subtle */
 .bg-grid {
-  background-image: radial-gradient(circle, rgba(0, 166, 81, 0.05) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: radial-gradient(circle, rgba(160, 170, 220, 0.03) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
 /* Glow utilities */
 .glow-green {
-  box-shadow: 0 0 20px rgba(0, 166, 81, 0.15), inset 0 0 20px rgba(0, 166, 81, 0.03);
+  box-shadow: 0 0 20px rgba(0, 166, 81, 0.10), inset 0 0 20px rgba(0, 166, 81, 0.02);
 }
 
 .border-glow {
-  border-color: rgba(0, 166, 81, 0.25);
-  transition: border-color 0.3s, box-shadow 0.3s;
+  border-color: rgba(255, 255, 255, 0.08);
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 .border-glow:hover {
-  border-color: rgba(0, 166, 81, 0.55);
-  box-shadow: 0 0 24px rgba(0, 166, 81, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 12px rgba(100, 120, 200, 0.04);
 }
 
 /* ── Liquid Gold system v2 — Rotating conic-gradient ring ────────── */
@@ -266,24 +250,23 @@ body::after {
 }
 
 /*
-  Liquid Gold Card — 4-layer technique:
-  Layer 1 (box-shadow): Warm gold glow behind the element
-  Layer 2 (element itself): Clip container with overflow:hidden + border-radius
-  Layer 3 (::before): Rotating conic-gradient — gold-dominant, 2 white hotspots, subtle iridescence
-  Layer 4 (::after): Inner plate that covers center, leaving only 2px ring visible
+  Liquid Gold Card — Credit card premium technique:
+  Layer 1 (box-shadow): Subtle warm glow
+  Layer 2 (element itself): Clip container with overflow:hidden + tight radius
+  Layer 3 (::before): Rotating conic-gradient — brushed gold, 2 white reflections, no iridescence
+  Layer 4 (::after): Inner plate with slight brushed texture
 */
 .liquid-gold-card {
   position: relative;
   overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 0.625rem;
   border: none;
-  backdrop-filter: blur(12px);
-  /* Layer 1: Glow */
-  box-shadow: 0 0 30px rgba(232,175,72,0.15),
-              0 0 60px rgba(212,175,55,0.05);
+  /* Layer 1: Tight, refined glow — like light catching a card edge */
+  box-shadow: 0 0 15px rgba(200,165,55,0.10),
+              0 1px 4px rgba(0,0,0,0.5);
 }
 
-/* Layer 3: Rotating conic-gradient ring */
+/* Layer 3: Brushed gold ring — credit card style */
 .liquid-gold-card::before {
   content: '';
   position: absolute;
@@ -292,58 +275,50 @@ body::after {
   pointer-events: none;
   background: conic-gradient(
     from 0deg,
-    /* Gold arc 1 */
-    #533517 0%,
-    #8b6914 8%,
-    #c49746 16%,
-    #feeaa5 24%,
-    /* White hotspot 1 */
-    #ffffff 26%,
-    #feeaa5 29%,
-    /* Subtle iridescence: pink hint */
-    #ffc0cb 30%,
-    #feeaa5 31.5%,
-    /* Subtle iridescence: blue hint */
-    #a8c8f0 32.5%,
-    #feeaa5 34%,
-    /* Gold arc 2 */
-    #c49746 40%,
-    #8b6914 47%,
-    #533517 50%,
-    /* Gold arc 3 (repeat) */
-    #8b6914 58%,
-    #c49746 66%,
-    #feeaa5 74%,
-    /* White hotspot 2 */
-    #ffffff 76%,
-    #feeaa5 79%,
-    /* Subtle iridescence: pink hint */
-    #ffc0cb 80%,
-    #feeaa5 81.5%,
-    /* Subtle iridescence: blue hint */
-    #a8c8f0 82.5%,
-    #feeaa5 84%,
-    /* Gold arc 4 */
-    #c49746 90%,
-    #8b6914 97%,
-    #533517 100%
+    /* Brushed gold arc 1 — darker to light */
+    #3d2a10 0%,
+    #7a5c1e 10%,
+    #b8923a 18%,
+    #d4b058 24%,
+    /* White reflection 1 — sharper, shorter */
+    #f0e0b0 26%,
+    #ffffff 27%,
+    #f0e0b0 28%,
+    #d4b058 30%,
+    /* Brushed gold arc 2 */
+    #b8923a 38%,
+    #7a5c1e 46%,
+    #3d2a10 50%,
+    /* Brushed gold arc 3 (repeat) */
+    #7a5c1e 58%,
+    #b8923a 66%,
+    #d4b058 74%,
+    /* White reflection 2 */
+    #f0e0b0 76%,
+    #ffffff 77%,
+    #f0e0b0 78%,
+    #d4b058 80%,
+    /* Brushed gold arc 4 */
+    #b8923a 88%,
+    #7a5c1e 96%,
+    #3d2a10 100%
   );
-  animation: liquidGoldSpin 4.5s linear infinite;
+  animation: liquidGoldSpin 6s linear infinite;
   z-index: 0;
 }
 
-/* Layer 4: Inner plate — covers center, leaves 2px ring */
+/* Layer 4: Inner plate — dark with subtle brushed texture */
 .liquid-gold-card::after {
   content: '';
   position: absolute;
-  inset: 2px;
+  inset: 1px;
   border-radius: inherit;
   pointer-events: none;
   z-index: 1;
-  background: linear-gradient(160deg,
-    rgba(20, 14, 5, 0.97) 0%,
-    rgba(8, 6, 2, 0.98) 40%,
-    rgba(15, 11, 4, 0.97) 100%
+  background: linear-gradient(165deg,
+    #0c0e19 0%,
+    #080a14 40%,
+    #0a0c17 100%
   );
 }
 
@@ -353,21 +328,21 @@ body::after {
   z-index: 2;
 }
 
-/* Hover: brighten the glow */
+/* Hover: subtle brightening */
 .liquid-gold-card:hover {
-  box-shadow: 0 0 36px rgba(232,175,72,0.22),
-              0 0 72px rgba(212,175,55,0.08);
+  box-shadow: 0 0 20px rgba(200,165,55,0.16),
+              0 2px 8px rgba(0,0,0,0.5);
 }
 .liquid-gold-card:hover::before {
-  animation-duration: 3s;
+  animation-duration: 4s;
 }
 
-/* ── Liquid Gold Active Tab — same ring technique, thinner (1.5px) ── */
+/* ── Liquid Gold Active Tab — credit card edge, 1px ring ── */
 .liquid-gold-tab-active {
   position: relative;
   overflow: hidden;
   border: none !important;
-  box-shadow: 0 0 20px rgba(232,175,72,0.15);
+  box-shadow: 0 0 12px rgba(200,165,55,0.12);
   transition: box-shadow 0.3s;
 }
 
@@ -379,40 +354,36 @@ body::after {
   pointer-events: none;
   background: conic-gradient(
     from 0deg,
-    #533517 0%,
-    #c49746 16%,
-    #feeaa5 24%,
-    #ffffff 26%,
-    #feeaa5 29%,
-    #ffc0cb 30%,
-    #feeaa5 31.5%,
-    #a8c8f0 32.5%,
-    #feeaa5 34%,
-    #c49746 40%,
-    #533517 50%,
-    #c49746 66%,
-    #feeaa5 74%,
-    #ffffff 76%,
-    #feeaa5 79%,
-    #ffc0cb 80%,
-    #feeaa5 81.5%,
-    #a8c8f0 82.5%,
-    #feeaa5 84%,
-    #c49746 90%,
-    #533517 100%
+    #3d2a10 0%,
+    #b8923a 18%,
+    #d4b058 24%,
+    #f0e0b0 26%,
+    #ffffff 27%,
+    #f0e0b0 28%,
+    #d4b058 30%,
+    #b8923a 38%,
+    #3d2a10 50%,
+    #b8923a 66%,
+    #d4b058 74%,
+    #f0e0b0 76%,
+    #ffffff 77%,
+    #f0e0b0 78%,
+    #d4b058 80%,
+    #b8923a 88%,
+    #3d2a10 100%
   );
-  animation: liquidGoldSpin 4.5s linear infinite;
+  animation: liquidGoldSpin 6s linear infinite;
   z-index: 0;
 }
 
 .liquid-gold-tab-active::after {
   content: '';
   position: absolute;
-  inset: 1.5px;
+  inset: 1px;
   border-radius: inherit;
   pointer-events: none;
   z-index: 1;
-  background: rgba(25, 15, 5, 0.95);
+  background: #0a0c16;
 }
 
 .liquid-gold-tab-active > * {
@@ -505,8 +476,8 @@ body::after {
   50%, 100% { opacity: 0; }
 }
 @keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(0, 166, 81, 0.2); }
-  50%      { box-shadow: 0 0 16px rgba(0, 166, 81, 0.4); }
+  0%, 100% { box-shadow: 0 0 8px rgba(0, 166, 81, 0.12); }
+  50%      { box-shadow: 0 0 14px rgba(0, 166, 81, 0.25); }
 }
 
 .animate-fade-in-up { animation: fadeInUp 0.4s ease-out both; }
@@ -533,9 +504,6 @@ html.light ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #c497
 html.light ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #d4a94f, #a07a1c); }
 
 html.light ::selection { background: rgba(196, 151, 70, 0.25); color: #1a1a1a; }
-
-/* Scanline CRT overlay — hide in light mode */
-html.light body::after { opacity: 0; }
 
 /* Film grain — softer in light mode */
 html.light .film-grain::before { opacity: 0.012; }
