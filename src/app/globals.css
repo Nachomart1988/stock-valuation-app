@@ -6,47 +6,48 @@
 
 /* ────────────────────────────────────────────────────────────────
    PRISMO — PROFESSIONAL FINTECH DESIGN SYSTEM
-   Primary accent: #00A651 (green)  •  Premium accent: Liquid Gold
+   Primary accent: #40b882 (sage-mint)  •  Premium accent: Liquid Gold
+   Cold pastel palette — temperature ≈ 0
    ──────────────────────────────────────────────────────────────── */
 @theme {
-  /* Cool navy gray scale — professional dark UI */
-  --color-gray-950: #050507;
-  --color-gray-900: #0a0c14;
-  --color-gray-800: #111320;
-  --color-gray-750: #161928;
-  --color-gray-700: #1c1f30;
-  --color-gray-600: #282c42;
-  --color-gray-500: #4a4e65;
-  --color-gray-400: #7c8098;
-  --color-gray-300: #a0a4b8;
-  --color-gray-200: #c8cad6;
-  --color-gray-100: #e4e6ed;
+  /* Cold indigo-slate scale — deep, unique, 0-temperature */
+  --color-gray-950: #030407;
+  --color-gray-900: #07091a;
+  --color-gray-800: #0c1024;
+  --color-gray-750: #11162e;
+  --color-gray-700: #161c38;
+  --color-gray-600: #222845;
+  --color-gray-500: #3c4168;
+  --color-gray-400: #6d718f;
+  --color-gray-300: #9598b0;
+  --color-gray-200: #bec2d6;
+  --color-gray-100: #dfe1ee;
 
-  /* Green accent palette */
-  --color-green-400: #34d97b;
-  --color-green-500: #00c05a;
-  --color-green-600: #00A651;
-  --color-green-700: #008040;
-  --color-green-800: #005c2e;
-  --color-green-900: #0a1a12;
-  --color-green-950: #060f0a;
+  /* Pastel sage-mint green — cool, desaturated */
+  --color-green-400: #80d9b8;
+  --color-green-500: #56c89a;
+  --color-green-600: #40b882;
+  --color-green-700: #2d8a5e;
+  --color-green-800: #1c5c3d;
+  --color-green-900: #0e2e1e;
+  --color-green-950: #071810;
 
-  /* Emerald (secondary accent) */
-  --color-emerald-400: #4ade80;
-  --color-emerald-500: #22c55e;
-  --color-emerald-600: #16a34a;
-  --color-emerald-700: #15803d;
-  --color-emerald-800: #166534;
-  --color-emerald-900: #14532d;
+  /* Pastel teal-emerald (secondary accent — distinct hue from green) */
+  --color-emerald-400: #72d5aa;
+  --color-emerald-500: #4bbf96;
+  --color-emerald-600: #34a87e;
+  --color-emerald-700: #25805e;
+  --color-emerald-800: #185e42;
+  --color-emerald-900: #0e3825;
 
-  /* Semantic */
-  --color-success: #00A651;
-  --color-danger: #ef4444;
-  --color-warning: #f59e0b;
+  /* Semantic — pastel, cold-toned */
+  --color-success: #40b882;
+  --color-danger:  #d46a70;
+  --color-warning: #c4984a;
 
-  /* Shadows — softer, more diffuse */
-  --shadow-medium: 0 4px 12px -2px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
-  --shadow-hard: 0 10px 25px -5px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+  /* Shadows — deeper for cold dark bg */
+  --shadow-medium: 0 4px 12px -2px rgb(0 0 10 / 0.45), 0 2px 4px -2px rgb(0 0 10 / 0.35);
+  --shadow-hard:   0 10px 25px -5px rgb(0 0 10 / 0.55), 0 4px 6px -4px rgb(0 0 10 / 0.45);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -57,19 +58,19 @@ html {
 }
 
 body {
-  background-color: #050507;
-  color: #c8cad6;
+  background-color: #030407;
+  color: #bec2d6;
   font-family: 'Space Grotesk', var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 0.35rem; }
-::-webkit-scrollbar-track { background: #0a0c14; }
-::-webkit-scrollbar-thumb { background: #282c42; border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: #3a3f58; }
+::-webkit-scrollbar-track { background: #07091a; }
+::-webkit-scrollbar-thumb { background: #222845; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #3c4168; }
 
-::selection { background: rgba(100, 120, 200, 0.25); color: #fff; }
+::selection { background: rgba(64, 90, 200, 0.22); color: #dfe1ee; }
 
 /* ═══════════════════════════════════════════════════════
    COMPONENT DEFAULTS
@@ -82,36 +83,36 @@ body {
 }
 
 .btn-primary {
-  background: #00A651;
+  background: #40b882;
   color: white;
 }
-.btn-primary:hover { background: #00c05a; }
+.btn-primary:hover { background: #56c89a; }
 
 .btn-secondary {
-  background: #111320;
-  color: #c8cad6;
-  border: 1px solid #1c1f30;
+  background: #0c1024;
+  color: #bec2d6;
+  border: 1px solid #161c38;
 }
-.btn-secondary:hover { border-color: #3a3f58; }
+.btn-secondary:hover { border-color: #3c4168; }
 
 .card {
-  background: #0a0c14;
+  background: #07091a;
   border-radius: 0.625rem;
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.06);
   padding: 1.25rem;
 }
 
 .input {
   width: 100%;
   padding: 0.625rem 0.875rem;
-  background: #0a0c14;
-  border: 1px solid #1c1f30;
+  background: #07091a;
+  border: 1px solid #161c38;
   border-radius: 0.375rem;
-  color: #c8cad6;
+  color: #bec2d6;
   transition: all 0.15s;
 }
-.input::placeholder { color: #4a4e65; }
-.input:focus { border-color: #00A651; outline: none; box-shadow: 0 0 0 2px rgba(0,166,81,0.12); }
+.input::placeholder { color: #3c4168; }
+.input:focus { border-color: #40b882; outline: none; box-shadow: 0 0 0 2px rgba(64,184,130,0.12); }
 
 .badge {
   display: inline-flex;
@@ -122,13 +123,13 @@ body {
   font-weight: 600;
 }
 
-.badge-success { background: rgba(0,166,81,0.1); color: #00A651; border: 1px solid rgba(0,166,81,0.3); }
-.badge-warning  { background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
-.badge-danger   { background: rgba(239,68,68,0.1);  color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+.badge-success { background: rgba(64,184,130,0.10); color: #40b882; border: 1px solid rgba(64,184,130,0.28); }
+.badge-warning  { background: rgba(196,152,74,0.10);  color: #c4984a; border: 1px solid rgba(196,152,74,0.28); }
+.badge-danger   { background: rgba(212,106,112,0.10); color: #d46a70; border: 1px solid rgba(212,106,112,0.28); }
 
 .skeleton {
   animation: pulse 2s cubic-bezier(0.4,0,0.6,1) infinite;
-  background: #111320;
+  background: #0c1024;
   border-radius: 0.25rem;
 }
 
@@ -136,14 +137,14 @@ body {
    UTILITIES
 ═══════════════════════════════════════════════════════ */
 .text-gradient-green {
-  background: linear-gradient(to right, #00A651, #34d97b);
+  background: linear-gradient(to right, #40b882, #80d9b8);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
 /* Keep legacy classes pointing to green */
-.text-gradient-blue { color: #00A651; }
+.text-gradient-blue { color: #40b882; }
 
 .glass { backdrop-filter: blur(12px); }
 .transition-smooth { transition: all 0.3s ease-in-out; }
@@ -161,7 +162,7 @@ body {
 
 .skeleton-shimmer {
   animation: shimmer 2s infinite;
-  background: linear-gradient(to right, #0a0c14 4%, #161928 25%, #0a0c14 36%);
+  background: linear-gradient(to right, #07091a 4%, #11162e 25%, #07091a 36%);
   background-size: 1000px 100%;
 }
 @keyframes shimmer {
@@ -191,24 +192,24 @@ body {
    SUBTLE BACKGROUND EFFECTS
 ═══════════════════════════════════════════════════════ */
 
-/* Dot grid background for panels — very subtle */
+/* Dot grid background for panels — very subtle, indigo-tinted */
 .bg-grid {
-  background-image: radial-gradient(circle, rgba(160, 170, 220, 0.03) 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgba(130, 145, 220, 0.04) 1px, transparent 1px);
   background-size: 28px 28px;
 }
 
 /* Glow utilities */
 .glow-green {
-  box-shadow: 0 0 20px rgba(0, 166, 81, 0.10), inset 0 0 20px rgba(0, 166, 81, 0.02);
+  box-shadow: 0 0 20px rgba(64, 184, 130, 0.10), inset 0 0 20px rgba(64, 184, 130, 0.02);
 }
 
 .border-glow {
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.07);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .border-glow:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: 0 0 12px rgba(100, 120, 200, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 12px rgba(80, 100, 200, 0.05);
 }
 
 /* ── Liquid Gold system v2 — Rotating conic-gradient ring ────────── */
@@ -307,7 +308,7 @@ body {
   z-index: 0;
 }
 
-/* Layer 4: Inner plate — dark with subtle brushed texture */
+/* Layer 4: Inner plate — cold indigo-dark with subtle tone */
 .liquid-gold-card::after {
   content: '';
   position: absolute;
@@ -316,9 +317,9 @@ body {
   pointer-events: none;
   z-index: 1;
   background: linear-gradient(165deg,
-    #0c0e19 0%,
-    #080a14 40%,
-    #0a0c17 100%
+    #0c0f22 0%,
+    #080b1c 40%,
+    #0a0d1f 100%
   );
 }
 
@@ -383,7 +384,7 @@ body {
   border-radius: inherit;
   pointer-events: none;
   z-index: 1;
-  background: #0a0c16;
+  background: #090c1e;
 }
 
 .liquid-gold-tab-active > * {
@@ -432,7 +433,7 @@ body {
   width: 200%; height: 200%;
   pointer-events: none;
   z-index: 9998;
-  opacity: 0.035;
+  opacity: 0.030;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   background-size: 256px 256px;
   animation: grainDrift 8s steps(10) infinite;
@@ -476,8 +477,8 @@ body {
   50%, 100% { opacity: 0; }
 }
 @keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(0, 166, 81, 0.12); }
-  50%      { box-shadow: 0 0 14px rgba(0, 166, 81, 0.25); }
+  0%, 100% { box-shadow: 0 0 8px rgba(64, 184, 130, 0.12); }
+  50%      { box-shadow: 0 0 16px rgba(64, 184, 130, 0.26); }
 }
 
 .animate-fade-in-up { animation: fadeInUp 0.4s ease-out both; }
@@ -494,47 +495,47 @@ body {
 ═══════════════════════════════════════════════════════ */
 
 html.light body {
-  background-color: #f5f1eb;
-  color: #1a1a1a;
+  background-color: #f1f3f8;
+  color: #1a1c2e;
 }
 
 /* Scrollbar */
-html.light ::-webkit-scrollbar-track { background: #e8e4de; }
-html.light ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #c49746, #8b6914); }
-html.light ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #d4a94f, #a07a1c); }
+html.light ::-webkit-scrollbar-track { background: #e2e4f0; }
+html.light ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #9e8a38, #6b5e20); }
+html.light ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #b09a40, #7a6c28); }
 
-html.light ::selection { background: rgba(196, 151, 70, 0.25); color: #1a1a1a; }
+html.light ::selection { background: rgba(158, 138, 56, 0.22); color: #1a1c2e; }
 
 /* Film grain — softer in light mode */
-html.light .film-grain::before { opacity: 0.012; }
+html.light .film-grain::before { opacity: 0.010; }
 
 /* ── Base components ── */
 html.light .card {
   background: #ffffff;
-  border-color: #ddd8cf;
+  border-color: #d4d6e6;
 }
 
 html.light .input {
   background: #ffffff;
-  border-color: #d4cfc6;
-  color: #1a1a1a;
+  border-color: #cdd0e2;
+  color: #1a1c2e;
 }
-html.light .input::placeholder { color: #999; }
-html.light .input:focus { border-color: #c49746; box-shadow: 0 0 0 2px rgba(196, 151, 70, 0.15); }
+html.light .input::placeholder { color: #8a8ea8; }
+html.light .input:focus { border-color: #9e8a38; box-shadow: 0 0 0 2px rgba(158, 138, 56, 0.14); }
 
-html.light .btn-primary { background: #c49746; color: white; }
-html.light .btn-primary:hover { background: #d4a94f; }
+html.light .btn-primary { background: #9e8a38; color: white; }
+html.light .btn-primary:hover { background: #b09a40; }
 
 html.light .btn-secondary {
   background: #ffffff;
-  color: #1a1a1a;
-  border-color: #d4cfc6;
+  color: #1a1c2e;
+  border-color: #cdd0e2;
 }
-html.light .btn-secondary:hover { border-color: #c49746; }
+html.light .btn-secondary:hover { border-color: #9e8a38; }
 
 /* ── Gradient text ── */
 html.light .text-gradient-green {
-  background: linear-gradient(to right, #8b6914, #c49746);
+  background: linear-gradient(to right, #6b5e20, #9e8a38);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -542,19 +543,19 @@ html.light .text-gradient-green {
 
 /* ── Dot grid background ── */
 html.light .bg-grid {
-  background-image: radial-gradient(circle, rgba(160, 130, 70, 0.07) 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgba(100, 110, 180, 0.06) 1px, transparent 1px);
 }
 
 /* ── Glow utilities ── */
 html.light .glow-green {
-  box-shadow: 0 0 20px rgba(196, 151, 70, 0.1), inset 0 0 20px rgba(196, 151, 70, 0.02);
+  box-shadow: 0 0 20px rgba(158, 138, 56, 0.10), inset 0 0 20px rgba(158, 138, 56, 0.02);
 }
 html.light .border-glow {
-  border-color: rgba(196, 151, 70, 0.2);
+  border-color: rgba(158, 138, 56, 0.18);
 }
 html.light .border-glow:hover {
-  border-color: rgba(196, 151, 70, 0.4);
-  box-shadow: 0 0 24px rgba(196, 151, 70, 0.06);
+  border-color: rgba(158, 138, 56, 0.38);
+  box-shadow: 0 0 24px rgba(158, 138, 56, 0.06);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -585,8 +586,8 @@ html.light .glow-gold {
 
 html.light .section-gold-line {
   background: linear-gradient(90deg,
-    rgba(196, 151, 70, 0.45),
-    rgba(196, 151, 70, 0.15),
+    rgba(158, 138, 56, 0.45),
+    rgba(158, 138, 56, 0.15),
     transparent
   );
 }
@@ -595,16 +596,16 @@ html.light .section-gold-line {
 html.light .ambient-gold-glow::before {
   background: radial-gradient(
     ellipse at center,
-    rgba(196, 151, 70, 0.05) 0%,
-    rgba(196, 151, 70, 0.015) 40%,
+    rgba(158, 138, 56, 0.05) 0%,
+    rgba(158, 138, 56, 0.015) 40%,
     transparent 70%
   );
 }
 
 /* ── Skeleton ── */
-html.light .skeleton { background: #e8e4de; }
+html.light .skeleton { background: #e2e4f0; }
 html.light .skeleton-shimmer {
-  background: linear-gradient(to right, #ede9e1 4%, #f5f3ef 25%, #ede9e1 36%);
+  background: linear-gradient(to right, #e8eaf4 4%, #f0f2f8 25%, #e8eaf4 36%);
   background-size: 1000px 100%;
 }
 
@@ -612,14 +613,14 @@ html.light .skeleton-shimmer {
    Header / Navigation
 ══════════════════════════════════════════════════════════════ */
 html.light nav.fixed {
-  background: rgba(245, 241, 235, 0.94) !important;
-  border-bottom-color: rgba(196, 151, 70, 0.2) !important;
+  background: rgba(241, 243, 248, 0.94) !important;
+  border-bottom-color: rgba(158, 138, 56, 0.20) !important;
   backdrop-filter: blur(16px);
 }
 
 /* Mobile menu border */
 html.light nav.fixed hr {
-  border-color: rgba(196, 151, 70, 0.15) !important;
+  border-color: rgba(158, 138, 56, 0.14) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -656,18 +657,18 @@ html.light .bg-black {
   background-color: #ffffff !important;
 }
 
-/* bg-gray-900/800/700 → light cream panels */
+/* bg-gray-900/800/700 → cool light panels */
 html.light [class*="bg-gray-900"] {
-  background-color: #f0ece5 !important;
+  background-color: #e6e8f2 !important;
 }
 html.light [class*="bg-gray-800"] {
-  background-color: #f3efe8 !important;
+  background-color: #eaecf5 !important;
 }
 html.light [class*="bg-gray-700"] {
-  background-color: #f5f1eb !important;
+  background-color: #f1f3f8 !important;
 }
 html.light [class*="bg-gray-600"] {
-  background-color: #e8e4de !important;
+  background-color: #e2e4f0 !important;
 }
 
 /* Liquid Gold elements inside bg-black panels: keep their text light */
@@ -680,10 +681,10 @@ html.light .liquid-gold-tab-active [class*="text-gray-"] {
    Gradient page backgrounds
 ══════════════════════════════════════════════════════════════ */
 html.light [class*="from-black"][class*="via-gray-800"][class*="to-black"] {
-  background: linear-gradient(to bottom, #f5f1eb, #ede8e0, #f5f1eb) !important;
+  background: linear-gradient(to bottom, #f1f3f8, #e6e8f2, #f1f3f8) !important;
 }
 html.light [class*="from-black"][class*="via-slate-900"][class*="to-black"] {
-  background: linear-gradient(135deg, #f5f1eb, #eae5dc, #f5f1eb) !important;
+  background: linear-gradient(135deg, #f1f3f8, #e2e4f0, #f1f3f8) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -691,19 +692,19 @@ html.light [class*="from-black"][class*="via-slate-900"][class*="to-black"] {
    Dark mode uses light text; light mode needs dark text
 ══════════════════════════════════════════════════════════════ */
 
-/* White text → near-black */
-html.light .text-white { color: #1a1a1a !important; }
+/* White text → near-black indigo */
+html.light .text-white { color: #1a1c2e !important; }
 
 /* Gray scale text → DARK values for strong legibility on light bg */
-html.light .text-gray-100 { color: #1a1a1a !important; }
-html.light .text-gray-200 { color: #222 !important; }
-html.light .text-gray-300 { color: #333 !important; }
-html.light .text-gray-400 { color: #444 !important; }
-html.light .text-gray-500 { color: #555 !important; }
-html.light .text-gray-600 { color: #666 !important; }
-html.light .text-gray-700 { color: #555 !important; }
-html.light .text-gray-800 { color: #333 !important; }
-html.light .text-gray-900 { color: #1a1a1a !important; }
+html.light .text-gray-100 { color: #1a1c2e !important; }
+html.light .text-gray-200 { color: #20223a !important; }
+html.light .text-gray-300 { color: #30324a !important; }
+html.light .text-gray-400 { color: #42446a !important; }
+html.light .text-gray-500 { color: #555878 !important; }
+html.light .text-gray-600 { color: #66688a !important; }
+html.light .text-gray-700 { color: #555778 !important; }
+html.light .text-gray-800 { color: #32344c !important; }
+html.light .text-gray-900 { color: #1a1c2e !important; }
 
 /* EXCEPTION: ALL text inside liquid-gold (dark plate) stays light */
 html.light .liquid-gold-card .text-white,
@@ -735,122 +736,122 @@ html.light .liquid-gold-tab-active.text-amber-200 {
 }
 
 /* Accent colors — darken for contrast on light */
-html.light .text-amber-200 { color: #6b5010 !important; }
-html.light .text-amber-300 { color: #8b6914 !important; }
-html.light .text-amber-400 { color: #a07a1c !important; }
+html.light .text-amber-200 { color: #5c4c14 !important; }
+html.light .text-amber-300 { color: #7a6418 !important; }
+html.light .text-amber-400 { color: #9e8a38 !important; }
 
-/* Emerald / green accents — deeper for light bg */
-html.light .text-green-300 { color: #16a34a !important; }
-html.light .text-green-400 { color: #15803d !important; }
-html.light .text-emerald-400 { color: #059669 !important; }
+/* Emerald / green accents — cool, deeper for light bg */
+html.light .text-green-300 { color: #2d8a5e !important; }
+html.light .text-green-400 { color: #25805e !important; }
+html.light .text-emerald-400 { color: #1e7a58 !important; }
 
-/* Red accent */
-html.light .text-red-300 { color: #dc2626 !important; }
-html.light .text-red-400 { color: #b91c1c !important; }
+/* Red accent — cool pastel red, deeper for light */
+html.light .text-red-300 { color: #b84a52 !important; }
+html.light .text-red-400 { color: #a03840 !important; }
 
 /* bg-clip-text gradient titles (e.g. "PRISMO" landing) */
 html.light [class*="from-white"][class*="to-gray-400"] {
-  --tw-gradient-from: #1a1a1a !important;
-  --tw-gradient-to: #555 !important;
+  --tw-gradient-from: #1a1c2e !important;
+  --tw-gradient-to: #555878 !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
    Border overrides
 ══════════════════════════════════════════════════════════════ */
 
-/* Borders with green-900 or amber-900 opacity → warm gold STRONGER */
+/* Borders with green-900 or amber-900 opacity → cool gold */
 html.light [class*="border-green-900/"],
 html.light [class*="border-amber-900/"] {
-  border-color: rgba(196, 151, 70, 0.30) !important;
+  border-color: rgba(158, 138, 56, 0.28) !important;
 }
 
-/* Gray borders — MUCH STRONGER for visibility */
+/* Gray borders — visible on light bg */
 html.light [class*="border-gray-700/"],
 html.light [class*="border-gray-800/"] {
-  border-color: rgba(0, 0, 0, 0.15) !important;
+  border-color: rgba(0, 5, 30, 0.12) !important;
 }
 html.light .border-gray-700,
 html.light [class*="border-gray-700"] {
-  border-color: rgba(0, 0, 0, 0.15) !important;
+  border-color: rgba(0, 5, 30, 0.12) !important;
 }
 html.light .border-gray-800,
 html.light [class*="border-gray-800"] {
-  border-color: rgba(0, 0, 0, 0.12) !important;
+  border-color: rgba(0, 5, 30, 0.10) !important;
 }
 html.light .border-gray-900,
 html.light [class*="border-gray-900"] {
-  border-color: rgba(0, 0, 0, 0.10) !important;
+  border-color: rgba(0, 5, 30, 0.08) !important;
 }
 html.light .border-gray-500,
 html.light [class*="border-gray-500"] {
-  border-color: rgba(0, 0, 0, 0.18) !important;
+  border-color: rgba(0, 5, 30, 0.16) !important;
 }
 html.light .border-gray-600,
 html.light [class*="border-gray-600"] {
-  border-color: rgba(0, 0, 0, 0.15) !important;
+  border-color: rgba(0, 5, 30, 0.12) !important;
 }
 
 /* White opacity borders (invisible on light bg) → visible */
 html.light [class*="border-white/"] {
-  border-color: rgba(0, 0, 0, 0.12) !important;
+  border-color: rgba(0, 5, 30, 0.10) !important;
 }
 
 /* Dividers — row separators must be visible */
 html.light [class*="divide-gray-900"] > * + * {
-  border-color: rgba(0, 0, 0, 0.10) !important;
+  border-color: rgba(0, 5, 30, 0.08) !important;
 }
 html.light [class*="divide-green-900"] > * + * {
-  border-color: rgba(196, 151, 70, 0.18) !important;
+  border-color: rgba(158, 138, 56, 0.16) !important;
 }
 html.light [class*="divide-gray-700"] > * + * {
-  border-color: rgba(0, 0, 0, 0.12) !important;
+  border-color: rgba(0, 5, 30, 0.10) !important;
 }
 html.light [class*="divide-gray-800"] > * + * {
-  border-color: rgba(0, 0, 0, 0.10) !important;
+  border-color: rgba(0, 5, 30, 0.08) !important;
 }
 html.light [class*="divide-white"] > * + * {
-  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(0, 5, 30, 0.06) !important;
 }
 
 /* Green border on active sections */
 html.light .border-green-600 {
-  border-color: #c49746 !important;
+  border-color: #9e8a38 !important;
 }
 html.light .border-emerald-600 {
-  border-color: #c49746 !important;
+  border-color: #9e8a38 !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
    Background accent overrides
 ══════════════════════════════════════════════════════════════ */
 
-/* Emerald / green tinted backgrounds — stronger tints */
+/* Emerald / green tinted backgrounds */
 html.light [class*="bg-emerald-900/"] {
-  background-color: rgba(209, 250, 229, 0.55) !important;
+  background-color: rgba(209, 238, 224, 0.55) !important;
 }
 html.light [class*="bg-green-900/"] {
-  background-color: rgba(209, 250, 229, 0.45) !important;
+  background-color: rgba(209, 238, 224, 0.45) !important;
 }
 
-/* Red / danger notification boxes — richer */
+/* Red / danger notification boxes */
 html.light [class*="bg-red-900/"] {
-  background-color: rgba(254, 226, 226, 0.75) !important;
+  background-color: rgba(248, 220, 222, 0.75) !important;
 }
 
-/* Amber notification boxes — richer */
+/* Amber notification boxes */
 html.light [class*="bg-amber-900/"] {
-  background-color: rgba(254, 243, 199, 0.65) !important;
+  background-color: rgba(248, 238, 200, 0.65) !important;
 }
 
-/* Green buttons stay green but adapt */
-html.light .bg-green-600 { background-color: #16a34a !important; }
-html.light .bg-green-600:hover { background-color: #15803d !important; }
-html.light .bg-emerald-600 { background-color: #059669 !important; }
+/* Green buttons adapt to cool palette */
+html.light .bg-green-600 { background-color: #2d8a5e !important; }
+html.light .bg-green-600:hover { background-color: #25805e !important; }
+html.light .bg-emerald-600 { background-color: #1e7a58 !important; }
 
 /* Disabled state buttons — visible in light mode */
 html.light [class*="disabled:bg-gray-600"]:disabled {
-  background-color: #d4cfc6 !important;
-  color: #888 !important;
+  background-color: #cdd0e2 !important;
+  color: #8a8ea8 !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -862,32 +863,32 @@ html.light input[class*="bg-black"],
 html.light select[class*="bg-black"],
 html.light textarea[class*="bg-black"] {
   background-color: #ffffff !important;
-  color: #1a1a1a !important;
-  border-color: #d4cfc6 !important;
+  color: #1a1c2e !important;
+  border-color: #cdd0e2 !important;
 }
 html.light input[class*="bg-black"]::placeholder,
 html.light textarea[class*="bg-black"]::placeholder {
-  color: #888 !important;
+  color: #8a8ea8 !important;
 }
 html.light input[class*="bg-black"]:focus,
 html.light textarea[class*="bg-black"]:focus {
-  border-color: #c49746 !important;
-  box-shadow: 0 0 0 2px rgba(196, 151, 70, 0.12);
+  border-color: #9e8a38 !important;
+  box-shadow: 0 0 0 2px rgba(158, 138, 56, 0.12);
 }
 
 /* Placeholder text — all gray variants */
 html.light .placeholder-gray-500::placeholder,
 html.light .placeholder-gray-600::placeholder,
 html.light [class*="placeholder-gray"]::placeholder {
-  color: #888 !important;
+  color: #8a8ea8 !important;
 }
 
 /* Select elements */
 html.light select[class*="bg-gray"],
 html.light select[class*="bg-black"] {
   background-color: #ffffff !important;
-  color: #1a1a1a !important;
-  border-color: #d4cfc6 !important;
+  color: #1a1c2e !important;
+  border-color: #cdd0e2 !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -896,37 +897,37 @@ html.light select[class*="bg-black"] {
 html.light thead[class*="bg-black"],
 html.light th[class*="bg-black"],
 html.light td[class*="bg-black"] {
-  background-color: rgba(245, 241, 235, 0.95) !important;
-  color: #1a1a1a !important;
+  background-color: rgba(241, 243, 248, 0.96) !important;
+  color: #1a1c2e !important;
 }
 html.light tr[class*="hover:bg-black"]:hover {
-  background-color: rgba(196, 151, 70, 0.06) !important;
+  background-color: rgba(158, 138, 56, 0.06) !important;
 }
 html.light thead.sticky {
-  background-color: rgba(245, 241, 235, 0.98) !important;
+  background-color: rgba(241, 243, 248, 0.98) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Shadow overrides — warm, visible shadows for light bg
+   Shadow overrides — cool, visible shadows for light bg
 ══════════════════════════════════════════════════════════════ */
 html.light .shadow-2xl {
-  box-shadow: 0 4px 24px rgba(120, 90, 30, 0.08), 0 1px 6px rgba(0, 0, 0, 0.05) !important;
+  box-shadow: 0 4px 24px rgba(20, 25, 60, 0.07), 0 1px 6px rgba(0, 0, 0, 0.04) !important;
 }
 html.light .shadow-lg {
-  box-shadow: 0 3px 16px rgba(120, 90, 30, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+  box-shadow: 0 3px 16px rgba(20, 25, 60, 0.05), 0 1px 4px rgba(0, 0, 0, 0.03) !important;
 }
 html.light .shadow-xl {
-  box-shadow: 0 4px 20px rgba(120, 90, 30, 0.07), 0 1px 5px rgba(0, 0, 0, 0.04) !important;
+  box-shadow: 0 4px 20px rgba(20, 25, 60, 0.06), 0 1px 5px rgba(0, 0, 0, 0.04) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
    Ring overrides (focus rings)
 ══════════════════════════════════════════════════════════════ */
 html.light [class*="ring-green"] {
-  --tw-ring-color: rgba(196, 151, 70, 0.3) !important;
+  --tw-ring-color: rgba(158, 138, 56, 0.28) !important;
 }
 html.light [class*="ring-emerald"] {
-  --tw-ring-color: rgba(196, 151, 70, 0.3) !important;
+  --tw-ring-color: rgba(158, 138, 56, 0.28) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -942,35 +943,35 @@ html.light canvas {
 html.light [class*="bg-slate-900"],
 html.light [class*="bg-zinc-900"],
 html.light [class*="bg-neutral-900"] {
-  background-color: #f0ece5 !important;
+  background-color: #e6e8f2 !important;
 }
 html.light [class*="bg-slate-800"],
 html.light [class*="bg-zinc-800"],
 html.light [class*="bg-neutral-800"] {
-  background-color: #f3efe8 !important;
+  background-color: #eaecf5 !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
    Scrollbar for panels inside light mode
 ══════════════════════════════════════════════════════════════ */
-html.light [class*="overflow-y-auto"]::-webkit-scrollbar-track { background: #ede9e1; }
-html.light [class*="overflow-y-auto"]::-webkit-scrollbar-thumb { background: #c49746; border-radius: 4px; }
-html.light [class*="overflow-x-auto"]::-webkit-scrollbar-track { background: #ede9e1; }
-html.light [class*="overflow-x-auto"]::-webkit-scrollbar-thumb { background: #c49746; border-radius: 4px; }
+html.light [class*="overflow-y-auto"]::-webkit-scrollbar-track { background: #e2e4f0; }
+html.light [class*="overflow-y-auto"]::-webkit-scrollbar-thumb { background: #9e8a38; border-radius: 4px; }
+html.light [class*="overflow-x-auto"]::-webkit-scrollbar-track { background: #e2e4f0; }
+html.light [class*="overflow-x-auto"]::-webkit-scrollbar-thumb { background: #9e8a38; border-radius: 4px; }
 
 /* ══════════════════════════════════════════════════════════════
    Misc badge / pill overrides
 ══════════════════════════════════════════════════════════════ */
-html.light .badge-success { background: rgba(0,166,81,0.08); color: #16a34a; border-color: rgba(0,166,81,0.2); }
-html.light .badge-warning  { background: rgba(245,158,11,0.08); color: #d97706; border-color: rgba(245,158,11,0.2); }
-html.light .badge-danger   { background: rgba(239,68,68,0.08);  color: #dc2626; border-color: rgba(239,68,68,0.2); }
+html.light .badge-success { background: rgba(64,184,130,0.08); color: #2d8a5e; border-color: rgba(64,184,130,0.20); }
+html.light .badge-warning  { background: rgba(196,152,74,0.08);  color: #7a6418; border-color: rgba(196,152,74,0.20); }
+html.light .badge-danger   { background: rgba(212,106,112,0.08); color: #a03840; border-color: rgba(212,106,112,0.20); }
 
 /* Emerald badge/pill elements */
 html.light [class*="bg-emerald-500/"] {
-  background-color: rgba(5, 150, 105, 0.1) !important;
+  background-color: rgba(30, 122, 88, 0.10) !important;
 }
 html.light [class*="border-emerald-500/"] {
-  border-color: rgba(5, 150, 105, 0.2) !important;
+  border-color: rgba(30, 122, 88, 0.20) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════
