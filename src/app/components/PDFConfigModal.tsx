@@ -100,6 +100,14 @@ const SECTION_GROUPS: SectionGroup[] = [
       { key: 'pivots_fibonacci',   label: 'Pivots & Fibonacci' },
     ],
   },
+  {
+    label: 'Pattern Detection (God Mode)',
+    color: 'text-red-400',
+    sections: [
+      { key: 'htf_detection',      label: 'High-Tight Flag Detection' },
+      { key: 'ep_detection',       label: 'Episodic Pivot Detection' },
+    ],
+  },
 ];
 
 const ALL_SECTION_KEYS = SECTION_GROUPS.flatMap(g => g.sections.map(s => s.key));

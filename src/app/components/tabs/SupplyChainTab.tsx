@@ -203,14 +203,32 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
         };
         setCenterCompany(center);
 
-        // 2. Peers → Competitors (same industry)
-        const peerSymbols: string[] = peersData?.[0]?.peersList || [];
+        // 2. Peers → Competitors
+        // stable/stock-peers returns [{symbol: "T", peersList: ["VZ","TMUS",...]}]
+        console.log('[SupplyChain] Raw peers data:', JSON.stringify(peersData)?.slice(0, 500));
+        let peerSymbols: string[] = [];
+        if (Array.isArray(peersData)) {
+          // Try peersList format first (standard FMP response)
+          const peersList = peersData[0]?.peersList;
+          if (Array.isArray(peersList)) {
+            peerSymbols = peersList.filter((s: string) => s && s !== ticker);
+          } else {
+            // Fallback: each item has a symbol
+            peerSymbols = peersData.map((p: any) => p.symbol).filter((s: string) => s && s !== ticker);
+          }
+        }
+        console.log('[SupplyChain] Parsed peer symbols:', peerSymbols);
         const comps: CompanyNode[] = [];
         if (peerSymbols.length > 0) {
-          const batchSymbols = peerSymbols.slice(0, 10).join(',');
-          const peerProfiles = await fetchFmp(`stable/profile/${batchSymbols}`).catch(() => []);
-          if (!cancelled && Array.isArray(peerProfiles)) {
-            for (const p of peerProfiles) {
+          const peerProfileResults = await Promise.all(
+            peerSymbols.slice(0, 10).map(sym =>
+              fetchFmp('stable/profile', { symbol: sym })
+                .then((d: any) => (Array.isArray(d) ? d[0] : d))
+                .catch(() => null)
+            )
+          );
+          if (!cancelled) {
+            for (const p of peerProfileResults) {
               if (p?.symbol && p.symbol !== ticker) {
                 comps.push({
                   symbol: p.symbol,
@@ -236,7 +254,7 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
         const sups: CompanyNode[] = [];
         const custs: CompanyNode[] = [];
         const seenSymbols = new Set([ticker, ...comps.map(c => c.symbol)]);
-        const minMktCap = Math.max(2e9, (center.mktCap || 1e10) * 0.005);
+        const minMktCap = Math.max(5e8, (center.mktCap || 1e10) * 0.002);
 
         const buildNode = (p: any, rel: 'supplier' | 'customer'): CompanyNode => ({
           symbol: p.symbol,
@@ -252,15 +270,20 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
 
         if (!useSectorFallback) {
           // 4a. Industry-level search — query FMP screener for each related industry
+          console.log('[SupplyChain] Industry match:', center.industry, '| Suppliers:', chainEntry.suppliers, '| Customers:', chainEntry.customers);
           const [supResults, custResults] = await Promise.all([
             Promise.all(
               chainEntry.suppliers.map(ind =>
-                fetchFmp('stable/stock-screener', { industry: ind, marketCapMoreThan: minMktCap, limit: 5 }).catch(() => [])
+                fetchFmp('api/v3/stock-screener', { industry: ind, marketCapMoreThan: minMktCap, limit: 8 })
+                  .then(r => { console.log(`[SupplyChain] Supplier industry "${ind}":`, r?.length || 0, 'results'); return r; })
+                  .catch(e => { console.warn(`[SupplyChain] Screener failed for "${ind}":`, e.message); return []; })
               )
             ),
             Promise.all(
               chainEntry.customers.map(ind =>
-                fetchFmp('stable/stock-screener', { industry: ind, marketCapMoreThan: minMktCap, limit: 5 }).catch(() => [])
+                fetchFmp('api/v3/stock-screener', { industry: ind, marketCapMoreThan: minMktCap, limit: 8 })
+                  .then(r => { console.log(`[SupplyChain] Customer industry "${ind}":`, r?.length || 0, 'results'); return r; })
+                  .catch(e => { console.warn(`[SupplyChain] Screener failed for "${ind}":`, e.message); return []; })
               )
             ),
           ]);
@@ -285,17 +308,18 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
           }
         } else {
           // 4b. Sector-level fallback — query screener by sector
+          console.log('[SupplyChain] No industry match, using sector fallback for:', center.sector);
           const sectorEntry = SECTOR_FALLBACK[center.sector];
           if (sectorEntry) {
             const [supResults, custResults] = await Promise.all([
               Promise.all(
                 sectorEntry.supplierSectors.slice(0, 2).map(sec =>
-                  fetchFmp('stable/stock-screener', { sector: sec, marketCapMoreThan: minMktCap, limit: 10 }).catch(() => [])
+                  fetchFmp('api/v3/stock-screener', { sector: sec, marketCapMoreThan: minMktCap, limit: 10 }).catch(() => [])
                 )
               ),
               Promise.all(
                 sectorEntry.customerSectors.slice(0, 2).map(sec =>
-                  fetchFmp('stable/stock-screener', { sector: sec, marketCapMoreThan: minMktCap, limit: 10 }).catch(() => [])
+                  fetchFmp('api/v3/stock-screener', { sector: sec, marketCapMoreThan: minMktCap, limit: 10 }).catch(() => [])
                 )
               ),
             ]);

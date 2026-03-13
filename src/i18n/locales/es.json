@@ -236,7 +236,9 @@
       "quantumPortfolio": "Quantum Portfolio",
       "drlTrading": "DRL Trading",
       "quantumRisk": "Quantum Risk",
-      "supplyChain": "Cadena de Suministro"
+      "supplyChain": "Cadena de Suministro",
+      "htfDetection": "HTF Detection",
+      "epDetection": "Episodic Pivots"
     },
     "precio": {
       "actual": "Precio Actual",

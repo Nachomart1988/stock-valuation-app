@@ -41,6 +41,20 @@ except ImportError:
     QISKIT_AVAILABLE = False
     get_quantum_risk_engine = None
 
+try:
+    from htf_detection_engine import get_htf_engine
+    HTF_AVAILABLE = True
+except ImportError:
+    HTF_AVAILABLE = False
+    get_htf_engine = None
+
+try:
+    from ep_detection_engine import get_ep_engine
+    EP_AVAILABLE = True
+except ImportError:
+    EP_AVAILABLE = False
+    get_ep_engine = None
+
 app = FastAPI(
     title="Stock Analysis AI API",
     description="Neural Ensemble for Stock Valuation & Company Quality Assessment",
@@ -1734,7 +1748,66 @@ async def quantum_status():
         'pennylane': PENNYLANE_AVAILABLE,
         'qiskit': QISKIT_AVAILABLE,
         'stable_baselines3': SB3_AVAILABLE,
+        'htf_engine': HTF_AVAILABLE,
+        'ep_engine': EP_AVAILABLE,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# HTF / EP DETECTION ENDPOINTS (GOD MODE)
+# ═══════════════════════════════════════════════════════════════════
+
+class HTFDetectionRequest(BaseModel):
+    ticker: str
+    min_surge: float = 0.80
+    max_flag_range: float = 0.15
+
+class EPDetectionRequest(BaseModel):
+    ticker: str
+    min_gap: float = 0.15
+    lookback_days: int = 504
+
+
+@app.post("/htf/detect")
+async def htf_detect(req: HTFDetectionRequest):
+    """High-Tight Flag detection — Quillamaggie style."""
+    if get_htf_engine is None:
+        raise HTTPException(status_code=503, detail="HTF detection engine not available")
+    try:
+        engine = get_htf_engine()
+        engine.min_surge = req.min_surge
+        engine.max_flag_range = req.max_flag_range
+        result = await asyncio.to_thread(engine.analyze, req.ticker)
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[HTF Detection] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/ep/detect")
+async def ep_detect(req: EPDetectionRequest):
+    """Episodic Pivot detection — Quillamaggie style."""
+    if get_ep_engine is None:
+        raise HTTPException(status_code=503, detail="EP detection engine not available")
+    try:
+        engine = get_ep_engine()
+        engine.min_gap = req.min_gap
+        engine.lookback_days = req.lookback_days
+        result = await asyncio.to_thread(engine.analyze, req.ticker)
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[EP Detection] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
