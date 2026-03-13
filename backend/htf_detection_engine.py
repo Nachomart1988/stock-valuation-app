@@ -467,12 +467,12 @@ class HTFDetectionEngine:
         # Catalyst
         score += catalyst * 0.10
 
-        return min(max(score, 0), 1.0)
+        return float(min(max(score, 0), 1.0))
 
     def _breakout_proximity(self, daily: Dict, flag: Optional[Dict]) -> Dict:
         """Check how close current price is to breakout."""
         if flag is None:
-            return {'proximity_pct': 0, 'breakout_triggered': False, 'vol_confirmation': False}
+            return {'proximity_pct': 0, 'breakout_triggered': False, 'vol_confirmation': False, 'flag_high': 0, 'vol_ratio': 0}
 
         closes = daily['close']
         volumes = daily['volume']
@@ -554,16 +554,18 @@ class HTFDetectionEngine:
 
         # Breakout
         if breakout.get('breakout_triggered') and breakout.get('vol_confirmation'):
-            parts.append(f"⚡ BREAKOUT CONFIRMED — price above flag high ${breakout['flag_high']:.2f} "
-                         f"with {breakout['vol_ratio']:.1f}x avg volume")
+            parts.append(f"⚡ BREAKOUT CONFIRMED — price above flag high ${breakout.get('flag_high', 0):.2f} "
+                         f"with {breakout.get('vol_ratio', 0):.1f}x avg volume")
         elif breakout.get('breakout_triggered'):
-            parts.append(f"Price above flag high but volume weak ({breakout['vol_ratio']:.1f}x avg) — "
+            parts.append(f"Price above flag high but volume weak ({breakout.get('vol_ratio', 0):.1f}x avg) — "
                          f"wait for volume confirmation")
-        elif breakout.get('proximity_pct', -99) > -5:
+        elif breakout.get('proximity_pct', -99) > -5 and breakout.get('flag_high', 0) > 0:
             parts.append(f"Breakout watch: {breakout['proximity_pct']:+.1f}% from flag high "
                          f"${breakout['flag_high']:.2f}")
+        elif breakout.get('flag_high', 0) > 0:
+            parts.append(f"Price {breakout.get('proximity_pct', 0):+.1f}% from flag high ${breakout['flag_high']:.2f} — not yet actionable")
         else:
-            parts.append(f"Price {breakout.get('proximity_pct', 0):+.1f}% from flag high — not yet actionable")
+            parts.append("No flag detected — breakout analysis not applicable")
 
         return "\n".join(parts)
 
@@ -676,14 +678,14 @@ class HTFDetectionEngine:
             # Build features
             if flag:
                 features = self._build_features(surge, flag, rs, catalyst, vol_dryup)
-                ml_prob = self._ml_score(features)
-                metrics_score = flag['flag_score']
+                ml_prob = float(self._ml_score(features))
+                metrics_score = float(flag['flag_score'])
             else:
                 ml_prob = 0.2
                 metrics_score = 0.1
 
             breakout = self._breakout_proximity(daily, flag)
-            score = self._fusion_score(metrics_score, ml_prob, breakout)
+            score = float(self._fusion_score(metrics_score, ml_prob, breakout))
 
             narrative = self._generate_narrative(ticker, surge, flag, catalyst, rs, breakout, score)
 
@@ -692,7 +694,7 @@ class HTFDetectionEngine:
                 'flag': flag,
                 'catalyst': catalyst,
                 'breakout': breakout,
-                'ml_probability': round(ml_prob, 3),
+                'ml_probability': round(float(ml_prob), 3),
                 'fusion_score': score,
                 'narrative': narrative,
             }

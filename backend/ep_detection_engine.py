@@ -468,7 +468,7 @@ class EPDetectionEngine:
         score += rs_out * 0.05                          # RS outperform
         score += catalyst_beat * 0.15                   # catalyst
         score += accel * 0.05                           # accelerating growth
-        return min(max(score, 0), 1.0)
+        return float(min(max(score, 0), 1.0))
 
     def _fusion_score(self, catalyst_score: float, metrics_score: float,
                       ml_prob: float) -> float:
@@ -688,9 +688,9 @@ class EPDetectionEngine:
             features = self._build_features(gap, support, followthrough, rs, catalyst, fundamentals)
             ml_prob = self._ml_score(features)
 
-            catalyst_score = self._compute_catalyst_score(catalyst, gap, fundamentals)
-            metrics_score = self._compute_metrics_score(support, followthrough, rs)
-            score = self._fusion_score(catalyst_score, metrics_score, ml_prob)
+            catalyst_score = float(self._compute_catalyst_score(catalyst, gap, fundamentals))
+            metrics_score = float(self._compute_metrics_score(support, followthrough, rs))
+            score = float(self._fusion_score(catalyst_score, metrics_score, ml_prob))
 
             narrative = self._generate_narrative(
                 ticker, gap, catalyst, support, followthrough, rs, fundamentals, score
