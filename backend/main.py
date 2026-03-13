@@ -2,11 +2,33 @@
 # FastAPI server for AdvanceValue Net & CompanyQuality Net
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import numpy as np
+import json
 import os
+
+
+class NumpySafeEncoder(json.JSONEncoder):
+    """JSON encoder that handles numpy types."""
+    def default(self, obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
+
+def numpy_safe_response(data: Any) -> JSONResponse:
+    """Return a JSONResponse that safely handles numpy types."""
+    content = json.loads(json.dumps(data, cls=NumpySafeEncoder))
+    return JSONResponse(content=content)
 
 from model import predictor
 from quality_model import quality_predictor
@@ -1675,7 +1697,7 @@ async def supply_chain_analyze(req: SupplyChainRequest):
         result = await asyncio.to_thread(engine.analyze, req.ticker)
         if 'error' in result:
             raise HTTPException(status_code=400, detail=result['error'])
-        return result
+        return numpy_safe_response(result)
     except HTTPException:
         raise
     except Exception as e:
@@ -1813,7 +1835,7 @@ async def htf_detect(req: HTFDetectionRequest):
         result = await asyncio.to_thread(engine.analyze, req.ticker)
         if 'error' in result:
             raise HTTPException(status_code=400, detail=result['error'])
-        return result
+        return numpy_safe_response(result)
     except HTTPException:
         raise
     except Exception as e:
@@ -1834,7 +1856,7 @@ async def ep_detect(req: EPDetectionRequest):
         result = await asyncio.to_thread(engine.analyze, req.ticker)
         if 'error' in result:
             raise HTTPException(status_code=400, detail=result['error'])
-        return result
+        return numpy_safe_response(result)
     except HTTPException:
         raise
     except Exception as e:
