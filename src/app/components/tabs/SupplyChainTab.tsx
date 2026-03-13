@@ -2,12 +2,11 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchFmp } from '@/lib/fmpClient';
 
 /* ───────────────────────────────────────────────────────────
-   SUPPLY CHAIN ANALYSIS TAB
+   SUPPLY CHAIN ANALYSIS TAB  v2
    Bloomberg Terminal-inspired supply chain visualization.
-   Shows suppliers → Company → customers in an interactive graph.
+   Now backed by real curated + inferred data from backend engine.
    ─────────────────────────────────────────────────────────── */
 
 interface CompanyNode {
@@ -21,109 +20,36 @@ interface CompanyNode {
   description?: string;
   country?: string;
   relationship: 'supplier' | 'customer' | 'competitor' | 'center';
-  relevance?: number; // 0-100, how relevant the connection is
-  revenueExposure?: string; // e.g. "Rev: 12.5%"
+  exposure: number;       // estimated revenue exposure %
+  correlation: number;    // price correlation with center
+  relevance: number;      // 0-100 composite score
+  isCurated: boolean;     // from curated database vs inferred
+}
+
+interface SupplyChainStats {
+  total_suppliers: number;
+  total_customers: number;
+  total_competitors: number;
+  avg_supplier_correlation: number;
+  avg_customer_correlation: number;
+  total_supplier_exposure: number;
+  total_customer_exposure: number;
+  data_quality: 'high' | 'medium' | 'low';
+}
+
+interface SupplyChainResult {
+  center: CompanyNode;
+  suppliers: CompanyNode[];
+  customers: CompanyNode[];
+  competitors: CompanyNode[];
+  data_source: 'curated' | 'industry_inferred' | 'peer_fallback';
+  stats: SupplyChainStats;
 }
 
 interface SupplyChainTabProps {
   ticker: string;
   profile?: any;
 }
-
-// ── Industry-level supply chain map ──
-// Maps each FMP industry to its typical supplier and customer industries.
-// Used to query FMP screener for companies in related industries.
-const SUPPLY_CHAIN_MAP: Record<string, { suppliers: string[]; customers: string[] }> = {
-  // TECHNOLOGY
-  'Software—Application': { suppliers: ['Semiconductors', 'Software—Infrastructure', 'Information Technology Services'], customers: ['Banks—Diversified', 'Healthcare Plans', 'Telecom Services', 'Insurance—Diversified'] },
-  'Software—Infrastructure': { suppliers: ['Semiconductors', 'Electronic Components'], customers: ['Software—Application', 'Banks—Diversified', 'Internet Content & Information', 'Information Technology Services'] },
-  'Semiconductors': { suppliers: ['Semiconductor Equipment & Materials', 'Specialty Chemicals'], customers: ['Consumer Electronics', 'Communication Equipment', 'Auto Manufacturers', 'Aerospace & Defense'] },
-  'Semiconductor Equipment & Materials': { suppliers: ['Specialty Chemicals', 'Scientific & Technical Instruments'], customers: ['Semiconductors'] },
-  'Consumer Electronics': { suppliers: ['Semiconductors', 'Electronic Components', 'Communication Equipment'], customers: ['Specialty Retail', 'Internet Retail', 'Telecom Services'] },
-  'Communication Equipment': { suppliers: ['Semiconductors', 'Electronic Components'], customers: ['Telecom Services', 'Aerospace & Defense', 'Internet Content & Information'] },
-  'Information Technology Services': { suppliers: ['Software—Infrastructure', 'Semiconductors'], customers: ['Banks—Diversified', 'Oil & Gas Integrated', 'Drug Manufacturers—General', 'Insurance—Diversified'] },
-  'Electronic Components': { suppliers: ['Specialty Chemicals', 'Copper', 'Aluminum'], customers: ['Semiconductors', 'Consumer Electronics', 'Auto Manufacturers', 'Medical Devices'] },
-  'Solar': { suppliers: ['Semiconductors', 'Specialty Chemicals', 'Electronic Components'], customers: ['Utilities—Regulated Electric', 'Utilities—Renewable'] },
-  // COMMUNICATION SERVICES
-  'Telecom Services': { suppliers: ['Communication Equipment', 'Semiconductors', 'Software—Infrastructure', 'Information Technology Services'], customers: ['Internet Content & Information', 'Entertainment', 'Advertising Agencies'] },
-  'Internet Content & Information': { suppliers: ['Software—Infrastructure', 'Information Technology Services', 'Semiconductors'], customers: ['Advertising Agencies', 'Internet Retail', 'Entertainment'] },
-  'Entertainment': { suppliers: ['Software—Application', 'Internet Content & Information'], customers: ['Internet Retail', 'Specialty Retail', 'Telecom Services'] },
-  'Advertising Agencies': { suppliers: ['Internet Content & Information', 'Entertainment', 'Software—Application'], customers: ['Packaged Foods', 'Auto Manufacturers', 'Household & Personal Products'] },
-  // CONSUMER CYCLICAL
-  'Auto Manufacturers': { suppliers: ['Auto Parts', 'Semiconductors', 'Steel', 'Specialty Chemicals', 'Aluminum'], customers: ['Auto & Truck Dealerships', 'Rental & Leasing Services'] },
-  'Auto Parts': { suppliers: ['Steel', 'Specialty Chemicals', 'Electronic Components', 'Aluminum'], customers: ['Auto Manufacturers'] },
-  'Internet Retail': { suppliers: ['Software—Infrastructure', 'Integrated Freight & Logistics', 'Information Technology Services'], customers: ['Packaged Foods', 'Consumer Electronics', 'Household & Personal Products'] },
-  'Specialty Retail': { suppliers: ['Packaged Foods', 'Apparel Manufacturing', 'Household & Personal Products'], customers: [] },
-  'Restaurants': { suppliers: ['Farm Products', 'Packaged Foods', 'Packaging & Containers', 'Food Distribution'], customers: [] },
-  'Apparel Manufacturing': { suppliers: ['Specialty Chemicals', 'Textile Manufacturing'], customers: ['Specialty Retail', 'Internet Retail', 'Department Stores'] },
-  'Lodging': { suppliers: ['Software—Application', 'Food Distribution', 'Building Materials'], customers: [] },
-  // HEALTHCARE
-  'Drug Manufacturers—General': { suppliers: ['Specialty Chemicals', 'Diagnostics & Research', 'Scientific & Technical Instruments'], customers: ['Medical Distribution', 'Pharmaceutical Retailers', 'Healthcare Plans'] },
-  'Drug Manufacturers—Specialty & Generic': { suppliers: ['Specialty Chemicals', 'Diagnostics & Research'], customers: ['Medical Distribution', 'Healthcare Plans'] },
-  'Biotechnology': { suppliers: ['Diagnostics & Research', 'Scientific & Technical Instruments', 'Specialty Chemicals'], customers: ['Drug Manufacturers—General', 'Medical Distribution'] },
-  'Medical Devices': { suppliers: ['Electronic Components', 'Semiconductors', 'Specialty Chemicals'], customers: ['Healthcare Plans', 'Medical Care Facilities'] },
-  'Healthcare Plans': { suppliers: ['Software—Application', 'Information Technology Services'], customers: [] },
-  'Diagnostics & Research': { suppliers: ['Scientific & Technical Instruments', 'Specialty Chemicals'], customers: ['Drug Manufacturers—General', 'Biotechnology', 'Medical Devices'] },
-  // FINANCIAL SERVICES
-  'Banks—Diversified': { suppliers: ['Software—Application', 'Software—Infrastructure', 'Information Technology Services'], customers: ['Real Estate Services', 'Capital Markets', 'Insurance—Diversified'] },
-  'Banks—Regional': { suppliers: ['Software—Application', 'Information Technology Services'], customers: ['Real Estate Services'] },
-  'Insurance—Diversified': { suppliers: ['Software—Application', 'Information Technology Services'], customers: [] },
-  'Capital Markets': { suppliers: ['Software—Infrastructure', 'Information Technology Services'], customers: ['Banks—Diversified', 'Insurance—Diversified'] },
-  'Financial Data & Stock Exchanges': { suppliers: ['Software—Infrastructure', 'Information Technology Services'], customers: ['Banks—Diversified', 'Capital Markets', 'Insurance—Diversified'] },
-  // ENERGY
-  'Oil & Gas Integrated': { suppliers: ['Oil & Gas Equipment & Services', 'Steel', 'Engineering & Construction'], customers: ['Oil & Gas Refining & Marketing', 'Utilities—Regulated Electric', 'Airlines', 'Specialty Chemicals'] },
-  'Oil & Gas Exploration & Production': { suppliers: ['Oil & Gas Equipment & Services', 'Oil & Gas Drilling'], customers: ['Oil & Gas Midstream', 'Oil & Gas Refining & Marketing'] },
-  'Oil & Gas Refining & Marketing': { suppliers: ['Oil & Gas Integrated', 'Oil & Gas Exploration & Production'], customers: ['Airlines', 'Trucking', 'Specialty Chemicals', 'Utilities—Regulated Electric'] },
-  'Oil & Gas Equipment & Services': { suppliers: ['Steel', 'Electronic Components', 'Specialty Chemicals'], customers: ['Oil & Gas Integrated', 'Oil & Gas Exploration & Production'] },
-  'Oil & Gas Midstream': { suppliers: ['Steel', 'Engineering & Construction'], customers: ['Oil & Gas Refining & Marketing', 'Utilities—Regulated Electric'] },
-  // INDUSTRIALS
-  'Aerospace & Defense': { suppliers: ['Semiconductors', 'Steel', 'Electronic Components', 'Specialty Chemicals'], customers: ['Airlines'] },
-  'Airlines': { suppliers: ['Aerospace & Defense', 'Oil & Gas Refining & Marketing'], customers: [] },
-  'Trucking': { suppliers: ['Auto Manufacturers', 'Oil & Gas Refining & Marketing'], customers: ['Internet Retail', 'Packaged Foods', 'Specialty Retail'] },
-  'Integrated Freight & Logistics': { suppliers: ['Airlines', 'Trucking', 'Software—Application'], customers: ['Internet Retail', 'Auto Manufacturers', 'Specialty Retail'] },
-  'Engineering & Construction': { suppliers: ['Steel', 'Building Materials', 'Specialty Chemicals'], customers: ['Oil & Gas Integrated', 'Utilities—Regulated Electric'] },
-  'Farm & Heavy Construction Machinery': { suppliers: ['Steel', 'Electronic Components', 'Semiconductors'], customers: ['Farm Products', 'Engineering & Construction'] },
-  'Industrial Distribution': { suppliers: ['Steel', 'Electronic Components', 'Specialty Chemicals'], customers: ['Engineering & Construction', 'Auto Manufacturers'] },
-  // BASIC MATERIALS
-  'Steel': { suppliers: ['Coal'], customers: ['Auto Manufacturers', 'Aerospace & Defense', 'Engineering & Construction', 'Auto Parts'] },
-  'Specialty Chemicals': { suppliers: ['Oil & Gas Refining & Marketing'], customers: ['Semiconductors', 'Drug Manufacturers—General', 'Auto Parts', 'Packaged Foods'] },
-  'Aluminum': { suppliers: ['Utilities—Regulated Electric'], customers: ['Auto Manufacturers', 'Aerospace & Defense', 'Packaging & Containers'] },
-  'Copper': { suppliers: [], customers: ['Electronic Components', 'Engineering & Construction', 'Auto Parts'] },
-  'Gold': { suppliers: [], customers: ['Capital Markets', 'Specialty Retail'] },
-  'Building Materials': { suppliers: ['Steel', 'Specialty Chemicals'], customers: ['Engineering & Construction'] },
-  'Packaging & Containers': { suppliers: ['Aluminum', 'Paper & Paper Products', 'Specialty Chemicals'], customers: ['Packaged Foods', 'Beverages—Non-Alcoholic', 'Household & Personal Products'] },
-  // CONSUMER DEFENSIVE
-  'Packaged Foods': { suppliers: ['Farm Products', 'Packaging & Containers', 'Specialty Chemicals'], customers: ['Grocery Stores', 'Discount Stores', 'Internet Retail'] },
-  'Household & Personal Products': { suppliers: ['Specialty Chemicals', 'Packaging & Containers'], customers: ['Grocery Stores', 'Discount Stores', 'Internet Retail'] },
-  'Beverages—Non-Alcoholic': { suppliers: ['Packaging & Containers', 'Farm Products', 'Specialty Chemicals'], customers: ['Grocery Stores', 'Restaurants', 'Discount Stores'] },
-  'Beverages—Brewers': { suppliers: ['Packaging & Containers', 'Farm Products'], customers: ['Grocery Stores', 'Restaurants'] },
-  'Discount Stores': { suppliers: ['Packaged Foods', 'Household & Personal Products', 'Apparel Manufacturing'], customers: [] },
-  'Grocery Stores': { suppliers: ['Packaged Foods', 'Farm Products', 'Beverages—Non-Alcoholic'], customers: [] },
-  'Farm Products': { suppliers: ['Farm & Heavy Construction Machinery', 'Specialty Chemicals'], customers: ['Packaged Foods', 'Restaurants', 'Grocery Stores'] },
-  // UTILITIES
-  'Utilities—Regulated Electric': { suppliers: ['Oil & Gas Integrated', 'Solar', 'Engineering & Construction'], customers: [] },
-  'Utilities—Renewable': { suppliers: ['Solar', 'Engineering & Construction'], customers: ['Utilities—Regulated Electric'] },
-  'Utilities—Regulated Gas': { suppliers: ['Oil & Gas Midstream', 'Engineering & Construction'], customers: [] },
-  // REAL ESTATE
-  'REIT—Specialty': { suppliers: ['Engineering & Construction', 'Building Materials'], customers: ['Telecom Services'] },
-  'REIT—Industrial': { suppliers: ['Engineering & Construction', 'Building Materials'], customers: ['Internet Retail', 'Integrated Freight & Logistics'] },
-  'REIT—Retail': { suppliers: ['Engineering & Construction', 'Building Materials'], customers: ['Specialty Retail', 'Restaurants'] },
-};
-
-// Sector-level fallback for industries not in the map
-const SECTOR_FALLBACK: Record<string, { supplierSectors: string[]; customerSectors: string[] }> = {
-  'Technology': { supplierSectors: ['Basic Materials'], customerSectors: ['Financial Services', 'Healthcare', 'Communication Services'] },
-  'Communication Services': { supplierSectors: ['Technology'], customerSectors: ['Consumer Cyclical'] },
-  'Consumer Cyclical': { supplierSectors: ['Technology', 'Industrials', 'Basic Materials'], customerSectors: [] },
-  'Consumer Defensive': { supplierSectors: ['Basic Materials', 'Industrials'], customerSectors: [] },
-  'Healthcare': { supplierSectors: ['Technology', 'Basic Materials'], customerSectors: [] },
-  'Financial Services': { supplierSectors: ['Technology'], customerSectors: ['Real Estate'] },
-  'Industrials': { supplierSectors: ['Basic Materials', 'Energy'], customerSectors: ['Consumer Cyclical'] },
-  'Basic Materials': { supplierSectors: ['Energy'], customerSectors: ['Industrials', 'Technology'] },
-  'Energy': { supplierSectors: ['Industrials'], customerSectors: ['Utilities', 'Basic Materials'] },
-  'Utilities': { supplierSectors: ['Energy', 'Industrials'], customerSectors: [] },
-  'Real Estate': { supplierSectors: ['Industrials', 'Basic Materials', 'Financial Services'], customerSectors: [] },
-};
 
 function fmtMktCap(v: number): string {
   if (!v) return '–';
@@ -133,6 +59,16 @@ function fmtMktCap(v: number): string {
   return `$${v.toLocaleString()}`;
 }
 
+function fmtCorr(c: number): string {
+  return c.toFixed(2);
+}
+
+const DATA_QUALITY_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  high:   { bg: 'bg-emerald-900/30', text: 'text-emerald-400', label: 'Curated Data' },
+  medium: { bg: 'bg-yellow-900/30',  text: 'text-yellow-400',  label: 'Industry Inferred' },
+  low:    { bg: 'bg-red-900/30',     text: 'text-red-400',     label: 'Peer Fallback' },
+};
+
 export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps) {
   const router = useRouter();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -140,13 +76,13 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [centerCompany, setCenterCompany] = useState<CompanyNode | null>(null);
-  const [suppliers, setSuppliers] = useState<CompanyNode[]>([]);
-  const [customers, setCustomers] = useState<CompanyNode[]>([]);
-  const [competitors, setCompetitors] = useState<CompanyNode[]>([]);
+  const [result, setResult] = useState<SupplyChainResult | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 1200, height: 700 });
+  const [sortBy, setSortBy] = useState<'relevance' | 'exposure' | 'mktCap' | 'correlation'>('relevance');
+
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
   // Responsive sizing
   useEffect(() => {
@@ -168,191 +104,24 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
     async function fetchSupplyChain() {
       setLoading(true);
       setError(null);
+      setResult(null);
 
       try {
-        // 1. Fetch company profile and peers in parallel
-        const [peersData, profileData] = await Promise.all([
-          fetchFmp('stable/stock-peers', { symbol: ticker }).catch(() => []),
-          profile
-            ? Promise.resolve(profile)
-            : fetchFmp('stable/profile', { symbol: ticker })
-                .then((d: any) => (Array.isArray(d) ? d[0] : d))
-                .catch(() => null),
-        ]);
-
-        if (cancelled) return;
-
-        const companyProfile = Array.isArray(profileData) ? profileData[0] : profileData;
-        if (!companyProfile) {
-          setError('Could not load company profile');
-          setLoading(false);
-          return;
-        }
-
-        const center: CompanyNode = {
-          symbol: companyProfile.symbol || ticker,
-          name: companyProfile.companyName || ticker,
-          sector: companyProfile.sector || '',
-          industry: companyProfile.industry || '',
-          mktCap: companyProfile.mktCap || 0,
-          price: companyProfile.price || 0,
-          change: companyProfile.changes || 0,
-          description: companyProfile.description || '',
-          country: companyProfile.country || '',
-          relationship: 'center',
-        };
-        setCenterCompany(center);
-
-        // 2. Peers → Competitors
-        // stable/stock-peers returns [{symbol: "T", peersList: ["VZ","TMUS",...]}]
-        console.log('[SupplyChain] Raw peers data:', JSON.stringify(peersData)?.slice(0, 500));
-        let peerSymbols: string[] = [];
-        if (Array.isArray(peersData)) {
-          // Try peersList format first (standard FMP response)
-          const peersList = peersData[0]?.peersList;
-          if (Array.isArray(peersList)) {
-            peerSymbols = peersList.filter((s: string) => s && s !== ticker);
-          } else {
-            // Fallback: each item has a symbol
-            peerSymbols = peersData.map((p: any) => p.symbol).filter((s: string) => s && s !== ticker);
-          }
-        }
-        console.log('[SupplyChain] Parsed peer symbols:', peerSymbols);
-        const comps: CompanyNode[] = [];
-        if (peerSymbols.length > 0) {
-          const peerProfileResults = await Promise.all(
-            peerSymbols.slice(0, 10).map(sym =>
-              fetchFmp('stable/profile', { symbol: sym })
-                .then((d: any) => (Array.isArray(d) ? d[0] : d))
-                .catch(() => null)
-            )
-          );
-          if (!cancelled) {
-            for (const p of peerProfileResults) {
-              if (p?.symbol && p.symbol !== ticker) {
-                comps.push({
-                  symbol: p.symbol,
-                  name: p.companyName || p.symbol,
-                  sector: p.sector || '',
-                  industry: p.industry || '',
-                  mktCap: p.mktCap || 0,
-                  price: p.price || 0,
-                  change: p.changes || 0,
-                  country: p.country || '',
-                  relationship: 'competitor',
-                });
-              }
-            }
-          }
-        }
-        if (cancelled) return;
-
-        // 3. Determine supplier & customer industries from supply chain map
-        const chainEntry = SUPPLY_CHAIN_MAP[center.industry];
-        const useSectorFallback = !chainEntry;
-
-        const sups: CompanyNode[] = [];
-        const custs: CompanyNode[] = [];
-        const seenSymbols = new Set([ticker, ...comps.map(c => c.symbol)]);
-        const minMktCap = Math.max(5e8, (center.mktCap || 1e10) * 0.002);
-
-        const buildNode = (p: any, rel: 'supplier' | 'customer'): CompanyNode => ({
-          symbol: p.symbol,
-          name: p.companyName || p.symbol,
-          sector: p.sector || '',
-          industry: p.industry || '',
-          mktCap: p.marketCap || p.mktCap || 0,
-          price: p.price || 0,
-          change: p.changes || p.changesPercentage || 0,
-          country: p.country || '',
-          relationship: rel,
+        const resp = await fetch(`${backendUrl}/supply-chain/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker }),
         });
 
-        if (!useSectorFallback) {
-          // 4a. Industry-level search — query FMP screener for each related industry
-          console.log('[SupplyChain] Industry match:', center.industry, '| Suppliers:', chainEntry.suppliers, '| Customers:', chainEntry.customers);
-          const [supResults, custResults] = await Promise.all([
-            Promise.all(
-              chainEntry.suppliers.map(ind =>
-                fetchFmp('api/v3/stock-screener', { industry: ind, marketCapMoreThan: minMktCap, limit: 8 })
-                  .then(r => { console.log(`[SupplyChain] Supplier industry "${ind}":`, r?.length || 0, 'results'); return r; })
-                  .catch(e => { console.warn(`[SupplyChain] Screener failed for "${ind}":`, e.message); return []; })
-              )
-            ),
-            Promise.all(
-              chainEntry.customers.map(ind =>
-                fetchFmp('api/v3/stock-screener', { industry: ind, marketCapMoreThan: minMktCap, limit: 8 })
-                  .then(r => { console.log(`[SupplyChain] Customer industry "${ind}":`, r?.length || 0, 'results'); return r; })
-                  .catch(e => { console.warn(`[SupplyChain] Screener failed for "${ind}":`, e.message); return []; })
-              )
-            ),
-          ]);
-
-          if (cancelled) return;
-
-          for (const batch of supResults) {
-            for (const p of (batch || [])) {
-              if (p?.symbol && !seenSymbols.has(p.symbol)) {
-                seenSymbols.add(p.symbol);
-                sups.push(buildNode(p, 'supplier'));
-              }
-            }
-          }
-          for (const batch of custResults) {
-            for (const p of (batch || [])) {
-              if (p?.symbol && !seenSymbols.has(p.symbol)) {
-                seenSymbols.add(p.symbol);
-                custs.push(buildNode(p, 'customer'));
-              }
-            }
-          }
-        } else {
-          // 4b. Sector-level fallback — query screener by sector
-          console.log('[SupplyChain] No industry match, using sector fallback for:', center.sector);
-          const sectorEntry = SECTOR_FALLBACK[center.sector];
-          if (sectorEntry) {
-            const [supResults, custResults] = await Promise.all([
-              Promise.all(
-                sectorEntry.supplierSectors.slice(0, 2).map(sec =>
-                  fetchFmp('api/v3/stock-screener', { sector: sec, marketCapMoreThan: minMktCap, limit: 10 }).catch(() => [])
-                )
-              ),
-              Promise.all(
-                sectorEntry.customerSectors.slice(0, 2).map(sec =>
-                  fetchFmp('api/v3/stock-screener', { sector: sec, marketCapMoreThan: minMktCap, limit: 10 }).catch(() => [])
-                )
-              ),
-            ]);
-
-            if (cancelled) return;
-
-            for (const batch of supResults) {
-              for (const p of (batch || [])) {
-                if (p?.symbol && !seenSymbols.has(p.symbol)) {
-                  seenSymbols.add(p.symbol);
-                  sups.push(buildNode(p, 'supplier'));
-                }
-              }
-            }
-            for (const batch of custResults) {
-              for (const p of (batch || [])) {
-                if (p?.symbol && !seenSymbols.has(p.symbol)) {
-                  seenSymbols.add(p.symbol);
-                  custs.push(buildNode(p, 'customer'));
-                }
-              }
-            }
-          }
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ detail: 'Unknown error' }));
+          throw new Error(err.detail || `HTTP ${resp.status}`);
         }
 
-        // Sort by market cap (largest = most relevant first)
-        sups.sort((a, b) => (b.mktCap || 0) - (a.mktCap || 0));
-        custs.sort((a, b) => (b.mktCap || 0) - (a.mktCap || 0));
-        comps.sort((a, b) => (b.mktCap || 0) - (a.mktCap || 0));
-
-        setSuppliers(sups.slice(0, 8));
-        setCustomers(custs.slice(0, 8));
-        setCompetitors(comps.slice(0, 6));
+        const data = await resp.json();
+        if (!cancelled) {
+          setResult(data);
+        }
       } catch (err: any) {
         if (!cancelled) setError(err.message || 'Failed to load supply chain data');
       } finally {
@@ -362,16 +131,25 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
 
     fetchSupplyChain();
     return () => { cancelled = true; };
-  }, [ticker, profile]);
-
-  const handleNodeClick = useCallback((symbol: string) => {
-    if (symbol === ticker) return;
-    setSelectedNode(symbol);
-  }, [ticker]);
+  }, [ticker, backendUrl]);
 
   const navigateToAnalysis = useCallback((symbol: string) => {
     router.push(`/analizar?ticker=${symbol}`);
   }, [router]);
+
+  // Sort nodes
+  const sortFn = useCallback((a: CompanyNode, b: CompanyNode) => {
+    switch (sortBy) {
+      case 'exposure': return (b.exposure || 0) - (a.exposure || 0);
+      case 'mktCap': return (b.mktCap || 0) - (a.mktCap || 0);
+      case 'correlation': return Math.abs(b.correlation || 0) - Math.abs(a.correlation || 0);
+      default: return (b.relevance || 0) - (a.relevance || 0);
+    }
+  }, [sortBy]);
+
+  const suppliers = useMemo(() => [...(result?.suppliers || [])].sort(sortFn), [result?.suppliers, sortFn]);
+  const customers = useMemo(() => [...(result?.customers || [])].sort(sortFn), [result?.customers, sortFn]);
+  const competitors = useMemo(() => [...(result?.competitors || [])].sort(sortFn), [result?.competitors, sortFn]);
 
   // ── SVG Graph Rendering ──
   const { width: W, height: H } = dimensions;
@@ -409,7 +187,7 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
       x: count === 1 ? centerX : startX + i * gap,
       y: H - 55,
     }));
-  }, [competitors, W, H, centerX, centerY]);
+  }, [competitors, W, H, centerX]);
 
   const selectedCompany = useMemo(() => {
     if (!selectedNode) return null;
@@ -420,7 +198,8 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
         <div className="w-12 h-12 border-2 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin" />
-        <p className="text-gray-500 text-sm">Loading supply chain data for {ticker}...</p>
+        <p className="text-gray-500 text-sm">Loading real supply chain data for {ticker}...</p>
+        <p className="text-gray-600 text-xs">Fetching profiles, correlations & exposure data</p>
       </div>
     );
   }
@@ -434,6 +213,12 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
     );
   }
 
+  if (!result) return null;
+
+  const { center } = result;
+  const stats = result.stats;
+  const quality = DATA_QUALITY_STYLES[stats.data_quality] || DATA_QUALITY_STYLES.low;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -444,9 +229,12 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
             </svg>
             Supply Chain Analysis
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${quality.bg} ${quality.text} border border-current/20`}>
+              {quality.label}
+            </span>
           </h2>
           <p className="text-gray-500 text-xs mt-1">
-            {centerCompany?.name} — Exposure to related companies (suppliers, customers, competitors)
+            {center.name} — Real supply chain exposure with price correlation
           </p>
         </div>
         <div className="flex items-center gap-4 text-[11px]">
@@ -462,9 +250,25 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
         </div>
       </div>
 
+      {/* Stats bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {[
+          { label: 'Supplier Exposure', value: `${stats.total_supplier_exposure.toFixed(1)}%`, sub: `${stats.total_suppliers} companies` },
+          { label: 'Customer Exposure', value: `${stats.total_customer_exposure.toFixed(1)}%`, sub: `${stats.total_customers} companies` },
+          { label: 'Avg Supplier Corr', value: fmtCorr(stats.avg_supplier_correlation), sub: 'Pearson (1Y)' },
+          { label: 'Avg Customer Corr', value: fmtCorr(stats.avg_customer_correlation), sub: 'Pearson (1Y)' },
+          { label: 'Data Source', value: result.data_source.replace('_', ' '), sub: stats.data_quality + ' quality' },
+        ].map(item => (
+          <div key={item.label} className="bg-black/30 rounded-xl border border-green-900/15 p-3 text-center">
+            <p className="text-xs text-gray-500 uppercase tracking-wider">{item.label}</p>
+            <p className="text-lg font-bold text-white mt-1 font-data">{item.value}</p>
+            <p className="text-[10px] text-gray-600">{item.sub}</p>
+          </div>
+        ))}
+      </div>
+
       {/* Graph Container */}
       <div ref={containerRef} className="relative rounded-xl border border-white/[0.06] bg-gray-900/40 overflow-hidden">
-        {/* SVG Graph */}
         <svg
           ref={svgRef}
           width={W}
@@ -474,7 +278,6 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
           style={{ minHeight: 500 }}
         >
           <defs>
-            {/* Connection line gradients */}
             <linearGradient id="grad-supplier" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="rgba(6,182,212,0.5)" />
               <stop offset="100%" stopColor="rgba(6,182,212,0.08)" />
@@ -483,11 +286,6 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
               <stop offset="0%" stopColor="rgba(245,158,11,0.08)" />
               <stop offset="100%" stopColor="rgba(245,158,11,0.5)" />
             </linearGradient>
-            <linearGradient id="grad-competitor" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgba(139,92,246,0.08)" />
-              <stop offset="100%" stopColor="rgba(139,92,246,0.5)" />
-            </linearGradient>
-            {/* Glow filters */}
             <filter id="glow-center" x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="6" result="blur" />
               <feMerge>
@@ -497,40 +295,66 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
             </filter>
           </defs>
 
-          {/* ── Connection Lines ── */}
-          {/* Supplier → Center */}
+          {/* ── Connection Lines — weighted by relevance ── */}
           {suppliers.map((s, i) => {
             const pos = supplierPositions[i];
             if (!pos) return null;
             const isHovered = hoveredNode === s.symbol;
+            const lineWidth = Math.max(0.5, Math.min(3, s.relevance / 30));
             return (
-              <path
-                key={`line-s-${s.symbol}`}
-                d={`M ${pos.x + 60} ${pos.y} C ${centerX * 0.5} ${pos.y}, ${centerX * 0.5} ${centerY}, ${centerX - 80} ${centerY}`}
-                fill="none"
-                stroke={isHovered ? 'rgba(6,182,212,0.7)' : 'url(#grad-supplier)'}
-                strokeWidth={isHovered ? 2 : 1}
-                className="transition-all duration-200"
-              />
+              <g key={`line-s-${s.symbol}`}>
+                <path
+                  d={`M ${pos.x + 60} ${pos.y} C ${centerX * 0.5} ${pos.y}, ${centerX * 0.5} ${centerY}, ${centerX - 80} ${centerY}`}
+                  fill="none"
+                  stroke={isHovered ? 'rgba(6,182,212,0.7)' : 'url(#grad-supplier)'}
+                  strokeWidth={isHovered ? lineWidth + 1 : lineWidth}
+                  className="transition-all duration-200"
+                />
+                {/* Exposure label on line */}
+                {s.exposure > 0 && (
+                  <text
+                    x={(pos.x + 60 + centerX - 80) / 2}
+                    y={pos.y + (centerY - pos.y) * 0.3 - 6}
+                    textAnchor="middle"
+                    fill="rgba(6,182,212,0.4)"
+                    fontSize={8}
+                    fontWeight={600}
+                  >
+                    {s.exposure.toFixed(1)}%
+                  </text>
+                )}
+              </g>
             );
           })}
-          {/* Center → Customer */}
           {customers.map((c, i) => {
             const pos = customerPositions[i];
             if (!pos) return null;
             const isHovered = hoveredNode === c.symbol;
+            const lineWidth = Math.max(0.5, Math.min(3, c.relevance / 30));
             return (
-              <path
-                key={`line-c-${c.symbol}`}
-                d={`M ${centerX + 80} ${centerY} C ${centerX + (W - centerX) * 0.5} ${centerY}, ${centerX + (W - centerX) * 0.5} ${pos.y}, ${pos.x - 60} ${pos.y}`}
-                fill="none"
-                stroke={isHovered ? 'rgba(245,158,11,0.7)' : 'url(#grad-customer)'}
-                strokeWidth={isHovered ? 2 : 1}
-                className="transition-all duration-200"
-              />
+              <g key={`line-c-${c.symbol}`}>
+                <path
+                  d={`M ${centerX + 80} ${centerY} C ${centerX + (W - centerX) * 0.5} ${centerY}, ${centerX + (W - centerX) * 0.5} ${pos.y}, ${pos.x - 60} ${pos.y}`}
+                  fill="none"
+                  stroke={isHovered ? 'rgba(245,158,11,0.7)' : 'url(#grad-customer)'}
+                  strokeWidth={isHovered ? lineWidth + 1 : lineWidth}
+                  className="transition-all duration-200"
+                />
+                {c.exposure > 0 && (
+                  <text
+                    x={(centerX + 80 + pos.x - 60) / 2}
+                    y={centerY + (pos.y - centerY) * 0.3 - 6}
+                    textAnchor="middle"
+                    fill="rgba(245,158,11,0.4)"
+                    fontSize={8}
+                    fontWeight={600}
+                  >
+                    {c.exposure.toFixed(1)}%
+                  </text>
+                )}
+              </g>
             );
           })}
-          {/* Center → Competitor */}
           {competitors.map((c, i) => {
             const pos = competitorPositions[i];
             if (!pos) return null;
@@ -538,10 +362,8 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
             return (
               <line
                 key={`line-comp-${c.symbol}`}
-                x1={centerX}
-                y1={centerY + 30}
-                x2={pos.x}
-                y2={pos.y - 18}
+                x1={centerX} y1={centerY + 30}
+                x2={pos.x} y2={pos.y - 18}
                 stroke={isHovered ? 'rgba(139,92,246,0.6)' : 'rgba(139,92,246,0.12)'}
                 strokeWidth={isHovered ? 1.5 : 0.7}
                 strokeDasharray={isHovered ? 'none' : '4 4'}
@@ -550,7 +372,7 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
             );
           })}
 
-          {/* ── Supplier count label ── */}
+          {/* Flow labels */}
           {suppliers.length > 0 && (
             <g>
               <rect x={centerX * 0.38 - 40} y={centerY - 10} width={80} height={20} rx={10} fill="rgba(6,182,212,0.08)" stroke="rgba(6,182,212,0.2)" strokeWidth={0.5} />
@@ -559,8 +381,6 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
               </text>
             </g>
           )}
-
-          {/* ── Customer count label ── */}
           {customers.length > 0 && (
             <g>
               <rect x={centerX + (W - centerX) * 0.62 - 42} y={centerY - 10} width={84} height={20} rx={10} fill="rgba(245,158,11,0.08)" stroke="rgba(245,158,11,0.2)" strokeWidth={0.5} />
@@ -569,8 +389,6 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
               </text>
             </g>
           )}
-
-          {/* ── Competitor label ── */}
           {competitors.length > 0 && (
             <text x={centerX} y={H - 8} textAnchor="middle" fill="rgba(139,92,246,0.5)" fontSize={10} fontWeight={600}>
               {competitors.length} Comps
@@ -578,29 +396,19 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
           )}
 
           {/* ── CENTER NODE ── */}
-          {centerCompany && (
-            <g filter="url(#glow-center)">
-              <rect
-                x={centerX - 78}
-                y={centerY - 32}
-                width={156}
-                height={64}
-                rx={8}
-                fill="#064e3b"
-                stroke="#10b981"
-                strokeWidth={1.5}
-              />
-              <text x={centerX} y={centerY - 10} textAnchor="middle" fill="#34d399" fontSize={14} fontWeight={800}>
-                {centerCompany.symbol}
-              </text>
-              <text x={centerX} y={centerY + 8} textAnchor="middle" fill="#a7f3d0" fontSize={9}>
-                {centerCompany.name.length > 22 ? centerCompany.name.slice(0, 22) + '…' : centerCompany.name}
-              </text>
-              <text x={centerX} y={centerY + 22} textAnchor="middle" fill="#6ee7b7" fontSize={8} fontWeight={600}>
-                {fmtMktCap(centerCompany.mktCap)}
-              </text>
-            </g>
-          )}
+          <g filter="url(#glow-center)">
+            <rect x={centerX - 78} y={centerY - 32} width={156} height={64} rx={8}
+              fill="#064e3b" stroke="#10b981" strokeWidth={1.5} />
+            <text x={centerX} y={centerY - 10} textAnchor="middle" fill="#34d399" fontSize={14} fontWeight={800}>
+              {center.symbol}
+            </text>
+            <text x={centerX} y={centerY + 8} textAnchor="middle" fill="#a7f3d0" fontSize={9}>
+              {center.name.length > 22 ? center.name.slice(0, 22) + '…' : center.name}
+            </text>
+            <text x={centerX} y={centerY + 22} textAnchor="middle" fill="#6ee7b7" fontSize={8} fontWeight={600}>
+              {fmtMktCap(center.mktCap)}
+            </text>
+          </g>
 
           {/* ── SUPPLIER NODES ── */}
           {suppliers.map((s, i) => {
@@ -613,26 +421,25 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
                 key={`node-s-${s.symbol}`}
                 onMouseEnter={() => setHoveredNode(s.symbol)}
                 onMouseLeave={() => setHoveredNode(null)}
-                onClick={() => handleNodeClick(s.symbol)}
+                onClick={() => setSelectedNode(s.symbol === selectedNode ? null : s.symbol)}
                 style={{ cursor: 'pointer' }}
               >
                 <rect
-                  x={pos.x - 55}
-                  y={pos.y - 16}
-                  width={110}
-                  height={32}
-                  rx={6}
+                  x={pos.x - 55} y={pos.y - 18} width={110} height={36} rx={6}
                   fill={isHovered || isSelected ? 'rgba(6,182,212,0.15)' : 'rgba(6,182,212,0.06)'}
                   stroke={isHovered || isSelected ? 'rgba(6,182,212,0.5)' : 'rgba(6,182,212,0.15)'}
                   strokeWidth={isHovered ? 1.5 : 0.7}
                   className="transition-all duration-150"
                 />
-                <text x={pos.x} y={pos.y - 2} textAnchor="middle" fill={isHovered ? '#22d3ee' : '#67e8f9'} fontSize={11} fontWeight={700}>
+                <text x={pos.x} y={pos.y - 3} textAnchor="middle" fill={isHovered ? '#22d3ee' : '#67e8f9'} fontSize={11} fontWeight={700}>
                   {s.symbol}
                 </text>
-                <text x={pos.x} y={pos.y + 11} textAnchor="middle" fill="rgba(6,182,212,0.5)" fontSize={7.5}>
-                  {fmtMktCap(s.mktCap)}
+                <text x={pos.x} y={pos.y + 10} textAnchor="middle" fill="rgba(6,182,212,0.5)" fontSize={7.5}>
+                  {fmtMktCap(s.mktCap)}{s.exposure > 0 ? ` · ${s.exposure}%` : ''}
                 </text>
+                {s.isCurated && (
+                  <circle cx={pos.x + 50} cy={pos.y - 14} r={3} fill="#22d3ee" opacity={0.6} />
+                )}
               </g>
             );
           })}
@@ -648,26 +455,25 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
                 key={`node-c-${c.symbol}`}
                 onMouseEnter={() => setHoveredNode(c.symbol)}
                 onMouseLeave={() => setHoveredNode(null)}
-                onClick={() => handleNodeClick(c.symbol)}
+                onClick={() => setSelectedNode(c.symbol === selectedNode ? null : c.symbol)}
                 style={{ cursor: 'pointer' }}
               >
                 <rect
-                  x={pos.x - 55}
-                  y={pos.y - 16}
-                  width={110}
-                  height={32}
-                  rx={6}
+                  x={pos.x - 55} y={pos.y - 18} width={110} height={36} rx={6}
                   fill={isHovered || isSelected ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.06)'}
                   stroke={isHovered || isSelected ? 'rgba(245,158,11,0.5)' : 'rgba(245,158,11,0.15)'}
                   strokeWidth={isHovered ? 1.5 : 0.7}
                   className="transition-all duration-150"
                 />
-                <text x={pos.x} y={pos.y - 2} textAnchor="middle" fill={isHovered ? '#fbbf24' : '#fcd34d'} fontSize={11} fontWeight={700}>
+                <text x={pos.x} y={pos.y - 3} textAnchor="middle" fill={isHovered ? '#fbbf24' : '#fcd34d'} fontSize={11} fontWeight={700}>
                   {c.symbol}
                 </text>
-                <text x={pos.x} y={pos.y + 11} textAnchor="middle" fill="rgba(245,158,11,0.5)" fontSize={7.5}>
-                  {fmtMktCap(c.mktCap)}
+                <text x={pos.x} y={pos.y + 10} textAnchor="middle" fill="rgba(245,158,11,0.5)" fontSize={7.5}>
+                  {fmtMktCap(c.mktCap)}{c.exposure > 0 ? ` · ${c.exposure}%` : ''}
                 </text>
+                {c.isCurated && (
+                  <circle cx={pos.x + 50} cy={pos.y - 14} r={3} fill="#fbbf24" opacity={0.6} />
+                )}
               </g>
             );
           })}
@@ -683,15 +489,11 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
                 key={`node-comp-${c.symbol}`}
                 onMouseEnter={() => setHoveredNode(c.symbol)}
                 onMouseLeave={() => setHoveredNode(null)}
-                onClick={() => handleNodeClick(c.symbol)}
+                onClick={() => setSelectedNode(c.symbol === selectedNode ? null : c.symbol)}
                 style={{ cursor: 'pointer' }}
               >
                 <rect
-                  x={pos.x - 42}
-                  y={pos.y - 16}
-                  width={84}
-                  height={32}
-                  rx={6}
+                  x={pos.x - 42} y={pos.y - 16} width={84} height={32} rx={6}
                   fill={isHovered || isSelected ? 'rgba(139,92,246,0.15)' : 'rgba(139,92,246,0.06)'}
                   stroke={isHovered || isSelected ? 'rgba(139,92,246,0.5)' : 'rgba(139,92,246,0.15)'}
                   strokeWidth={isHovered ? 1.5 : 0.7}
@@ -713,7 +515,7 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
           {ticker} — Supply Chain Exposure
         </div>
         <div className="absolute top-3 right-3 text-[10px] text-gray-600 font-mono">
-          Sort by: Company Exposure
+          Sort by: {sortBy}
         </div>
       </div>
 
@@ -737,31 +539,31 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
                 }`}>
                   {selectedCompany.relationship.toUpperCase()}
                 </span>
+                {selectedCompany.isCurated && (
+                  <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-emerald-900/30 text-emerald-400 border border-emerald-500/20">
+                    VERIFIED
+                  </span>
+                )}
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                <div>
-                  <div className="text-[10px] text-gray-600 uppercase">Price</div>
-                  <div className="text-sm font-semibold text-white font-mono">${selectedCompany.price?.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-gray-600 uppercase">Change</div>
-                  <div className={`text-sm font-semibold font-mono ${(selectedCompany.change || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {(selectedCompany.change || 0) >= 0 ? '+' : ''}{(selectedCompany.change || 0).toFixed(2)}%
+              <div className="grid grid-cols-2 sm:grid-cols-7 gap-3">
+                {[
+                  { label: 'Price', value: `$${selectedCompany.price?.toFixed(2)}` },
+                  { label: 'Change', value: `${(selectedCompany.change || 0) >= 0 ? '+' : ''}${(selectedCompany.change || 0).toFixed(2)}%`, color: (selectedCompany.change || 0) >= 0 ? 'text-green-400' : 'text-red-400' },
+                  { label: 'Mkt Cap', value: fmtMktCap(selectedCompany.mktCap) },
+                  { label: 'Exposure', value: selectedCompany.exposure > 0 ? `${selectedCompany.exposure}%` : '–' },
+                  { label: 'Correlation', value: fmtCorr(selectedCompany.correlation) },
+                  { label: 'Relevance', value: `${selectedCompany.relevance}/100` },
+                  { label: 'Country', value: selectedCompany.country || '–' },
+                ].map(item => (
+                  <div key={item.label}>
+                    <div className="text-[10px] text-gray-600 uppercase">{item.label}</div>
+                    <div className={`text-sm font-semibold font-mono ${(item as any).color || 'text-white'}`}>{item.value}</div>
                   </div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-gray-600 uppercase">Mkt Cap</div>
-                  <div className="text-sm font-semibold text-white">{fmtMktCap(selectedCompany.mktCap)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-gray-600 uppercase">Sector</div>
-                  <div className="text-xs text-gray-400 truncate">{selectedCompany.sector || '–'}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-gray-600 uppercase">Industry</div>
-                  <div className="text-xs text-gray-400 truncate">{selectedCompany.industry || '–'}</div>
-                </div>
+                ))}
               </div>
+              {selectedCompany.description && (
+                <p className="text-xs text-gray-500 mt-3 leading-relaxed">{selectedCompany.description}</p>
+              )}
             </div>
             <button
               onClick={() => navigateToAnalysis(selectedCompany.symbol)}
@@ -773,7 +575,25 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
         </div>
       )}
 
-      {/* ── Relationship Table ── */}
+      {/* ── Sort controls ── */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-gray-500">Sort by:</span>
+        {(['relevance', 'exposure', 'mktCap', 'correlation'] as const).map(key => (
+          <button
+            key={key}
+            onClick={() => setSortBy(key)}
+            className={`px-2.5 py-1 rounded-lg transition capitalize ${
+              sortBy === key
+                ? 'bg-green-900/30 text-green-400 border border-green-500/30'
+                : 'bg-black/30 text-gray-500 hover:text-gray-300 border border-transparent'
+            }`}
+          >
+            {key === 'mktCap' ? 'Market Cap' : key}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Relationship Tables ── */}
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Suppliers Table */}
         <div className="rounded-xl border border-cyan-500/10 bg-gray-900/30 overflow-hidden">
@@ -788,16 +608,25 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
             ) : suppliers.map(s => (
               <div
                 key={s.symbol}
-                className="flex items-center justify-between px-4 py-2 hover:bg-cyan-500/[0.04] transition cursor-pointer"
+                className="flex items-center justify-between px-4 py-2.5 hover:bg-cyan-500/[0.04] transition cursor-pointer"
                 onClick={() => navigateToAnalysis(s.symbol)}
                 onMouseEnter={() => setHoveredNode(s.symbol)}
                 onMouseLeave={() => setHoveredNode(null)}
               >
-                <div>
-                  <span className="font-semibold text-xs text-cyan-300 font-mono">{s.symbol}</span>
-                  <span className="text-[10px] text-gray-500 ml-2 hidden sm:inline">{s.industry}</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-xs text-cyan-300 font-mono">{s.symbol}</span>
+                    {s.isCurated && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" title="Verified" />}
+                  </div>
+                  <span className="text-[10px] text-gray-600 truncate block">{s.name}</span>
                 </div>
-                <span className="text-[10px] text-gray-500 font-mono">{fmtMktCap(s.mktCap)}</span>
+                <div className="text-right shrink-0 ml-2">
+                  <div className="text-[10px] text-gray-500 font-mono">{fmtMktCap(s.mktCap)}</div>
+                  <div className="flex items-center gap-2 text-[9px]">
+                    {s.exposure > 0 && <span className="text-cyan-400">{s.exposure}%</span>}
+                    <span className="text-gray-600">r={fmtCorr(s.correlation)}</span>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -816,16 +645,25 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
             ) : customers.map(c => (
               <div
                 key={c.symbol}
-                className="flex items-center justify-between px-4 py-2 hover:bg-amber-500/[0.04] transition cursor-pointer"
+                className="flex items-center justify-between px-4 py-2.5 hover:bg-amber-500/[0.04] transition cursor-pointer"
                 onClick={() => navigateToAnalysis(c.symbol)}
                 onMouseEnter={() => setHoveredNode(c.symbol)}
                 onMouseLeave={() => setHoveredNode(null)}
               >
-                <div>
-                  <span className="font-semibold text-xs text-amber-300 font-mono">{c.symbol}</span>
-                  <span className="text-[10px] text-gray-500 ml-2 hidden sm:inline">{c.industry}</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-xs text-amber-300 font-mono">{c.symbol}</span>
+                    {c.isCurated && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Verified" />}
+                  </div>
+                  <span className="text-[10px] text-gray-600 truncate block">{c.name}</span>
                 </div>
-                <span className="text-[10px] text-gray-500 font-mono">{fmtMktCap(c.mktCap)}</span>
+                <div className="text-right shrink-0 ml-2">
+                  <div className="text-[10px] text-gray-500 font-mono">{fmtMktCap(c.mktCap)}</div>
+                  <div className="flex items-center gap-2 text-[9px]">
+                    {c.exposure > 0 && <span className="text-amber-400">{c.exposure}%</span>}
+                    <span className="text-gray-600">r={fmtCorr(c.correlation)}</span>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -835,25 +673,28 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
         <div className="rounded-xl border border-violet-500/10 bg-gray-900/30 overflow-hidden">
           <div className="px-4 py-2.5 border-b border-violet-500/10 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-violet-500" />
-            <span className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Comps</span>
+            <span className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Competitors</span>
             <span className="text-[10px] text-gray-600 ml-auto">{competitors.length}</span>
           </div>
           <div className="divide-y divide-white/[0.03]">
             {competitors.length === 0 ? (
-              <p className="text-gray-600 text-xs text-center py-4">No comps identified</p>
+              <p className="text-gray-600 text-xs text-center py-4">No competitors identified</p>
             ) : competitors.map(c => (
               <div
                 key={c.symbol}
-                className="flex items-center justify-between px-4 py-2 hover:bg-violet-500/[0.04] transition cursor-pointer"
+                className="flex items-center justify-between px-4 py-2.5 hover:bg-violet-500/[0.04] transition cursor-pointer"
                 onClick={() => navigateToAnalysis(c.symbol)}
                 onMouseEnter={() => setHoveredNode(c.symbol)}
                 onMouseLeave={() => setHoveredNode(null)}
               >
-                <div>
+                <div className="min-w-0">
                   <span className="font-semibold text-xs text-violet-300 font-mono">{c.symbol}</span>
-                  <span className="text-[10px] text-gray-500 ml-2 hidden sm:inline">{c.industry}</span>
+                  <span className="text-[10px] text-gray-600 truncate block">{c.name}</span>
                 </div>
-                <span className="text-[10px] text-gray-500 font-mono">{fmtMktCap(c.mktCap)}</span>
+                <div className="text-right shrink-0 ml-2">
+                  <div className="text-[10px] text-gray-500 font-mono">{fmtMktCap(c.mktCap)}</div>
+                  <span className="text-[9px] text-gray-600">r={fmtCorr(c.correlation)}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -862,8 +703,12 @@ export default function SupplyChainTab({ ticker, profile }: SupplyChainTabProps)
 
       {/* Disclaimer */}
       <p className="text-[10px] text-gray-700 text-center">
-        Supply chain relationships are derived from GICS industry classification. Companies shown are major
-        players in related industries ranked by market cap. Actual contractual relationships may differ.
+        {result.data_source === 'curated'
+          ? 'Supply chain data from curated database of verified relationships. Exposure estimates based on public filings and analyst reports.'
+          : result.data_source === 'industry_inferred'
+          ? 'Relationships inferred from GICS industry classification. Companies are major players in related industries ranked by market cap. Actual contractual relationships may differ.'
+          : 'Relationships based on peer classification. For more accurate data, curated relationships are available for major companies.'}
+        {' '}Price correlations computed over 1-year daily returns (Pearson r).
       </p>
     </div>
   );

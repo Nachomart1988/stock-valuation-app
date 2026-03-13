@@ -42,6 +42,13 @@ except ImportError:
     get_quantum_risk_engine = None
 
 try:
+    from supply_chain_engine import get_supply_chain_engine
+    SUPPLY_CHAIN_AVAILABLE = True
+except ImportError:
+    SUPPLY_CHAIN_AVAILABLE = False
+    get_supply_chain_engine = None
+
+try:
     from htf_detection_engine import get_htf_engine
     HTF_AVAILABLE = True
 except ImportError:
@@ -1647,6 +1654,32 @@ async def options_evaluate(req: OptionsEvaluateRequest):
 
     except Exception as e:
         print(f"[Options] Error evaluating strategy: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SUPPLY CHAIN ENDPOINT
+# ═══════════════════════════════════════════════════════════════════
+
+class SupplyChainRequest(BaseModel):
+    ticker: str
+
+@app.post("/supply-chain/analyze")
+async def supply_chain_analyze(req: SupplyChainRequest):
+    """Real supply chain analysis with curated + inferred data."""
+    if get_supply_chain_engine is None:
+        raise HTTPException(status_code=503, detail="Supply chain engine not available")
+    try:
+        engine = get_supply_chain_engine()
+        result = await asyncio.to_thread(engine.analyze, req.ticker)
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Supply Chain] Error: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
