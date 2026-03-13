@@ -343,6 +343,305 @@ KNOWN_SUPPLY_CHAINS: Dict[str, Dict[str, List[Tuple[str, str, float]]]] = {
             ('URI', 'United Rentals', 8.0), ('FLR', 'Fluor Corp', 5.0),
         ],
     },
+    # ── ADDITIONAL TECH ───────────────────────────────────────────
+    'ORCL': {
+        'suppliers': [
+            ('NVDA', 'NVIDIA', 6.0), ('INTC', 'Intel', 4.0),
+            ('TSM', 'Taiwan Semiconductor', 5.0), ('AMD', 'AMD', 3.0),
+        ],
+        'customers': [
+            ('JPM', 'JPMorgan Chase', 4.0), ('BAC', 'Bank of America', 3.0),
+            ('WMT', 'Walmart', 2.5), ('UNH', 'UnitedHealth', 3.0),
+        ],
+    },
+    'NFLX': {
+        'suppliers': [
+            ('AMZN', 'Amazon (AWS)', 10.0), ('GOOGL', 'Google Cloud', 3.0),
+            ('MSFT', 'Microsoft Azure', 3.0), ('ANET', 'Arista Networks', 2.0),
+        ],
+        'customers': [],
+    },
+    'CSCO': {
+        'suppliers': [
+            ('TSM', 'Taiwan Semiconductor', 8.0), ('AVGO', 'Broadcom', 5.0),
+            ('INTC', 'Intel', 4.0), ('MRVL', 'Marvell Tech', 3.0),
+        ],
+        'customers': [
+            ('MSFT', 'Microsoft', 4.0), ('AMZN', 'Amazon', 3.0),
+            ('JPM', 'JPMorgan Chase', 2.5), ('T', 'AT&T', 5.0),
+            ('VZ', 'Verizon', 4.0),
+        ],
+    },
+    'ADBE': {
+        'suppliers': [
+            ('AMZN', 'Amazon (AWS)', 8.0), ('MSFT', 'Microsoft Azure', 4.0),
+        ],
+        'customers': [
+            ('DIS', 'Walt Disney', 2.0), ('PG', 'Procter & Gamble', 1.5),
+            ('NKE', 'Nike', 1.5),
+        ],
+    },
+    'DELL': {
+        'suppliers': [
+            ('INTC', 'Intel', 15.0), ('AMD', 'AMD', 8.0),
+            ('NVDA', 'NVIDIA', 6.0), ('MU', 'Micron Technology', 5.0),
+            ('AVGO', 'Broadcom', 3.0), ('WDC', 'Western Digital', 4.0),
+            ('STX', 'Seagate', 3.5),
+        ],
+        'customers': [
+            ('MSFT', 'Microsoft', 3.0), ('AMZN', 'Amazon', 3.0),
+            ('GOOGL', 'Alphabet', 2.0),
+        ],
+    },
+    # ── MORE SEMICONDUCTORS ───────────────────────────────────────
+    'MU': {
+        'suppliers': [
+            ('ASML', 'ASML Holding', 5.0), ('LRCX', 'Lam Research', 6.0),
+            ('AMAT', 'Applied Materials', 5.0), ('KLAC', 'KLA Corp', 3.0),
+        ],
+        'customers': [
+            ('AAPL', 'Apple', 10.0), ('NVDA', 'NVIDIA', 8.0),
+            ('DELL', 'Dell Technologies', 5.0), ('HPQ', 'HP Inc', 4.0),
+        ],
+    },
+    'MRVL': {
+        'suppliers': [
+            ('TSM', 'Taiwan Semiconductor', 30.0), ('ASML', 'ASML Holding', 2.0),
+        ],
+        'customers': [
+            ('AMZN', 'Amazon', 8.0), ('MSFT', 'Microsoft', 6.0),
+            ('GOOGL', 'Alphabet', 5.0), ('META', 'Meta Platforms', 4.0),
+        ],
+    },
+    'ASML': {
+        'suppliers': [
+            ('ZEISS', 'Carl Zeiss (private)', 10.0),
+        ],
+        'customers': [
+            ('TSM', 'Taiwan Semiconductor', 35.0), ('INTC', 'Intel', 15.0),
+            ('SAMSUNG', 'Samsung', 20.0), ('MU', 'Micron Technology', 5.0),
+        ],
+    },
+    'AMAT': {
+        'suppliers': [],
+        'customers': [
+            ('TSM', 'Taiwan Semiconductor', 20.0), ('INTC', 'Intel', 10.0),
+            ('SAMSUNG', 'Samsung', 15.0), ('MU', 'Micron Technology', 8.0),
+        ],
+    },
+    'LRCX': {
+        'suppliers': [],
+        'customers': [
+            ('TSM', 'Taiwan Semiconductor', 25.0), ('INTC', 'Intel', 10.0),
+            ('MU', 'Micron Technology', 8.0), ('SAMSUNG', 'Samsung', 12.0),
+        ],
+    },
+    # ── RETAIL / E-COMMERCE ───────────────────────────────────────
+    'COST': {
+        'suppliers': [
+            ('PG', 'Procter & Gamble', 6.0), ('KO', 'Coca-Cola', 3.0),
+            ('PEP', 'PepsiCo', 3.0), ('KHC', 'Kraft Heinz', 3.0),
+        ],
+        'customers': [],
+    },
+    'TGT': {
+        'suppliers': [
+            ('PG', 'Procter & Gamble', 7.0), ('KO', 'Coca-Cola', 3.0),
+            ('UL', 'Unilever', 3.0), ('CL', 'Colgate-Palmolive', 2.5),
+        ],
+        'customers': [],
+    },
+    # ── PAYMENTS / FINTECH ────────────────────────────────────────
+    'PYPL': {
+        'suppliers': [
+            ('V', 'Visa', 8.0), ('MA', 'Mastercard', 7.0),
+            ('AMZN', 'Amazon (AWS)', 5.0), ('MSFT', 'Microsoft', 3.0),
+        ],
+        'customers': [
+            ('EBAY', 'eBay', 5.0), ('AMZN', 'Amazon', 3.0),
+            ('WMT', 'Walmart', 2.0),
+        ],
+    },
+    'SQ': {
+        'suppliers': [
+            ('V', 'Visa', 10.0), ('MA', 'Mastercard', 8.0),
+            ('AMZN', 'Amazon (AWS)', 4.0),
+        ],
+        'customers': [],
+    },
+    # ── ENTERTAINMENT / MEDIA ─────────────────────────────────────
+    'DIS': {
+        'suppliers': [
+            ('AMZN', 'Amazon (AWS)', 5.0), ('GOOGL', 'Google (ads)', 3.0),
+            ('CMCSA', 'Comcast (content)', 4.0),
+        ],
+        'customers': [
+            ('T', 'AT&T (distribution)', 3.0), ('CMCSA', 'Comcast', 4.0),
+            ('VZ', 'Verizon', 2.0),
+        ],
+    },
+    # ── TELECOM ───────────────────────────────────────────────────
+    'T': {
+        'suppliers': [
+            ('AAPL', 'Apple', 10.0), ('CSCO', 'Cisco Systems', 6.0),
+            ('NOK', 'Nokia', 5.0), ('ERIC', 'Ericsson', 5.0),
+            ('QCOM', 'Qualcomm', 3.0),
+        ],
+        'customers': [],
+    },
+    'VZ': {
+        'suppliers': [
+            ('AAPL', 'Apple', 10.0), ('CSCO', 'Cisco Systems', 5.0),
+            ('NOK', 'Nokia', 5.0), ('ERIC', 'Ericsson', 5.0),
+        ],
+        'customers': [],
+    },
+    'TMUS': {
+        'suppliers': [
+            ('AAPL', 'Apple', 8.0), ('NOK', 'Nokia', 6.0),
+            ('ERIC', 'Ericsson', 6.0), ('CSCO', 'Cisco Systems', 3.0),
+        ],
+        'customers': [],
+    },
+    # ── LOGISTICS ─────────────────────────────────────────────────
+    'UPS': {
+        'suppliers': [
+            ('BA', 'Boeing', 5.0), ('CHRW', 'C.H. Robinson', 3.0),
+        ],
+        'customers': [
+            ('AMZN', 'Amazon', 15.0), ('WMT', 'Walmart', 5.0),
+            ('AAPL', 'Apple', 3.0), ('NKE', 'Nike', 3.0),
+        ],
+    },
+    'FDX': {
+        'suppliers': [
+            ('BA', 'Boeing', 4.0),
+        ],
+        'customers': [
+            ('AMZN', 'Amazon', 12.0), ('WMT', 'Walmart', 4.0),
+            ('AAPL', 'Apple', 3.0),
+        ],
+    },
+    # ── CLOUD / DATA CENTER ───────────────────────────────────────
+    'ANET': {
+        'suppliers': [
+            ('AVGO', 'Broadcom', 8.0), ('INTC', 'Intel', 4.0),
+            ('TSM', 'Taiwan Semiconductor', 5.0),
+        ],
+        'customers': [
+            ('MSFT', 'Microsoft', 15.0), ('META', 'Meta Platforms', 12.0),
+            ('AMZN', 'Amazon', 8.0), ('GOOGL', 'Alphabet', 8.0),
+        ],
+    },
+    # ── RESTAURANTS ───────────────────────────────────────────────
+    'MCD': {
+        'suppliers': [
+            ('KO', 'Coca-Cola', 8.0), ('HAVI', 'HAVI (private)', 10.0),
+            ('TSN', 'Tyson Foods', 5.0),
+        ],
+        'customers': [],
+    },
+    'SBUX': {
+        'suppliers': [
+            ('KO', 'Coca-Cola', 3.0), ('PEP', 'PepsiCo', 5.0),
+        ],
+        'customers': [],
+    },
+    # ── AUTO PARTS ────────────────────────────────────────────────
+    'APTV': {
+        'suppliers': [
+            ('TSM', 'Taiwan Semiconductor', 5.0), ('NXPI', 'NXP Semiconductors', 4.0),
+            ('STM', 'STMicroelectronics', 3.0),
+        ],
+        'customers': [
+            ('GM', 'General Motors', 10.0), ('F', 'Ford Motor', 8.0),
+            ('TSLA', 'Tesla', 5.0), ('STLA', 'Stellantis', 6.0),
+        ],
+    },
+    'GM': {
+        'suppliers': [
+            ('APTV', 'Aptiv', 5.0), ('ALB', 'Albemarle', 4.0),
+            ('ON', 'ON Semiconductor', 3.0), ('NXPI', 'NXP Semiconductors', 3.0),
+            ('LG', 'LG Energy (battery)', 8.0), ('X', 'US Steel', 4.0),
+        ],
+        'customers': [
+            ('AN', 'AutoNation', 6.0), ('KMX', 'CarMax', 5.0),
+        ],
+    },
+    'F': {
+        'suppliers': [
+            ('APTV', 'Aptiv', 4.0), ('X', 'US Steel', 5.0),
+            ('NUE', 'Nucor', 4.0), ('ON', 'ON Semiconductor', 3.0),
+        ],
+        'customers': [
+            ('AN', 'AutoNation', 5.0), ('KMX', 'CarMax', 4.0),
+        ],
+    },
+    # ── MEDICAL DISTRIBUTION ──────────────────────────────────────
+    'MCK': {
+        'suppliers': [
+            ('JNJ', 'Johnson & Johnson', 8.0), ('PFE', 'Pfizer', 7.0),
+            ('LLY', 'Eli Lilly', 6.0), ('ABBV', 'AbbVie', 6.0),
+            ('MRK', 'Merck', 5.0), ('BMY', 'Bristol-Myers Squibb', 4.0),
+        ],
+        'customers': [
+            ('CVS', 'CVS Health', 10.0), ('WBA', 'Walgreens', 8.0),
+            ('WMT', 'Walmart (pharmacy)', 5.0),
+        ],
+    },
+    'CVS': {
+        'suppliers': [
+            ('MCK', 'McKesson', 12.0), ('ABC', 'Cencora', 10.0),
+            ('CAH', 'Cardinal Health', 8.0),
+        ],
+        'customers': [
+            ('UNH', 'UnitedHealth', 5.0),
+        ],
+    },
+    # ── ADDITIONAL PHARMA ─────────────────────────────────────────
+    'MRK': {
+        'suppliers': [
+            ('TMO', 'Thermo Fisher', 4.0), ('DHR', 'Danaher', 3.0),
+        ],
+        'customers': [
+            ('MCK', 'McKesson', 10.0), ('ABC', 'Cencora', 8.0),
+            ('CAH', 'Cardinal Health', 7.0), ('CVS', 'CVS Health', 6.0),
+        ],
+    },
+    'BMY': {
+        'suppliers': [
+            ('TMO', 'Thermo Fisher', 4.0), ('DHR', 'Danaher', 3.0),
+        ],
+        'customers': [
+            ('MCK', 'McKesson', 9.0), ('ABC', 'Cencora', 7.0),
+            ('CVS', 'CVS Health', 5.0),
+        ],
+    },
+    # ── ADDITIONAL INDUSTRIAL ─────────────────────────────────────
+    'GE': {
+        'suppliers': [
+            ('HWM', 'Howmet Aerospace', 6.0), ('TDG', 'TransDigm', 4.0),
+        ],
+        'customers': [
+            ('BA', 'Boeing', 20.0), ('RTX', 'RTX Corp', 5.0),
+            ('DAL', 'Delta Air Lines', 5.0), ('UAL', 'United Airlines', 4.0),
+        ],
+    },
+    'RTX': {
+        'suppliers': [
+            ('HWM', 'Howmet Aerospace', 5.0), ('TDG', 'TransDigm', 4.0),
+        ],
+        'customers': [
+            ('BA', 'Boeing', 10.0), ('LMT', 'Lockheed Martin', 5.0),
+        ],
+    },
+    'LMT': {
+        'suppliers': [
+            ('RTX', 'RTX Corp', 8.0), ('GE', 'GE Aerospace', 5.0),
+            ('HWM', 'Howmet Aerospace', 4.0), ('NOC', 'Northrop Grumman', 3.0),
+        ],
+        'customers': [],  # mainly US government
+    },
 }
 
 # ── Industry-level inference for tickers NOT in curated list ─────────
@@ -407,7 +706,112 @@ INDUSTRY_SUPPLY_MAP: Dict[str, Dict[str, List[str]]] = {
         'supplier_industries': ['Software—Infrastructure', 'Integrated Freight & Logistics'],
         'customer_industries': [],
     },
+    'Consumer Electronics': {
+        'supplier_industries': ['Semiconductors', 'Electronic Components', 'Semiconductor Equipment & Materials'],
+        'customer_industries': ['Telecom Services', 'Internet Retail', 'Specialty Retail'],
+    },
+    'Communication Equipment': {
+        'supplier_industries': ['Semiconductors', 'Electronic Components'],
+        'customer_industries': ['Telecom Services', 'Internet Content & Information'],
+    },
+    'Internet Content & Information': {
+        'supplier_industries': ['Semiconductors', 'Software—Infrastructure', 'Communication Equipment'],
+        'customer_industries': ['Advertising Agencies'],
+    },
+    'Capital Markets': {
+        'supplier_industries': ['Software—Application', 'Software—Infrastructure', 'Information Technology Services'],
+        'customer_industries': [],
+    },
+    'Insurance—Diversified': {
+        'supplier_industries': ['Software—Application', 'Information Technology Services'],
+        'customer_industries': [],
+    },
+    'Healthcare Plans': {
+        'supplier_industries': ['Medical Distribution', 'Drug Manufacturers—General', 'Software—Application'],
+        'customer_industries': ['Medical Care Facilities'],
+    },
+    'Medical Distribution': {
+        'supplier_industries': ['Drug Manufacturers—General', 'Medical Devices', 'Biotechnology'],
+        'customer_industries': ['Healthcare Plans', 'Medical Care Facilities', 'Pharmaceutical Retailers'],
+    },
+    'Airlines': {
+        'supplier_industries': ['Aerospace & Defense', 'Oil & Gas Integrated', 'Oil & Gas Refining & Marketing'],
+        'customer_industries': [],
+    },
+    'Integrated Freight & Logistics': {
+        'supplier_industries': ['Aerospace & Defense', 'Auto Manufacturers'],
+        'customer_industries': ['Internet Retail', 'Discount Stores', 'Specialty Retail'],
+    },
+    'Discount Stores': {
+        'supplier_industries': ['Packaged Foods', 'Household & Personal Products', 'Beverages—Non-Alcoholic'],
+        'customer_industries': [],
+    },
+    'Specialty Retail': {
+        'supplier_industries': ['Consumer Electronics', 'Apparel Manufacturing'],
+        'customer_industries': [],
+    },
+    'Household & Personal Products': {
+        'supplier_industries': ['Specialty Chemicals', 'Packaging & Containers', 'Farm Products'],
+        'customer_industries': ['Discount Stores', 'Grocery Stores', 'Internet Retail'],
+    },
+    'Oil & Gas Equipment & Services': {
+        'supplier_industries': ['Steel', 'Industrial Distribution'],
+        'customer_industries': ['Oil & Gas Integrated', 'Oil & Gas E&P'],
+    },
+    'Steel': {
+        'supplier_industries': ['Mining'],
+        'customer_industries': ['Auto Manufacturers', 'Aerospace & Defense', 'Farm & Heavy Construction Machinery'],
+    },
+    'Auto Parts': {
+        'supplier_industries': ['Semiconductors', 'Steel', 'Specialty Chemicals'],
+        'customer_industries': ['Auto Manufacturers'],
+    },
+    'Farm & Heavy Construction Machinery': {
+        'supplier_industries': ['Steel', 'Auto Parts', 'Semiconductors'],
+        'customer_industries': ['Rental & Leasing Services'],
+    },
+    'Real Estate Services': {
+        'supplier_industries': ['Banks—Diversified', 'Software—Application'],
+        'customer_industries': [],
+    },
+    'Utilities—Regulated Electric': {
+        'supplier_industries': ['Oil & Gas Integrated', 'Solar', 'Electrical Equipment & Parts'],
+        'customer_industries': [],
+    },
 }
+
+
+# ── Build reverse-lookup index from curated data ─────────────────────
+# If AAPL lists TSM as supplier with 25% exposure, then TSM should
+# auto-list AAPL as customer with 25% exposure — doubles coverage.
+_REVERSE_SUPPLIERS: Dict[str, List[Tuple[str, str, float]]] = defaultdict(list)  # sym → customers derived from other tickers' supplier lists
+_REVERSE_CUSTOMERS: Dict[str, List[Tuple[str, str, float]]] = defaultdict(list)  # sym → suppliers derived from other tickers' customer lists
+
+def _build_reverse_index():
+    """Build reverse-lookup index so curated data works bidirectionally."""
+    for center, chains in KNOWN_SUPPLY_CHAINS.items():
+        # Get center name from first mention or fallback
+        center_name = center
+
+        # If ticker X has supplier Y, then Y has customer X
+        for sym, name, exp in chains.get('suppliers', []):
+            _REVERSE_SUPPLIERS[sym].append((center, center_name, exp))
+
+        # If ticker X has customer Y, then Y has supplier X
+        for sym, name, exp in chains.get('customers', []):
+            _REVERSE_CUSTOMERS[sym].append((center, center_name, exp))
+
+_build_reverse_index()
+
+# Name lookup helper for reverse index
+_TICKER_NAMES: Dict[str, str] = {}
+for _t, _chains in KNOWN_SUPPLY_CHAINS.items():
+    for _s, _n, _e in _chains.get('suppliers', []) + _chains.get('customers', []):
+        _TICKER_NAMES[_s] = _n
+    # Also try to name the center tickers from any mention
+for _t in KNOWN_SUPPLY_CHAINS:
+    if _t not in _TICKER_NAMES:
+        _TICKER_NAMES[_t] = _t
 
 
 class SupplyChainEngine:
@@ -614,20 +1018,40 @@ class SupplyChainEngine:
         competitors = []
         data_source = 'peer_fallback'
 
-        # 3. Check curated database first
+        # 3. Check curated database first (direct + reverse lookup)
         curated = KNOWN_SUPPLY_CHAINS.get(ticker)
-        if curated:
+        reverse_suppliers = _REVERSE_CUSTOMERS.get(ticker, [])  # other tickers that list us as customer → they are our suppliers
+        reverse_customers = _REVERSE_SUPPLIERS.get(ticker, [])  # other tickers that list us as supplier → they are our customers
+        has_curated = curated is not None
+        has_reverse = bool(reverse_suppliers or reverse_customers)
+
+        if has_curated or has_reverse:
             data_source = 'curated'
-            logger.info(f"[SupplyChain] Using curated data for {ticker}")
+            logger.info(f"[SupplyChain] Using curated data for {ticker} (direct={has_curated}, reverse={has_reverse})")
+
+            # Merge direct + reverse, dedup by symbol
+            sup_entries = list(curated.get('suppliers', [])) if curated else []
+            cust_entries = list(curated.get('customers', [])) if curated else []
+
+            # Add reverse-lookup entries (avoid duplicates)
+            sup_syms = {s[0] for s in sup_entries}
+            cust_syms = {c[0] for c in cust_entries}
+
+            for sym, name, exp in reverse_suppliers:
+                if sym not in sup_syms and sym != ticker:
+                    # Use the name from our name lookup if available
+                    display_name = _TICKER_NAMES.get(sym, name)
+                    sup_entries.append((sym, display_name, exp))
+                    sup_syms.add(sym)
+
+            for sym, name, exp in reverse_customers:
+                if sym not in cust_syms and sym != ticker:
+                    display_name = _TICKER_NAMES.get(sym, name)
+                    cust_entries.append((sym, display_name, exp))
+                    cust_syms.add(sym)
 
             # Collect all symbols to fetch in batch
-            all_syms = []
-            sup_entries = curated.get('suppliers', [])
-            cust_entries = curated.get('customers', [])
-            for sym, name, exp in sup_entries:
-                all_syms.append(sym)
-            for sym, name, exp in cust_entries:
-                all_syms.append(sym)
+            all_syms = [sym for sym, _, _ in sup_entries] + [sym for sym, _, _ in cust_entries]
 
             # Batch fetch profiles
             profiles = self._fetch_batch_profiles(all_syms)
@@ -636,7 +1060,6 @@ class SupplyChainEngine:
             for sym, name, exp in sup_entries:
                 prof = profiles.get(sym)
                 if not prof:
-                    # Create minimal profile
                     prof = {'symbol': sym, 'companyName': name, 'mktCap': 0, 'price': 0}
 
                 corr = 0.0
