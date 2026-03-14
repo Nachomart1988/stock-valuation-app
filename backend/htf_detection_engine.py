@@ -53,6 +53,8 @@ class HTFDetectionEngine:
         flag_weeks: Tuple[int, int] = (2, 10),  # 2-10 weeks flag duration
         surge_weeks: Tuple[int, int] = (3, 16),  # 3-16 weeks surge window
         ml_mode: bool = True,
+        surge_lookback_months: int = 0,  # 0 = all history, else only recent N months
+        ignore_vol_dryup: bool = False,  # True = skip vol dryup in scoring (screener mode)
     ):
         self.api_key = api_key or os.environ.get('FMP_API_KEY')
         self.min_surge = min_surge
@@ -60,6 +62,8 @@ class HTFDetectionEngine:
         self.flag_weeks_range = flag_weeks
         self.surge_weeks_range = surge_weeks
         self.ml_mode = ml_mode and SKLEARN_AVAILABLE
+        self.surge_lookback_months = surge_lookback_months
+        self.ignore_vol_dryup = ignore_vol_dryup
         self._session = requests.Session()
         self._ml_model = None
         self._scaler = None
@@ -168,16 +172,28 @@ class HTFDetectionEngine:
         """
         Detect explosive surges: ≥min_surge move in surge_weeks_range.
         Returns list of surge candidates with start/end indices.
+        If surge_lookback_months > 0, only consider surges starting within that window.
         """
         closes = weekly['close']
         highs = weekly['high']
+        dates = weekly['dates']
         n = len(closes)
         surges = []
 
         min_w, max_w = self.surge_weeks_range
 
+        # Compute earliest allowed start index based on lookback
+        earliest_start_idx = 0
+        if self.surge_lookback_months > 0 and n > 0:
+            cutoff_date = datetime.now() - timedelta(days=self.surge_lookback_months * 30)
+            cutoff_str = cutoff_date.strftime('%Y-%m-%d')
+            for idx, d in enumerate(dates):
+                if d >= cutoff_str:
+                    earliest_start_idx = idx
+                    break
+
         for end_idx in range(min_w, n):
-            for start_idx in range(max(0, end_idx - max_w), end_idx - min_w + 1):
+            for start_idx in range(max(earliest_start_idx, end_idx - max_w), end_idx - min_w + 1):
                 low_point = np.min(closes[start_idx:start_idx + 3])  # low near start
                 high_point = np.max(highs[start_idx:end_idx + 1])
                 if low_point <= 0:
@@ -274,7 +290,11 @@ class HTFDetectionEngine:
             tightness_score = 1.0 - (flag_range / self.max_flag_range)
             dryup_score = max(0, 1.0 - vol_dryup)
             duration_score = 1.0 - abs(weeks - 5) / 5  # optimal ~5 weeks
-            flag_score = tightness_score * 0.4 + dryup_score * 0.35 + duration_score * 0.25
+            if self.ignore_vol_dryup:
+                # Screener mode: ignore vol dryup, weight tightness + duration only
+                flag_score = tightness_score * 0.60 + duration_score * 0.40
+            else:
+                flag_score = tightness_score * 0.4 + dryup_score * 0.35 + duration_score * 0.25
 
             if flag_score > best_score:
                 best_score = flag_score
@@ -452,20 +472,28 @@ class HTFDetectionEngine:
         catalyst = features[9]
 
         score = 0.0
-        # Surge strength
-        score += min(surge_pct / 2.0, 1.0) * 0.20
-        # Flag tightness
-        score += max(0, 1.0 - flag_range / 0.15) * 0.25
-        # Volume dry-up
-        score += max(0, 1.0 - vol_dryup) * 0.20
-        # Volume declining
-        score += vol_declining * 0.05
-        # RS strength
-        score += rs_pct * 0.15
-        # RS new high
-        score += rs_new_high * 0.05
-        # Catalyst
-        score += catalyst * 0.10
+        if self.ignore_vol_dryup:
+            # Screener mode: redistribute vol weights to surge/flag/RS
+            score += min(surge_pct / 2.0, 1.0) * 0.30
+            score += max(0, 1.0 - flag_range / 0.15) * 0.30
+            score += rs_pct * 0.20
+            score += rs_new_high * 0.05
+            score += catalyst * 0.15
+        else:
+            # Surge strength
+            score += min(surge_pct / 2.0, 1.0) * 0.20
+            # Flag tightness
+            score += max(0, 1.0 - flag_range / 0.15) * 0.25
+            # Volume dry-up
+            score += max(0, 1.0 - vol_dryup) * 0.20
+            # Volume declining
+            score += vol_declining * 0.05
+            # RS strength
+            score += rs_pct * 0.15
+            # RS new high
+            score += rs_new_high * 0.05
+            # Catalyst
+            score += catalyst * 0.10
 
         return float(min(max(score, 0), 1.0))
 

@@ -1816,6 +1816,8 @@ class HTFDetectionRequest(BaseModel):
     ticker: str
     min_surge: float = 0.80
     max_flag_range: float = 0.15
+    surge_lookback_months: int = 0       # 0 = all history, 3/6/9/12 = recent months
+    ignore_vol_dryup: bool = False       # True = screener mode, skip vol dryup
 
 class EPDetectionRequest(BaseModel):
     ticker: str
@@ -1832,6 +1834,8 @@ async def htf_detect(req: HTFDetectionRequest):
         engine = get_htf_engine()
         engine.min_surge = req.min_surge
         engine.max_flag_range = req.max_flag_range
+        engine.surge_lookback_months = req.surge_lookback_months
+        engine.ignore_vol_dryup = req.ignore_vol_dryup
         result = await asyncio.to_thread(engine.analyze, req.ticker)
         if 'error' in result:
             raise HTTPException(status_code=400, detail=result['error'])

@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
   const sector = sp.get('sector') || '';
   const minSurge = parseFloat(sp.get('minSurge') || '0.80');
   const maxFlagRange = parseFloat(sp.get('maxFlagRange') || '0.15');
+  const surgeLookbackMonths = parseInt(sp.get('surgeLookbackMonths') || '0');
 
   // 1. Fetch stocks from FMP screener
   const screenerParams = new URLSearchParams({
@@ -73,6 +74,8 @@ export async function GET(req: NextRequest) {
           ticker: stock.symbol,
           min_surge: minSurge,
           max_flag_range: maxFlagRange,
+          surge_lookback_months: surgeLookbackMonths,
+          ignore_vol_dryup: true,
         }),
       });
       if (!res.ok) return;

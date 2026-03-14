@@ -157,6 +157,7 @@ export default function ScreenerPage() {
     sector: '',
     minSurge: '80',
     maxFlagRange: '15',
+    surgeLookbackMonths: '3',
   });
 
   // EP Scanner state (GODMODE only)
@@ -267,6 +268,7 @@ export default function ScreenerPage() {
         ...(htfFilters.sector ? { sector: htfFilters.sector } : {}),
         minSurge: String(parseFloat(htfFilters.minSurge || '80') / 100),
         maxFlagRange: String(parseFloat(htfFilters.maxFlagRange || '15') / 100),
+        surgeLookbackMonths: htfFilters.surgeLookbackMonths || '3',
       });
 
       const res = await fetch(`/api/htf-scan?${params.toString()}`);
@@ -544,7 +546,7 @@ export default function ScreenerPage() {
                     </span>
                   </h2>
                   <p className="text-gray-400 text-sm mt-1 max-w-xl">
-                    Scan for High-Tight Flag patterns (Qullamaggie). Stocks with 80%+ surges followed by tight consolidation.
+                    Scan for High-Tight Flag patterns (Qullamaggie). Find stocks with explosive surges in your chosen timeframe followed by tight consolidation.
                   </p>
                 </div>
                 <button
@@ -567,7 +569,7 @@ export default function ScreenerPage() {
               </div>
 
               {/* HTF Filters */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-rose-900/15">
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-rose-900/15">
                 <div>
                   <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Price Min</label>
                   <input type="number" min="0" placeholder="5"
@@ -632,6 +634,20 @@ export default function ScreenerPage() {
                     disabled={htfLoading}
                     className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
                   />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Surge Window</label>
+                  <select
+                    value={htfFilters.surgeLookbackMonths}
+                    onChange={e => setHtfFilters(f => ({ ...f, surgeLookbackMonths: e.target.value }))}
+                    disabled={htfLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  >
+                    <option value="3">Last 3 months</option>
+                    <option value="6">Last 6 months</option>
+                    <option value="9">Last 9 months</option>
+                    <option value="12">Last 12 months</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Max Flag %</label>
