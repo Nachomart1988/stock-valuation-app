@@ -1,11 +1,11 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 function getSupabaseUrl(): string {
-  return process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  return (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
 }
 
 function getAnonKey(): string {
-  return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  return (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim();
 }
 
 function isValidUrl(url: string): boolean {
@@ -25,7 +25,7 @@ export function getSupabaseClient(): SupabaseClient | null {
 // Server-side admin client (bypasses RLS — only for API routes)
 export function createAdminClient(): SupabaseClient | null {
   const url = getSupabaseUrl();
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!url || !serviceKey || !isValidUrl(url)) return null;
   return createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
