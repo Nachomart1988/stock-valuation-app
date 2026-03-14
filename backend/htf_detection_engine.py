@@ -45,6 +45,10 @@ class HTFDetectionEngine:
       - Breakout: price > flag high on ≥2x avg volume
     """
 
+    # Class-level ML model cache (shared across instances, trained once)
+    _shared_ml_model = None
+    _shared_scaler = None
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -65,8 +69,9 @@ class HTFDetectionEngine:
         self.surge_lookback_months = surge_lookback_months
         self.ignore_vol_dryup = ignore_vol_dryup
         self._session = requests.Session()
-        self._ml_model = None
-        self._scaler = None
+        # Use shared class-level ML model
+        self._ml_model = HTFDetectionEngine._shared_ml_model
+        self._scaler = HTFDetectionEngine._shared_scaler
 
     # ── FMP Helpers ──────────────────────────────────────────────────────
 
@@ -446,6 +451,9 @@ class HTFDetectionEngine:
             n_estimators=100, max_depth=5, random_state=42
         )
         self._ml_model.fit(X_scaled, y)
+        # Cache at class level so other instances reuse it
+        HTFDetectionEngine._shared_ml_model = self._ml_model
+        HTFDetectionEngine._shared_scaler = self._scaler
         logger.info("HTF ML model trained on synthetic data")
 
     def _ml_score(self, features: np.ndarray) -> float:

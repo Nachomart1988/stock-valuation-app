@@ -1828,14 +1828,16 @@ class EPDetectionRequest(BaseModel):
 @app.post("/htf/detect")
 async def htf_detect(req: HTFDetectionRequest):
     """High-Tight Flag detection — Quillamaggie style."""
-    if get_htf_engine is None:
+    if not HTF_AVAILABLE:
         raise HTTPException(status_code=503, detail="HTF detection engine not available")
     try:
-        engine = get_htf_engine()
-        engine.min_surge = req.min_surge
-        engine.max_flag_range = req.max_flag_range
-        engine.surge_lookback_months = req.surge_lookback_months
-        engine.ignore_vol_dryup = req.ignore_vol_dryup
+        from htf_detection_engine import HTFDetectionEngine
+        engine = HTFDetectionEngine(
+            min_surge=req.min_surge,
+            max_flag_range=req.max_flag_range,
+            surge_lookback_months=req.surge_lookback_months,
+            ignore_vol_dryup=req.ignore_vol_dryup,
+        )
         result = await asyncio.to_thread(engine.analyze, req.ticker)
         if 'error' in result:
             raise HTTPException(status_code=400, detail=result['error'])

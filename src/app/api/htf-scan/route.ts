@@ -4,7 +4,7 @@ export const maxDuration = 300;
 
 const FMP_BASE = 'https://financialmodelingprep.com';
 const SCAN_CONCURRENCY = 5;
-const MAX_STOCKS = 250;
+const MAX_STOCKS = 1000;
 
 export async function GET(req: NextRequest) {
   const apiKey = process.env.FMP_API_KEY;
@@ -81,7 +81,8 @@ export async function GET(req: NextRequest) {
       if (!res.ok) return;
       const data = await res.json();
       scanned++;
-      if (data.detected && data.score > 0) {
+      // Accept any result with patterns found (score > 0), not just detected=true
+      if (data.score > 0 && data.patterns?.length > 0) {
         results.push({
           symbol: stock.symbol,
           companyName: stock.companyName || stock.symbol,
@@ -89,6 +90,7 @@ export async function GET(req: NextRequest) {
           currentPrice: stock.price,
           marketCap: stock.marketCap || 0,
           score: data.score,
+          detected: data.detected,
           bestPattern: data.best_pattern || null,
           narrative: (data.narrative || '').slice(0, 200),
           patternsCount: data.patterns?.length || 0,
@@ -103,11 +105,11 @@ export async function GET(req: NextRequest) {
     await Promise.all(wave.map(scanHTF));
   }
 
-  // Sort by score descending, return top 15
+  // Sort by score descending, return top 25
   results.sort((a, b) => b.score - a.score);
 
   return NextResponse.json({
-    results: results.slice(0, 15),
+    results: results.slice(0, 25),
     total: valid.length,
     scanned,
   });
