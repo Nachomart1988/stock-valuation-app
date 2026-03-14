@@ -744,16 +744,43 @@ export default function DiarioInversorTab() {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target?.result as string);
-        if (data.trades) setTrades(data.trades);
-        if (data.weeklyPL) setWeeklyPL(data.weeklyPL);
-        if (data.ptaEntries) setPtaEntries(data.ptaEntries);
-        if (data.accountBalance) setAccountBalance(data.accountBalance);
-        alert('Datos importados correctamente');
+        let imported = 0;
+
+        // Support both export format keys and DB format keys
+        const tradesData = data.trades;
+        const wplData = data.weeklyPL ?? data.weekly_pl;
+        const ptaData = data.ptaEntries ?? data.pta;
+        const balData = data.accountBalance ?? data.balance;
+
+        if (Array.isArray(tradesData) && tradesData.length > 0) {
+          setTrades(tradesData);
+          imported += tradesData.length;
+        }
+        if (Array.isArray(wplData) && wplData.length > 0) {
+          setWeeklyPL(wplData);
+          imported += wplData.length;
+        }
+        if (Array.isArray(ptaData) && ptaData.length > 0) {
+          setPtaEntries(ptaData);
+          imported += ptaData.length;
+        }
+        if (typeof balData === 'number' && balData > 0) {
+          setAccountBalance(balData);
+        }
+
+        if (imported > 0) {
+          alert(`Importados: ${imported} registros (trades + PL + PTA)`);
+        } else {
+          const keys = Object.keys(data).join(', ');
+          alert(`No se encontraron datos válidos. Keys en archivo: ${keys}`);
+        }
       } catch (err) {
-        alert('Error al importar datos');
+        alert('Error al importar datos — archivo JSON inválido');
       }
     };
     reader.readAsText(file);
+    // Reset input so same file can be re-imported
+    event.target.value = '';
   };
 
   // ═══════════════════════════════════════════════════════════════
