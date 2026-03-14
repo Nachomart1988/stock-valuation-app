@@ -746,8 +746,27 @@ export default function DiarioInversorTab() {
         const data = JSON.parse(e.target?.result as string);
         let imported = 0;
 
-        // If the file is a raw array, treat it as trades
-        const normalized = Array.isArray(data) ? { trades: data } : data;
+        // Detect format: array of arrays with headers, raw array of objects, or object
+        let normalized: any;
+        if (Array.isArray(data)) {
+          // Check if first element is array (headers row) → convert to objects
+          if (Array.isArray(data[0])) {
+            const headers: string[] = data[0].map((h: any) => String(h).trim());
+            const rows = data.slice(1).map((row: any[]) => {
+              const obj: Record<string, any> = {};
+              headers.forEach((h, i) => { obj[h] = row[i] ?? null; });
+              return obj;
+            });
+            console.log('[DiarioInversor] Import: array-of-arrays detected. Headers:', headers);
+            normalized = { trades: rows };
+          } else {
+            // Raw array of objects
+            if (data.length > 0) console.log('[DiarioInversor] Import: raw array. First item keys:', Object.keys(data[0]));
+            normalized = { trades: data };
+          }
+        } else {
+          normalized = data;
+        }
 
         // Support both export format keys and DB format keys
         const tradesData = normalized.trades;
@@ -756,55 +775,77 @@ export default function DiarioInversorTab() {
         const balData = normalized.accountBalance ?? normalized.balance;
 
         if (Array.isArray(tradesData) && tradesData.length > 0) {
+          // Helper: case-insensitive field lookup
+          const get = (obj: any, ...keys: string[]): any => {
+            for (const k of keys) {
+              // Try exact match first
+              if (obj[k] !== undefined) return obj[k];
+              // Try case-insensitive
+              const lower = k.toLowerCase();
+              const found = Object.keys(obj).find(ok => ok.toLowerCase() === lower || ok.toLowerCase().replace(/[\s_-]/g, '') === lower.replace(/[\s_-]/g, ''));
+              if (found && obj[found] !== undefined) return obj[found];
+            }
+            return undefined;
+          };
+          const num = (v: any): number => { const n = Number(v); return isNaN(n) ? 0 : n; };
+
           // Normalize each imported trade — fill missing fields with defaults
-          const normalized: Trade[] = tradesData.map((t: any) => ({
-            id: t.id || generateId(),
-            name: t.name || t.symbol || '',
-            symbol: (t.symbol || t.ticker || '').toUpperCase(),
-            side: t.side || 'Long',
-            date: t.date || t.entryDate || new Date().toISOString().split('T')[0],
-            qty: Number(t.qty || t.quantity || t.shares || 0),
-            entryPrice: Number(t.entryPrice || t.entry || t.price || 0),
-            value: Number(t.value || 0) || (Number(t.qty || 0) * Number(t.entryPrice || t.entry || t.price || 0)),
-            commission: Number(t.commission || 0),
-            pt1Price: t.pt1Price ?? t.target ?? null,
-            pt1Qty: t.pt1Qty ?? null,
-            pt2Price: t.pt2Price ?? null,
-            pt2Qty: t.pt2Qty ?? null,
-            pt3Price: t.pt3Price ?? null,
-            pt3Qty: t.pt3Qty ?? null,
-            s1Price: t.s1Price ?? null,
-            s2Price: t.s2Price ?? null,
-            sfDate: t.sfDate ?? null,
-            sl: Number(t.sl || t.stopLoss || t.stop || 0),
-            initialSL: Number(t.initialSL || t.sl || t.stopLoss || t.stop || 0),
-            initialRisk: Number(t.initialRisk || 0),
-            setup: t.setup || 'Other',
-            sellReason: t.sellReason ?? null,
-            postAnalysis: t.postAnalysis || '',
-            chartLink: t.chartLink || '',
-            industry: t.industry || t.sector || '',
-            partial1Qty: t.partial1Qty ?? null,
-            partial1Pct: t.partial1Pct ?? null,
-            partial2Qty: t.partial2Qty ?? null,
-            partial2Pct: t.partial2Pct ?? null,
-            partial3Qty: t.partial3Qty ?? null,
-            partial3Pct: t.partial3Pct ?? null,
-            exitPrice: t.exitPrice ?? t.exit ?? null,
-            exitDate: t.exitDate ?? null,
-            state: t.state || (t.exitPrice || t.exit ? 'Closed' : 'Open'),
-            currentPrice: t.currentPrice ?? null,
-          }));
+          const normalizedTrades: Trade[] = tradesData.map((t: any) => {
+            const symbol = String(get(t, 'symbol', 'ticker', 'Symbol', 'Ticker', 'SYMBOL') || '').toUpperCase();
+            const entryPrice = num(get(t, 'entryPrice', 'entry', 'price', 'Entry Price', 'EntryPrice', 'Precio', 'Price', 'Avg Price'));
+            const qty = num(get(t, 'qty', 'quantity', 'shares', 'Qty', 'Quantity', 'Shares', 'Cantidad', 'Size'));
+            const sl = num(get(t, 'sl', 'stopLoss', 'stop', 'SL', 'Stop Loss', 'StopLoss', 'Stop'));
+            const exitPrice = get(t, 'exitPrice', 'exit', 'Exit Price', 'ExitPrice', 'Sell Price', 'Close Price');
+
+            return {
+              id: get(t, 'id', 'Id', 'ID') || generateId(),
+              name: get(t, 'name', 'Name', 'Company', 'company', 'Empresa') || symbol,
+              symbol,
+              side: get(t, 'side', 'Side', 'Direction', 'Lado') || 'Long',
+              date: get(t, 'date', 'Date', 'entryDate', 'Entry Date', 'Fecha', 'Open Date') || new Date().toISOString().split('T')[0],
+              qty,
+              entryPrice,
+              value: num(get(t, 'value', 'Value', 'Total', 'Valor')) || (qty * entryPrice),
+              commission: num(get(t, 'commission', 'Commission', 'Fee', 'Fees', 'Comision')),
+              pt1Price: get(t, 'pt1Price', 'PT1', 'Target', 'target', 'Price Target', 'PT 1') ?? null,
+              pt1Qty: get(t, 'pt1Qty', 'PT1 Qty') ?? null,
+              pt2Price: get(t, 'pt2Price', 'PT2', 'PT 2') ?? null,
+              pt2Qty: get(t, 'pt2Qty', 'PT2 Qty') ?? null,
+              pt3Price: get(t, 'pt3Price', 'PT3', 'PT 3') ?? null,
+              pt3Qty: get(t, 'pt3Qty', 'PT3 Qty') ?? null,
+              s1Price: get(t, 's1Price', 'S1', 'S1 Price') ?? null,
+              s2Price: get(t, 's2Price', 'S2', 'S2 Price') ?? null,
+              sfDate: get(t, 'sfDate', 'SF Date', 'Expected Exit') ?? null,
+              sl,
+              initialSL: num(get(t, 'initialSL', 'Initial SL', 'InitialSL', 'Original Stop')) || sl,
+              initialRisk: num(get(t, 'initialRisk', 'Initial Risk', 'Risk', 'Riesgo')),
+              setup: get(t, 'setup', 'Setup', 'Strategy', 'Estrategia', 'Pattern') || 'Other',
+              sellReason: get(t, 'sellReason', 'Sell Reason', 'Exit Reason', 'Reason') ?? null,
+              postAnalysis: get(t, 'postAnalysis', 'Post Analysis', 'Notes', 'Notas', 'Analysis') || '',
+              chartLink: get(t, 'chartLink', 'Chart', 'Chart Link', 'Link') || '',
+              industry: get(t, 'industry', 'Industry', 'Sector', 'sector', 'Industria') || '',
+              partial1Qty: get(t, 'partial1Qty', 'Partial 1 Qty') ?? null,
+              partial1Pct: get(t, 'partial1Pct', 'Partial 1 Pct') ?? null,
+              partial2Qty: get(t, 'partial2Qty', 'Partial 2 Qty') ?? null,
+              partial2Pct: get(t, 'partial2Pct', 'Partial 2 Pct') ?? null,
+              partial3Qty: get(t, 'partial3Qty', 'Partial 3 Qty') ?? null,
+              partial3Pct: get(t, 'partial3Pct', 'Partial 3 Pct') ?? null,
+              exitPrice: exitPrice != null ? num(exitPrice) : null,
+              exitDate: get(t, 'exitDate', 'Exit Date', 'Close Date', 'Fecha Salida') ?? null,
+              state: get(t, 'state', 'State', 'Status', 'Estado') || (exitPrice != null ? 'Closed' : 'Open'),
+              currentPrice: get(t, 'currentPrice', 'Current Price', 'Last Price', 'Market Price') ?? null,
+            } as Trade;
+          });
 
           // Merge: add imported trades, skip duplicates by id
           setTrades(prev => {
             const existingIds = new Set(prev.map(t => t.id));
-            const newTrades = normalized.filter(t => !existingIds.has(t.id));
+            const newTrades = normalizedTrades.filter(t => !existingIds.has(t.id));
             const merged = [...prev, ...newTrades];
             console.log(`[DiarioInversor] Import: ${prev.length} existing + ${newTrades.length} new = ${merged.length} total`);
             return merged;
           });
-          imported += normalized.length;
+          imported += normalizedTrades.length;
         }
         if (Array.isArray(wplData) && wplData.length > 0) {
           setWeeklyPL(prev => {
