@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 import Header from '@/app/components/Header';
 import { useLanguage } from '@/i18n/LanguageContext';
 
@@ -30,6 +31,50 @@ interface TopOpportunity {
   intrinsicValue: number;
   upside: number;
   marketCap: number;
+}
+
+interface HTFScanResult {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  currentPrice: number;
+  marketCap: number;
+  score: number;
+  bestPattern: {
+    surge_pct: number;
+    flag_range_pct: number | null;
+    flag_weeks: number | null;
+    vol_dryup: number | null;
+    ml_probability: number;
+    breakout_status: string;
+  } | null;
+  narrative: string;
+  patternsCount: number;
+}
+
+interface EPScanResult {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  currentPrice: number;
+  marketCap: number;
+  score: number;
+  bestEpisode: {
+    date: string;
+    gap_pct: number;
+    vol_spike: number;
+    holds_support: boolean;
+    has_followthrough: boolean;
+    catalyst_type: string;
+    action: string;
+    ml_probability: number;
+  } | null;
+  narrative: string;
+  episodesCount: number;
+  fundamentals: {
+    accelerating: boolean;
+    latest_growth: number;
+  } | null;
 }
 
 interface ScreenerFilters {
@@ -65,6 +110,9 @@ const fmtMktCap = (v: number) => {
 export default function ScreenerPage() {
   const router = useRouter();
   const { t } = useLanguage();
+  const { user } = useUser();
+  const isGodMode = (user?.publicMetadata?.plan as string) === 'godmode';
+
   const [screenerResults, setScreenerResults] = useState<ScreenerResult[]>([]);
   const [screenerLoading, setScreenerLoading] = useState(false);
   const [screenerError, setScreenerError] = useState<string | null>(null);
@@ -95,6 +143,18 @@ export default function ScreenerPage() {
     marketCapMin: '500000000',
     country: 'US',
   });
+
+  // HTF Scanner state (GODMODE only)
+  const [htfResults, setHtfResults] = useState<HTFScanResult[]>([]);
+  const [htfLoading, setHtfLoading] = useState(false);
+  const [htfError, setHtfError] = useState<string | null>(null);
+  const [htfStats, setHtfStats] = useState({ total: 0, scanned: 0 });
+
+  // EP Scanner state (GODMODE only)
+  const [epResults, setEpResults] = useState<EPScanResult[]>([]);
+  const [epLoading, setEpLoading] = useState(false);
+  const [epError, setEpError] = useState<string | null>(null);
+  const [epStats, setEpStats] = useState({ total: 0, scanned: 0 });
 
   const buildScreenerParams = (limit: number, offset: number) => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
@@ -173,6 +233,76 @@ export default function ScreenerPage() {
       setPrismoLoading(false);
     }
   }, [prismoFilters, t]);
+
+  const scanHTF = useCallback(async () => {
+    setHtfLoading(true);
+    setHtfError(null);
+    setHtfResults([]);
+    setHtfStats({ total: 0, scanned: 0 });
+
+    try {
+      const params = new URLSearchParams({
+        priceMin: prismoFilters.priceMin || '5',
+        priceMax: prismoFilters.priceMax || '500',
+        marketCapMin: prismoFilters.marketCapMin || '500000000',
+        country: prismoFilters.country || 'US',
+      });
+
+      const res = await fetch(`/api/htf-scan?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      setHtfStats({ total: data.total || 0, scanned: data.scanned || 0 });
+
+      if (!data.results?.length) {
+        setHtfError('No HTF patterns detected in the current filter range.');
+      } else {
+        setHtfResults(data.results);
+      }
+    } catch (err: any) {
+      setHtfError(err.message || 'Error scanning for HTF patterns');
+    } finally {
+      setHtfLoading(false);
+    }
+  }, [prismoFilters]);
+
+  const scanEP = useCallback(async () => {
+    setEpLoading(true);
+    setEpError(null);
+    setEpResults([]);
+    setEpStats({ total: 0, scanned: 0 });
+
+    try {
+      const params = new URLSearchParams({
+        priceMin: prismoFilters.priceMin || '5',
+        priceMax: prismoFilters.priceMax || '500',
+        marketCapMin: prismoFilters.marketCapMin || '500000000',
+        country: prismoFilters.country || 'US',
+      });
+
+      const res = await fetch(`/api/ep-scan?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      setEpStats({ total: data.total || 0, scanned: data.scanned || 0 });
+
+      if (!data.results?.length) {
+        setEpError('No Episodic Pivot patterns detected in the current filter range.');
+      } else {
+        setEpResults(data.results);
+      }
+    } catch (err: any) {
+      setEpError(err.message || 'Error scanning for Episodic Pivots');
+    } finally {
+      setEpLoading(false);
+    }
+  }, [prismoFilters]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -372,6 +502,314 @@ export default function ScreenerPage() {
             )}
           </div>
         </div>
+
+        {/* ═══════ HTF Scanner (GODMODE ONLY) ═══════ */}
+        {isGodMode && (
+          <div className="relative mb-8 rounded-xl border border-rose-500/20 bg-gray-900/60 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-rose-500/[0.03] to-transparent" />
+            <div className="relative p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-rose-300 flex items-center gap-2">
+                    <svg className="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    HTF Scanner
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 uppercase tracking-wider">
+                      God Mode
+                    </span>
+                  </h2>
+                  <p className="text-gray-400 text-sm mt-1 max-w-xl">
+                    Scan for High-Tight Flag patterns (Qullamaggie). Stocks with 80%+ surges followed by tight consolidation.
+                  </p>
+                </div>
+                <button
+                  onClick={scanHTF}
+                  disabled={htfLoading}
+                  className="shrink-0 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-bold rounded-xl shadow-lg shadow-rose-500/20 disabled:opacity-50 transition-all text-sm"
+                >
+                  {htfLoading ? (
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  )}
+                  {htfLoading ? 'Scanning...' : 'Scan HTF'}
+                </button>
+              </div>
+
+              {htfLoading && (
+                <div className="mt-4 flex items-center gap-2">
+                  <svg className="animate-spin w-4 h-4 text-rose-400" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  <span className="text-xs text-rose-400/70">Analyzing patterns across all filtered stocks... this may take 1-2 minutes</span>
+                  <div className="flex-1 h-1.5 bg-gray-900/40 rounded-full overflow-hidden ml-2">
+                    <div className="h-full bg-rose-500/50 animate-pulse rounded-full w-full" />
+                  </div>
+                </div>
+              )}
+
+              {!htfLoading && htfStats.total > 0 && (
+                <div className="mt-3 text-[11px] text-rose-400/50">
+                  {htfStats.total} stocks screened · {htfStats.scanned} analyzed for HTF patterns
+                </div>
+              )}
+
+              {htfError && (
+                <div className="mt-4 bg-rose-900/20 border border-rose-700/30 rounded-xl px-4 py-3 text-rose-300 text-sm">
+                  {htfError}
+                </div>
+              )}
+
+              {htfResults.length > 0 && (
+                <div className="mt-5 rounded-xl border border-rose-500/15 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-rose-900/20 text-rose-400/80 text-xs uppercase tracking-wider">
+                          <th className="text-center px-3 py-2.5 w-10">#</th>
+                          <th className="text-left px-3 py-2.5">Ticker</th>
+                          <th className="text-left px-3 py-2.5">Company</th>
+                          <th className="text-center px-3 py-2.5">Score</th>
+                          <th className="text-right px-3 py-2.5">Surge %</th>
+                          <th className="text-right px-3 py-2.5 hidden sm:table-cell">Flag Range</th>
+                          <th className="text-right px-3 py-2.5 hidden md:table-cell">ML Prob</th>
+                          <th className="text-center px-3 py-2.5 hidden sm:table-cell">Breakout</th>
+                          <th className="text-right px-3 py-2.5">Price</th>
+                          <th className="text-center px-3 py-2.5">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {htfResults.map((r, i) => (
+                          <tr
+                            key={r.symbol}
+                            className={`border-t border-rose-900/15 hover:bg-rose-900/10 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-900/20'}`}
+                          >
+                            <td className="text-center px-3 py-2.5">
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                                i < 3 ? 'bg-rose-500/20 text-rose-300' : 'bg-gray-800 text-gray-400'
+                              }`}>
+                                {i + 1}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className="font-data font-bold text-rose-300">{r.symbol}</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-200 max-w-[160px] truncate">{r.companyName}</td>
+                            <td className="px-3 py-2.5 text-center">
+                              <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                                r.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' :
+                                r.score >= 40 ? 'bg-yellow-500/20 text-yellow-300' :
+                                'bg-gray-700/50 text-gray-400'
+                              }`}>
+                                {r.score}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data text-rose-200">
+                              {r.bestPattern ? `${(r.bestPattern.surge_pct * 100).toFixed(0)}%` : '–'}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data text-gray-400 hidden sm:table-cell">
+                              {r.bestPattern?.flag_range_pct != null ? `${(r.bestPattern.flag_range_pct * 100).toFixed(1)}%` : '–'}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data text-gray-400 hidden md:table-cell">
+                              {r.bestPattern ? `${(r.bestPattern.ml_probability * 100).toFixed(0)}%` : '–'}
+                            </td>
+                            <td className="px-3 py-2.5 text-center hidden sm:table-cell">
+                              {r.bestPattern?.breakout_status && (
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                  r.bestPattern.breakout_status === 'confirmed' ? 'bg-emerald-500/20 text-emerald-400' :
+                                  r.bestPattern.breakout_status === 'approaching' ? 'bg-yellow-500/20 text-yellow-400' :
+                                  'bg-gray-700/40 text-gray-500'
+                                }`}>
+                                  {r.bestPattern.breakout_status}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data text-gray-300">${r.currentPrice.toFixed(2)}</td>
+                            <td className="px-3 py-2.5 text-center">
+                              <button
+                                onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                className="px-3 py-1.5 bg-rose-500/15 hover:bg-rose-500/30 border border-rose-500/25 rounded-lg text-rose-300 text-xs font-semibold transition"
+                              >
+                                Analyze
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ EP Scanner (GODMODE ONLY) ═══════ */}
+        {isGodMode && (
+          <div className="relative mb-8 rounded-xl border border-violet-500/20 bg-gray-900/60 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-violet-500/[0.03] to-transparent" />
+            <div className="relative p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-violet-300 flex items-center gap-2">
+                    <svg className="w-6 h-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                    Episodic Pivot Scanner
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30 uppercase tracking-wider">
+                      God Mode
+                    </span>
+                  </h2>
+                  <p className="text-gray-400 text-sm mt-1 max-w-xl">
+                    Scan for Episodic Pivots (Qullamaggie). Explosive gap-ups on earnings catalysts with support holds and follow-through.
+                  </p>
+                </div>
+                <button
+                  onClick={scanEP}
+                  disabled={epLoading}
+                  className="shrink-0 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg shadow-violet-500/20 disabled:opacity-50 transition-all text-sm"
+                >
+                  {epLoading ? (
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                  )}
+                  {epLoading ? 'Scanning...' : 'Scan EP'}
+                </button>
+              </div>
+
+              {epLoading && (
+                <div className="mt-4 flex items-center gap-2">
+                  <svg className="animate-spin w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  <span className="text-xs text-violet-400/70">Scanning for Episodic Pivots across all filtered stocks... this may take 1-2 minutes</span>
+                  <div className="flex-1 h-1.5 bg-gray-900/40 rounded-full overflow-hidden ml-2">
+                    <div className="h-full bg-violet-500/50 animate-pulse rounded-full w-full" />
+                  </div>
+                </div>
+              )}
+
+              {!epLoading && epStats.total > 0 && (
+                <div className="mt-3 text-[11px] text-violet-400/50">
+                  {epStats.total} stocks screened · {epStats.scanned} analyzed for Episodic Pivots
+                </div>
+              )}
+
+              {epError && (
+                <div className="mt-4 bg-violet-900/20 border border-violet-700/30 rounded-xl px-4 py-3 text-violet-300 text-sm">
+                  {epError}
+                </div>
+              )}
+
+              {epResults.length > 0 && (
+                <div className="mt-5 rounded-xl border border-violet-500/15 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-violet-900/20 text-violet-400/80 text-xs uppercase tracking-wider">
+                          <th className="text-center px-3 py-2.5 w-10">#</th>
+                          <th className="text-left px-3 py-2.5">Ticker</th>
+                          <th className="text-left px-3 py-2.5">Company</th>
+                          <th className="text-center px-3 py-2.5">Score</th>
+                          <th className="text-right px-3 py-2.5">Gap %</th>
+                          <th className="text-right px-3 py-2.5 hidden sm:table-cell">Vol Spike</th>
+                          <th className="text-center px-3 py-2.5 hidden sm:table-cell">Support</th>
+                          <th className="text-center px-3 py-2.5 hidden md:table-cell">Follow-Thru</th>
+                          <th className="text-center px-3 py-2.5">Action</th>
+                          <th className="text-right px-3 py-2.5">Price</th>
+                          <th className="text-center px-3 py-2.5">Go</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {epResults.map((r, i) => (
+                          <tr
+                            key={r.symbol}
+                            className={`border-t border-violet-900/15 hover:bg-violet-900/10 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-900/20'}`}
+                          >
+                            <td className="text-center px-3 py-2.5">
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                                i < 3 ? 'bg-violet-500/20 text-violet-300' : 'bg-gray-800 text-gray-400'
+                              }`}>
+                                {i + 1}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className="font-data font-bold text-violet-300">{r.symbol}</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-200 max-w-[160px] truncate">{r.companyName}</td>
+                            <td className="px-3 py-2.5 text-center">
+                              <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                                r.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' :
+                                r.score >= 40 ? 'bg-yellow-500/20 text-yellow-300' :
+                                'bg-gray-700/50 text-gray-400'
+                              }`}>
+                                {r.score}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data text-violet-200">
+                              {r.bestEpisode ? `${(r.bestEpisode.gap_pct * 100).toFixed(0)}%` : '–'}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data text-gray-400 hidden sm:table-cell">
+                              {r.bestEpisode ? `${r.bestEpisode.vol_spike.toFixed(1)}x` : '–'}
+                            </td>
+                            <td className="px-3 py-2.5 text-center hidden sm:table-cell">
+                              {r.bestEpisode && (
+                                <span className={r.bestEpisode.holds_support ? 'text-emerald-400' : 'text-red-400'}>
+                                  {r.bestEpisode.holds_support ? 'HOLDS' : 'BROKEN'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-center hidden md:table-cell">
+                              {r.bestEpisode && (
+                                <span className={r.bestEpisode.has_followthrough ? 'text-emerald-400' : 'text-gray-600'}>
+                                  {r.bestEpisode.has_followthrough ? 'YES' : 'NO'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              {r.bestEpisode?.action && (
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                                  r.bestEpisode.action === 'buy' ? 'bg-emerald-500/20 text-emerald-400' :
+                                  r.bestEpisode.action === 'watch' ? 'bg-yellow-500/20 text-yellow-400' :
+                                  'bg-gray-700/40 text-gray-500'
+                                }`}>
+                                  {r.bestEpisode.action}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data text-gray-300">${r.currentPrice.toFixed(2)}</td>
+                            <td className="px-3 py-2.5 text-center">
+                              <button
+                                onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                className="px-3 py-1.5 bg-violet-500/15 hover:bg-violet-500/30 border border-violet-500/25 rounded-lg text-violet-300 text-xs font-semibold transition"
+                              >
+                                Analyze
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ═══════ Filter Panel ═══════ */}
         <div className="bg-gray-900/50 rounded-xl border border-white/[0.06] p-6 mb-6">
