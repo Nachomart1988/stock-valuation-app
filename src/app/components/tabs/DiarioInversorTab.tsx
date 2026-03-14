@@ -176,6 +176,7 @@ export default function DiarioInversorTab() {
   }, [trades]);
 
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [importToast, setImportToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
   // ── Save to DB (debounced 1.5s) ──────────────────────────────────
   const saveToDB = useCallback(async (
@@ -736,6 +737,11 @@ export default function DiarioInversorTab() {
     URL.revokeObjectURL(url);
   };
 
+  const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
+    setImportToast({ type, message });
+    setTimeout(() => setImportToast(null), 6000);
+  }, []);
+
   const importData = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -743,148 +749,245 @@ export default function DiarioInversorTab() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string);
-        let imported = 0;
+        const raw = e.target?.result as string;
+        let data: any;
 
-        // Detect format: array of arrays with headers, raw array of objects, or object
-        let normalized: any;
-        if (Array.isArray(data)) {
-          // Check if first element is array (headers row) → convert to objects
-          if (Array.isArray(data[0])) {
-            const headers: string[] = data[0].map((h: any) => String(h).trim());
-            const rows = data.slice(1).map((row: any[]) => {
-              const obj: Record<string, any> = {};
-              headers.forEach((h, i) => { obj[h] = row[i] ?? null; });
-              return obj;
-            });
-            console.log('[DiarioInversor] Import: array-of-arrays detected. Headers:', headers);
-            normalized = { trades: rows };
-          } else {
-            // Raw array of objects
-            if (data.length > 0) console.log('[DiarioInversor] Import: raw array. First item keys:', Object.keys(data[0]));
-            normalized = { trades: data };
-          }
-        } else {
-          normalized = data;
+        // Try JSON first, then CSV
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          // Parse CSV: split lines, detect separator, build array-of-arrays
+          const lines = raw.split(/\r?\n/).filter(l => l.trim());
+          if (lines.length < 2) { showToast('error', 'Archivo vacío o formato no reconocido'); return; }
+          const sep = lines[0].includes('\t') ? '\t' : lines[0].includes(';') ? ';' : ',';
+          data = lines.map(line => {
+            const vals: string[] = [];
+            let cur = '', inQ = false;
+            for (const ch of line) {
+              if (ch === '"') { inQ = !inQ; }
+              else if (ch === sep && !inQ) { vals.push(cur.trim()); cur = ''; }
+              else { cur += ch; }
+            }
+            vals.push(cur.trim());
+            return vals;
+          });
         }
 
-        // Support both export format keys and DB format keys
-        const tradesData = normalized.trades;
-        const wplData = normalized.weeklyPL ?? normalized.weekly_pl;
-        const ptaData = normalized.ptaEntries ?? normalized.pta;
-        const balData = normalized.accountBalance ?? normalized.balance;
+        let imported = 0;
 
-        if (Array.isArray(tradesData) && tradesData.length > 0) {
-          // Helper: case-insensitive field lookup
-          const get = (obj: any, ...keys: string[]): any => {
-            for (const k of keys) {
-              // Try exact match first
-              if (obj[k] !== undefined) return obj[k];
-              // Try case-insensitive
-              const lower = k.toLowerCase();
-              const found = Object.keys(obj).find(ok => ok.toLowerCase() === lower || ok.toLowerCase().replace(/[\s_-]/g, '') === lower.replace(/[\s_-]/g, ''));
-              if (found && obj[found] !== undefined) return obj[found];
-            }
-            return undefined;
+        // ── Normalize to array of objects ──
+        let records: Record<string, any>[] = [];
+
+        if (Array.isArray(data)) {
+          if (data.length === 0) { showToast('error', 'Archivo vacío'); return; }
+
+          if (Array.isArray(data[0])) {
+            // Array-of-arrays: first row = headers
+            const headers: string[] = data[0].map((h: any) => String(h).trim());
+            records = data.slice(1)
+              .filter((row: any[]) => row.some((v: any) => v !== null && v !== undefined && String(v).trim() !== ''))
+              .map((row: any[]) => {
+                const obj: Record<string, any> = {};
+                headers.forEach((h, i) => { obj[h] = row[i] ?? null; });
+                return obj;
+              });
+            console.log('[DiarioInversor] Import: array-of-arrays. Headers:', headers);
+          } else if (typeof data[0] === 'object' && data[0] !== null) {
+            records = data;
+            console.log('[DiarioInversor] Import: array of objects. Keys:', Object.keys(data[0]));
+          }
+        } else if (data && typeof data === 'object') {
+          // Prismo export format: { trades: [...], weeklyPL: [...], ... }
+          if (Array.isArray(data.trades)) {
+            records = data.trades;
+          }
+          // Also import PL/PTA/balance from export format
+          const wplData = data.weeklyPL ?? data.weekly_pl;
+          const ptaData = data.ptaEntries ?? data.pta;
+          const balData = data.accountBalance ?? data.balance;
+          if (Array.isArray(wplData) && wplData.length > 0) {
+            setWeeklyPL(prev => {
+              const ids = new Set(prev.map(w => w.id));
+              return [...prev, ...wplData.filter((w: any) => !ids.has(w.id))];
+            });
+            imported += wplData.length;
+          }
+          if (Array.isArray(ptaData) && ptaData.length > 0) {
+            setPtaEntries(prev => {
+              const ids = new Set(prev.map(p => p.id));
+              return [...prev, ...ptaData.filter((p: any) => !ids.has(p.id))];
+            });
+            imported += ptaData.length;
+          }
+          if (typeof balData === 'number' && balData > 0) setAccountBalance(balData);
+        }
+
+        if (records.length === 0 && imported === 0) {
+          showToast('error', 'No se encontraron registros válidos en el archivo');
+          return;
+        }
+
+        if (records.length > 0) {
+          // ── Smart field mapping: normalize any key to our Trade fields ──
+          // Build a mapping from file columns → Trade fields using fuzzy matching
+          const FIELD_PATTERNS: Record<keyof Trade, RegExp> = {
+            symbol:       /^(symbol|ticker|stock|accion|codigo|code|sym)$/i,
+            name:         /^(name|company|empresa|nombre|comp|stock\s*name)$/i,
+            side:         /^(side|direction|tipo|dir|long.?short|lado)$/i,
+            date:         /^(date|fecha|entry.?date|open.?date|buy.?date|trade.?date)$/i,
+            qty:          /^(qty|quantity|shares|size|cantidad|acciones|units|volume|vol|share)$/i,
+            entryPrice:   /^(entry.?price|entry|precio|price|avg.?price|buy.?price|cost|precio.?entrada|avg.?cost|purchase.?price)$/i,
+            value:        /^(value|total|valor|amount|monto|market.?value|notional)$/i,
+            commission:   /^(commission|fee|fees|comision|com|brokerage)$/i,
+            sl:           /^(sl|stop.?loss|stop|stoploss|protective.?stop)$/i,
+            initialSL:    /^(initial.?sl|initial.?stop|original.?stop)$/i,
+            initialRisk:  /^(initial.?risk|risk|riesgo)$/i,
+            setup:        /^(setup|strategy|estrategia|pattern|trade.?type|system)$/i,
+            exitPrice:    /^(exit.?price|exit|sell.?price|close.?price|precio.?salida|sold.?at)$/i,
+            exitDate:     /^(exit.?date|close.?date|sell.?date|fecha.?salida|sold.?date)$/i,
+            state:        /^(state|status|estado|open.?close|position.?status)$/i,
+            sellReason:   /^(sell.?reason|exit.?reason|reason|motivo|razon)$/i,
+            postAnalysis: /^(post.?analysis|notes|notas|analysis|comentarios|comments)$/i,
+            chartLink:    /^(chart.?link|chart|link|url|imagen)$/i,
+            industry:     /^(industry|sector|industria|gics)$/i,
+            pt1Price:     /^(pt1.?price|pt1|target|price.?target|tp1|take.?profit)$/i,
+            pt2Price:     /^(pt2.?price|pt2|target.?2|tp2)$/i,
+            pt3Price:     /^(pt3.?price|pt3|target.?3|tp3)$/i,
+            pt1Qty:       /^(pt1.?qty|pt1.?quantity)$/i,
+            pt2Qty:       /^(pt2.?qty)$/i,
+            pt3Qty:       /^(pt3.?qty)$/i,
+            s1Price:      /^(s1.?price|s1|support.?1)$/i,
+            s2Price:      /^(s2.?price|s2|support.?2)$/i,
+            sfDate:       /^(sf.?date|expected.?exit)$/i,
+            partial1Qty:  /^(partial.?1.?qty)$/i,
+            partial1Pct:  /^(partial.?1.?pct)$/i,
+            partial2Qty:  /^(partial.?2.?qty)$/i,
+            partial2Pct:  /^(partial.?2.?pct)$/i,
+            partial3Qty:  /^(partial.?3.?qty)$/i,
+            partial3Pct:  /^(partial.?3.?pct)$/i,
+            currentPrice: /^(current.?price|last.?price|market.?price|precio.?actual)$/i,
+            id:           /^(id|trade.?id)$/i,
           };
+
+          // Get actual keys from first record
+          const fileKeys = Object.keys(records[0]);
+          const keyMap: Record<string, string> = {}; // fileKey → tradeField
+
+          for (const fk of fileKeys) {
+            const normalized = fk.trim().replace(/[\s_-]+/g, ' ');
+            for (const [field, pattern] of Object.entries(FIELD_PATTERNS)) {
+              // Test against both original key and normalized version
+              if (pattern.test(fk.trim()) || pattern.test(normalized) || pattern.test(fk.replace(/[\s_-]/g, ''))) {
+                keyMap[fk] = field;
+                break;
+              }
+            }
+          }
+
+          console.log('[DiarioInversor] Import field mapping:', keyMap);
+          console.log('[DiarioInversor] Unmapped keys:', fileKeys.filter(k => !keyMap[k]));
+
+          const mappedFields = Object.values(keyMap);
+          const hasSymbol = mappedFields.includes('symbol');
+          const hasPrice = mappedFields.includes('entryPrice');
+
+          if (!hasSymbol && !hasPrice && mappedFields.length < 2) {
+            showToast('error', `No se pudieron mapear los campos. Columnas: ${fileKeys.join(', ')}`);
+            return;
+          }
+
           const num = (v: any): number => { const n = Number(v); return isNaN(n) ? 0 : n; };
+          const getMapped = (rec: Record<string, any>, field: string): any => {
+            const fk = Object.entries(keyMap).find(([, f]) => f === field)?.[0];
+            if (!fk) return undefined;
+            return rec[fk];
+          };
 
-          // Normalize each imported trade — fill missing fields with defaults
-          const normalizedTrades: Trade[] = tradesData.map((t: any) => {
-            const symbol = String(get(t, 'symbol', 'ticker', 'Symbol', 'Ticker', 'SYMBOL') || '').toUpperCase();
-            const entryPrice = num(get(t, 'entryPrice', 'entry', 'price', 'Entry Price', 'EntryPrice', 'Precio', 'Price', 'Avg Price'));
-            const qty = num(get(t, 'qty', 'quantity', 'shares', 'Qty', 'Quantity', 'Shares', 'Cantidad', 'Size'));
-            const sl = num(get(t, 'sl', 'stopLoss', 'stop', 'SL', 'Stop Loss', 'StopLoss', 'Stop'));
-            const exitPrice = get(t, 'exitPrice', 'exit', 'Exit Price', 'ExitPrice', 'Sell Price', 'Close Price');
+          const normalizedTrades: Trade[] = records
+            .filter(rec => {
+              // Must have at least a symbol or entry price
+              const sym = getMapped(rec, 'symbol');
+              const price = getMapped(rec, 'entryPrice');
+              return (sym && String(sym).trim()) || (price && num(price) > 0);
+            })
+            .map(rec => {
+              const symbol = String(getMapped(rec, 'symbol') || '').toUpperCase().trim();
+              const entryPrice = num(getMapped(rec, 'entryPrice'));
+              const qty = num(getMapped(rec, 'qty'));
+              const sl = num(getMapped(rec, 'sl'));
+              const exitPriceRaw = getMapped(rec, 'exitPrice');
+              const exitPrice = exitPriceRaw != null && String(exitPriceRaw).trim() !== '' ? num(exitPriceRaw) : null;
 
-            return {
-              id: get(t, 'id', 'Id', 'ID') || generateId(),
-              name: get(t, 'name', 'Name', 'Company', 'company', 'Empresa') || symbol,
-              symbol,
-              side: get(t, 'side', 'Side', 'Direction', 'Lado') || 'Long',
-              date: get(t, 'date', 'Date', 'entryDate', 'Entry Date', 'Fecha', 'Open Date') || new Date().toISOString().split('T')[0],
-              qty,
-              entryPrice,
-              value: num(get(t, 'value', 'Value', 'Total', 'Valor')) || (qty * entryPrice),
-              commission: num(get(t, 'commission', 'Commission', 'Fee', 'Fees', 'Comision')),
-              pt1Price: get(t, 'pt1Price', 'PT1', 'Target', 'target', 'Price Target', 'PT 1') ?? null,
-              pt1Qty: get(t, 'pt1Qty', 'PT1 Qty') ?? null,
-              pt2Price: get(t, 'pt2Price', 'PT2', 'PT 2') ?? null,
-              pt2Qty: get(t, 'pt2Qty', 'PT2 Qty') ?? null,
-              pt3Price: get(t, 'pt3Price', 'PT3', 'PT 3') ?? null,
-              pt3Qty: get(t, 'pt3Qty', 'PT3 Qty') ?? null,
-              s1Price: get(t, 's1Price', 'S1', 'S1 Price') ?? null,
-              s2Price: get(t, 's2Price', 'S2', 'S2 Price') ?? null,
-              sfDate: get(t, 'sfDate', 'SF Date', 'Expected Exit') ?? null,
-              sl,
-              initialSL: num(get(t, 'initialSL', 'Initial SL', 'InitialSL', 'Original Stop')) || sl,
-              initialRisk: num(get(t, 'initialRisk', 'Initial Risk', 'Risk', 'Riesgo')),
-              setup: get(t, 'setup', 'Setup', 'Strategy', 'Estrategia', 'Pattern') || 'Other',
-              sellReason: get(t, 'sellReason', 'Sell Reason', 'Exit Reason', 'Reason') ?? null,
-              postAnalysis: get(t, 'postAnalysis', 'Post Analysis', 'Notes', 'Notas', 'Analysis') || '',
-              chartLink: get(t, 'chartLink', 'Chart', 'Chart Link', 'Link') || '',
-              industry: get(t, 'industry', 'Industry', 'Sector', 'sector', 'Industria') || '',
-              partial1Qty: get(t, 'partial1Qty', 'Partial 1 Qty') ?? null,
-              partial1Pct: get(t, 'partial1Pct', 'Partial 1 Pct') ?? null,
-              partial2Qty: get(t, 'partial2Qty', 'Partial 2 Qty') ?? null,
-              partial2Pct: get(t, 'partial2Pct', 'Partial 2 Pct') ?? null,
-              partial3Qty: get(t, 'partial3Qty', 'Partial 3 Qty') ?? null,
-              partial3Pct: get(t, 'partial3Pct', 'Partial 3 Pct') ?? null,
-              exitPrice: exitPrice != null ? num(exitPrice) : null,
-              exitDate: get(t, 'exitDate', 'Exit Date', 'Close Date', 'Fecha Salida') ?? null,
-              state: get(t, 'state', 'State', 'Status', 'Estado') || (exitPrice != null ? 'Closed' : 'Open'),
-              currentPrice: get(t, 'currentPrice', 'Current Price', 'Last Price', 'Market Price') ?? null,
-            } as Trade;
-          });
+              return {
+                id: getMapped(rec, 'id') || generateId(),
+                name: String(getMapped(rec, 'name') || symbol || ''),
+                symbol,
+                side: String(getMapped(rec, 'side') || 'Long') as TradeSide,
+                date: String(getMapped(rec, 'date') || new Date().toISOString().split('T')[0]),
+                qty,
+                entryPrice,
+                value: num(getMapped(rec, 'value')) || (qty * entryPrice),
+                commission: num(getMapped(rec, 'commission')),
+                pt1Price: getMapped(rec, 'pt1Price') ?? null,
+                pt1Qty: getMapped(rec, 'pt1Qty') ?? null,
+                pt2Price: getMapped(rec, 'pt2Price') ?? null,
+                pt2Qty: getMapped(rec, 'pt2Qty') ?? null,
+                pt3Price: getMapped(rec, 'pt3Price') ?? null,
+                pt3Qty: getMapped(rec, 'pt3Qty') ?? null,
+                s1Price: getMapped(rec, 's1Price') ?? null,
+                s2Price: getMapped(rec, 's2Price') ?? null,
+                sfDate: getMapped(rec, 'sfDate') ?? null,
+                sl,
+                initialSL: num(getMapped(rec, 'initialSL')) || sl,
+                initialRisk: num(getMapped(rec, 'initialRisk')),
+                setup: (getMapped(rec, 'setup') || 'Other') as TradeSetup,
+                sellReason: getMapped(rec, 'sellReason') ?? null,
+                postAnalysis: String(getMapped(rec, 'postAnalysis') || ''),
+                chartLink: String(getMapped(rec, 'chartLink') || ''),
+                industry: String(getMapped(rec, 'industry') || ''),
+                partial1Qty: getMapped(rec, 'partial1Qty') ?? null,
+                partial1Pct: getMapped(rec, 'partial1Pct') ?? null,
+                partial2Qty: getMapped(rec, 'partial2Qty') ?? null,
+                partial2Pct: getMapped(rec, 'partial2Pct') ?? null,
+                partial3Qty: getMapped(rec, 'partial3Qty') ?? null,
+                partial3Pct: getMapped(rec, 'partial3Pct') ?? null,
+                exitPrice,
+                exitDate: getMapped(rec, 'exitDate') ?? null,
+                state: (getMapped(rec, 'state') || (exitPrice != null ? 'Closed' : 'Open')) as TradeState,
+                currentPrice: getMapped(rec, 'currentPrice') ?? null,
+              } as Trade;
+            });
 
-          // Merge: add imported trades, skip duplicates by id
+          if (normalizedTrades.length === 0) {
+            showToast('error', `Registros encontrados pero sin datos válidos (symbol/price). Columnas: ${fileKeys.join(', ')}`);
+            return;
+          }
+
+          // Merge: add imported, skip duplicates by id or symbol+date+entryPrice
           setTrades(prev => {
             const existingIds = new Set(prev.map(t => t.id));
-            const newTrades = normalizedTrades.filter(t => !existingIds.has(t.id));
+            const existingKeys = new Set(prev.map(t => `${t.symbol}|${t.date}|${t.entryPrice}`));
+            const newTrades = normalizedTrades.filter(t =>
+              !existingIds.has(t.id) && !existingKeys.has(`${t.symbol}|${t.date}|${t.entryPrice}`)
+            );
             const merged = [...prev, ...newTrades];
             console.log(`[DiarioInversor] Import: ${prev.length} existing + ${newTrades.length} new = ${merged.length} total`);
             return merged;
           });
           imported += normalizedTrades.length;
-        }
-        if (Array.isArray(wplData) && wplData.length > 0) {
-          setWeeklyPL(prev => {
-            const existingIds = new Set(prev.map(w => w.id));
-            const newEntries = wplData.filter((w: any) => !existingIds.has(w.id));
-            return [...prev, ...newEntries];
-          });
-          imported += wplData.length;
-        }
-        if (Array.isArray(ptaData) && ptaData.length > 0) {
-          setPtaEntries(prev => {
-            const existingIds = new Set(prev.map(p => p.id));
-            const newEntries = ptaData.filter((p: any) => !existingIds.has(p.id));
-            return [...prev, ...newEntries];
-          });
-          imported += ptaData.length;
-        }
-        if (typeof balData === 'number' && balData > 0) {
-          setAccountBalance(balData);
-        }
 
-        // Always show first raw record for debugging
-        const firstRaw = Array.isArray(data) ? (Array.isArray(data[0]) ? `Headers: ${data[0].join(', ')}` : JSON.stringify(data[0], null, 2)) : JSON.stringify(Object.keys(data));
-        const debugInfo = firstRaw.slice(0, 500);
-
-        if (imported > 0) {
-          // Check if first raw trade actually had mappable data
-          const firstSrc = Array.isArray(tradesData) ? tradesData[0] : null;
-          const firstKeys = firstSrc ? Object.keys(firstSrc).join(', ') : 'none';
-          alert(`Importados: ${imported} registros.\n\nKeys encontradas: ${firstKeys}\n\nPrimer registro:\n${debugInfo}`);
-        } else {
-          alert(`No se encontraron datos válidos.\n\nPrimer elemento:\n${debugInfo}`);
+          const withSymbol = normalizedTrades.filter(t => t.symbol).length;
+          const withPrice = normalizedTrades.filter(t => t.entryPrice > 0).length;
+          showToast('success', `${normalizedTrades.length} trades importados (${withSymbol} con ticker, ${withPrice} con precio). Mapeados: ${mappedFields.join(', ')}`);
+        } else if (imported > 0) {
+          showToast('success', `${imported} registros importados (PL/PTA/Balance)`);
         }
-      } catch (err) {
-        alert('Error al importar datos — archivo JSON inválido');
+      } catch (err: any) {
+        console.error('[DiarioInversor] Import error:', err);
+        showToast('error', `Error al importar: ${err.message || 'Archivo inválido'}`);
       }
     };
     reader.readAsText(file);
-    // Reset input so same file can be re-imported
     event.target.value = '';
   };
 
@@ -895,7 +998,20 @@ export default function DiarioInversorTab() {
   const years = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Import Toast Notification */}
+      {importToast && (
+        <div className={`fixed top-6 right-6 z-50 max-w-md px-5 py-3.5 rounded-xl border shadow-2xl backdrop-blur-sm animate-fade-in-up flex items-start gap-3 ${
+          importToast.type === 'success' ? 'bg-green-900/90 border-green-500/40 text-green-200' :
+          importToast.type === 'error'   ? 'bg-red-900/90 border-red-500/40 text-red-200' :
+          'bg-blue-900/90 border-blue-500/40 text-blue-200'
+        }`}>
+          <span className="text-lg mt-0.5">{importToast.type === 'success' ? '✅' : importToast.type === 'error' ? '❌' : 'ℹ️'}</span>
+          <p className="text-sm leading-relaxed flex-1">{importToast.message}</p>
+          <button onClick={() => setImportToast(null)} className="text-white/50 hover:text-white text-lg ml-2">✕</button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
         <div>
