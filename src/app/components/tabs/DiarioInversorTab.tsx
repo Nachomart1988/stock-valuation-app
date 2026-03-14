@@ -867,11 +867,17 @@ export default function DiarioInversorTab() {
           setAccountBalance(balData);
         }
 
+        // Always show first raw record for debugging
+        const firstRaw = Array.isArray(data) ? (Array.isArray(data[0]) ? `Headers: ${data[0].join(', ')}` : JSON.stringify(data[0], null, 2)) : JSON.stringify(Object.keys(data));
+        const debugInfo = firstRaw.slice(0, 500);
+
         if (imported > 0) {
-          alert(`Importados: ${imported} registros. Los trades existentes se mantuvieron.`);
+          // Check if first raw trade actually had mappable data
+          const firstSrc = Array.isArray(tradesData) ? tradesData[0] : null;
+          const firstKeys = firstSrc ? Object.keys(firstSrc).join(', ') : 'none';
+          alert(`Importados: ${imported} registros.\n\nKeys encontradas: ${firstKeys}\n\nPrimer registro:\n${debugInfo}`);
         } else {
-          const sample = JSON.stringify(Array.isArray(data) ? data[0] : data, null, 2).slice(0, 300);
-          alert(`No se encontraron datos válidos.\n\nPrimer elemento:\n${sample}`);
+          alert(`No se encontraron datos válidos.\n\nPrimer elemento:\n${debugInfo}`);
         }
       } catch (err) {
         alert('Error al importar datos — archivo JSON inválido');
@@ -924,8 +930,22 @@ export default function DiarioInversorTab() {
 
           <label className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white cursor-pointer">
             📥 {t('diarioTab.import')}
-            <input type="file" accept=".json" onChange={importData} className="hidden" />
+            <input type="file" accept=".json,.csv" onChange={importData} className="hidden" />
           </label>
+
+          <button
+            onClick={() => {
+              if (window.confirm('¿Borrar TODOS los trades, P&L y PTA? Esta acción no se puede deshacer.')) {
+                setTrades([]);
+                setWeeklyPL([]);
+                setPtaEntries([]);
+                setAccountBalance(10000);
+              }
+            }}
+            className="px-4 py-2 bg-red-600/80 hover:bg-red-600 rounded text-white text-sm"
+          >
+            🗑 Borrar todo
+          </button>
 
           {/* Sync status badge */}
           {user ? (
