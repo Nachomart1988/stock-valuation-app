@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const FMP_BASE = 'https://financialmodelingprep.com';
-const SCAN_CONCURRENCY = 3;
-const MAX_STOCKS = 80;
+const SCAN_CONCURRENCY = 5;
+const MAX_STOCKS = 250;
 
 export async function GET(req: NextRequest) {
   const apiKey = process.env.FMP_API_KEY;
@@ -18,6 +18,9 @@ export async function GET(req: NextRequest) {
   const priceMax = sp.get('priceMax') || '500';
   const marketCapMin = sp.get('marketCapMin') || '500000000';
   const country = sp.get('country') || 'US';
+  const sector = sp.get('sector') || '';
+  const minGap = parseFloat(sp.get('minGap') || '0.15');
+  const lookbackDays = parseInt(sp.get('lookbackDays') || '504');
 
   // 1. Fetch stocks from FMP screener
   const screenerParams = new URLSearchParams({
@@ -25,6 +28,7 @@ export async function GET(req: NextRequest) {
     priceLowerThan: priceMax,
     marketCapMoreThan: marketCapMin,
     country,
+    ...(sector ? { sector } : {}),
     exchange: 'NYSE,NASDAQ,AMEX',
     isActivelyTrading: 'true',
     isEtf: 'false',
@@ -67,8 +71,8 @@ export async function GET(req: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ticker: stock.symbol,
-          min_gap: 0.15,
-          lookback_days: 504,
+          min_gap: minGap,
+          lookback_days: lookbackDays,
         }),
       });
       if (!res.ok) return;

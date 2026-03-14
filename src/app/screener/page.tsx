@@ -149,12 +149,30 @@ export default function ScreenerPage() {
   const [htfLoading, setHtfLoading] = useState(false);
   const [htfError, setHtfError] = useState<string | null>(null);
   const [htfStats, setHtfStats] = useState({ total: 0, scanned: 0 });
+  const [htfFilters, setHtfFilters] = useState({
+    priceMin: '5',
+    priceMax: '500',
+    marketCapMin: '500000000',
+    country: 'US',
+    sector: '',
+    minSurge: '80',
+    maxFlagRange: '15',
+  });
 
   // EP Scanner state (GODMODE only)
   const [epResults, setEpResults] = useState<EPScanResult[]>([]);
   const [epLoading, setEpLoading] = useState(false);
   const [epError, setEpError] = useState<string | null>(null);
   const [epStats, setEpStats] = useState({ total: 0, scanned: 0 });
+  const [epFilters, setEpFilters] = useState({
+    priceMin: '5',
+    priceMax: '500',
+    marketCapMin: '500000000',
+    country: 'US',
+    sector: '',
+    minGap: '15',
+    lookbackDays: '504',
+  });
 
   const buildScreenerParams = (limit: number, offset: number) => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
@@ -242,10 +260,13 @@ export default function ScreenerPage() {
 
     try {
       const params = new URLSearchParams({
-        priceMin: prismoFilters.priceMin || '5',
-        priceMax: prismoFilters.priceMax || '500',
-        marketCapMin: prismoFilters.marketCapMin || '500000000',
-        country: prismoFilters.country || 'US',
+        priceMin: htfFilters.priceMin || '5',
+        priceMax: htfFilters.priceMax || '500',
+        marketCapMin: htfFilters.marketCapMin || '500000000',
+        country: htfFilters.country || 'US',
+        ...(htfFilters.sector ? { sector: htfFilters.sector } : {}),
+        minSurge: String(parseFloat(htfFilters.minSurge || '80') / 100),
+        maxFlagRange: String(parseFloat(htfFilters.maxFlagRange || '15') / 100),
       });
 
       const res = await fetch(`/api/htf-scan?${params.toString()}`);
@@ -267,7 +288,7 @@ export default function ScreenerPage() {
     } finally {
       setHtfLoading(false);
     }
-  }, [prismoFilters]);
+  }, [htfFilters]);
 
   const scanEP = useCallback(async () => {
     setEpLoading(true);
@@ -277,10 +298,13 @@ export default function ScreenerPage() {
 
     try {
       const params = new URLSearchParams({
-        priceMin: prismoFilters.priceMin || '5',
-        priceMax: prismoFilters.priceMax || '500',
-        marketCapMin: prismoFilters.marketCapMin || '500000000',
-        country: prismoFilters.country || 'US',
+        priceMin: epFilters.priceMin || '5',
+        priceMax: epFilters.priceMax || '500',
+        marketCapMin: epFilters.marketCapMin || '500000000',
+        country: epFilters.country || 'US',
+        ...(epFilters.sector ? { sector: epFilters.sector } : {}),
+        minGap: String(parseFloat(epFilters.minGap || '15') / 100),
+        lookbackDays: epFilters.lookbackDays || '504',
       });
 
       const res = await fetch(`/api/ep-scan?${params.toString()}`);
@@ -302,7 +326,7 @@ export default function ScreenerPage() {
     } finally {
       setEpLoading(false);
     }
-  }, [prismoFilters]);
+  }, [epFilters]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -542,6 +566,84 @@ export default function ScreenerPage() {
                 </button>
               </div>
 
+              {/* HTF Filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-rose-900/15">
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Price Min</label>
+                  <input type="number" min="0" placeholder="5"
+                    value={htfFilters.priceMin}
+                    onChange={e => setHtfFilters(f => ({ ...f, priceMin: e.target.value }))}
+                    disabled={htfLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Price Max</label>
+                  <input type="number" min="0" placeholder="500"
+                    value={htfFilters.priceMax}
+                    onChange={e => setHtfFilters(f => ({ ...f, priceMax: e.target.value }))}
+                    disabled={htfLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Mkt Cap Min</label>
+                  <select
+                    value={htfFilters.marketCapMin}
+                    onChange={e => setHtfFilters(f => ({ ...f, marketCapMin: e.target.value }))}
+                    disabled={htfLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  >
+                    <option value="100000000">$100M+</option>
+                    <option value="500000000">$500M+</option>
+                    <option value="1000000000">$1B+</option>
+                    <option value="10000000000">$10B+</option>
+                    <option value="50000000000">$50B+</option>
+                    <option value="200000000000">$200B+</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Country</label>
+                  <select
+                    value={htfFilters.country}
+                    onChange={e => setHtfFilters(f => ({ ...f, country: e.target.value }))}
+                    disabled={htfLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  >
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Sector</label>
+                  <select
+                    value={htfFilters.sector}
+                    onChange={e => setHtfFilters(f => ({ ...f, sector: e.target.value }))}
+                    disabled={htfLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  >
+                    {SECTORS.map(s => <option key={s} value={s}>{s || 'All Sectors'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Min Surge %</label>
+                  <input type="number" min="50" max="200" step="10" placeholder="80"
+                    value={htfFilters.minSurge}
+                    onChange={e => setHtfFilters(f => ({ ...f, minSurge: e.target.value }))}
+                    disabled={htfLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Max Flag %</label>
+                  <input type="number" min="5" max="25" step="1" placeholder="15"
+                    value={htfFilters.maxFlagRange}
+                    onChange={e => setHtfFilters(f => ({ ...f, maxFlagRange: e.target.value }))}
+                    disabled={htfLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
               {htfLoading && (
                 <div className="mt-4 flex items-center gap-2">
                   <svg className="animate-spin w-4 h-4 text-rose-400" viewBox="0 0 24 24" fill="none">
@@ -688,6 +790,88 @@ export default function ScreenerPage() {
                   )}
                   {epLoading ? 'Scanning...' : 'Scan EP'}
                 </button>
+              </div>
+
+              {/* EP Filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-violet-900/15">
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Price Min</label>
+                  <input type="number" min="0" placeholder="5"
+                    value={epFilters.priceMin}
+                    onChange={e => setEpFilters(f => ({ ...f, priceMin: e.target.value }))}
+                    disabled={epLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Price Max</label>
+                  <input type="number" min="0" placeholder="500"
+                    value={epFilters.priceMax}
+                    onChange={e => setEpFilters(f => ({ ...f, priceMax: e.target.value }))}
+                    disabled={epLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Mkt Cap Min</label>
+                  <select
+                    value={epFilters.marketCapMin}
+                    onChange={e => setEpFilters(f => ({ ...f, marketCapMin: e.target.value }))}
+                    disabled={epLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  >
+                    <option value="100000000">$100M+</option>
+                    <option value="500000000">$500M+</option>
+                    <option value="1000000000">$1B+</option>
+                    <option value="10000000000">$10B+</option>
+                    <option value="50000000000">$50B+</option>
+                    <option value="200000000000">$200B+</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Country</label>
+                  <select
+                    value={epFilters.country}
+                    onChange={e => setEpFilters(f => ({ ...f, country: e.target.value }))}
+                    disabled={epLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  >
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Sector</label>
+                  <select
+                    value={epFilters.sector}
+                    onChange={e => setEpFilters(f => ({ ...f, sector: e.target.value }))}
+                    disabled={epLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  >
+                    {SECTORS.map(s => <option key={s} value={s}>{s || 'All Sectors'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Min Gap %</label>
+                  <input type="number" min="10" max="50" step="5" placeholder="15"
+                    value={epFilters.minGap}
+                    onChange={e => setEpFilters(f => ({ ...f, minGap: e.target.value }))}
+                    disabled={epLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Lookback</label>
+                  <select
+                    value={epFilters.lookbackDays}
+                    onChange={e => setEpFilters(f => ({ ...f, lookbackDays: e.target.value }))}
+                    disabled={epLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  >
+                    <option value="252">1 Year</option>
+                    <option value="504">2 Years</option>
+                    <option value="756">3 Years</option>
+                  </select>
+                </div>
               </div>
 
               {epLoading && (
