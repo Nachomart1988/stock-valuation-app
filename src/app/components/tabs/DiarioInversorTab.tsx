@@ -756,15 +756,70 @@ export default function DiarioInversorTab() {
         const balData = normalized.accountBalance ?? normalized.balance;
 
         if (Array.isArray(tradesData) && tradesData.length > 0) {
-          setTrades(tradesData);
-          imported += tradesData.length;
+          // Normalize each imported trade — fill missing fields with defaults
+          const normalized: Trade[] = tradesData.map((t: any) => ({
+            id: t.id || generateId(),
+            name: t.name || t.symbol || '',
+            symbol: (t.symbol || t.ticker || '').toUpperCase(),
+            side: t.side || 'Long',
+            date: t.date || t.entryDate || new Date().toISOString().split('T')[0],
+            qty: Number(t.qty || t.quantity || t.shares || 0),
+            entryPrice: Number(t.entryPrice || t.entry || t.price || 0),
+            value: Number(t.value || 0) || (Number(t.qty || 0) * Number(t.entryPrice || t.entry || t.price || 0)),
+            commission: Number(t.commission || 0),
+            pt1Price: t.pt1Price ?? t.target ?? null,
+            pt1Qty: t.pt1Qty ?? null,
+            pt2Price: t.pt2Price ?? null,
+            pt2Qty: t.pt2Qty ?? null,
+            pt3Price: t.pt3Price ?? null,
+            pt3Qty: t.pt3Qty ?? null,
+            s1Price: t.s1Price ?? null,
+            s2Price: t.s2Price ?? null,
+            sfDate: t.sfDate ?? null,
+            sl: Number(t.sl || t.stopLoss || t.stop || 0),
+            initialSL: Number(t.initialSL || t.sl || t.stopLoss || t.stop || 0),
+            initialRisk: Number(t.initialRisk || 0),
+            setup: t.setup || 'Other',
+            sellReason: t.sellReason ?? null,
+            postAnalysis: t.postAnalysis || '',
+            chartLink: t.chartLink || '',
+            industry: t.industry || t.sector || '',
+            partial1Qty: t.partial1Qty ?? null,
+            partial1Pct: t.partial1Pct ?? null,
+            partial2Qty: t.partial2Qty ?? null,
+            partial2Pct: t.partial2Pct ?? null,
+            partial3Qty: t.partial3Qty ?? null,
+            partial3Pct: t.partial3Pct ?? null,
+            exitPrice: t.exitPrice ?? t.exit ?? null,
+            exitDate: t.exitDate ?? null,
+            state: t.state || (t.exitPrice || t.exit ? 'Closed' : 'Open'),
+            currentPrice: t.currentPrice ?? null,
+          }));
+
+          // Merge: add imported trades, skip duplicates by id
+          setTrades(prev => {
+            const existingIds = new Set(prev.map(t => t.id));
+            const newTrades = normalized.filter(t => !existingIds.has(t.id));
+            const merged = [...prev, ...newTrades];
+            console.log(`[DiarioInversor] Import: ${prev.length} existing + ${newTrades.length} new = ${merged.length} total`);
+            return merged;
+          });
+          imported += normalized.length;
         }
         if (Array.isArray(wplData) && wplData.length > 0) {
-          setWeeklyPL(wplData);
+          setWeeklyPL(prev => {
+            const existingIds = new Set(prev.map(w => w.id));
+            const newEntries = wplData.filter((w: any) => !existingIds.has(w.id));
+            return [...prev, ...newEntries];
+          });
           imported += wplData.length;
         }
         if (Array.isArray(ptaData) && ptaData.length > 0) {
-          setPtaEntries(ptaData);
+          setPtaEntries(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const newEntries = ptaData.filter((p: any) => !existingIds.has(p.id));
+            return [...prev, ...newEntries];
+          });
           imported += ptaData.length;
         }
         if (typeof balData === 'number' && balData > 0) {
@@ -772,10 +827,10 @@ export default function DiarioInversorTab() {
         }
 
         if (imported > 0) {
-          alert(`Importados: ${imported} registros (trades + PL + PTA)`);
+          alert(`Importados: ${imported} registros. Los trades existentes se mantuvieron.`);
         } else {
-          const keys = Object.keys(data).join(', ');
-          alert(`No se encontraron datos válidos. Keys en archivo: ${keys}`);
+          const sample = JSON.stringify(Array.isArray(data) ? data[0] : data, null, 2).slice(0, 300);
+          alert(`No se encontraron datos válidos.\n\nPrimer elemento:\n${sample}`);
         }
       } catch (err) {
         alert('Error al importar datos — archivo JSON inválido');
