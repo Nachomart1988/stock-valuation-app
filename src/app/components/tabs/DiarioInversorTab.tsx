@@ -976,6 +976,15 @@ export default function DiarioInversorTab() {
           });
           imported += normalizedTrades.length;
 
+          // Auto-switch to the year of the first imported trade so they're visible
+          const firstDate = normalizedTrades.find(t => t.date)?.date;
+          if (firstDate) {
+            const importYear = new Date(firstDate).getFullYear();
+            if (!isNaN(importYear) && importYear >= 2000) {
+              setSelectedYear(importYear);
+            }
+          }
+
           const withSymbol = normalizedTrades.filter(t => t.symbol).length;
           const withPrice = normalizedTrades.filter(t => t.entryPrice > 0).length;
           showToast('success', `${normalizedTrades.length} trades importados (${withSymbol} con ticker, ${withPrice} con precio). Mapeados: ${mappedFields.join(', ')}`);
