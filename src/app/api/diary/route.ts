@@ -10,7 +10,11 @@ export async function GET() {
 
     const db = createAdminClient();
     if (!db) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const detail = !url ? 'missing SUPABASE_URL' : !key ? 'missing SERVICE_ROLE_KEY' : 'invalid URL';
+      console.error('[Diary API] DB client null —', detail);
+      return NextResponse.json({ error: `Database not configured (${detail})` }, { status: 503 });
     }
 
     const { data, error } = await db
@@ -45,7 +49,11 @@ export async function PUT(req: NextRequest) {
 
     const db = createAdminClient();
     if (!db) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const detail = !url ? 'missing SUPABASE_URL' : !key ? 'missing SERVICE_ROLE_KEY' : 'invalid URL';
+      console.error('[Diary API] DB client null —', detail);
+      return NextResponse.json({ error: `Database not configured (${detail})` }, { status: 503 });
     }
 
     const body = await req.json();
