@@ -746,11 +746,14 @@ export default function DiarioInversorTab() {
         const data = JSON.parse(e.target?.result as string);
         let imported = 0;
 
+        // If the file is a raw array, treat it as trades
+        const normalized = Array.isArray(data) ? { trades: data } : data;
+
         // Support both export format keys and DB format keys
-        const tradesData = data.trades;
-        const wplData = data.weeklyPL ?? data.weekly_pl;
-        const ptaData = data.ptaEntries ?? data.pta;
-        const balData = data.accountBalance ?? data.balance;
+        const tradesData = normalized.trades;
+        const wplData = normalized.weeklyPL ?? normalized.weekly_pl;
+        const ptaData = normalized.ptaEntries ?? normalized.pta;
+        const balData = normalized.accountBalance ?? normalized.balance;
 
         if (Array.isArray(tradesData) && tradesData.length > 0) {
           setTrades(tradesData);
