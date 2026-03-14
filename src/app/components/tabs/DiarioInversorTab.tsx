@@ -241,7 +241,7 @@ export default function DiarioInversorTab() {
         .then(res => res.json())
         .then(data => {
           if (data.error) throw new Error(data.error);
-          const dbTrades: Trade[] = data.trades ?? [];
+          const dbTrades: Trade[] = (data.trades ?? []).filter((t: Trade) => t && t.symbol);
           const dbWPL: WeeklyPL[] = data.weekly_pl ?? [];
           const dbPTA: PTAEntry[] = data.pta ?? [];
           const dbBalance: number = data.balance ?? 10000;
@@ -525,7 +525,7 @@ export default function DiarioInversorTab() {
       return;
     }
 
-    const symbols = [...new Set(openTradesNow.map(t => t.symbol.toUpperCase().trim()).filter(s => s.length > 0))];
+    const symbols = [...new Set(openTradesNow.map(t => (t.symbol || '').toUpperCase().trim()).filter(s => s.length > 0))];
     console.log('[DiarioInversor] Symbols to fetch:', symbols);
 
     if (symbols.length === 0) {
@@ -566,7 +566,7 @@ export default function DiarioInversorTab() {
 
       // Update trades with new prices
       setTrades(prev => prev.map(t => {
-        const upperSymbol = t.symbol.toUpperCase().trim();
+        const upperSymbol = (t.symbol || '').toUpperCase().trim();
         if (t.state === 'Open' && priceMap[upperSymbol] !== undefined) {
           return { ...t, currentPrice: priceMap[upperSymbol] };
         }
