@@ -175,6 +175,8 @@ export default function DiarioInversorTab() {
     tradesRef.current = trades;
   }, [trades]);
 
+  const [syncError, setSyncError] = useState<string | null>(null);
+
   // ── Save to DB (debounced 1.5s) ──────────────────────────────────
   const saveToDB = useCallback(async (
     t: Trade[], wpl: WeeklyPL[], pta: PTAEntry[], bal: number
@@ -183,17 +185,28 @@ export default function DiarioInversorTab() {
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     syncTimerRef.current = setTimeout(async () => {
       setSyncStatus('saving');
+      setSyncError(null);
       try {
         const res = await fetch('/api/diary', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ trades: t, weekly_pl: wpl, pta, balance: bal }),
         });
-        setSyncStatus(res.ok ? 'saved' : 'error');
-        setTimeout(() => setSyncStatus('idle'), 3000);
-      } catch {
+        if (res.ok) {
+          setSyncStatus('saved');
+          setTimeout(() => setSyncStatus('idle'), 3000);
+        } else {
+          const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+          const msg = errData.error || `HTTP ${res.status}`;
+          console.error('[DiarioInversor] Sync error:', msg);
+          setSyncError(msg);
+          setSyncStatus('error');
+        }
+      } catch (e: any) {
+        const msg = e?.message || 'Network error';
+        console.error('[DiarioInversor] Sync exception:', msg);
+        setSyncError(msg);
         setSyncStatus('error');
-        setTimeout(() => setSyncStatus('idle'), 4000);
       }
     }, 1500);
   }, [user]);
@@ -233,21 +246,22 @@ export default function DiarioInversorTab() {
           const dbPTA: PTAEntry[] = data.pta ?? [];
           const dbBalance: number = data.balance ?? 10000;
 
-          // If DB is empty, migrate localStorage data to DB
-          const localTrades = localStorage.getItem('diario_trades_v2');
-          if (dbTrades.length === 0 && localTrades) {
-            const migrated = JSON.parse(localTrades);
-            const migratedWPL = JSON.parse(localStorage.getItem('diario_weeklypl_v2') || '[]');
-            const migratedPTA = JSON.parse(localStorage.getItem('diario_pta_v2') || '[]');
-            const migratedBal = JSON.parse(localStorage.getItem('diario_balance') || '10000');
-            setTrades(migrated);
-            tradesRef.current = migrated;
-            setWeeklyPL(migratedWPL);
-            setPtaEntries(migratedPTA);
-            setAccountBalance(migratedBal);
-            // Push migrated data to DB
-            saveToDB(migrated, migratedWPL, migratedPTA, migratedBal);
-            console.log('[DiarioInversor] Migrated localStorage data to DB');
+          // Always compare DB vs localStorage — use whichever has MORE trades.
+          // This recovers data if a previous sync failed and localStorage has unsaved trades.
+          const localTrades: Trade[] = JSON.parse(localStorage.getItem('diario_trades_v2') || '[]');
+          const localWPL = JSON.parse(localStorage.getItem('diario_weeklypl_v2') || '[]');
+          const localPTA = JSON.parse(localStorage.getItem('diario_pta_v2') || '[]');
+          const localBal = JSON.parse(localStorage.getItem('diario_balance') || '10000');
+
+          if (localTrades.length > dbTrades.length) {
+            // localStorage has more trades — use it and re-sync to DB
+            console.warn(`[DiarioInversor] localStorage has ${localTrades.length} trades vs DB ${dbTrades.length} — using localStorage and re-syncing`);
+            setTrades(localTrades);
+            tradesRef.current = localTrades;
+            setWeeklyPL(localWPL);
+            setPtaEntries(localPTA);
+            setAccountBalance(localBal);
+            saveToDB(localTrades, localWPL, localPTA, localBal);
           } else {
             setTrades(dbTrades);
             tradesRef.current = dbTrades;
@@ -792,12 +806,15 @@ export default function DiarioInversorTab() {
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
               syncStatus === 'saving' ? 'bg-green-900/40 border-green-500/40 text-green-300' :
               syncStatus === 'saved'  ? 'bg-green-900/40 border-green-500/40 text-green-300' :
-              syncStatus === 'error'  ? 'bg-red-900/40 border-red-500/40 text-red-300' :
+              syncStatus === 'error'  ? 'bg-red-900/40 border-red-500/40 text-red-300 cursor-pointer' :
               'bg-black/60 border-white/[0.08] text-gray-400'
-            }`}>
+            }`}
+            title={syncStatus === 'error' && syncError ? syncError : undefined}
+            onClick={syncStatus === 'error' ? () => { setSyncStatus('idle'); setSyncError(null); } : undefined}
+            >
               {syncStatus === 'saving' && <><span className="animate-spin">⏳</span> Saving...</>}
               {syncStatus === 'saved'  && <>✅ Saved to cloud</>}
-              {syncStatus === 'error'  && <>❌ Sync error</>}
+              {syncStatus === 'error'  && <>❌ Sync error{syncError ? ` — ${syncError}` : ''} ✕</>}
               {syncStatus === 'idle'   && <>☁️ Cloud sync</>}
             </div>
           ) : (
