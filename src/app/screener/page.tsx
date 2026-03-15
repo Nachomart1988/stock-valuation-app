@@ -77,6 +77,34 @@ interface EPScanResult {
   } | null;
 }
 
+interface MABounceScanResult {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  currentPrice: number;
+  marketCap: number;
+  score: number;
+  bounceCount: number;
+  surgePct: number;
+  surgeWindow: string;
+  currentMa: number;
+  maDistancePct: number;
+  maPeriod: number;
+  avgQuality: number;
+  avgRecoveryPct: number;
+  narrative: string;
+  bestBounce: {
+    date: string;
+    bounce_low: number;
+    ma_value: number;
+    recovery_date: string;
+    recovery_price: number;
+    recovery_pct: number;
+    bars_to_recover: number;
+    quality: number;
+  } | null;
+}
+
 interface ScreenerFilters {
   marketCapMoreThan: string;
   marketCapLowerThan: string;
@@ -173,6 +201,22 @@ export default function ScreenerPage() {
     sector: '',
     minGap: '15',
     lookbackDays: '504',
+  });
+
+  // MA Bounce Scanner state (GODMODE only)
+  const [mabResults, setMabResults] = useState<MABounceScanResult[]>([]);
+  const [mabLoading, setMabLoading] = useState(false);
+  const [mabError, setMabError] = useState<string | null>(null);
+  const [mabStats, setMabStats] = useState({ total: 0, scanned: 0 });
+  const [mabFilters, setMabFilters] = useState({
+    priceMin: '5',
+    priceMax: '500',
+    marketCapMin: '500000000',
+    country: 'US',
+    sector: '',
+    minSurge: '50',
+    surgeLookbackMonths: '6',
+    maPeriod: '20',
   });
 
   const buildScreenerParams = (limit: number, offset: number) => {
@@ -329,6 +373,45 @@ export default function ScreenerPage() {
       setEpLoading(false);
     }
   }, [epFilters]);
+
+  const scanMABounce = useCallback(async () => {
+    setMabLoading(true);
+    setMabError(null);
+    setMabResults([]);
+    setMabStats({ total: 0, scanned: 0 });
+
+    try {
+      const params = new URLSearchParams({
+        priceMin: mabFilters.priceMin || '5',
+        priceMax: mabFilters.priceMax || '500',
+        marketCapMin: mabFilters.marketCapMin || '500000000',
+        country: mabFilters.country || 'US',
+        ...(mabFilters.sector ? { sector: mabFilters.sector } : {}),
+        minSurge: String(parseFloat(mabFilters.minSurge || '50') / 100),
+        surgeLookbackMonths: mabFilters.surgeLookbackMonths || '6',
+        maPeriod: mabFilters.maPeriod || '20',
+      });
+
+      const res = await fetch(`/api/ma-bounce-scan?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      setMabStats({ total: data.total || 0, scanned: data.scanned || 0 });
+
+      if (!data.results?.length) {
+        setMabError('No MA Bounce patterns detected in the current filter range.');
+      } else {
+        setMabResults(data.results);
+      }
+    } catch (err: any) {
+      setMabError(err.message || 'Error scanning for MA Bounces');
+    } finally {
+      setMabLoading(false);
+    }
+  }, [mabFilters]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -1028,6 +1111,261 @@ export default function ScreenerPage() {
                                   onClick={() => {
                                     localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'Episodic Pivot' }));
                                     window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'Episodic Pivot' }) }));
+                                  }}
+                                  className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
+                                  title="Add to Watchlist"
+                                >
+                                  + Watch
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ MA Bounce Scanner (GODMODE ONLY) ═══════ */}
+        {isGodMode && (
+          <div className="relative mb-8 rounded-xl border border-teal-500/20 bg-gray-900/60 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-teal-500/[0.03] to-transparent" />
+            <div className="relative p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-teal-300 flex items-center gap-2">
+                    <svg className="w-6 h-6 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17l4-4 4 4 4-8 4 4" />
+                    </svg>
+                    MA Bounce Scanner
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400 border border-teal-500/30 uppercase tracking-wider">
+                      God Mode
+                    </span>
+                  </h2>
+                  <p className="text-gray-400 text-sm mt-1 max-w-xl">
+                    Find surging stocks that repeatedly bounce off their moving average. Sorted by bounce count — the more bounces, the stronger the MA support.
+                  </p>
+                </div>
+                <button
+                  onClick={scanMABounce}
+                  disabled={mabLoading}
+                  className="shrink-0 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white font-bold rounded-xl shadow-lg shadow-teal-500/20 disabled:opacity-50 transition-all text-sm"
+                >
+                  {mabLoading ? (
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17l4-4 4 4 4-8 4 4" />
+                    </svg>
+                  )}
+                  {mabLoading ? 'Scanning...' : 'Scan Bounces'}
+                </button>
+              </div>
+
+              {/* MA Bounce Filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-teal-900/15">
+                <div>
+                  <label className="block text-[10px] text-teal-400/60 uppercase tracking-wider mb-1">Price Min</label>
+                  <input type="number" min="0" placeholder="5"
+                    value={mabFilters.priceMin}
+                    onChange={e => setMabFilters(f => ({ ...f, priceMin: e.target.value }))}
+                    disabled={mabLoading}
+                    className="w-full bg-gray-900/60 border border-teal-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-teal-400/60 uppercase tracking-wider mb-1">Price Max</label>
+                  <input type="number" min="0" placeholder="500"
+                    value={mabFilters.priceMax}
+                    onChange={e => setMabFilters(f => ({ ...f, priceMax: e.target.value }))}
+                    disabled={mabLoading}
+                    className="w-full bg-gray-900/60 border border-teal-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-teal-400/60 uppercase tracking-wider mb-1">Mkt Cap Min</label>
+                  <select
+                    value={mabFilters.marketCapMin}
+                    onChange={e => setMabFilters(f => ({ ...f, marketCapMin: e.target.value }))}
+                    disabled={mabLoading}
+                    className="w-full bg-gray-900/60 border border-teal-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500 disabled:opacity-50"
+                  >
+                    <option value="100000000">$100M+</option>
+                    <option value="500000000">$500M+</option>
+                    <option value="1000000000">$1B+</option>
+                    <option value="10000000000">$10B+</option>
+                    <option value="50000000000">$50B+</option>
+                    <option value="200000000000">$200B+</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-teal-400/60 uppercase tracking-wider mb-1">Country</label>
+                  <select
+                    value={mabFilters.country}
+                    onChange={e => setMabFilters(f => ({ ...f, country: e.target.value }))}
+                    disabled={mabLoading}
+                    className="w-full bg-gray-900/60 border border-teal-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500 disabled:opacity-50"
+                  >
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-teal-400/60 uppercase tracking-wider mb-1">Sector</label>
+                  <select
+                    value={mabFilters.sector}
+                    onChange={e => setMabFilters(f => ({ ...f, sector: e.target.value }))}
+                    disabled={mabLoading}
+                    className="w-full bg-gray-900/60 border border-teal-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500 disabled:opacity-50"
+                  >
+                    {SECTORS.map(s => <option key={s} value={s}>{s || 'All Sectors'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-teal-400/60 uppercase tracking-wider mb-1">Min Surge %</label>
+                  <input type="number" min="20" max="200" step="10" placeholder="50"
+                    value={mabFilters.minSurge}
+                    onChange={e => setMabFilters(f => ({ ...f, minSurge: e.target.value }))}
+                    disabled={mabLoading}
+                    className="w-full bg-gray-900/60 border border-teal-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-teal-400/60 uppercase tracking-wider mb-1">Surge Window</label>
+                  <select
+                    value={mabFilters.surgeLookbackMonths}
+                    onChange={e => setMabFilters(f => ({ ...f, surgeLookbackMonths: e.target.value }))}
+                    disabled={mabLoading}
+                    className="w-full bg-gray-900/60 border border-teal-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500 disabled:opacity-50"
+                  >
+                    <option value="3">Last 3 months</option>
+                    <option value="6">Last 6 months</option>
+                    <option value="9">Last 9 months</option>
+                    <option value="12">Last 12 months</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-teal-400/60 uppercase tracking-wider mb-1">MA Period</label>
+                  <select
+                    value={mabFilters.maPeriod}
+                    onChange={e => setMabFilters(f => ({ ...f, maPeriod: e.target.value }))}
+                    disabled={mabLoading}
+                    className="w-full bg-gray-900/60 border border-teal-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500 disabled:opacity-50"
+                  >
+                    <option value="20">MA 20</option>
+                    <option value="50">MA 50</option>
+                  </select>
+                </div>
+              </div>
+
+              {mabLoading && (
+                <div className="mt-4 flex items-center gap-2">
+                  <svg className="animate-spin w-4 h-4 text-teal-400" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  <span className="text-xs text-teal-400/70">Scanning for MA Bounce patterns across all filtered stocks... this may take 1-2 minutes</span>
+                  <div className="flex-1 h-1.5 bg-gray-900/40 rounded-full overflow-hidden ml-2">
+                    <div className="h-full bg-teal-500/50 animate-pulse rounded-full w-full" />
+                  </div>
+                </div>
+              )}
+
+              {!mabLoading && mabStats.total > 0 && (
+                <div className="mt-3 text-[11px] text-teal-400/50">
+                  {mabStats.total} stocks screened · {mabStats.scanned} analyzed for MA Bounce patterns
+                </div>
+              )}
+
+              {mabError && (
+                <div className="mt-4 bg-teal-900/20 border border-teal-700/30 rounded-xl px-4 py-3 text-teal-300 text-sm">
+                  {mabError}
+                </div>
+              )}
+
+              {mabResults.length > 0 && (
+                <div className="mt-5 rounded-xl border border-teal-500/15 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-teal-900/20 text-teal-400/80 text-xs uppercase tracking-wider">
+                          <th className="text-center px-3 py-2.5 w-10">#</th>
+                          <th className="text-left px-3 py-2.5">Ticker</th>
+                          <th className="text-left px-3 py-2.5">Company</th>
+                          <th className="text-center px-3 py-2.5">Bounces</th>
+                          <th className="text-center px-3 py-2.5">Score</th>
+                          <th className="text-right px-3 py-2.5">Surge %</th>
+                          <th className="text-right px-3 py-2.5 hidden sm:table-cell">Avg Recovery</th>
+                          <th className="text-right px-3 py-2.5 hidden md:table-cell">MA Dist</th>
+                          <th className="text-right px-3 py-2.5">Price</th>
+                          <th className="text-center px-3 py-2.5">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mabResults.map((r, i) => (
+                          <tr
+                            key={r.symbol}
+                            className={`border-t border-teal-900/15 hover:bg-teal-900/10 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-900/20'}`}
+                          >
+                            <td className="text-center px-3 py-2.5">
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                                i < 3 ? 'bg-teal-500/20 text-teal-300' : 'bg-gray-800 text-gray-400'
+                              }`}>
+                                {i + 1}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className="font-data font-bold text-teal-300">{r.symbol}</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-200 max-w-[160px] truncate">{r.companyName}</td>
+                            <td className="px-3 py-2.5 text-center">
+                              <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-black ${
+                                r.bounceCount >= 6 ? 'bg-emerald-500/20 text-emerald-300' :
+                                r.bounceCount >= 3 ? 'bg-yellow-500/20 text-yellow-300' :
+                                'bg-gray-700/50 text-gray-400'
+                              }`}>
+                                {r.bounceCount}x
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                                r.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' :
+                                r.score >= 40 ? 'bg-yellow-500/20 text-yellow-300' :
+                                'bg-gray-700/50 text-gray-400'
+                              }`}>
+                                {r.score}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data text-teal-200">
+                              {r.surgePct ? `+${(r.surgePct * 100).toFixed(0)}%` : '–'}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data text-gray-400 hidden sm:table-cell">
+                              {r.avgRecoveryPct ? `${r.avgRecoveryPct.toFixed(1)}%` : '–'}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data hidden md:table-cell">
+                              <span className={r.maDistancePct >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                                {r.maDistancePct >= 0 ? '+' : ''}{r.maDistancePct.toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-data text-gray-300">${r.currentPrice.toFixed(2)}</td>
+                            <td className="px-3 py-2.5 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                  className="px-3 py-1.5 bg-teal-500/15 hover:bg-teal-500/30 border border-teal-500/25 rounded-lg text-teal-300 text-xs font-semibold transition"
+                                >
+                                  Analyze
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'MA Bounce' }));
+                                    window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'MA Bounce' }) }));
                                   }}
                                   className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
                                   title="Add to Watchlist"

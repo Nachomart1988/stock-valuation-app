@@ -902,11 +902,11 @@ export default function WatchlistTab({ items, setItems }: WatchlistTabProps) {
           </div>
 
           {loadingChart ? (
-            <div className="h-[400px] flex items-center justify-center">
+            <div className="h-[600px] flex items-center justify-center">
               <div className="text-gray-500 text-sm animate-pulse">Loading chart...</div>
             </div>
           ) : candlestickConfig ? (
-            <div className="h-[400px]">
+            <div className="h-[600px]">
               <Chart
                 type="candlestick"
                 data={candlestickConfig.data as any}

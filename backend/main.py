@@ -84,6 +84,13 @@ except ImportError:
     EP_AVAILABLE = False
     get_ep_engine = None
 
+try:
+    from ma_bounce_engine import get_ma_bounce_engine
+    MA_BOUNCE_AVAILABLE = True
+except ImportError:
+    MA_BOUNCE_AVAILABLE = False
+    get_ma_bounce_engine = None
+
 app = FastAPI(
     title="Stock Analysis AI API",
     description="Neural Ensemble for Stock Valuation & Company Quality Assessment",
@@ -1805,6 +1812,7 @@ async def quantum_status():
         'stable_baselines3': SB3_AVAILABLE,
         'htf_engine': HTF_AVAILABLE,
         'ep_engine': EP_AVAILABLE,
+        'ma_bounce_engine': MA_BOUNCE_AVAILABLE,
     }
 
 
@@ -1867,6 +1875,37 @@ async def ep_detect(req: EPDetectionRequest):
         raise
     except Exception as e:
         print(f"[EP Detection] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MABounceRequest(BaseModel):
+    ticker: str
+    min_surge: float = 0.50
+    surge_lookback_months: int = 6
+    ma_period: int = 20
+
+
+@app.post("/ma-bounce/detect")
+async def ma_bounce_detect(req: MABounceRequest):
+    """MA Bounce detection — finds stocks that repeatedly bounce off MA20/MA50."""
+    if not MA_BOUNCE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="MA Bounce engine not available")
+    try:
+        from ma_bounce_engine import MABounceEngine
+        engine = MABounceEngine(
+            min_surge=req.min_surge,
+            surge_lookback_months=req.surge_lookback_months,
+            ma_period=req.ma_period,
+        )
+        result = await asyncio.to_thread(engine.analyze, req.ticker)
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return numpy_safe_response(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[MA Bounce] Error: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
