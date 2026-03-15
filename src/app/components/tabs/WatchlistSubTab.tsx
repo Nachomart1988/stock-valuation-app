@@ -192,12 +192,30 @@ export default function WatchlistTab({ items, setItems }: WatchlistTabProps) {
         processPending();
       }
     };
+
+    // Re-check pending items when tab/page becomes visible again
+    // (StorageEvent only fires cross-tab, so same-tab navigation needs this)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') processPending();
+    };
+    const handleFocus = () => processPending();
+
     window.addEventListener('storage', handleStorage);
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    // Poll localStorage every 2s to catch same-tab writes from screener
+    const pollInterval = setInterval(processPending, 2000);
 
     // Also check on mount for pending items
     processPending();
 
-    return () => window.removeEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(pollInterval);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

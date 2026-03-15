@@ -105,9 +105,43 @@ export async function GET(req: NextRequest) {
 
   // Sort by score descending, return top 25
   results.sort((a, b) => b.score - a.score);
+  const top25 = results.slice(0, 25);
+
+  // Fetch next earnings dates for top results
+  if (top25.length > 0) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + 3);
+      const to = futureDate.toISOString().split('T')[0];
+
+      const earningsRes = await fetch(
+        `${FMP_BASE}/stable/earning-calendar?from=${today}&to=${to}&apikey=${apiKey}`,
+        { cache: 'no-store' }
+      );
+      if (earningsRes.ok) {
+        const earningsData = await earningsRes.json();
+        if (Array.isArray(earningsData)) {
+          // Build map: symbol → nearest earnings date
+          const earningsMap = new Map<string, string>();
+          for (const e of earningsData) {
+            if (e.symbol && e.date) {
+              // Keep earliest date per symbol
+              if (!earningsMap.has(e.symbol) || e.date < earningsMap.get(e.symbol)!) {
+                earningsMap.set(e.symbol, e.date);
+              }
+            }
+          }
+          for (const r of top25) {
+            r.nextEarnings = earningsMap.get(r.symbol) || null;
+          }
+        }
+      }
+    } catch { /* earnings fetch is best-effort */ }
+  }
 
   return NextResponse.json({
-    results: results.slice(0, 25),
+    results: top25,
     total: valid.length,
     scanned,
   });

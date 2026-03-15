@@ -75,6 +75,7 @@ interface EPScanResult {
     accelerating: boolean;
     latest_growth: number;
   } | null;
+  nextEarnings: string | null;
 }
 
 interface MABounceScanResult {
@@ -1073,6 +1074,7 @@ export default function ScreenerPage() {
                           <th className="text-center px-3 py-2.5 hidden md:table-cell">Follow-Thru</th>
                           <th className="text-center px-3 py-2.5">Action</th>
                           <th className="text-right px-3 py-2.5">Price</th>
+                          <th className="text-center px-3 py-2.5 hidden lg:table-cell">Next Earnings</th>
                           <th className="text-center px-3 py-2.5">Go</th>
                         </tr>
                       </thead>
@@ -1134,6 +1136,18 @@ export default function ScreenerPage() {
                               )}
                             </td>
                             <td className="px-3 py-2.5 text-right font-data text-gray-300">${r.currentPrice.toFixed(2)}</td>
+                            <td className="px-3 py-2.5 text-center hidden lg:table-cell">
+                              {r.nextEarnings ? (() => {
+                                const days = Math.ceil((new Date(r.nextEarnings).getTime() - Date.now()) / 86400000);
+                                return (
+                                  <span className={`text-[10px] font-semibold font-data ${
+                                    days <= 7 ? 'text-red-400' : days <= 21 ? 'text-amber-400' : 'text-gray-400'
+                                  }`}>
+                                    {r.nextEarnings.slice(5)} <span className="text-gray-600">({days}d)</span>
+                                  </span>
+                                );
+                              })() : <span className="text-gray-700 text-[10px]">–</span>}
+                            </td>
                             <td className="px-3 py-2.5 text-center">
                               <div className="flex items-center justify-center gap-1.5">
                                 <button

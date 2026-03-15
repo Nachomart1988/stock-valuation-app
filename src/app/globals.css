@@ -498,6 +498,14 @@ body {
   animation: memoryFoamPress 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* ── Global Memory Foam on ALL buttons ── */
+button {
+  transition: transform 0.15s ease-out;
+}
+button:active:not(:disabled) {
+  animation: memoryFoamPress 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 
 /* ═══════════════════════════════════════════════════════
    LIGHT MODE
