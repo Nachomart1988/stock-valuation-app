@@ -143,47 +143,29 @@ export default function WatchlistTab({ items, setItems }: WatchlistTabProps) {
     setNotifPermission(perm);
   }, []);
 
-  // ── Listen for pending add from screener ─────────────────────
+  // ── Listen for pending add from screener (supports array of items) ──
   useEffect(() => {
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'watchlist_pending_add' && e.newValue) {
-        try {
-          const pending = JSON.parse(e.newValue);
-          if (pending.symbol) {
-            const newItem: WatchlistItem = {
-              id: generateId(),
-              symbol: pending.symbol.toUpperCase(),
-              companyName: pending.companyName || pending.symbol,
-              description: '',
-              strategy: pending.strategy || 'Others',
-              alertPrice: null,
-              alertDirection: 'above',
-              alertTriggered: false,
-              addedAt: new Date().toISOString(),
-            };
-            setItems(prev => {
-              if (prev.some(i => i.symbol === newItem.symbol)) return prev;
-              return [...prev, newItem];
-            });
-            setToast({ type: 'success', message: `${pending.symbol} added to watchlist` });
-            localStorage.removeItem('watchlist_pending_add');
-          }
-        } catch { /* ignore parse errors */ }
-      }
-    };
-    window.addEventListener('storage', handleStorage);
-
-    // Also check on mount for pending items
-    const pending = localStorage.getItem('watchlist_pending_add');
-    if (pending) {
+    const processPending = () => {
+      const raw = localStorage.getItem('watchlist_pending_add');
+      if (!raw) return;
       try {
-        const p = JSON.parse(pending);
-        if (p.symbol) {
-          const exists = items.some(i => i.symbol === p.symbol.toUpperCase());
-          if (!exists) {
-            const newItem: WatchlistItem = {
+        const parsed = JSON.parse(raw);
+        // Support both single object (legacy) and array format
+        const pendingList: any[] = Array.isArray(parsed) ? parsed : (parsed?.symbol ? [parsed] : []);
+        if (pendingList.length === 0) {
+          localStorage.removeItem('watchlist_pending_add');
+          return;
+        }
+        const added: string[] = [];
+        setItems(prev => {
+          let updated = [...prev];
+          for (const p of pendingList) {
+            if (!p.symbol) continue;
+            const sym = p.symbol.toUpperCase();
+            if (updated.some(i => i.symbol === sym)) continue;
+            updated.push({
               id: generateId(),
-              symbol: p.symbol.toUpperCase(),
+              symbol: sym,
               companyName: p.companyName || p.symbol,
               description: '',
               strategy: p.strategy || 'Others',
@@ -191,14 +173,29 @@ export default function WatchlistTab({ items, setItems }: WatchlistTabProps) {
               alertDirection: 'above',
               alertTriggered: false,
               addedAt: new Date().toISOString(),
-            };
-            setItems(prev => [...prev, newItem]);
-            setToast({ type: 'success', message: `${p.symbol} added to watchlist` });
+            });
+            added.push(sym);
           }
-          localStorage.removeItem('watchlist_pending_add');
+          return updated;
+        });
+        if (added.length > 0) {
+          setToast({ type: 'success', message: added.length === 1
+            ? `${added[0]} added to watchlist`
+            : `${added.length} stocks added to watchlist` });
         }
-      } catch { /* ignore */ }
-    }
+        localStorage.removeItem('watchlist_pending_add');
+      } catch { localStorage.removeItem('watchlist_pending_add'); }
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'watchlist_pending_add' && e.newValue) {
+        processPending();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    // Also check on mount for pending items
+    processPending();
 
     return () => window.removeEventListener('storage', handleStorage);
   // eslint-disable-next-line react-hooks/exhaustive-deps

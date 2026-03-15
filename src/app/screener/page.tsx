@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import Header from '@/app/components/Header';
@@ -218,6 +218,23 @@ export default function ScreenerPage() {
     surgeLookbackMonths: '6',
     maPeriod: '20',
   });
+
+  // ── Watchlist add helper (accumulates array in localStorage) ──
+  const [watchlistAdded, setWatchlistAdded] = useState<Set<string>>(new Set());
+  const foamTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const addToWatchlist = useCallback((symbol: string, companyName: string, strategy: string) => {
+    // Accumulate pending items as array
+    const existing = localStorage.getItem('watchlist_pending_add');
+    let pending: any[] = [];
+    try { if (existing) pending = JSON.parse(existing); } catch { pending = []; }
+    if (!Array.isArray(pending)) pending = [];
+    if (!pending.some((p: any) => p.symbol === symbol)) {
+      pending.push({ symbol, companyName, strategy });
+      localStorage.setItem('watchlist_pending_add', JSON.stringify(pending));
+    }
+    setWatchlistAdded(prev => new Set(prev).add(symbol));
+  }, []);
 
   const buildScreenerParams = (limit: number, offset: number) => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
@@ -603,14 +620,23 @@ export default function ScreenerPage() {
                                 {t('screener.analyze')}
                               </button>
                               <button
-                                onClick={() => {
-                                  localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: opp.symbol, companyName: opp.companyName, strategy: 'Others' }));
-                                  window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: opp.symbol, companyName: opp.companyName, strategy: 'Others' }) }));
+                                onClick={(e) => {
+                                  addToWatchlist(opp.symbol, opp.companyName, 'Others');
+                                  const btn = e.currentTarget;
+                                  btn.classList.remove('animate-foam-press');
+                                  void btn.offsetWidth;
+                                  btn.classList.add('animate-foam-press');
+                                  if (foamTimers.current[opp.symbol]) clearTimeout(foamTimers.current[opp.symbol]);
+                                  foamTimers.current[opp.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
                                 }}
-                                className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
+                                className={`px-2 py-1.5 border rounded-lg text-[10px] font-semibold transition-colors ${
+                                  watchlistAdded.has(opp.symbol)
+                                    ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                                }`}
                                 title="Add to Watchlist"
                               >
-                                + Watch
+                                {watchlistAdded.has(opp.symbol) ? 'Added' : '+ Watch'}
                               </button>
                             </div>
                           </td>
@@ -854,14 +880,23 @@ export default function ScreenerPage() {
                                   Analyze
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'HTF' }));
-                                    window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'HTF' }) }));
+                                  onClick={(e) => {
+                                    addToWatchlist(r.symbol, r.companyName, 'HTF');
+                                    const btn = e.currentTarget;
+                                    btn.classList.remove('animate-foam-press');
+                                    void btn.offsetWidth;
+                                    btn.classList.add('animate-foam-press');
+                                    if (foamTimers.current[r.symbol]) clearTimeout(foamTimers.current[r.symbol]);
+                                    foamTimers.current[r.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
                                   }}
-                                  className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
+                                  className={`px-2 py-1.5 border rounded-lg text-[10px] font-semibold transition-colors ${
+                                    watchlistAdded.has(r.symbol)
+                                      ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                      : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                                  }`}
                                   title="Add to Watchlist"
                                 >
-                                  + Watch
+                                  {watchlistAdded.has(r.symbol) ? 'Added' : '+ Watch'}
                                 </button>
                               </div>
                             </td>
@@ -1108,14 +1143,23 @@ export default function ScreenerPage() {
                                   Analyze
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'Episodic Pivot' }));
-                                    window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'Episodic Pivot' }) }));
+                                  onClick={(e) => {
+                                    addToWatchlist(r.symbol, r.companyName, 'Episodic Pivot');
+                                    const btn = e.currentTarget;
+                                    btn.classList.remove('animate-foam-press');
+                                    void btn.offsetWidth;
+                                    btn.classList.add('animate-foam-press');
+                                    if (foamTimers.current[r.symbol]) clearTimeout(foamTimers.current[r.symbol]);
+                                    foamTimers.current[r.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
                                   }}
-                                  className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
+                                  className={`px-2 py-1.5 border rounded-lg text-[10px] font-semibold transition-colors ${
+                                    watchlistAdded.has(r.symbol)
+                                      ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                      : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                                  }`}
                                   title="Add to Watchlist"
                                 >
-                                  + Watch
+                                  {watchlistAdded.has(r.symbol) ? 'Added' : '+ Watch'}
                                 </button>
                               </div>
                             </td>
@@ -1363,14 +1407,23 @@ export default function ScreenerPage() {
                                   Analyze
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'MA Bounce' }));
-                                    window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'MA Bounce' }) }));
+                                  onClick={(e) => {
+                                    addToWatchlist(r.symbol, r.companyName, 'MA Bounce');
+                                    const btn = e.currentTarget;
+                                    btn.classList.remove('animate-foam-press');
+                                    void btn.offsetWidth;
+                                    btn.classList.add('animate-foam-press');
+                                    if (foamTimers.current[r.symbol]) clearTimeout(foamTimers.current[r.symbol]);
+                                    foamTimers.current[r.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
                                   }}
-                                  className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
+                                  className={`px-2 py-1.5 border rounded-lg text-[10px] font-semibold transition-colors ${
+                                    watchlistAdded.has(r.symbol)
+                                      ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                      : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                                  }`}
                                   title="Add to Watchlist"
                                 >
-                                  + Watch
+                                  {watchlistAdded.has(r.symbol) ? 'Added' : '+ Watch'}
                                 </button>
                               </div>
                             </td>
@@ -1576,14 +1629,23 @@ export default function ScreenerPage() {
                             {t('screener.analyze')}
                           </button>
                           <button
-                            onClick={() => {
-                              localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: stock.symbol, companyName: stock.companyName, strategy: 'Others' }));
-                              window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: stock.symbol, companyName: stock.companyName, strategy: 'Others' }) }));
+                            onClick={(e) => {
+                              addToWatchlist(stock.symbol, stock.companyName, 'Others');
+                              const btn = e.currentTarget;
+                              btn.classList.remove('animate-foam-press');
+                              void btn.offsetWidth;
+                              btn.classList.add('animate-foam-press');
+                              if (foamTimers.current[stock.symbol]) clearTimeout(foamTimers.current[stock.symbol]);
+                              foamTimers.current[stock.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
                             }}
-                            className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
+                            className={`px-2 py-1.5 border rounded-lg text-[10px] font-semibold transition-colors ${
+                              watchlistAdded.has(stock.symbol)
+                                ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                            }`}
                             title="Add to Watchlist"
                           >
-                            + Watch
+                            {watchlistAdded.has(stock.symbol) ? 'Added' : '+ Watch'}
                           </button>
                         </div>
                       </td>
