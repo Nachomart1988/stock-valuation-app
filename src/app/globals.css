@@ -498,12 +498,9 @@ body {
   animation: memoryFoamPress 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* ── Global Memory Foam on ALL buttons ── */
+/* ── Global Memory Foam — SVG displacement filter applied via MemoryFoamProvider ── */
 button {
-  transition: transform 0.15s ease-out;
-}
-button:active:not(:disabled) {
-  animation: memoryFoamPress 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: box-shadow 0.3s ease-in-out;
 }
 
 

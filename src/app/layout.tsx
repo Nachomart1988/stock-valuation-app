@@ -5,6 +5,7 @@ import { LanguageProvider } from "@/i18n/LanguageContext";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 import ServiceWorkerRegistrar from "./components/ServiceWorkerRegistrar";
+import MemoryFoamProvider from "./components/MemoryFoamProvider";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import Script from "next/script";
@@ -128,6 +129,7 @@ export default function RootLayout({
               {children}
             </LanguageProvider>
           </ThemeProvider>
+          <MemoryFoamProvider />
           <ServiceWorkerRegistrar />
           {/* Vercel Analytics + Speed Insights */}
           <Analytics />
