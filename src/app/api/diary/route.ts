@@ -19,7 +19,7 @@ export async function GET() {
 
     const { data, error } = await db
       .from('diary_data')
-      .select('trades, weekly_pl, pta, balance')
+      .select('trades, weekly_pl, pta, balance, watchlist')
       .eq('user_id', userId)
       .single();
 
@@ -34,6 +34,7 @@ export async function GET() {
       weekly_pl: data?.weekly_pl ?? [],
       pta: data?.pta ?? [],
       balance: data?.balance ?? 10000,
+      watchlist: data?.watchlist ?? [],
     });
   } catch (e: any) {
     console.error('[Diary API] GET exception:', e.message);
@@ -57,7 +58,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { trades, weekly_pl, pta, balance } = body;
+    const { trades, weekly_pl, pta, balance, watchlist } = body;
 
     const { error } = await db
       .from('diary_data')
@@ -68,6 +69,7 @@ export async function PUT(req: NextRequest) {
           weekly_pl: weekly_pl ?? [],
           pta: pta ?? [],
           balance: balance ?? 10000,
+          watchlist: watchlist ?? [],
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id' }

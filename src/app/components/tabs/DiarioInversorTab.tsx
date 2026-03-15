@@ -6,6 +6,7 @@ import { Tab } from '@headlessui/react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useUser } from '@clerk/nextjs';
 import { fetchFmp } from '@/lib/fmpClient';
+import WatchlistTab from './WatchlistSubTab';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES - Estructura principal según especificaciones
@@ -108,6 +109,26 @@ interface PTAEntry {
   linkedTradeIds: string[];
 }
 
+// Watchlist Types
+type WatchlistStrategy = 'Episodic Pivot' | 'HTF' | 'Overextension' | 'Others';
+
+interface WatchlistItem {
+  id: string;
+  symbol: string;
+  description: string;
+  strategy: WatchlistStrategy;
+  alertPrice: number | null;
+  alertDirection: 'above' | 'below';
+  alertTriggered: boolean;
+  addedAt: string;
+  companyName: string;
+  // Live fields (runtime only)
+  currentPrice?: number | null;
+  volume?: number | null;
+  change?: number | null;
+  changePct?: number | null;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════════════════
@@ -159,6 +180,7 @@ export default function DiarioInversorTab() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [weeklyPL, setWeeklyPL] = useState<WeeklyPL[]>([]);
   const [ptaEntries, setPtaEntries] = useState<PTAEntry[]>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
 
   // UI States
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
@@ -180,7 +202,7 @@ export default function DiarioInversorTab() {
 
   // ── Save to DB (debounced 1.5s) ──────────────────────────────────
   const saveToDB = useCallback(async (
-    t: Trade[], wpl: WeeklyPL[], pta: PTAEntry[], bal: number
+    t: Trade[], wpl: WeeklyPL[], pta: PTAEntry[], bal: number, wl?: WatchlistItem[]
   ) => {
     if (!user) return;
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
@@ -191,7 +213,7 @@ export default function DiarioInversorTab() {
         const res = await fetch('/api/diary', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trades: t, weekly_pl: wpl, pta, balance: bal }),
+          body: JSON.stringify({ trades: t, weekly_pl: wpl, pta, balance: bal, watchlist: wl ?? [] }),
         });
         if (res.ok) {
           setSyncStatus('saved');
@@ -222,6 +244,7 @@ export default function DiarioInversorTab() {
         const savedWeeklyPL = localStorage.getItem('diario_weeklypl_v2');
         const savedPTA = localStorage.getItem('diario_pta_v2');
         const savedBalance = localStorage.getItem('diario_balance');
+        const savedWatchlist = localStorage.getItem('diario_watchlist_v2');
         if (savedTrades) {
           const p = JSON.parse(savedTrades);
           setTrades(p);
@@ -230,6 +253,7 @@ export default function DiarioInversorTab() {
         if (savedWeeklyPL) setWeeklyPL(JSON.parse(savedWeeklyPL));
         if (savedPTA) setPtaEntries(JSON.parse(savedPTA));
         if (savedBalance) setAccountBalance(JSON.parse(savedBalance));
+        if (savedWatchlist) setWatchlist(JSON.parse(savedWatchlist));
       } catch (e) {
         console.error('[DiarioInversor] localStorage load error:', e);
       }
@@ -246,6 +270,7 @@ export default function DiarioInversorTab() {
           const dbWPL: WeeklyPL[] = data.weekly_pl ?? [];
           const dbPTA: PTAEntry[] = data.pta ?? [];
           const dbBalance: number = data.balance ?? 10000;
+          const dbWatchlist: WatchlistItem[] = data.watchlist ?? [];
 
           // Always compare DB vs localStorage — use whichever has MORE trades.
           // This recovers data if a previous sync failed and localStorage has unsaved trades.
@@ -253,6 +278,7 @@ export default function DiarioInversorTab() {
           const localWPL = JSON.parse(localStorage.getItem('diario_weeklypl_v2') || '[]');
           const localPTA = JSON.parse(localStorage.getItem('diario_pta_v2') || '[]');
           const localBal = JSON.parse(localStorage.getItem('diario_balance') || '10000');
+          const localWatchlist = JSON.parse(localStorage.getItem('diario_watchlist_v2') || '[]');
 
           if (localTrades.length > dbTrades.length) {
             // localStorage has more trades — use it and re-sync to DB
@@ -262,13 +288,15 @@ export default function DiarioInversorTab() {
             setWeeklyPL(localWPL);
             setPtaEntries(localPTA);
             setAccountBalance(localBal);
-            saveToDB(localTrades, localWPL, localPTA, localBal);
+            setWatchlist(localWatchlist);
+            saveToDB(localTrades, localWPL, localPTA, localBal, localWatchlist);
           } else {
             setTrades(dbTrades);
             tradesRef.current = dbTrades;
             setWeeklyPL(dbWPL);
             setPtaEntries(dbPTA);
             setAccountBalance(dbBalance);
+            setWatchlist(dbWatchlist);
             console.log('[DiarioInversor] Loaded from DB:', dbTrades.length, 'trades');
           }
           setDataLoaded(true);
@@ -303,11 +331,16 @@ export default function DiarioInversorTab() {
     localStorage.setItem('diario_balance', JSON.stringify(accountBalance));
   }, [accountBalance, dataLoaded]);
 
+  useEffect(() => {
+    if (!dataLoaded) return;
+    localStorage.setItem('diario_watchlist_v2', JSON.stringify(watchlist));
+  }, [watchlist, dataLoaded]);
+
   // ── Save to DB whenever data changes (debounced) ─────────────────
   useEffect(() => {
     if (!dataLoaded || !user) return;
-    saveToDB(trades, weeklyPL, ptaEntries, accountBalance);
-  }, [trades, weeklyPL, ptaEntries, accountBalance, dataLoaded, user, saveToDB]);
+    saveToDB(trades, weeklyPL, ptaEntries, accountBalance, watchlist);
+  }, [trades, weeklyPL, ptaEntries, accountBalance, watchlist, dataLoaded, user, saveToDB]);
 
   // ═══════════════════════════════════════════════════════════════
   // CALCULATED VALUES - Desde tabla maestra
@@ -1099,7 +1132,7 @@ export default function DiarioInversorTab() {
       {/* Sub-tabs */}
       <Tab.Group>
         <Tab.List className="flex gap-2 bg-black/60 p-2 rounded-lg">
-          {['SWING', 'P&L', 'Portfolio', 'PTA'].map(tab => (
+          {['SWING', 'P&L', 'Portfolio', 'PTA', 'Watchlist'].map(tab => (
             <Tab
               key={tab}
               className={({ selected }) =>
@@ -1170,6 +1203,16 @@ export default function DiarioInversorTab() {
               setEntries={setPtaEntries}
               trades={yearTrades}
               createEmpty={createEmptyPTA}
+            />
+          </Tab.Panel>
+
+          {/* ═══════════════════════════════════════════════════════════════ */}
+          {/* WATCHLIST TAB */}
+          {/* ═══════════════════════════════════════════════════════════════ */}
+          <Tab.Panel>
+            <WatchlistTab
+              items={watchlist}
+              setItems={setWatchlist}
             />
           </Tab.Panel>
         </Tab.Panels>

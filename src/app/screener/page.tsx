@@ -512,12 +512,24 @@ export default function ScreenerPage() {
                             </span>
                           </td>
                           <td className="px-3 py-2.5 text-center">
-                            <button
-                              onClick={() => router.push(`/analizar?ticker=${opp.symbol}`)}
-                              className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/25 rounded-lg text-amber-300 text-xs font-semibold transition"
-                            >
-                              {t('screener.analyze')}
-                            </button>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => router.push(`/analizar?ticker=${opp.symbol}`)}
+                                className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/25 rounded-lg text-amber-300 text-xs font-semibold transition"
+                              >
+                                {t('screener.analyze')}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: opp.symbol, companyName: opp.companyName, strategy: 'Others' }));
+                                  window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: opp.symbol, companyName: opp.companyName, strategy: 'Others' }) }));
+                                }}
+                                className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
+                                title="Add to Watchlist"
+                              >
+                                + Watch
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -751,12 +763,24 @@ export default function ScreenerPage() {
                             </td>
                             <td className="px-3 py-2.5 text-right font-data text-gray-300">${r.currentPrice.toFixed(2)}</td>
                             <td className="px-3 py-2.5 text-center">
-                              <button
-                                onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
-                                className="px-3 py-1.5 bg-rose-500/15 hover:bg-rose-500/30 border border-rose-500/25 rounded-lg text-rose-300 text-xs font-semibold transition"
-                              >
-                                Analyze
-                              </button>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                  className="px-3 py-1.5 bg-rose-500/15 hover:bg-rose-500/30 border border-rose-500/25 rounded-lg text-rose-300 text-xs font-semibold transition"
+                                >
+                                  Analyze
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'HTF' }));
+                                    window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'HTF' }) }));
+                                  }}
+                                  className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
+                                  title="Add to Watchlist"
+                                >
+                                  + Watch
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -993,12 +1017,24 @@ export default function ScreenerPage() {
                             </td>
                             <td className="px-3 py-2.5 text-right font-data text-gray-300">${r.currentPrice.toFixed(2)}</td>
                             <td className="px-3 py-2.5 text-center">
-                              <button
-                                onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
-                                className="px-3 py-1.5 bg-violet-500/15 hover:bg-violet-500/30 border border-violet-500/25 rounded-lg text-violet-300 text-xs font-semibold transition"
-                              >
-                                Analyze
-                              </button>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                  className="px-3 py-1.5 bg-violet-500/15 hover:bg-violet-500/30 border border-violet-500/25 rounded-lg text-violet-300 text-xs font-semibold transition"
+                                >
+                                  Analyze
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'Episodic Pivot' }));
+                                    window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: r.symbol, companyName: r.companyName, strategy: 'Episodic Pivot' }) }));
+                                  }}
+                                  className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
+                                  title="Add to Watchlist"
+                                >
+                                  + Watch
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1194,12 +1230,24 @@ export default function ScreenerPage() {
                       <td className="px-4 py-3 text-gray-400 text-xs max-w-[140px] truncate">{stock.sector || '–'}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{stock.country || '–'}</td>
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => router.push(`/analizar?ticker=${stock.symbol}`)}
-                          className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs font-semibold transition"
-                        >
-                          {t('screener.analyze')}
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => router.push(`/analizar?ticker=${stock.symbol}`)}
+                            className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs font-semibold transition"
+                          >
+                            {t('screener.analyze')}
+                          </button>
+                          <button
+                            onClick={() => {
+                              localStorage.setItem('watchlist_pending_add', JSON.stringify({ symbol: stock.symbol, companyName: stock.companyName, strategy: 'Others' }));
+                              window.dispatchEvent(new StorageEvent('storage', { key: 'watchlist_pending_add', newValue: JSON.stringify({ symbol: stock.symbol, companyName: stock.companyName, strategy: 'Others' }) }));
+                            }}
+                            className="px-2 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 border border-cyan-500/20 rounded-lg text-cyan-400 text-[10px] font-semibold transition"
+                            title="Add to Watchlist"
+                          >
+                            + Watch
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
