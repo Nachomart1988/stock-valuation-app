@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { NarrativeText } from '@/app/components/NarrativeText';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -909,9 +910,7 @@ export default function MomentumTab({ ticker }: MomentumTabProps) {
           {result.narrative && (
             <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
               <h4 className="text-sm font-semibold text-gray-300 mb-3">{t('Narrative','Narrativa')}</h4>
-              <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">
-                {result.narrative}
-              </div>
+              <NarrativeText text={result.narrative} className="text-sm text-gray-300 leading-relaxed whitespace-pre-line" />
             </div>
           )}
 

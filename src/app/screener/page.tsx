@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import Header from '@/app/components/Header';
@@ -219,6 +219,35 @@ export default function ScreenerPage() {
     surgeLookbackMonths: '6',
     maPeriod: '20',
   });
+
+  // ── Persist scanner results in sessionStorage so they survive tab switches ──
+  const SS_KEY = 'screener_cache';
+
+  // Restore cached results on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SS_KEY);
+      if (!raw) return;
+      const c = JSON.parse(raw);
+      if (c.screenerResults?.length) { setScreenerResults(c.screenerResults); setScreenerPage(c.screenerPage ?? 0); }
+      if (c.topOpportunities?.length) { setTopOpportunities(c.topOpportunities); setPrismoStats(c.prismoStats ?? { total: 0, analyzed: 0 }); }
+      if (c.htfResults?.length) { setHtfResults(c.htfResults); setHtfStats(c.htfStats ?? { total: 0, scanned: 0 }); }
+      if (c.epResults?.length) { setEpResults(c.epResults); setEpStats(c.epStats ?? { total: 0, scanned: 0 }); }
+      if (c.mabResults?.length) { setMabResults(c.mabResults); setMabStats(c.mabStats ?? { total: 0, scanned: 0 }); }
+    } catch { /* ignore corrupt cache */ }
+  }, []);
+
+  // Save results whenever they change
+  useEffect(() => {
+    const cache = {
+      screenerResults, screenerPage,
+      topOpportunities, prismoStats,
+      htfResults, htfStats,
+      epResults, epStats,
+      mabResults, mabStats,
+    };
+    try { sessionStorage.setItem(SS_KEY, JSON.stringify(cache)); } catch { /* quota */ }
+  }, [screenerResults, screenerPage, topOpportunities, prismoStats, htfResults, htfStats, epResults, epStats, mabResults, mabStats]);
 
   // ── Watchlist add helper (accumulates array in localStorage) ──
   const [watchlistAdded, setWatchlistAdded] = useState<Set<string>>(new Set());

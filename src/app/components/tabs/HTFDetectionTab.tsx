@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
+import { NarrativeText } from '@/app/components/NarrativeText';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceArea, Cell, Area,
@@ -406,9 +407,7 @@ export default function HTFDetectionTab({ ticker }: HTFDetectionTabProps) {
             <h3 className="text-sm font-semibold text-gray-300 mb-3">
               {es ? 'Interpretación' : 'Interpretation'}
             </h3>
-            <div className="text-sm text-gray-300 whitespace-pre-line font-data leading-relaxed">
-              {pattern?.narrative || result.narrative}
-            </div>
+            <NarrativeText text={pattern?.narrative || result.narrative} className="text-sm text-gray-300 whitespace-pre-line font-data leading-relaxed" />
           </div>
 
           {/* Detailed metrics table */}

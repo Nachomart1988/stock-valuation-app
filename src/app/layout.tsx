@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://www.prismo.us"),
   title: "Prismo - Analisis de Acciones con IA Multimodelo",
   description: "El primer multimodelo de valuacion fully customizable. 20+ modelos de valuacion, Monte Carlo, analisis neural y mas. Inputs totalmente personalizables.",
-  keywords: "stock analysis, valuation models, DCF, DDM, Graham, Monte Carlo, stock valuation, investment analysis, Prismo",
+  keywords: "stock analysis, valuation models, DCF, DDM, Graham, Monte Carlo, stock valuation, investment analysis, Prismo, analisis de acciones, valuacion de acciones, intrinsic value calculator, stock screener, fair value stocks, AI stock analysis, modelos de valuacion, WACC calculator, stock analyzer, analisis fundamental",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/favicon.ico",
@@ -85,6 +85,12 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="es" suppressHydrationWarning>
+        <head>
+          <link rel="preconnect" href="https://financialmodelingprep.com" />
+          <link rel="dns-prefetch" href="https://financialmodelingprep.com" />
+          <link rel="preconnect" href="https://www.googletagmanager.com" />
+          <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+        </head>
         <body
           className={`${spaceGrotesk.variable} ${ibmPlexMono.variable} antialiased film-grain`}
         >
