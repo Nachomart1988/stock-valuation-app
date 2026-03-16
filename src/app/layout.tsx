@@ -37,9 +37,15 @@ export const metadata: Metadata = {
   keywords: "stock analysis, valuation models, DCF, DDM, Graham, Monte Carlo, stock valuation, investment analysis, Prismo, analisis de acciones, valuacion de acciones, intrinsic value calculator, stock screener, fair value stocks, AI stock analysis, modelos de valuacion, WACC calculator, stock analyzer, analisis fundamental",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
     shortcut: "/favicon.ico",
-    apple: "/favicon.ico",
+    apple: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
   },
   appleWebApp: {
     capable: true,
@@ -61,10 +67,11 @@ export const metadata: Metadata = {
     locale: "es_AR",
     images: [
       {
-        url: "/cover-prismo.jpg",
+        url: "https://www.prismo.us/cover-prismo.jpg",
         width: 1200,
         height: 630,
         alt: "Prismo - Analisis de Acciones con IA Multimodelo",
+        type: "image/jpeg",
       },
     ],
   },
@@ -73,7 +80,14 @@ export const metadata: Metadata = {
     title: "Prismo - Analisis de Acciones con IA Multimodelo",
     description: "20+ modelos de valuacion, Monte Carlo, analisis neural y clasificador hibrido. Todo personalizable.",
     site: "@prismo_us",
-    images: ["/cover-prismo.jpg"],
+    images: [
+      {
+        url: "https://www.prismo.us/cover-prismo.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Prismo - Analisis de Acciones con IA Multimodelo",
+      },
+    ],
   },
 };
 
