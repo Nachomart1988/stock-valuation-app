@@ -106,6 +106,23 @@ interface MABounceScanResult {
   } | null;
 }
 
+interface SqueezeScanResult {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  price: number;
+  marketCap: number;
+  floatShares: number;
+  volume: number;
+  avgVolume: number;
+  rotation: number;
+  triggerPrice: number;
+  triggeredAt: string;
+  squeezeTier: 'POWER' | 'EXTREME' | 'STRONG' | 'MODERATE';
+  squeezeScore: number;
+  volSurge: number;
+}
+
 interface ScreenerFilters {
   marketCapMoreThan: string;
   marketCapLowerThan: string;
@@ -220,6 +237,21 @@ export default function ScreenerPage() {
     maPeriod: '20',
   });
 
+  // PowerPlay Squeeze Scanner state (GODMODE only)
+  const [sqzResults, setSqzResults] = useState<SqueezeScanResult[]>([]);
+  const [sqzLoading, setSqzLoading] = useState(false);
+  const [sqzError, setSqzError] = useState<string | null>(null);
+  const [sqzStats, setSqzStats] = useState({ total: 0, scanned: 0 });
+  const [sqzFilters, setSqzFilters] = useState({
+    priceMin: '0.5',
+    priceMax: '50',
+    marketCapMax: '2000000000',
+    country: 'US',
+    sector: '',
+    minRotation: '8',
+    maxFloat: '100000000',
+  });
+
   // ── Persist scanner results in sessionStorage so they survive tab switches ──
   const SS_KEY = 'screener_cache';
 
@@ -234,6 +266,7 @@ export default function ScreenerPage() {
       if (c.htfResults?.length) { setHtfResults(c.htfResults); setHtfStats(c.htfStats ?? { total: 0, scanned: 0 }); }
       if (c.epResults?.length) { setEpResults(c.epResults); setEpStats(c.epStats ?? { total: 0, scanned: 0 }); }
       if (c.mabResults?.length) { setMabResults(c.mabResults); setMabStats(c.mabStats ?? { total: 0, scanned: 0 }); }
+      if (c.sqzResults?.length) { setSqzResults(c.sqzResults); setSqzStats(c.sqzStats ?? { total: 0, scanned: 0 }); }
     } catch { /* ignore corrupt cache */ }
   }, []);
 
@@ -245,9 +278,10 @@ export default function ScreenerPage() {
       htfResults, htfStats,
       epResults, epStats,
       mabResults, mabStats,
+      sqzResults, sqzStats,
     };
     try { sessionStorage.setItem(SS_KEY, JSON.stringify(cache)); } catch { /* quota */ }
-  }, [screenerResults, screenerPage, topOpportunities, prismoStats, htfResults, htfStats, epResults, epStats, mabResults, mabStats]);
+  }, [screenerResults, screenerPage, topOpportunities, prismoStats, htfResults, htfStats, epResults, epStats, mabResults, mabStats, sqzResults, sqzStats]);
 
   // ── Watchlist add helper (accumulates array in localStorage) ──
   const [watchlistAdded, setWatchlistAdded] = useState<Set<string>>(new Set());
@@ -459,6 +493,44 @@ export default function ScreenerPage() {
       setMabLoading(false);
     }
   }, [mabFilters]);
+
+  const scanSqueeze = useCallback(async () => {
+    setSqzLoading(true);
+    setSqzError(null);
+    setSqzResults([]);
+    setSqzStats({ total: 0, scanned: 0 });
+
+    try {
+      const params = new URLSearchParams({
+        priceMin: sqzFilters.priceMin || '0.5',
+        priceMax: sqzFilters.priceMax || '50',
+        marketCapMax: sqzFilters.marketCapMax || '2000000000',
+        country: sqzFilters.country || 'US',
+        ...(sqzFilters.sector ? { sector: sqzFilters.sector } : {}),
+        minRotation: sqzFilters.minRotation || '8',
+        maxFloat: sqzFilters.maxFloat || '100000000',
+      });
+
+      const res = await fetch(`/api/squeeze-scan?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      setSqzStats({ total: data.total || 0, scanned: data.scanned || 0 });
+
+      if (!data.results?.length) {
+        setSqzError('No squeeze candidates detected in the current filter range.');
+      } else {
+        setSqzResults(data.results);
+      }
+    } catch (err: any) {
+      setSqzError(err.message || 'Error scanning for squeezes');
+    } finally {
+      setSqzLoading(false);
+    }
+  }, [sqzFilters]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -1474,6 +1546,283 @@ export default function ScreenerPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ PowerPlay Squeeze Scanner (GODMODE ONLY) ═══════ */}
+        {isGodMode && (
+          <div className="relative mb-8 rounded-xl border border-fuchsia-500/20 bg-gray-900/60 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-fuchsia-500/[0.04] via-purple-500/[0.02] to-transparent" />
+            <div className="relative p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-fuchsia-300 flex items-center gap-2">
+                    <svg className="w-6 h-6 text-fuchsia-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                    PowerPlay Squeeze Scanner
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30 uppercase tracking-wider">
+                      God Mode
+                    </span>
+                  </h2>
+                  <p className="text-gray-400 text-sm mt-1 max-w-xl">
+                    Detect low-float stocks with massive volume rotation — the hallmark of a short squeeze or momentum squeeze in progress.
+                  </p>
+                </div>
+                <button
+                  onClick={scanSqueeze}
+                  disabled={sqzLoading}
+                  className="shrink-0 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-600 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg shadow-fuchsia-500/20 disabled:opacity-50 transition-all text-sm"
+                >
+                  {sqzLoading ? (
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                  )}
+                  {sqzLoading ? 'Scanning...' : 'Scan Squeezes'}
+                </button>
+              </div>
+
+              {/* Squeeze Filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-fuchsia-900/15">
+                <div>
+                  <label className="block text-[10px] text-fuchsia-400/60 uppercase tracking-wider mb-1">Price Min</label>
+                  <input type="number" min="0" step="0.1" placeholder="0.5"
+                    value={sqzFilters.priceMin}
+                    onChange={e => setSqzFilters(f => ({ ...f, priceMin: e.target.value }))}
+                    disabled={sqzLoading}
+                    className="w-full bg-gray-900/60 border border-fuchsia-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-fuchsia-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-fuchsia-400/60 uppercase tracking-wider mb-1">Price Max</label>
+                  <input type="number" min="0" placeholder="50"
+                    value={sqzFilters.priceMax}
+                    onChange={e => setSqzFilters(f => ({ ...f, priceMax: e.target.value }))}
+                    disabled={sqzLoading}
+                    className="w-full bg-gray-900/60 border border-fuchsia-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-fuchsia-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-fuchsia-400/60 uppercase tracking-wider mb-1">Mkt Cap Max</label>
+                  <select
+                    value={sqzFilters.marketCapMax}
+                    onChange={e => setSqzFilters(f => ({ ...f, marketCapMax: e.target.value }))}
+                    disabled={sqzLoading}
+                    className="w-full bg-gray-900/60 border border-fuchsia-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-fuchsia-500 disabled:opacity-50"
+                  >
+                    <option value="500000000">≤ $500M</option>
+                    <option value="1000000000">≤ $1B</option>
+                    <option value="2000000000">≤ $2B</option>
+                    <option value="5000000000">≤ $5B</option>
+                    <option value="10000000000">≤ $10B</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-fuchsia-400/60 uppercase tracking-wider mb-1">Max Float</label>
+                  <select
+                    value={sqzFilters.maxFloat}
+                    onChange={e => setSqzFilters(f => ({ ...f, maxFloat: e.target.value }))}
+                    disabled={sqzLoading}
+                    className="w-full bg-gray-900/60 border border-fuchsia-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-fuchsia-500 disabled:opacity-50"
+                  >
+                    <option value="10000000">≤ 10M</option>
+                    <option value="25000000">≤ 25M</option>
+                    <option value="50000000">≤ 50M</option>
+                    <option value="100000000">≤ 100M</option>
+                    <option value="250000000">≤ 250M</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-fuchsia-400/60 uppercase tracking-wider mb-1">Min Rotation</label>
+                  <select
+                    value={sqzFilters.minRotation}
+                    onChange={e => setSqzFilters(f => ({ ...f, minRotation: e.target.value }))}
+                    disabled={sqzLoading}
+                    className="w-full bg-gray-900/60 border border-fuchsia-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-fuchsia-500 disabled:opacity-50"
+                  >
+                    <option value="5">≥ 5x</option>
+                    <option value="8">≥ 8x</option>
+                    <option value="10">≥ 10x</option>
+                    <option value="15">≥ 15x</option>
+                    <option value="20">≥ 20x</option>
+                    <option value="30">≥ 30x</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-fuchsia-400/60 uppercase tracking-wider mb-1">Country</label>
+                  <select
+                    value={sqzFilters.country}
+                    onChange={e => setSqzFilters(f => ({ ...f, country: e.target.value }))}
+                    disabled={sqzLoading}
+                    className="w-full bg-gray-900/60 border border-fuchsia-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-fuchsia-500 disabled:opacity-50"
+                  >
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-fuchsia-400/60 uppercase tracking-wider mb-1">Sector</label>
+                  <select
+                    value={sqzFilters.sector}
+                    onChange={e => setSqzFilters(f => ({ ...f, sector: e.target.value }))}
+                    disabled={sqzLoading}
+                    className="w-full bg-gray-900/60 border border-fuchsia-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-fuchsia-500 disabled:opacity-50"
+                  >
+                    {SECTORS.map(s => <option key={s} value={s}>{s || 'All Sectors'}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {sqzLoading && (
+                <div className="mt-4 flex items-center gap-2">
+                  <svg className="animate-spin w-4 h-4 text-fuchsia-400" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  <span className="text-xs text-fuchsia-400/70">Scanning for squeeze candidates — fetching float + volume data... this may take 2-3 minutes</span>
+                  <div className="flex-1 h-1.5 bg-gray-900/40 rounded-full overflow-hidden ml-2">
+                    <div className="h-full bg-fuchsia-500/50 animate-pulse rounded-full w-full" />
+                  </div>
+                </div>
+              )}
+
+              {!sqzLoading && sqzStats.total > 0 && (
+                <div className="mt-3 text-[11px] text-fuchsia-400/50">
+                  {sqzStats.total} stocks screened · {sqzStats.scanned} analyzed for squeeze rotation
+                </div>
+              )}
+
+              {sqzError && (
+                <div className="mt-4 bg-fuchsia-900/20 border border-fuchsia-700/30 rounded-xl px-4 py-3 text-fuchsia-300 text-sm">
+                  {sqzError}
+                </div>
+              )}
+
+              {sqzResults.length > 0 && (
+                <div className="mt-5 rounded-xl border border-fuchsia-500/15 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-fuchsia-900/20 text-fuchsia-400/80 text-xs uppercase tracking-wider">
+                          <th className="text-left px-3 py-2.5">Symbol</th>
+                          <th className="text-right px-3 py-2.5">Float</th>
+                          <th className="text-center px-3 py-2.5">Rotation</th>
+                          <th className="text-right px-3 py-2.5">Trigger Price</th>
+                          <th className="text-left px-3 py-2.5 hidden sm:table-cell">Triggered At</th>
+                          <th className="text-center px-3 py-2.5">Squeeze Score</th>
+                          <th className="text-center px-3 py-2.5">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sqzResults.map((r) => {
+                          const rotPct = Math.min(100, (r.rotation / 50) * 100);
+                          return (
+                            <tr
+                              key={r.symbol}
+                              className="border-t border-fuchsia-900/15 hover:bg-fuchsia-900/10 transition-colors"
+                            >
+                              <td className="px-3 py-3">
+                                <button
+                                  onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                  className="font-data font-bold text-fuchsia-300 hover:text-fuchsia-200 transition-colors flex items-center gap-1"
+                                >
+                                  <svg className="w-3 h-3 text-fuchsia-500/60" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                                  </svg>
+                                  {r.symbol}
+                                </button>
+                              </td>
+                              <td className="px-3 py-3 text-right font-data text-gray-300">
+                                {r.floatShares >= 1e9 ? `${(r.floatShares / 1e9).toFixed(1)}B` :
+                                 r.floatShares >= 1e6 ? `${(r.floatShares / 1e6).toFixed(1)}M` :
+                                 r.floatShares >= 1e3 ? `${(r.floatShares / 1e3).toFixed(0)}K` :
+                                 String(r.floatShares)}
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-data font-bold text-fuchsia-300 min-w-[50px] text-right">
+                                    {r.rotation.toFixed(1)}x
+                                  </span>
+                                  <div className="flex-1 h-2.5 bg-gray-800 rounded-full overflow-hidden min-w-[60px]">
+                                    <div
+                                      className="h-full rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-400 transition-all"
+                                      style={{ width: `${rotPct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-right font-data text-gray-200">
+                                ${r.triggerPrice.toFixed(2)}
+                              </td>
+                              <td className="px-3 py-3 text-left text-gray-400 text-xs hidden sm:table-cell font-data">
+                                {r.triggeredAt}
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-black tracking-wider ${
+                                  r.squeezeTier === 'POWER'
+                                    ? 'bg-fuchsia-500/25 text-fuchsia-300 border border-fuchsia-400/40 shadow-[0_0_12px_rgba(217,70,239,0.3)]'
+                                    : r.squeezeTier === 'EXTREME'
+                                    ? 'bg-purple-500/25 text-purple-300 border border-purple-400/40'
+                                    : r.squeezeTier === 'STRONG'
+                                    ? 'bg-violet-500/20 text-violet-300 border border-violet-400/30'
+                                    : 'bg-gray-700/40 text-gray-300 border border-gray-600/30'
+                                }`}>
+                                  {r.squeezeTier}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                    className="px-3 py-1.5 bg-fuchsia-500/15 hover:bg-fuchsia-500/30 border border-fuchsia-500/25 rounded-lg text-fuchsia-300 text-xs font-semibold transition"
+                                  >
+                                    Analyze
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      addToWatchlist(r.symbol, r.companyName, 'Squeeze');
+                                      const btn = e.currentTarget;
+                                      btn.classList.remove('animate-foam-press');
+                                      void btn.offsetWidth;
+                                      btn.classList.add('animate-foam-press');
+                                      if (foamTimers.current[r.symbol]) clearTimeout(foamTimers.current[r.symbol]);
+                                      foamTimers.current[r.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
+                                    }}
+                                    className={`px-2 py-1.5 border rounded-lg text-[10px] font-semibold transition-colors ${
+                                      watchlistAdded.has(r.symbol)
+                                        ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                        : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                                    }`}
+                                    title="Add to Watchlist"
+                                  >
+                                    {watchlistAdded.has(r.symbol) ? 'Added' : '+ Watch'}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-fuchsia-900/15">
+                    <span className="text-[11px] text-fuchsia-400/50">
+                      {sqzResults.length} squeeze{sqzResults.length !== 1 ? 's' : ''} detected
+                    </span>
+                    <span className="text-[10px] text-gray-600">
+                      Rows per Page: {sqzResults.length} · 1 - {sqzResults.length} of {sqzResults.length}
+                    </span>
                   </div>
                 </div>
               )}
