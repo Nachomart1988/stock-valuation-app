@@ -581,13 +581,13 @@ export default function CalculosTab({
         <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
           <thead className="bg-black/60">
             <tr>
-              <th className="px-4 py-4 text-left text-gray-200 font-bold sticky left-0 bg-black/60 z-10 min-w-[180px]">
+              <th className="px-3 sm:px-4 py-3 sm:py-4 text-left text-gray-200 font-bold sticky left-0 bg-black/60 z-10 min-w-[140px] sm:min-w-[180px] text-xs sm:text-sm">
                 {t('calculosTab.projectionTable')}
               </th>
               {projections.map((p: Projection) => (
                 <th
                   key={p.year}
-                  className={`px-4 py-4 text-center font-bold min-w-[120px] ${p.isProjected ? 'text-green-300 bg-green-900/10' : 'text-gray-200'}`}
+                  className={`px-3 sm:px-4 py-3 sm:py-4 text-center font-bold min-w-[90px] sm:min-w-[120px] text-xs sm:text-sm ${p.isProjected ? 'text-green-300 bg-green-900/10' : 'text-gray-200'}`}
                 >
                   {p.year}{p.isProjected ? 'E' : ''}
                 </th>

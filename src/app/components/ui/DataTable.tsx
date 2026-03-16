@@ -56,14 +56,14 @@ export function DataTable({
   };
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-green-900/20">
+    <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 rounded-xl border border-green-900/20">
       <table className="min-w-full">
         <thead className={`bg-black/60 backdrop-blur-sm ${stickyHeader ? 'sticky top-0 z-10' : ''}`}>
           <tr>
             {columns.map((column) => (
               <th
                 key={column.key}
-                className={`px-6 py-4 text-sm font-semibold text-green-400/80 border-b border-green-900/20 ${getAlignClass(column.align)}`}
+                className={`px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-semibold text-green-400/80 border-b border-green-900/20 whitespace-nowrap ${getAlignClass(column.align)}`}
               >
                 {column.label}
               </th>
@@ -84,10 +84,10 @@ export function DataTable({
                 {columns.map((column, colIndex) => (
                   <td
                     key={`${rowIndex}-${column.key}`}
-                    className={`px-6 py-4 ${getAlignClass(column.align)}`}
+                    className={`px-3 sm:px-6 py-3 sm:py-4 ${getAlignClass(column.align)}`}
                   >
                     <div className="flex items-center gap-2 justify-end">
-                      <span className="font-data text-neutral-100">
+                      <span className="font-data text-neutral-100 text-xs sm:text-sm">
                         {formatValue(row[column.key], column.format)}
                       </span>
                       {showTrends && colIndex > 0 && rowIndex < data.length - 1 && (

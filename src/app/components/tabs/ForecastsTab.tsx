@@ -104,11 +104,11 @@ export default function ForecastsTab({ ticker }: { ticker: string }) {
         <table className="min-w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
           <thead className="bg-black/60">
             <tr>
-              <th className="px-6 py-4 text-left font-bold text-gray-200 sticky left-0 bg-black/60 z-10 min-w-[220px]">
+              <th className="px-3 sm:px-6 py-3 sm:py-4 text-left font-bold text-gray-200 sticky left-0 bg-black/60 z-10 min-w-[150px] sm:min-w-[220px] text-xs sm:text-sm">
                 {t('forecastsTab.metric')}
               </th>
               {years.map(year => (
-                <th key={year} className="px-6 py-4 text-center font-bold text-gray-200 min-w-[140px]">
+                <th key={year} className="px-3 sm:px-6 py-3 sm:py-4 text-center font-bold text-gray-200 min-w-[100px] sm:min-w-[140px] text-xs sm:text-sm">
                   {year}
                 </th>
               ))}

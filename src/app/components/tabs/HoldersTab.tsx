@@ -831,32 +831,32 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-white/[0.06]">
-                      <th className="py-3 px-3 text-gray-400 font-semibold">Investor</th>
-                      <th className="py-3 px-3 text-gray-400 font-semibold text-right">Shares</th>
-                      <th className="py-3 px-3 text-gray-400 font-semibold text-right">Change %</th>
-                      <th className="py-3 px-3 text-gray-400 font-semibold text-right">Ownership %</th>
-                      <th className="py-3 px-3 text-gray-400 font-semibold text-right">Avg Price</th>
-                      <th className="py-3 px-3 text-gray-400 font-semibold text-right">Performance</th>
-                      <th className="py-3 px-3 text-gray-400 font-semibold text-right">Holding (Q)</th>
-                      <th className="py-3 px-3 text-gray-400 font-semibold text-center">Status</th>
+                      <th className="py-3 px-3 text-gray-400 font-semibold text-xs sm:text-sm">Investor</th>
+                      <th className="py-3 px-3 text-gray-400 font-semibold text-right text-xs sm:text-sm">Shares</th>
+                      <th className="py-3 px-3 text-gray-400 font-semibold text-right text-xs sm:text-sm">Change %</th>
+                      <th className="py-3 px-3 text-gray-400 font-semibold text-right text-xs sm:text-sm hidden sm:table-cell">Ownership %</th>
+                      <th className="py-3 px-3 text-gray-400 font-semibold text-right text-xs sm:text-sm hidden md:table-cell">Avg Price</th>
+                      <th className="py-3 px-3 text-gray-400 font-semibold text-right text-xs sm:text-sm hidden md:table-cell">Performance</th>
+                      <th className="py-3 px-3 text-gray-400 font-semibold text-right text-xs sm:text-sm hidden lg:table-cell">Holding (Q)</th>
+                      <th className="py-3 px-3 text-gray-400 font-semibold text-center text-xs sm:text-sm">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {institutionalAnalytics.map((holder, idx) => (
                       <tr key={idx} className="border-b border-green-900/20 hover:bg-black/40">
-                        <td className="py-3 px-3 text-gray-200 font-medium max-w-[200px] truncate" title={holder.investorName}>
+                        <td className="py-3 px-3 text-gray-200 font-medium max-w-[140px] sm:max-w-[200px] truncate text-xs sm:text-sm" title={holder.investorName}>
                           {holder.investorName}
                         </td>
-                        <td className="py-3 px-3 text-right text-gray-100">{formatShares(holder.shares)}</td>
-                        <td className={`py-3 px-3 text-right ${getChangeColor(holder.changeInSharesPercentage)}`}>
+                        <td className="py-3 px-3 text-right text-gray-100 text-xs sm:text-sm">{formatShares(holder.shares)}</td>
+                        <td className={`py-3 px-3 text-right text-xs sm:text-sm ${getChangeColor(holder.changeInSharesPercentage)}`}>
                           {holder.changeInSharesPercentage > 0 ? '+' : ''}{formatPercent(holder.changeInSharesPercentage)}
                         </td>
-                        <td className="py-3 px-3 text-right text-green-400">{formatPercent(holder.ownership)}</td>
-                        <td className="py-3 px-3 text-right text-gray-300">${holder.avgPricePaid?.toFixed(2) || 'N/A'}</td>
-                        <td className={`py-3 px-3 text-right ${getChangeColor(holder.performancePercentage)}`}>
+                        <td className="py-3 px-3 text-right text-green-400 text-xs sm:text-sm hidden sm:table-cell">{formatPercent(holder.ownership)}</td>
+                        <td className="py-3 px-3 text-right text-gray-300 text-xs sm:text-sm hidden md:table-cell">${holder.avgPricePaid?.toFixed(2) || 'N/A'}</td>
+                        <td className={`py-3 px-3 text-right text-xs sm:text-sm hidden md:table-cell ${getChangeColor(holder.performancePercentage)}`}>
                           {holder.performancePercentage > 0 ? '+' : ''}{formatPercent(holder.performancePercentage)}
                         </td>
-                        <td className="py-3 px-3 text-right text-gray-400">{holder.holdingPeriod || 'N/A'}</td>
+                        <td className="py-3 px-3 text-right text-gray-400 text-xs sm:text-sm hidden lg:table-cell">{holder.holdingPeriod || 'N/A'}</td>
                         <td className="py-3 px-3 text-center">
                           {holder.isNew && (
                             <span className="px-2 py-1 bg-green-600 text-white text-xs rounded-full">NEW</span>

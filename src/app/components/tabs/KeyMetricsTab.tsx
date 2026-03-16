@@ -1525,8 +1525,8 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
       <div className="bg-gradient-to-r from-black/60 to-black/80 p-6 rounded-xl border border-white/[0.08]">
         <div className="flex flex-wrap justify-between items-start gap-6">
           {/* Summary Score */}
-          <div className="flex-1 min-w-[250px]">
-            <h4 className="text-lg font-semibold text-gray-200 mb-3">📊 Benchmark Summary</h4>
+          <div className="flex-1 min-w-0 sm:min-w-[250px]">
+            <h4 className="text-base sm:text-lg font-semibold text-gray-200 mb-3">Benchmark Summary</h4>
             <div className="flex gap-4">
               <div className="text-center bg-green-900/30 px-4 py-3 rounded-lg border border-green-600">
                 <div className="text-3xl font-bold text-green-400">{benchmarkSummary.good}</div>
@@ -1553,7 +1553,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
           </div>
 
           {/* Legend */}
-          <div className="flex-1 min-w-[200px]">
+          <div className="flex-1 min-w-0 sm:min-w-[200px]">
             <h4 className="text-lg font-semibold text-gray-200 mb-3">Legend</h4>
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
@@ -1996,11 +1996,11 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
               <table className="w-full border border-white/[0.06] rounded-xl overflow-hidden shadow-lg">
                 <thead className="bg-emerald-900/30">
                   <tr>
-                    <th className="px-6 py-4 text-left text-gray-200 font-bold text-base sticky left-0 bg-emerald-900/30 z-10 min-w-[240px]">
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 text-left text-gray-200 font-bold text-xs sm:text-base sticky left-0 bg-emerald-900/30 z-10 min-w-[160px] sm:min-w-[240px]">
                       Component
                     </th>
                     {ownerEarnings.slice(0, 10).map((row: any, i: number) => (
-                      <th key={i} className="px-6 py-4 text-center font-bold text-base min-w-[100px] text-gray-200">
+                      <th key={i} className="px-3 sm:px-6 py-3 sm:py-4 text-center font-bold text-xs sm:text-base min-w-[80px] sm:min-w-[100px] text-gray-200">
                         {row.date ? new Date(row.date).getFullYear() : `Period ${i + 1}`}
                       </th>
                     ))}
