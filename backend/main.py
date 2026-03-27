@@ -91,6 +91,20 @@ except ImportError:
     MA_BOUNCE_AVAILABLE = False
     get_ma_bounce_engine = None
 
+try:
+    from mcp_integration_engine import get_mcp_engine
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    get_mcp_engine = None
+
+try:
+    from strategy_backtest_engine import get_strategy_backtest_engine
+    BACKTEST_AVAILABLE = True
+except ImportError:
+    BACKTEST_AVAILABLE = False
+    get_strategy_backtest_engine = None
+
 app = FastAPI(
     title="Stock Analysis AI API",
     description="Neural Ensemble for Stock Valuation & Company Quality Assessment",
@@ -1906,6 +1920,56 @@ async def ma_bounce_detect(req: MABounceRequest):
         raise
     except Exception as e:
         print(f"[MA Bounce] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── MCP Integration ─────────────────────────────────────────────
+
+@app.get("/mcp/status")
+async def mcp_status():
+    """MCP integration status and available tools."""
+    if not MCP_AVAILABLE:
+        raise HTTPException(status_code=503, detail="MCP engine not available")
+    engine = get_mcp_engine()
+    return {
+        "status": engine.get_status(),
+        "tools": engine.get_available_tools(),
+        "guide": engine.get_connection_guide(),
+    }
+
+
+# ── Strategy Backtester ─────────────────────────────────────────
+
+class BacktestRequest(BaseModel):
+    strategy: str
+    ticker: str = "AAPL"
+    period_days: int = 756
+    mode: str = "local"  # "local" | "mcp"
+
+
+@app.post("/backtest/run")
+async def run_backtest(req: BacktestRequest):
+    """Run strategy backtest (local simulation or MCP prompt generation)."""
+    if not BACKTEST_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Backtest engine not available")
+    try:
+        engine = get_strategy_backtest_engine()
+        if req.mode == "mcp":
+            prompt = engine.generate_mcp_prompt(req.strategy, req.ticker, req.period_days)
+            mcp_engine = get_mcp_engine() if MCP_AVAILABLE else None
+            return {
+                "mode": "mcp_ready",
+                "prompt": prompt,
+                "mcp_url": mcp_engine.get_fmp_mcp_url() if mcp_engine else "",
+            }
+        else:
+            result = await asyncio.to_thread(
+                engine.run_local_backtest, req.strategy, req.ticker, req.period_days
+            )
+            return numpy_safe_response(result)
+    except Exception as e:
+        print(f"[Backtest] Error: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 

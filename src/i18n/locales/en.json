@@ -238,7 +238,9 @@
       "quantumRisk": "Quantum Risk",
       "supplyChain": "Supply Chain",
       "htfDetection": "HTF Detection",
-      "epDetection": "Episodic Pivots"
+      "epDetection": "Episodic Pivots",
+      "mcpIntegration": "MCP AI",
+      "strategyBacktester": "AI Backtester"
     },
     "precio": {
       "actual": "Current Price",
