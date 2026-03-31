@@ -195,7 +195,7 @@ class PortfolioOptimizer:
                 # FMP returns list of {date, open, high, low, close, volume, ...}
                 # sorted newest-first, so reverse for chronological order
                 rows = sorted(data, key=lambda r: r.get('date', ''))
-                prices = [(r['date'], float(r['close'])) for r in rows if r.get('close')]
+                prices = [(r['date'], float(r.get('adjClose', r['close']))) for r in rows if r.get('close')]
 
                 if len(prices) > 20:
                     results[ticker] = prices

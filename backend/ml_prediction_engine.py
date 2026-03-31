@@ -371,11 +371,15 @@ class MLPredictionEngine:
                     f"need at least {lookback + max(horizons) + 50}"
                 )
 
-            # 2. Extract OHLCV arrays
-            opens = np.array([d.get('open', d.get('close', 0)) for d in raw_data], dtype=np.float64)
-            highs = np.array([d.get('high', d.get('close', 0)) for d in raw_data], dtype=np.float64)
-            lows = np.array([d.get('low', d.get('close', 0)) for d in raw_data], dtype=np.float64)
-            closes = np.array([d.get('close', 0) for d in raw_data], dtype=np.float64)
+            # 2. Extract OHLCV arrays (split-adjusted via adjClose)
+            raw_closes = np.array([d.get('close', 0) for d in raw_data], dtype=np.float64)
+            adj_closes = np.array([d.get('adjClose', d.get('close', 0)) for d in raw_data], dtype=np.float64)
+            adj_ratio = np.where(raw_closes > 0, adj_closes / raw_closes, 1.0)
+
+            opens = np.array([d.get('open', d.get('close', 0)) for d in raw_data], dtype=np.float64) * adj_ratio
+            highs = np.array([d.get('high', d.get('close', 0)) for d in raw_data], dtype=np.float64) * adj_ratio
+            lows = np.array([d.get('low', d.get('close', 0)) for d in raw_data], dtype=np.float64) * adj_ratio
+            closes = adj_closes
             volumes = np.array([d.get('volume', 0) for d in raw_data], dtype=np.float64)
             dates = [d.get('date', '') for d in raw_data]
 

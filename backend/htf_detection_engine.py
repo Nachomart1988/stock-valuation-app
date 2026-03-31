@@ -88,7 +88,7 @@ class HTFDetectionEngine:
             return None
 
     def _fetch_daily_prices(self, ticker: str, days: int = 756) -> Optional[Dict]:
-        """Fetch daily OHLCV from FMP historical-price-eod."""
+        """Fetch daily OHLCV from FMP historical-price-eod (split-adjusted)."""
         data = self._fetch_json('historical-price-eod/full', {
             'symbol': ticker,
         })
@@ -108,10 +108,18 @@ class HTFDetectionEngine:
         data = data[-days:]
 
         dates = [d['date'] for d in data]
-        opens = np.array([d.get('open', d.get('close', 0)) for d in data], dtype=float)
-        highs = np.array([d.get('high', d.get('close', 0)) for d in data], dtype=float)
-        lows = np.array([d.get('low', d.get('close', 0)) for d in data], dtype=float)
-        closes = np.array([d.get('close', 0) for d in data], dtype=float)
+
+        # Use adjClose for split-adjusted prices; adjust OHLC proportionally
+        raw_closes = np.array([d.get('close', 0) for d in data], dtype=float)
+        adj_closes = np.array([d.get('adjClose', d.get('close', 0)) for d in data], dtype=float)
+
+        # Compute adjustment ratio per bar (adjClose / close); handles splits & reverse-splits
+        adj_ratio = np.where(raw_closes > 0, adj_closes / raw_closes, 1.0)
+
+        opens = np.array([d.get('open', d.get('close', 0)) for d in data], dtype=float) * adj_ratio
+        highs = np.array([d.get('high', d.get('close', 0)) for d in data], dtype=float) * adj_ratio
+        lows = np.array([d.get('low', d.get('close', 0)) for d in data], dtype=float) * adj_ratio
+        closes = adj_closes
         volumes = np.array([d.get('volume', 0) for d in data], dtype=float)
 
         return {

@@ -81,6 +81,18 @@ class GapAnalysisEngine:
                 logger.info("[GapEngine] Got %d raw bars for %s", len(hist), ticker)
                 # FMP returns newest first — sort ascending (oldest first)
                 hist = sorted(hist, key=lambda x: x.get('date', ''))
+
+                # Adjust OHLC for splits using adjClose
+                for bar in hist:
+                    raw_close = bar.get('close', 0)
+                    adj_close = bar.get('adjClose', raw_close)
+                    if raw_close and raw_close > 0:
+                        ratio = adj_close / raw_close
+                        bar['open'] = bar.get('open', raw_close) * ratio
+                        bar['high'] = bar.get('high', raw_close) * ratio
+                        bar['low'] = bar.get('low', raw_close) * ratio
+                        bar['close'] = adj_close
+
                 return hist
 
             except Exception as e:

@@ -60,7 +60,7 @@ class QuantumPortfolioOptimizer:
                 if isinstance(hist, list) and len(hist) > 5:
                     # FMP returns newest-first — reverse to oldest-first
                     hist_sorted = sorted(hist, key=lambda x: x.get('date', ''))
-                    closes = np.array([d['close'] for d in hist_sorted if 'close' in d])
+                    closes = np.array([d.get('adjClose', d['close']) for d in hist_sorted if 'close' in d])
                     if len(closes) > 20:
                         prices[ticker] = closes
             except Exception as e:

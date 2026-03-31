@@ -182,6 +182,17 @@ class HistoricalDataFetcher:
                 # FMP returns newest first — reverse to oldest first
                 historical = list(reversed(historical))
 
+                # Adjust OHLC for splits using adjClose
+                for bar in historical:
+                    raw_close = bar.get('close', 0)
+                    adj_close = bar.get('adjClose', raw_close)
+                    if raw_close and raw_close > 0:
+                        ratio = adj_close / raw_close
+                        bar['open'] = bar.get('open', raw_close) * ratio
+                        bar['high'] = bar.get('high', raw_close) * ratio
+                        bar['low'] = bar.get('low', raw_close) * ratio
+                        bar['close'] = adj_close
+
                 # Trim to max_bars
                 if len(historical) > max_bars:
                     historical = historical[-max_bars:]

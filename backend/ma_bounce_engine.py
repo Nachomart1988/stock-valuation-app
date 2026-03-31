@@ -70,12 +70,17 @@ class MABounceEngine:
 
         data = data[-days:]
 
+        # Use adjClose for split-adjusted prices; adjust OHLC proportionally
+        raw_closes = np.array([d.get('close', 0) for d in data], dtype=float)
+        adj_closes = np.array([d.get('adjClose', d.get('close', 0)) for d in data], dtype=float)
+        adj_ratio = np.where(raw_closes > 0, adj_closes / raw_closes, 1.0)
+
         return {
             'dates': [d['date'] for d in data],
-            'open': np.array([d.get('open', d.get('close', 0)) for d in data], dtype=float),
-            'high': np.array([d.get('high', d.get('close', 0)) for d in data], dtype=float),
-            'low': np.array([d.get('low', d.get('close', 0)) for d in data], dtype=float),
-            'close': np.array([d.get('close', 0) for d in data], dtype=float),
+            'open': np.array([d.get('open', d.get('close', 0)) for d in data], dtype=float) * adj_ratio,
+            'high': np.array([d.get('high', d.get('close', 0)) for d in data], dtype=float) * adj_ratio,
+            'low': np.array([d.get('low', d.get('close', 0)) for d in data], dtype=float) * adj_ratio,
+            'close': adj_closes,
             'volume': np.array([d.get('volume', 0) for d in data], dtype=float),
         }
 

@@ -376,7 +376,7 @@ class QuantumRiskEngine:
             hist = data.get('historical', data) if isinstance(data, dict) else data
             if isinstance(hist, list) and len(hist) > 30:
                 hist_sorted = sorted(hist, key=lambda x: x.get('date', ''))
-                closes = np.array([d['close'] for d in hist_sorted if 'close' in d])
+                closes = np.array([d.get('adjClose', d['close']) for d in hist_sorted if 'close' in d])
                 volumes = np.array([d.get('volume', 0) for d in hist_sorted if 'close' in d])
                 return closes, volumes
         except Exception as e:

@@ -893,7 +893,7 @@ class SupplyChainEngine:
         if not isinstance(data, list) or len(data) < 30:
             return None
         data = sorted(data, key=lambda x: x.get('date', ''))[-days:]
-        return np.array([d.get('close', 0) for d in data], dtype=float)
+        return np.array([d.get('adjClose', d.get('close', 0)) for d in data], dtype=float)
 
     def _fetch_peers(self, ticker: str) -> List[str]:
         data = self._fetch_json('stock-peers', {'symbol': ticker})
