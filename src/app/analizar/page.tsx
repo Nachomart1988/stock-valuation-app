@@ -48,8 +48,6 @@ import DRLTradingTab from '@/app/components/tabs/DRLTradingTab';
 import SupplyChainTab from '@/app/components/tabs/SupplyChainTab';
 import HTFDetectionTab from '@/app/components/tabs/HTFDetectionTab';
 import EPDetectionTab from '@/app/components/tabs/EPDetectionTab';
-import FormerRunnerLowFloatTab from '@/app/components/tabs/FormerRunnerLowFloatTab';
-import CheapBreakoutScannerTab from '@/app/components/tabs/CheapBreakoutScannerTab';
 import MCPIntegrationTab from '@/app/components/tabs/MCPIntegrationTab';
 import StrategyBacktesterTab from '@/app/components/tabs/StrategyBacktesterTab';
 import QuantumRiskTab from '@/app/components/tabs/QuantumRiskTab';
@@ -502,14 +500,16 @@ function AnalizarContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Función para analizar un ticker (llamada desde InputsTab)
+  // Función para analizar un ticker (llamada desde InputsTab or Header)
   const handleAnalizar = (newTicker: string) => {
     // Strip anything that's not alphanumeric, dot or dash (e.g. TSLA] → TSLA, BRK.B → BRK.B)
     const upperTicker = newTicker.toUpperCase().trim().replace(/[^A-Z0-9.\-]/g, '');
     if (!upperTicker) return;
     setActiveTicker(upperTicker);
     setTicker(upperTicker);
-    setData(null);
+    // Only clear data if no previous analysis exists (first load).
+    // When switching tickers inline, keep showing previous data with loading overlay.
+    if (!data) setData(null);
     setSharedAverageVal(null);
   };
 
@@ -962,10 +962,11 @@ function AnalizarContent() {
     );
   }
 
-  if (loading) {
+  // Full-page loading only when no previous data exists
+  if (loading && !data) {
     return (
       <main className="min-h-screen bg-gray-950/80">
-        <Header />
+        <Header activeTicker={activeTicker} onTickerChange={handleAnalizar} />
         <div className="flex items-center justify-center pt-20 sm:pt-24 min-h-[80vh] px-4">
           <p className="text-lg sm:text-2xl font-bold text-green-400 text-center">{t('analysis.loadingData')} {activeTicker}...</p>
         </div>
@@ -1069,10 +1070,8 @@ function AnalizarContent() {
       `${t('analysis.categories.supplyChain')} (Beta)`,      // 13 (GOD MODE only)
       `${t('analysis.categories.htfDetection')} (Beta)`,     // 14 (GOD MODE only)
       `${t('analysis.categories.epDetection')} (Beta)`,      // 15 (GOD MODE only)
-      `${t('analysis.categories.formerRunner')} (Beta)`,     // 16 (GOD MODE only)
-      `${t('analysis.categories.cheapBreakout')} (Beta)`,    // 17 (GOD MODE only)
-      t('analysis.categories.mcpIntegration'),                // 18 (GOD MODE only)
-      t('analysis.categories.strategyBacktester'),            // 19 (GOD MODE only)
+      t('analysis.categories.mcpIntegration'),                // 16 (GOD MODE only)
+      t('analysis.categories.strategyBacktester'),            // 17 (GOD MODE only)
     ] : []),
     t('analysis.categories.investorJournal'),                // last — always detached
   ];
@@ -1080,6 +1079,20 @@ function AnalizarContent() {
   return (
     <main className="min-h-screen bg-gray-950/80 text-gray-100">
       <Header activeTicker={activeTicker} onTickerChange={handleAnalizar} />
+
+      {/* Inline loading overlay when switching tickers (data already loaded) */}
+      {loading && data && (
+        <div className="fixed inset-0 z-40 bg-gray-950/70 backdrop-blur-sm flex items-center justify-center transition-opacity">
+          <div className="flex flex-col items-center gap-3 bg-gray-900/90 border border-green-500/20 rounded-2xl px-8 py-6 shadow-2xl">
+            <svg className="w-8 h-8 animate-spin text-green-400" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <p className="text-green-400 font-bold text-lg">{t('analysis.loadingData')} {activeTicker}...</p>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-[1600px] mx-auto px-3 sm:px-5 md:px-8 pt-20 sm:pt-24 pb-8">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-5 sm:mb-8 md:mb-12">
           <div className="min-w-0">
@@ -1445,28 +1458,14 @@ function AnalizarContent() {
     </Tab.Panel>
   )}
 
-  {/* 16. Former Runner + Low-Float — GOD MODE only */}
-  {isGodMode && (
-    <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-      <FormerRunnerLowFloatTab ticker={activeTicker} />
-    </Tab.Panel>
-  )}
-
-  {/* 17. Cheap Breakout Scanner — GOD MODE only */}
-  {isGodMode && (
-    <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-      <CheapBreakoutScannerTab ticker={activeTicker} />
-    </Tab.Panel>
-  )}
-
-  {/* 18. MCP AI Integration — GOD MODE only */}
+  {/* 16. MCP AI Integration — GOD MODE only */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <MCPIntegrationTab />
     </Tab.Panel>
   )}
 
-  {/* 19. AI Strategy Backtester — GOD MODE only */}
+  {/* 17. AI Strategy Backtester — GOD MODE only */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <StrategyBacktesterTab />

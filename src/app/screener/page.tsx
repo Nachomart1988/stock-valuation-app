@@ -123,6 +123,35 @@ interface SqueezeScanResult {
   volSurge: number;
 }
 
+interface FormerRunnerScanResult {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  currentPrice: number;
+  marketCap: number;
+  score: number;
+  pastSurgePct: number;
+  dormancyMonths: number;
+  wakeVolumeMultiplier: number;
+  peakDate: string;
+  narrative: string;
+}
+
+interface CheapBreakoutScanResult {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  currentPrice: number;
+  marketCap: number;
+  score: number;
+  breakoutPct: number;
+  volumeMultiplier: number;
+  breakoutDate: string;
+  breakoutPrice: number;
+  totalBreakouts: number;
+  narrative: string;
+}
+
 interface ScreenerFilters {
   marketCapMoreThan: string;
   marketCapLowerThan: string;
@@ -252,6 +281,36 @@ export default function ScreenerPage() {
     maxFloat: '100000000',
   });
 
+  // Former Runner + Low-Float Scanner state (GODMODE only)
+  const [frlResults, setFrlResults] = useState<FormerRunnerScanResult[]>([]);
+  const [frlLoading, setFrlLoading] = useState(false);
+  const [frlError, setFrlError] = useState<string | null>(null);
+  const [frlStats, setFrlStats] = useState({ total: 0, scanned: 0 });
+  const [frlFilters, setFrlFilters] = useState({
+    priceMin: '0.01',
+    priceMax: '10',
+    marketCapMax: '500000000',
+    country: 'US',
+    sector: '',
+    minPastSurge: '400',
+    minDormancyMonths: '6',
+    wakeVolumeMultiplier: '15',
+  });
+
+  // Cheap Breakout Scanner state (GODMODE only)
+  const [cbkResults, setCbkResults] = useState<CheapBreakoutScanResult[]>([]);
+  const [cbkLoading, setCbkLoading] = useState(false);
+  const [cbkError, setCbkError] = useState<string | null>(null);
+  const [cbkStats, setCbkStats] = useState({ total: 0, scanned: 0 });
+  const [cbkFilters, setCbkFilters] = useState({
+    minPrice: '0.01',
+    maxPrice: '0.10',
+    marketCapMax: '100000000',
+    country: 'US',
+    sector: '',
+    minVolumeMultiplier: '15',
+  });
+
   // ── Persist scanner results in sessionStorage so they survive tab switches ──
   const SS_KEY = 'screener_cache';
 
@@ -267,6 +326,8 @@ export default function ScreenerPage() {
       if (c.epResults?.length) { setEpResults(c.epResults); setEpStats(c.epStats ?? { total: 0, scanned: 0 }); }
       if (c.mabResults?.length) { setMabResults(c.mabResults); setMabStats(c.mabStats ?? { total: 0, scanned: 0 }); }
       if (c.sqzResults?.length) { setSqzResults(c.sqzResults); setSqzStats(c.sqzStats ?? { total: 0, scanned: 0 }); }
+      if (c.frlResults?.length) { setFrlResults(c.frlResults); setFrlStats(c.frlStats ?? { total: 0, scanned: 0 }); }
+      if (c.cbkResults?.length) { setCbkResults(c.cbkResults); setCbkStats(c.cbkStats ?? { total: 0, scanned: 0 }); }
     } catch { /* ignore corrupt cache */ }
   }, []);
 
@@ -279,9 +340,11 @@ export default function ScreenerPage() {
       epResults, epStats,
       mabResults, mabStats,
       sqzResults, sqzStats,
+      frlResults, frlStats,
+      cbkResults, cbkStats,
     };
     try { sessionStorage.setItem(SS_KEY, JSON.stringify(cache)); } catch { /* quota */ }
-  }, [screenerResults, screenerPage, topOpportunities, prismoStats, htfResults, htfStats, epResults, epStats, mabResults, mabStats, sqzResults, sqzStats]);
+  }, [screenerResults, screenerPage, topOpportunities, prismoStats, htfResults, htfStats, epResults, epStats, mabResults, mabStats, sqzResults, sqzStats, frlResults, frlStats, cbkResults, cbkStats]);
 
   // ── Watchlist add helper (accumulates array in localStorage) ──
   const [watchlistAdded, setWatchlistAdded] = useState<Set<string>>(new Set());
@@ -531,6 +594,82 @@ export default function ScreenerPage() {
       setSqzLoading(false);
     }
   }, [sqzFilters]);
+
+  const scanFormerRunner = useCallback(async () => {
+    setFrlLoading(true);
+    setFrlError(null);
+    setFrlResults([]);
+    setFrlStats({ total: 0, scanned: 0 });
+
+    try {
+      const params = new URLSearchParams({
+        priceMin: frlFilters.priceMin || '0.01',
+        priceMax: frlFilters.priceMax || '10',
+        marketCapMax: frlFilters.marketCapMax || '500000000',
+        country: frlFilters.country || 'US',
+        ...(frlFilters.sector ? { sector: frlFilters.sector } : {}),
+        minPastSurge: String(parseFloat(frlFilters.minPastSurge || '400') / 100),
+        minDormancyMonths: frlFilters.minDormancyMonths || '6',
+        wakeVolumeMultiplier: frlFilters.wakeVolumeMultiplier || '15',
+      });
+
+      const res = await fetch(`/api/former-runner-scan?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      setFrlStats({ total: data.total || 0, scanned: data.scanned || 0 });
+
+      if (!data.results?.length) {
+        setFrlError('No Former Runner patterns detected in the current filter range.');
+      } else {
+        setFrlResults(data.results);
+      }
+    } catch (err: any) {
+      setFrlError(err.message || 'Error scanning for Former Runners');
+    } finally {
+      setFrlLoading(false);
+    }
+  }, [frlFilters]);
+
+  const scanCheapBreakout = useCallback(async () => {
+    setCbkLoading(true);
+    setCbkError(null);
+    setCbkResults([]);
+    setCbkStats({ total: 0, scanned: 0 });
+
+    try {
+      const params = new URLSearchParams({
+        minPrice: cbkFilters.minPrice || '0.01',
+        maxPrice: cbkFilters.maxPrice || '0.10',
+        marketCapMax: cbkFilters.marketCapMax || '100000000',
+        country: cbkFilters.country || 'US',
+        ...(cbkFilters.sector ? { sector: cbkFilters.sector } : {}),
+        minVolumeMultiplier: cbkFilters.minVolumeMultiplier || '15',
+      });
+
+      const res = await fetch(`/api/cheap-breakout-scan?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      setCbkStats({ total: data.total || 0, scanned: data.scanned || 0 });
+
+      if (!data.results?.length) {
+        setCbkError('No Cheap Breakout patterns detected in the current filter range.');
+      } else {
+        setCbkResults(data.results);
+      }
+    } catch (err: any) {
+      setCbkError(err.message || 'Error scanning for Cheap Breakouts');
+    } finally {
+      setCbkLoading(false);
+    }
+  }, [cbkFilters]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -1824,6 +1963,364 @@ export default function ScreenerPage() {
                       Rows per Page: {sqzResults.length} · 1 - {sqzResults.length} of {sqzResults.length}
                     </span>
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ Former Runner + Low-Float Scanner (GODMODE ONLY) ═══════ */}
+        {isGodMode && (
+          <div className="relative mb-8 rounded-xl border border-emerald-500/20 bg-gray-900/60 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-emerald-500/[0.04] via-green-500/[0.02] to-transparent" />
+            <div className="relative p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-emerald-300 flex items-center gap-2">
+                    <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                    Former Runner + Low-Float Scanner
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase tracking-wider">
+                      God Mode
+                    </span>
+                  </h2>
+                  <p className="text-gray-400 text-sm mt-1 max-w-xl">
+                    Detect stocks that ran hard in the past, went dormant, and are now waking up with explosive volume — Jack Sykes / Quillamaggie style.
+                  </p>
+                </div>
+                <button
+                  onClick={scanFormerRunner}
+                  disabled={frlLoading}
+                  className="shrink-0 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all text-sm"
+                >
+                  {frlLoading ? (
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                  )}
+                  {frlLoading ? 'Scanning...' : 'Scan Former Runners'}
+                </button>
+              </div>
+
+              {/* Former Runner Filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-emerald-900/15">
+                <div>
+                  <label className="block text-[10px] text-emerald-400/60 uppercase tracking-wider mb-1">Price Min</label>
+                  <input type="number" min="0" step="0.01" placeholder="0.01"
+                    value={frlFilters.priceMin}
+                    onChange={e => setFrlFilters(f => ({ ...f, priceMin: e.target.value }))}
+                    disabled={frlLoading}
+                    className="w-full bg-gray-900/60 border border-emerald-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-emerald-400/60 uppercase tracking-wider mb-1">Price Max</label>
+                  <input type="number" min="0" placeholder="10"
+                    value={frlFilters.priceMax}
+                    onChange={e => setFrlFilters(f => ({ ...f, priceMax: e.target.value }))}
+                    disabled={frlLoading}
+                    className="w-full bg-gray-900/60 border border-emerald-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-emerald-400/60 uppercase tracking-wider mb-1">Mkt Cap Max</label>
+                  <select
+                    value={frlFilters.marketCapMax}
+                    onChange={e => setFrlFilters(f => ({ ...f, marketCapMax: e.target.value }))}
+                    disabled={frlLoading}
+                    className="w-full bg-gray-900/60 border border-emerald-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                  >
+                    <option value="100000000">≤ $100M</option>
+                    <option value="500000000">≤ $500M</option>
+                    <option value="1000000000">≤ $1B</option>
+                    <option value="2000000000">≤ $2B</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-emerald-400/60 uppercase tracking-wider mb-1">Min Surge %</label>
+                  <input type="number" min="100" max="2000" step="50" placeholder="400"
+                    value={frlFilters.minPastSurge}
+                    onChange={e => setFrlFilters(f => ({ ...f, minPastSurge: e.target.value }))}
+                    disabled={frlLoading}
+                    className="w-full bg-gray-900/60 border border-emerald-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-emerald-400/60 uppercase tracking-wider mb-1">Min Dormancy (m)</label>
+                  <input type="number" min="1" max="36" step="1" placeholder="6"
+                    value={frlFilters.minDormancyMonths}
+                    onChange={e => setFrlFilters(f => ({ ...f, minDormancyMonths: e.target.value }))}
+                    disabled={frlLoading}
+                    className="w-full bg-gray-900/60 border border-emerald-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-emerald-400/60 uppercase tracking-wider mb-1">Wake Vol (x)</label>
+                  <input type="number" min="5" max="100" step="5" placeholder="15"
+                    value={frlFilters.wakeVolumeMultiplier}
+                    onChange={e => setFrlFilters(f => ({ ...f, wakeVolumeMultiplier: e.target.value }))}
+                    disabled={frlLoading}
+                    className="w-full bg-gray-900/60 border border-emerald-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-emerald-400/60 uppercase tracking-wider mb-1">Country</label>
+                  <select
+                    value={frlFilters.country}
+                    onChange={e => setFrlFilters(f => ({ ...f, country: e.target.value }))}
+                    disabled={frlLoading}
+                    className="w-full bg-gray-900/60 border border-emerald-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                  >
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-emerald-400/60 uppercase tracking-wider mb-1">Sector</label>
+                  <select
+                    value={frlFilters.sector}
+                    onChange={e => setFrlFilters(f => ({ ...f, sector: e.target.value }))}
+                    disabled={frlLoading}
+                    className="w-full bg-gray-900/60 border border-emerald-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                  >
+                    {SECTORS.map(s => <option key={s} value={s}>{s || 'All'}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Error */}
+              {frlError && (
+                <div className="mt-4 bg-red-900/20 border border-red-700/40 rounded-xl px-4 py-3 text-red-400 text-sm">
+                  {frlError}
+                </div>
+              )}
+
+              {/* Stats */}
+              {frlStats.total > 0 && !frlLoading && (
+                <div className="mt-3 text-[11px] text-emerald-400/50">
+                  Scanned {frlStats.scanned} / {frlStats.total} stocks · {frlResults.length} former runner{frlResults.length !== 1 ? 's' : ''} detected
+                </div>
+              )}
+
+              {/* Results Table */}
+              {frlResults.length > 0 && (
+                <div className="mt-4 overflow-x-auto rounded-xl border border-emerald-900/20">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-emerald-900/20 text-emerald-400/80 text-xs uppercase tracking-wider">
+                        <th className="text-left px-4 py-2.5">Ticker</th>
+                        <th className="text-left px-4 py-2.5">Company</th>
+                        <th className="text-right px-4 py-2.5">Score</th>
+                        <th className="text-right px-4 py-2.5">Price</th>
+                        <th className="text-right px-4 py-2.5">Past Surge</th>
+                        <th className="text-right px-4 py-2.5">Dormancy</th>
+                        <th className="text-right px-4 py-2.5">Wake Vol</th>
+                        <th className="text-left px-4 py-2.5">Peak Date</th>
+                        <th className="px-4 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {frlResults.map((r, i) => (
+                        <tr key={r.symbol} className={`border-t border-emerald-900/10 ${i % 2 === 0 ? 'bg-gray-900/30' : ''} hover:bg-emerald-900/10 transition`}>
+                          <td className="px-4 py-2.5 font-bold text-emerald-400">{r.symbol}</td>
+                          <td className="px-4 py-2.5 text-gray-300 max-w-[180px] truncate">{r.companyName}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${r.score >= 70 ? 'bg-emerald-900/40 text-emerald-400' : r.score >= 50 ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>
+                              {r.score}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-white font-mono">${r.currentPrice.toFixed(4)}</td>
+                          <td className="px-4 py-2.5 text-right text-red-400 font-mono">+{r.pastSurgePct.toFixed(0)}%</td>
+                          <td className="px-4 py-2.5 text-right text-gray-400">{r.dormancyMonths.toFixed(1)}m</td>
+                          <td className="px-4 py-2.5 text-right text-emerald-400 font-mono">{r.wakeVolumeMultiplier.toFixed(1)}x</td>
+                          <td className="px-4 py-2.5 text-gray-500 text-xs">{r.peakDate}</td>
+                          <td className="px-4 py-2.5">
+                            <button
+                              onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                              className="text-[11px] px-3 py-1 rounded-lg bg-emerald-900/30 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-900/50 transition"
+                            >
+                              Analyze
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ Cheap Breakout Scanner (GODMODE ONLY) ═══════ */}
+        {isGodMode && (
+          <div className="relative mb-8 rounded-xl border border-amber-500/20 bg-gray-900/60 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-amber-500/[0.04] via-orange-500/[0.02] to-transparent" />
+            <div className="relative p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-amber-300 flex items-center gap-2">
+                    <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Cheap Breakout Scanner (.01-.10)
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 uppercase tracking-wider">
+                      God Mode
+                    </span>
+                  </h2>
+                  <p className="text-gray-400 text-sm mt-1 max-w-xl">
+                    Find penny stocks ($0.01-$0.10) with explosive volume breakouts (15x+ average) — the classic Jack Sykes lottery ticket setup.
+                  </p>
+                </div>
+                <button
+                  onClick={scanCheapBreakout}
+                  disabled={cbkLoading}
+                  className="shrink-0 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold rounded-xl shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all text-sm"
+                >
+                  {cbkLoading ? (
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 1v8m0 0v1" />
+                    </svg>
+                  )}
+                  {cbkLoading ? 'Scanning...' : 'Scan Cheap Breakouts'}
+                </button>
+              </div>
+
+              {/* Cheap Breakout Filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-amber-900/15">
+                <div>
+                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1">Min Price</label>
+                  <input type="number" min="0.001" max="0.10" step="0.005" placeholder="0.01"
+                    value={cbkFilters.minPrice}
+                    onChange={e => setCbkFilters(f => ({ ...f, minPrice: e.target.value }))}
+                    disabled={cbkLoading}
+                    className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1">Max Price</label>
+                  <input type="number" min="0.01" max="1.00" step="0.01" placeholder="0.10"
+                    value={cbkFilters.maxPrice}
+                    onChange={e => setCbkFilters(f => ({ ...f, maxPrice: e.target.value }))}
+                    disabled={cbkLoading}
+                    className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1">Mkt Cap Max</label>
+                  <select
+                    value={cbkFilters.marketCapMax}
+                    onChange={e => setCbkFilters(f => ({ ...f, marketCapMax: e.target.value }))}
+                    disabled={cbkLoading}
+                    className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  >
+                    <option value="50000000">≤ $50M</option>
+                    <option value="100000000">≤ $100M</option>
+                    <option value="500000000">≤ $500M</option>
+                    <option value="1000000000">≤ $1B</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1">Min Vol (x)</label>
+                  <input type="number" min="5" max="100" step="5" placeholder="15"
+                    value={cbkFilters.minVolumeMultiplier}
+                    onChange={e => setCbkFilters(f => ({ ...f, minVolumeMultiplier: e.target.value }))}
+                    disabled={cbkLoading}
+                    className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1">Country</label>
+                  <select
+                    value={cbkFilters.country}
+                    onChange={e => setCbkFilters(f => ({ ...f, country: e.target.value }))}
+                    disabled={cbkLoading}
+                    className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  >
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1">Sector</label>
+                  <select
+                    value={cbkFilters.sector}
+                    onChange={e => setCbkFilters(f => ({ ...f, sector: e.target.value }))}
+                    disabled={cbkLoading}
+                    className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  >
+                    {SECTORS.map(s => <option key={s} value={s}>{s || 'All'}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Error */}
+              {cbkError && (
+                <div className="mt-4 bg-red-900/20 border border-red-700/40 rounded-xl px-4 py-3 text-red-400 text-sm">
+                  {cbkError}
+                </div>
+              )}
+
+              {/* Stats */}
+              {cbkStats.total > 0 && !cbkLoading && (
+                <div className="mt-3 text-[11px] text-amber-400/50">
+                  Scanned {cbkStats.scanned} / {cbkStats.total} stocks · {cbkResults.length} breakout{cbkResults.length !== 1 ? 's' : ''} detected
+                </div>
+              )}
+
+              {/* Results Table */}
+              {cbkResults.length > 0 && (
+                <div className="mt-4 overflow-x-auto rounded-xl border border-amber-900/20">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-amber-900/20 text-amber-400/80 text-xs uppercase tracking-wider">
+                        <th className="text-left px-4 py-2.5">Ticker</th>
+                        <th className="text-left px-4 py-2.5">Company</th>
+                        <th className="text-right px-4 py-2.5">Score</th>
+                        <th className="text-right px-4 py-2.5">Price</th>
+                        <th className="text-right px-4 py-2.5">Breakout %</th>
+                        <th className="text-right px-4 py-2.5">Vol (x)</th>
+                        <th className="text-right px-4 py-2.5">Breakouts</th>
+                        <th className="text-left px-4 py-2.5">Last Date</th>
+                        <th className="px-4 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cbkResults.map((r, i) => (
+                        <tr key={r.symbol} className={`border-t border-amber-900/10 ${i % 2 === 0 ? 'bg-gray-900/30' : ''} hover:bg-amber-900/10 transition`}>
+                          <td className="px-4 py-2.5 font-bold text-amber-400">{r.symbol}</td>
+                          <td className="px-4 py-2.5 text-gray-300 max-w-[180px] truncate">{r.companyName}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${r.score >= 70 ? 'bg-amber-900/40 text-amber-400' : r.score >= 50 ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>
+                              {r.score}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-white font-mono">${r.currentPrice.toFixed(4)}</td>
+                          <td className="px-4 py-2.5 text-right text-amber-400 font-mono">+{r.breakoutPct.toFixed(1)}%</td>
+                          <td className="px-4 py-2.5 text-right text-orange-400 font-mono">{r.volumeMultiplier.toFixed(1)}x</td>
+                          <td className="px-4 py-2.5 text-right text-gray-300">{r.totalBreakouts}</td>
+                          <td className="px-4 py-2.5 text-gray-500 text-xs">{r.breakoutDate}</td>
+                          <td className="px-4 py-2.5">
+                            <button
+                              onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                              className="text-[11px] px-3 py-1 rounded-lg bg-amber-900/30 text-amber-400 border border-amber-500/20 hover:bg-amber-900/50 transition"
+                            >
+                              Analyze
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
