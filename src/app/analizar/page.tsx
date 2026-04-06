@@ -48,6 +48,8 @@ import DRLTradingTab from '@/app/components/tabs/DRLTradingTab';
 import SupplyChainTab from '@/app/components/tabs/SupplyChainTab';
 import HTFDetectionTab from '@/app/components/tabs/HTFDetectionTab';
 import EPDetectionTab from '@/app/components/tabs/EPDetectionTab';
+import FormerRunnerLowFloatTab from '@/app/components/tabs/FormerRunnerLowFloatTab';
+import CheapBreakoutScannerTab from '@/app/components/tabs/CheapBreakoutScannerTab';
 import MCPIntegrationTab from '@/app/components/tabs/MCPIntegrationTab';
 import StrategyBacktesterTab from '@/app/components/tabs/StrategyBacktesterTab';
 import QuantumRiskTab from '@/app/components/tabs/QuantumRiskTab';
@@ -1067,15 +1069,17 @@ function AnalizarContent() {
       `${t('analysis.categories.supplyChain')} (Beta)`,      // 13 (GOD MODE only)
       `${t('analysis.categories.htfDetection')} (Beta)`,     // 14 (GOD MODE only)
       `${t('analysis.categories.epDetection')} (Beta)`,      // 15 (GOD MODE only)
-      t('analysis.categories.mcpIntegration'),                // 16 (GOD MODE only)
-      t('analysis.categories.strategyBacktester'),            // 17 (GOD MODE only)
+      `${t('analysis.categories.formerRunner')} (Beta)`,     // 16 (GOD MODE only)
+      `${t('analysis.categories.cheapBreakout')} (Beta)`,    // 17 (GOD MODE only)
+      t('analysis.categories.mcpIntegration'),                // 18 (GOD MODE only)
+      t('analysis.categories.strategyBacktester'),            // 19 (GOD MODE only)
     ] : []),
     t('analysis.categories.investorJournal'),                // last — always detached
   ];
 
   return (
     <main className="min-h-screen bg-gray-950/80 text-gray-100">
-      <Header />
+      <Header activeTicker={activeTicker} onTickerChange={handleAnalizar} />
       <div className="max-w-[1600px] mx-auto px-3 sm:px-5 md:px-8 pt-20 sm:pt-24 pb-8">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-5 sm:mb-8 md:mb-12">
           <div className="min-w-0">
@@ -1441,14 +1445,28 @@ function AnalizarContent() {
     </Tab.Panel>
   )}
 
-  {/* 16. MCP AI Integration — GOD MODE only */}
+  {/* 16. Former Runner + Low-Float — GOD MODE only */}
+  {isGodMode && (
+    <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
+      <FormerRunnerLowFloatTab ticker={activeTicker} />
+    </Tab.Panel>
+  )}
+
+  {/* 17. Cheap Breakout Scanner — GOD MODE only */}
+  {isGodMode && (
+    <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
+      <CheapBreakoutScannerTab ticker={activeTicker} />
+    </Tab.Panel>
+  )}
+
+  {/* 18. MCP AI Integration — GOD MODE only */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <MCPIntegrationTab />
     </Tab.Panel>
   )}
 
-  {/* 17. AI Strategy Backtester — GOD MODE only */}
+  {/* 19. AI Strategy Backtester — GOD MODE only */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <StrategyBacktesterTab />

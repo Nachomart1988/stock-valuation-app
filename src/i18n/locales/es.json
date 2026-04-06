@@ -239,6 +239,8 @@
       "supplyChain": "Cadena de Suministro",
       "htfDetection": "HTF Detection",
       "epDetection": "Episodic Pivots",
+      "formerRunner": "Former Runner",
+      "cheapBreakout": "Cheap Breakout",
       "mcpIntegration": "MCP AI",
       "strategyBacktester": "AI Backtester"
     },

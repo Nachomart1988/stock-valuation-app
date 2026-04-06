@@ -92,6 +92,20 @@ except ImportError:
     get_ma_bounce_engine = None
 
 try:
+    from former_runner_low_float_scanner import get_former_runner_scanner
+    FORMER_RUNNER_AVAILABLE = True
+except ImportError:
+    FORMER_RUNNER_AVAILABLE = False
+    get_former_runner_scanner = None
+
+try:
+    from cheap_breakout_scanner import get_cheap_breakout_scanner
+    CHEAP_BREAKOUT_AVAILABLE = True
+except ImportError:
+    CHEAP_BREAKOUT_AVAILABLE = False
+    get_cheap_breakout_scanner = None
+
+try:
     from mcp_integration_engine import get_mcp_engine
     MCP_AVAILABLE = True
 except ImportError:
@@ -1920,6 +1934,74 @@ async def ma_bounce_detect(req: MABounceRequest):
         raise
     except Exception as e:
         print(f"[MA Bounce] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Former Runner + Low-Float Scanner ──────────────────────────
+
+class FormerRunnerRequest(BaseModel):
+    ticker: str
+    min_past_surge: float = 4.0
+    min_dormancy_months: int = 6
+    wake_volume_multiplier: float = 15.0
+
+
+@app.post("/former-runner/detect")
+async def former_runner_detect(req: FormerRunnerRequest):
+    """Former Runner + Low-Float OTC detection — Jack Sykes style."""
+    if not FORMER_RUNNER_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Former Runner scanner not available")
+    try:
+        from former_runner_low_float_scanner import FormerRunnerLowFloatScanner
+        engine = FormerRunnerLowFloatScanner(
+            min_past_surge=req.min_past_surge,
+            min_dormancy_months=req.min_dormancy_months,
+            wake_volume_multiplier=req.wake_volume_multiplier,
+        )
+        result = await asyncio.to_thread(engine.analyze, req.ticker)
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return numpy_safe_response(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Former Runner] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Cheap Breakout Scanner ─────────────────────────────────────
+
+class CheapBreakoutRequest(BaseModel):
+    ticker: str
+    min_price: float = 0.01
+    max_price: float = 0.10
+    min_volume_multiplier: float = 15.0
+    lookback_days: int = 504
+
+
+@app.post("/cheap-breakout/detect")
+async def cheap_breakout_detect(req: CheapBreakoutRequest):
+    """Cheap Breakout Scanner (.01-.10 + explosive volume) — Jack Sykes Classic."""
+    if not CHEAP_BREAKOUT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Cheap Breakout scanner not available")
+    try:
+        from cheap_breakout_scanner import CheapBreakoutScanner
+        engine = CheapBreakoutScanner(
+            min_price=req.min_price,
+            max_price=req.max_price,
+            min_volume_multiplier=req.min_volume_multiplier,
+            lookback_days=req.lookback_days,
+        )
+        result = await asyncio.to_thread(engine.analyze, req.ticker)
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return numpy_safe_response(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Cheap Breakout] Error: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -10,11 +10,18 @@ import LanguageSelector from './LanguageSelector';
 import Logo from './Logo';
 import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
 
-export default function Header() {
+interface HeaderProps {
+  activeTicker?: string;
+  onTickerChange?: (ticker: string) => void;
+}
+
+export default function Header({ activeTicker, onTickerChange }: HeaderProps = {}) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
   const [themeBounce, setThemeBounce] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [editingTicker, setEditingTicker] = useState(false);
+  const [tickerDraft, setTickerDraft] = useState('');
   const pathname = usePathname();
   const { t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -92,6 +99,44 @@ export default function Header() {
             )}
           </div>
 
+          {/* Active Ticker (inline editable) — only on /analizar */}
+          {isAnalizar && activeTicker && onTickerChange && (
+            <div className="hidden md:flex items-center gap-1.5">
+              {editingTicker ? (
+                <form
+                  onSubmit={e => {
+                    e.preventDefault();
+                    const cleaned = tickerDraft.toUpperCase().trim().replace(/[^A-Z0-9.\-]/g, '');
+                    if (cleaned && cleaned !== activeTicker) onTickerChange(cleaned);
+                    setEditingTicker(false);
+                  }}
+                  className="flex items-center gap-1"
+                >
+                  <input
+                    autoFocus
+                    value={tickerDraft}
+                    onChange={e => setTickerDraft(e.target.value.toUpperCase())}
+                    onBlur={() => setEditingTicker(false)}
+                    onKeyDown={e => { if (e.key === 'Escape') setEditingTicker(false); }}
+                    className="w-24 px-2 py-1 text-sm font-bold bg-black/60 border border-green-500/50 rounded-lg text-green-400 focus:outline-none focus:border-green-400 text-center"
+                    maxLength={10}
+                  />
+                </form>
+              ) : (
+                <button
+                  onClick={() => { setTickerDraft(activeTicker); setEditingTicker(true); }}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-green-900/20 border border-green-500/20 hover:border-green-500/40 hover:bg-green-900/30 transition-all group"
+                  title="Click to change ticker"
+                >
+                  <span className="text-[13px] font-bold text-green-400 tracking-wide">{activeTicker}</span>
+                  <svg className="w-3 h-3 text-green-500/60 group-hover:text-green-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Right side: Clock + Auth + Language */}
           <div className="hidden md:flex items-center gap-3">
             <span className="text-[11px] tabular-nums text-gray-600 font-mono tracking-wide">
@@ -161,6 +206,36 @@ export default function Header() {
 
           {/* Mobile menu button */}
           <div className="md:hidden flex items-center gap-3">
+            {isAnalizar && activeTicker && onTickerChange && (
+              editingTicker ? (
+                <form
+                  onSubmit={e => {
+                    e.preventDefault();
+                    const cleaned = tickerDraft.toUpperCase().trim().replace(/[^A-Z0-9.\-]/g, '');
+                    if (cleaned && cleaned !== activeTicker) onTickerChange(cleaned);
+                    setEditingTicker(false);
+                  }}
+                  className="flex items-center"
+                >
+                  <input
+                    autoFocus
+                    value={tickerDraft}
+                    onChange={e => setTickerDraft(e.target.value.toUpperCase())}
+                    onBlur={() => setEditingTicker(false)}
+                    onKeyDown={e => { if (e.key === 'Escape') setEditingTicker(false); }}
+                    className="w-20 px-2 py-0.5 text-xs font-bold bg-black/60 border border-green-500/50 rounded text-green-400 focus:outline-none text-center"
+                    maxLength={10}
+                  />
+                </form>
+              ) : (
+                <button
+                  onClick={() => { setTickerDraft(activeTicker); setEditingTicker(true); }}
+                  className="px-2 py-0.5 rounded bg-green-900/20 border border-green-500/20 text-[11px] font-bold text-green-400"
+                >
+                  {activeTicker}
+                </button>
+              )
+            )}
             <span className="text-[11px] tabular-nums text-gray-600 font-mono">
               {currentTime}
             </span>
