@@ -127,6 +127,7 @@ interface FormerRunnerScanResult {
   symbol: string;
   companyName: string;
   sector: string;
+  exchange: string;
   currentPrice: number;
   marketCap: number;
   score: number;
@@ -141,6 +142,7 @@ interface CheapBreakoutScanResult {
   symbol: string;
   companyName: string;
   sector: string;
+  exchange: string;
   currentPrice: number;
   marketCap: number;
   score: number;
@@ -290,7 +292,7 @@ export default function ScreenerPage() {
     priceMin: '0.01',
     priceMax: '10',
     marketCapMax: '500000000',
-    country: 'US',
+    country: '',          // All countries — OTC stocks may not be tagged as US
     sector: '',
     minPastSurge: '400',
     minDormancyMonths: '6',
@@ -303,10 +305,10 @@ export default function ScreenerPage() {
   const [cbkError, setCbkError] = useState<string | null>(null);
   const [cbkStats, setCbkStats] = useState({ total: 0, scanned: 0 });
   const [cbkFilters, setCbkFilters] = useState({
-    minPrice: '0.01',
+    minPrice: '0.001',
     maxPrice: '0.10',
-    marketCapMax: '100000000',
-    country: 'US',
+    marketCapMax: '500000000',   // Larger cap to include more OTC
+    country: '',                  // All countries — OTC stocks may not be tagged as US
     sector: '',
     minVolumeMultiplier: '15',
   });
@@ -2115,6 +2117,7 @@ export default function ScreenerPage() {
                       <tr className="bg-emerald-900/20 text-emerald-400/80 text-xs uppercase tracking-wider">
                         <th className="text-left px-4 py-2.5">Ticker</th>
                         <th className="text-left px-4 py-2.5">Company</th>
+                        <th className="text-left px-4 py-2.5">Exch</th>
                         <th className="text-right px-4 py-2.5">Score</th>
                         <th className="text-right px-4 py-2.5">Price</th>
                         <th className="text-right px-4 py-2.5">Past Surge</th>
@@ -2129,6 +2132,7 @@ export default function ScreenerPage() {
                         <tr key={r.symbol} className={`border-t border-emerald-900/10 ${i % 2 === 0 ? 'bg-gray-900/30' : ''} hover:bg-emerald-900/10 transition`}>
                           <td className="px-4 py-2.5 font-bold text-emerald-400">{r.symbol}</td>
                           <td className="px-4 py-2.5 text-gray-300 max-w-[180px] truncate">{r.companyName}</td>
+                          <td className="px-4 py-2.5 text-gray-500 text-xs">{r.exchange}</td>
                           <td className="px-4 py-2.5 text-right">
                             <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${r.score >= 70 ? 'bg-emerald-900/40 text-emerald-400' : r.score >= 50 ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>
                               {r.score}
@@ -2285,6 +2289,7 @@ export default function ScreenerPage() {
                       <tr className="bg-amber-900/20 text-amber-400/80 text-xs uppercase tracking-wider">
                         <th className="text-left px-4 py-2.5">Ticker</th>
                         <th className="text-left px-4 py-2.5">Company</th>
+                        <th className="text-left px-4 py-2.5">Exch</th>
                         <th className="text-right px-4 py-2.5">Score</th>
                         <th className="text-right px-4 py-2.5">Price</th>
                         <th className="text-right px-4 py-2.5">Breakout %</th>
@@ -2299,6 +2304,7 @@ export default function ScreenerPage() {
                         <tr key={r.symbol} className={`border-t border-amber-900/10 ${i % 2 === 0 ? 'bg-gray-900/30' : ''} hover:bg-amber-900/10 transition`}>
                           <td className="px-4 py-2.5 font-bold text-amber-400">{r.symbol}</td>
                           <td className="px-4 py-2.5 text-gray-300 max-w-[180px] truncate">{r.companyName}</td>
+                          <td className="px-4 py-2.5 text-gray-500 text-xs">{r.exchange}</td>
                           <td className="px-4 py-2.5 text-right">
                             <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${r.score >= 70 ? 'bg-amber-900/40 text-amber-400' : r.score >= 50 ? 'bg-yellow-900/40 text-yellow-400' : 'bg-red-900/40 text-red-400'}`}>
                               {r.score}

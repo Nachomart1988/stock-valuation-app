@@ -4,7 +4,6 @@ export const maxDuration = 300;
 
 const FMP_BASE = 'https://financialmodelingprep.com';
 const SCAN_CONCURRENCY = 5;
-const MAX_STOCKS = 1000;
 
 export async function GET(req: NextRequest) {
   const apiKey = process.env.FMP_API_KEY;
@@ -17,24 +16,24 @@ export async function GET(req: NextRequest) {
   const priceMin = sp.get('priceMin') || '0.01';
   const priceMax = sp.get('priceMax') || '10';
   const marketCapMax = sp.get('marketCapMax') || '500000000';
-  const country = sp.get('country') || 'US';
+  const country = sp.get('country') || '';
   const sector = sp.get('sector') || '';
   const minPastSurge = parseFloat(sp.get('minPastSurge') || '4.0');
   const minDormancyMonths = parseInt(sp.get('minDormancyMonths') || '6');
   const wakeVolumeMultiplier = parseFloat(sp.get('wakeVolumeMultiplier') || '15');
 
-  // 1. Fetch OTC / small-cap stocks from FMP screener
+  // 1. Fetch OTC / small-cap stocks — NO exchange filter to include OTC markets
   const screenerParams = new URLSearchParams({
     priceMoreThan: priceMin,
     priceLowerThan: priceMax,
     marketCapLowerThan: marketCapMax,
-    country,
+    ...(country ? { country } : {}),
     ...(sector ? { sector } : {}),
-    exchange: 'NYSE,NASDAQ,AMEX',
+    // NO exchange filter — include ALL exchanges (NYSE, NASDAQ, AMEX, OTC, PINK, etc.)
     isActivelyTrading: 'true',
     isEtf: 'false',
     isFund: 'false',
-    limit: String(MAX_STOCKS),
+    limit: '10000',      // Fetch full universe — no artificial cap
     apikey: apiKey,
   });
 
@@ -46,6 +45,31 @@ export async function GET(req: NextRequest) {
       if (Array.isArray(data)) stocks = data;
     }
   } catch { /* skip */ }
+
+  // If screener returned few results, also try the v3 stock-screener endpoint
+  if (stocks.length < 50) {
+    try {
+      const v3Params = new URLSearchParams({
+        priceMoreThan: priceMin,
+        priceLowerThan: priceMax,
+        marketCapLowerThan: marketCapMax,
+        ...(country ? { country } : {}),
+        ...(sector ? { sector } : {}),
+        isActivelyTrading: 'true',
+        isEtf: 'false',
+        isFund: 'false',
+        limit: '10000',
+        apikey: apiKey,
+      });
+      const res = await fetch(`${FMP_BASE}/api/v3/stock-screener?${v3Params}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          stocks = stocks.concat(data);
+        }
+      }
+    } catch { /* skip */ }
+  }
 
   const seen = new Set<string>();
   const valid = stocks.filter((s: any) => {
@@ -59,7 +83,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ results: [], total: 0, scanned: 0 });
   }
 
-  // 2. Scan each stock via backend
+  // 2. Scan each stock via backend — no result cap
   const results: any[] = [];
   let scanned = 0;
 
@@ -83,6 +107,7 @@ export async function GET(req: NextRequest) {
           symbol: stock.symbol,
           companyName: stock.companyName || stock.symbol,
           sector: stock.sector || '',
+          exchange: stock.exchangeShortName || stock.exchange || '',
           currentPrice: data.current_price || stock.price,
           marketCap: stock.marketCap || 0,
           score: data.score,
@@ -101,10 +126,11 @@ export async function GET(req: NextRequest) {
     await Promise.all(wave.map(scanFormerRunner));
   }
 
+  // Sort by score descending — return ALL qualifying results (no cap)
   results.sort((a, b) => b.score - a.score);
 
   return NextResponse.json({
-    results: results.slice(0, 25),
+    results,
     total: valid.length,
     scanned,
   });
