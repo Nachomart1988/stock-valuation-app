@@ -11,9 +11,15 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+# Minimum rolling window for computing the volume baseline
+VOL_MA_WINDOW = 120  # 120 trading days (~6 months) — long enough to smooth OTC dead days
+MIN_NONZERO_DAYS = 30  # Need at least 30 non-zero volume days in the window to trust the avg
+
+
 class CheapBreakoutScanner:
     """
-    Detecta breakouts en el rango 0.01-0.10 con volumen explosivo (15x+ promedio).
+    Detecta breakouts en el rango 0.01-0.10 con volumen explosivo vs media móvil
+    de 120 días (excluyendo días con volumen 0).
     Setup favorito de Jack Sykes en OTCs.
     """
 
@@ -23,12 +29,14 @@ class CheapBreakoutScanner:
         min_price: float = 0.01,
         max_price: float = 0.10,
         min_volume_multiplier: float = 15.0,
+        min_absolute_volume: int = 50_000,   # Minimum raw volume to consider
         lookback_days: int = 504,
     ):
         self.api_key = api_key or os.environ.get('FMP_API_KEY')
         self.min_price = min_price
         self.max_price = max_price
         self.min_volume_multiplier = min_volume_multiplier
+        self.min_absolute_volume = min_absolute_volume
         self.lookback_days = lookback_days
         self._session = requests.Session()
 
@@ -62,6 +70,32 @@ class CheapBreakoutScanner:
 
         return {'dates': dates, 'close': closes, 'volume': volumes}
 
+    def _compute_nonzero_rolling_avg(self, volumes: np.ndarray) -> np.ndarray:
+        """
+        Compute a rolling average of volume over VOL_MA_WINDOW days,
+        but EXCLUDING days where volume == 0 from the mean calculation.
+        This avoids OTC dead-day dilution where many days have 0 volume.
+        Returns an array the same length as volumes.
+        """
+        n = len(volumes)
+        avg = np.zeros(n, dtype=float)
+
+        for i in range(n):
+            # Look back up to VOL_MA_WINDOW days
+            start = max(0, i - VOL_MA_WINDOW)
+            window = volumes[start:i]  # exclude current day
+            nonzero = window[window > 0]
+
+            if len(nonzero) >= MIN_NONZERO_DAYS:
+                avg[i] = np.mean(nonzero)
+            elif len(nonzero) > 0:
+                # Not enough data but some — use what we have, flagged as unreliable
+                avg[i] = np.mean(nonzero)
+            else:
+                avg[i] = 0  # No valid baseline
+
+        return avg
+
     def analyze(self, ticker: str) -> Dict[str, Any]:
         data = self._fetch_historical(ticker)
         if not data or len(data['close']) < 60:
@@ -81,11 +115,8 @@ class CheapBreakoutScanner:
                 'chart_data': [],
             }
 
-        # 50-day rolling average volume
-        kernel = np.ones(50) / 50
-        avg_vol_50 = np.convolve(volumes, kernel, mode='valid')
-        pad_len = len(volumes) - len(avg_vol_50)
-        avg_vol_50 = np.concatenate([np.full(pad_len, avg_vol_50[0]), avg_vol_50])
+        # 120-day rolling average volume (excluding zero-volume days)
+        avg_vol = self._compute_nonzero_rolling_avg(volumes)
 
         breakouts = []
         for i in range(1, len(closes)):
@@ -95,8 +126,16 @@ class CheapBreakoutScanner:
             if prev_close <= 0:
                 continue
 
+            # Skip if today's volume doesn't meet absolute minimum
+            if volumes[i] < self.min_absolute_volume:
+                continue
+
+            # Skip if no reliable baseline
+            if avg_vol[i] <= 0:
+                continue
+
             breakout_pct = (closes[i] - prev_close) / prev_close
-            vol_multiplier = volumes[i] / avg_vol_50[i] if avg_vol_50[i] > 0 else 1.0
+            vol_multiplier = volumes[i] / avg_vol[i]
 
             if breakout_pct >= 0.20 and vol_multiplier >= self.min_volume_multiplier:
                 breakouts.append({
@@ -105,6 +144,7 @@ class CheapBreakoutScanner:
                     'volume_multiplier': round(vol_multiplier, 1),
                     'price': round(float(closes[i]), 4),
                     'volume': int(volumes[i]),
+                    'avg_volume_120d': int(avg_vol[i]),
                 })
 
         # Build chart data
@@ -115,7 +155,7 @@ class CheapBreakoutScanner:
                 'date': dates[i],
                 'close': round(float(closes[i]), 4),
                 'volume': int(volumes[i]),
-                'avg_vol_50': round(float(avg_vol_50[i]), 0),
+                'avg_vol_120': round(float(avg_vol[i]), 0) if avg_vol[i] > 0 else 0,
                 'is_breakout': dates[i] in breakout_dates,
                 'in_range': bool(in_range[i]),
             })
@@ -126,7 +166,7 @@ class CheapBreakoutScanner:
                 'score': 0,
                 'narrative': f'No se detectaron breakouts .01-.10 con volumen explosivo en {ticker}.',
                 'ticker': ticker,
-                'chart_data': chart_data[-120:],  # last ~6 months for context
+                'chart_data': chart_data[-120:],
             }
 
         best = breakouts[-1]
@@ -134,7 +174,8 @@ class CheapBreakoutScanner:
 
         narrative = f"**CHEAP BREAKOUT DETECTADO** en {ticker} — Score {score}/100\n"
         narrative += f"• Breakout: +{best['breakout_pct']:.1f}% en rango centavos\n"
-        narrative += f"• Volumen: {best['volume_multiplier']:.1f}x promedio → explosivo\n"
+        narrative += f"• Volumen: {best['volume_multiplier']:.1f}x vs MA-120d (excl. días muertos) → explosivo\n"
+        narrative += f"• Volumen raw: {best['volume']:,} vs avg {best['avg_volume_120d']:,}\n"
         narrative += f"• Precio: ${best['price']:.4f}\n"
         narrative += f"• Total breakouts detectados: {len(breakouts)}\n"
         narrative += "→ Setup clásico de Jack Sykes: lottery ticket con momentum institucional."
