@@ -1,7 +1,7 @@
 // src/app/components/tabs/ValuacionesTab.tsx
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import { fetchFmp } from '@/lib/fmpClient';
@@ -780,6 +780,7 @@ export default function ValuacionesTab({
   const [advanceValueNetLoading, setAdvanceValueNetLoading] = useState(false);
   const [advanceValueNetError, setAdvanceValueNetError] = useState<string | null>(null);
   const [includePrismoValue, setIncludePrismoValue] = useState(false);
+  const advanceValueNetFetchedRef = useRef(false);
 
   // ────────────────────────────────────────────────
   // Fetch P/E de competidores para EPS*Benchmark
@@ -1788,23 +1789,28 @@ export default function ValuacionesTab({
 
   // ────────────────────────────────────────────────
   // AdvanceValue Net - Call backend API when methods are ready
+  // Only fetches once per ticker (uses ref to prevent re-fetches when methods recalculate)
   // ────────────────────────────────────────────────
   useEffect(() => {
+    // Reset ref when ticker changes so it fetches for the new ticker
+    advanceValueNetFetchedRef.current = false;
+  }, [ticker]);
+
+  useEffect(() => {
+    // Already fetched for this ticker — skip
+    if (advanceValueNetFetchedRef.current) return;
+
     const fetchAdvanceValueNet = async () => {
       // Need at least some valid methods and a current price
       const validMethods = methods.filter(m => m.value !== null && m.value > 0 && isFinite(m.value));
       const currentPrice = quote?.price;
 
-      console.log('[AdvanceValueNet] Checking conditions:', {
-        validMethodsCount: validMethods.length,
-        currentPrice,
-        methodsTotal: methods.length
-      });
-
       if (validMethods.length < 3 || !currentPrice || currentPrice <= 0) {
-        console.log('[AdvanceValueNet] Conditions not met, skipping fetch');
         return;
       }
+
+      // Mark as fetched to prevent re-runs
+      advanceValueNetFetchedRef.current = true;
 
       console.log('[AdvanceValueNet] Starting fetch to backend...');
       setAdvanceValueNetLoading(true);
@@ -1845,7 +1851,7 @@ export default function ValuacionesTab({
         ];
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
         const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/advancevalue/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1883,7 +1889,7 @@ export default function ValuacionesTab({
       } catch (err: any) {
         console.error('[AdvanceValueNet] Error:', err.message);
         setAdvanceValueNetError(err.message);
-        setAdvanceValueNet(null);
+        // Keep previous data visible — don't wipe it on error
       } finally {
         setAdvanceValueNetLoading(false);
       }
@@ -1893,7 +1899,7 @@ export default function ValuacionesTab({
     if (methods.length > 0 && !loading) {
       fetchAdvanceValueNet();
     }
-  }, [methods, loading, quote, income, balance, profile, sustainableGrowthRate, avgCAPMFromBeta, ticker]);
+  }, [methods, loading, quote, income, balance, profile, sustainableGrowthRate, avgCAPMFromBeta, ticker, onAdvanceValueNetChange]);
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-20">

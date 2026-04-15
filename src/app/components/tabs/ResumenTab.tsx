@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import { fetchFmp } from '@/lib/fmpClient';
@@ -467,8 +467,15 @@ export default function ResumenTab({
     }
   };
 
+  // Debounce resumen generation — wait 3s after last dependency change so all data
+  // can settle before calling the slow 12-layer neural engine
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    generarResumen();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      generarResumen();
+    }, 3000);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [ticker, currentPrice, advanceValueNet, companyQualityNet, keyMetricsSummary, sustainableGrowthRate, wacc, dcfValuation, monteCarlo, pivotAnalysis, holdersData, forecasts, diarioStats, news, averageValuation]);
 
   // Client-side DFT for a single window — returns fftSignal at last bar and complex components

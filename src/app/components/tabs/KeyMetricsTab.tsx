@@ -1275,7 +1275,7 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
         });
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
         const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/companyquality/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
