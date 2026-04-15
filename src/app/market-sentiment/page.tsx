@@ -7,6 +7,7 @@ import Header from '../components/Header';
 import { LogoLoader } from '../components/ui/LogoLoader';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { fetchFmp } from '@/lib/fmpClient';
+import { postBackend } from '@/lib/backendClient';
 import { useUser } from '@clerk/nextjs';
 
 interface MarketSignal {
@@ -216,16 +217,21 @@ export default function MarketSentimentPage() {
     try {
       setLoading(true);
       setError(null);
-      const [newsData, gainersData, losersData, sectorsData, industriesData, forexData, sp500Cons, dowCons] = await Promise.all([
+      // FMP snapshot endpoints require a date param — use yesterday (today's data may not be ready yet)
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const snapshotDate = yesterday.toISOString().slice(0, 10);
+
+      const [newsData, gainersData, losersData, sectorsData, industriesData, sp500Cons, dowCons] = await Promise.all([
         fetchFmp('stable/news/general-latest', { page: 0, limit: 30 }).catch(() => []),
         fetchFmp('stable/biggest-gainers').catch(() => []),
         fetchFmp('stable/biggest-losers').catch(() => []),
-        fetchFmp('stable/sector-performance-snapshot').catch(() => []),
-        fetchFmp('stable/industry-performance-snapshot').catch(() => []),
-        fetchFmp('stable/fx').catch(() => []),
+        fetchFmp('stable/sector-performance-snapshot', { date: snapshotDate }).catch(() => []),
+        fetchFmp('stable/industry-performance-snapshot', { date: snapshotDate }).catch(() => []),
         fetchFmp('stable/sp500-constituent').catch(() => []),
         fetchFmp('stable/dowjones-constituent').catch(() => []),
       ]);
+      const forexData: any[] = [];
 
       // Helper: fetch batch-quote-short for a list of constituent symbols → compute breadth counts
       const computeBreadth = async (constituents: any[]) => {
@@ -264,22 +270,16 @@ export default function MarketSentimentPage() {
       const indexBreadth = { sp500: sp500Breadth, dow: dowBreadth };
 
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/market-sentiment/analyze`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            news: newsData || [],
-            gainers: gainersData || [],
-            losers: losersData || [],
-            sectorPerformance: sectorsData || [],
-            industryPerformance: industriesData || [],
-            language: locale,
-            forexQuotes: forexData || [],
-            indexBreadth,
-          }),
+        const sentimentData = await postBackend<MarketSentimentData>('/market-sentiment/analyze', {
+          news: newsData || [],
+          gainers: gainersData || [],
+          losers: losersData || [],
+          sectorPerformance: sectorsData || [],
+          industryPerformance: industriesData || [],
+          language: locale,
+          forexQuotes: forexData || [],
+          indexBreadth,
         });
-        if (!res.ok) throw new Error('Backend error: ' + res.status);
-        const sentimentData: MarketSentimentData = await res.json();
         setBackendStatus('connected');
         setData(sentimentData);
         setLastUpdate(new Date());

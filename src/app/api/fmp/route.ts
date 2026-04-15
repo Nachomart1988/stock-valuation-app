@@ -23,8 +23,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const res = await fetch(url, { cache: 'no-store' });
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      return NextResponse.json(data, { status: res.status });
+    } catch {
+      // FMP returned non-JSON (e.g. plain-text error message)
+      return NextResponse.json({ error: text || 'FMP returned non-JSON response' }, { status: res.ok ? 200 : 502 });
+    }
   } catch {
     return NextResponse.json({ error: 'FMP request failed' }, { status: 502 });
   }

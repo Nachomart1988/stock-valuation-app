@@ -1844,6 +1844,8 @@ export default function ValuacionesTab({
             ? lastIncome.revenue / lastBalance.totalAssets : 0,
         ];
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/advancevalue/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1853,7 +1855,9 @@ export default function ValuacionesTab({
             expert_valuations: expertValuations,
             tabular_features: tabularFeatures,
           }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));

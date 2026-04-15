@@ -1274,6 +1274,8 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
           scores: features.slice(28, 30),
         });
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/companyquality/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1282,7 +1284,9 @@ export default function KeyMetricsTab({ ticker, industry, onCompanyQualityNetCha
             features,
             industry: industry || 'Unknown',
           }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
