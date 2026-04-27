@@ -8,6 +8,7 @@ import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import Header from '@/app/components/Header';
 import Logo from '@/app/components/Logo';
 import { fetchFmp } from '@/lib/fmpClient';
+import EarningsCalendarSection from '@/app/components/EarningsCalendarSection';
 
 interface NewsItem {
   title: string;
@@ -306,6 +307,9 @@ export default function Home() {
           )}
         </div>
       </section>
+
+      {/* Earnings Calendar */}
+      <EarningsCalendarSection />
 
       {/* Features Section */}
       <section id="features" className="py-20 px-4 border-t border-white/[0.04]">

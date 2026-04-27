@@ -80,6 +80,7 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
               <>
                 <a href="#features" className={navLinkClass()}>{t('nav.features')}</a>
                 <a href="#market" className={navLinkClass()}>{t('nav.market')}</a>
+                <a href="#earnings" className={navLinkClass()}>Earnings</a>
                 <a href="#pricing" className={navLinkClass()}>{t('nav.pricing')}</a>
                 <a href="#about" className={navLinkClass()}>{t('nav.about')}</a>
                 <Link href="/screener" className={navLinkClass()}>Screener</Link>
