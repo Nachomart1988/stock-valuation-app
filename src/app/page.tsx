@@ -8,7 +8,6 @@ import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import Header from '@/app/components/Header';
 import Logo from '@/app/components/Logo';
 import { fetchFmp } from '@/lib/fmpClient';
-import EarningsCalendarSection from '@/app/components/EarningsCalendarSection';
 
 interface NewsItem {
   title: string;
@@ -308,8 +307,36 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Earnings Calendar */}
-      <EarningsCalendarSection />
+      {/* Earnings Calendar CTA */}
+      <section className="py-14 px-4 border-t border-white/[0.04]">
+        <div className="max-w-4xl mx-auto">
+          <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-8 sm:p-10">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+              <div>
+                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 mb-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-[10px] font-bold text-amber-400 tracking-wider uppercase">Live</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">Earnings Calendar</h3>
+                <p className="text-sm text-gray-400 max-w-md">
+                  {es
+                    ? 'Todos los reportes de la semana con estimados de analistas, historial de Beat/Miss y alertas por email.'
+                    : 'All weekly reports with analyst estimates, Beat/Miss history, and email alerts.'}
+                </p>
+              </div>
+              <Link
+                href="/earnings"
+                className="shrink-0 inline-flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm rounded-lg transition-colors"
+              >
+                {es ? 'Ver Calendario' : 'View Calendar'}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Features Section */}
       <section id="features" className="py-20 px-4 border-t border-white/[0.04]">

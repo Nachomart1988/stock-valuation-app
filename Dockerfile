@@ -1,4 +1,5 @@
 # Root-level Dockerfile for Railway deployment (backend service)
+# Works whether build context is repo root OR backend/ directory
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -10,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (Docker layer caching)
-COPY backend/requirements.txt .
+COPY requirements.txt .
 
 # Install PyTorch CPU-only
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
@@ -25,9 +26,9 @@ RUN if [ "$ENABLE_QUANTUM" = "1" ]; then \
     fi
 
 # Copy backend application code
-COPY backend/ .
+COPY . .
 
 EXPOSE 8000
 
 # Railway provides $PORT
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
