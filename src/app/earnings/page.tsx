@@ -121,32 +121,40 @@ export default function EarningsPage() {
       const all = Array.isArray(data) ? data : [];
       setEarnings(all);
 
-      // Fetch previous quarter historical data for beat/miss (120 days back)
-      const uniqueSymbols = new Set(all.map((e) => e.symbol));
-      const prevFrom = fmtDate(addDays(monday, -130));
-      const prevTo = fmtDate(addDays(monday, -7));
-
-      const prevData: EarningsEntry[] = await fetchFmpRaw(
-        'stable/earnings-calendar',
-        { from: prevFrom, to: prevTo }
-      ).catch(() => []);
-
+      // Fetch beat/miss per-symbol via stable/earnings (only for US tickers)
+      // Limit concurrency to 6 to avoid rate limiting
+      const symbols = [...new Set(all.map((e) => e.symbol).filter((s) => !s.includes('.')))];
       const map: Record<string, PrevQuarterResult> = {};
-      // Sort by date descending to get most recent first
-      const sorted = (Array.isArray(prevData) ? prevData : [])
-        .filter((e) => uniqueSymbols.has(e.symbol) && e.epsActual != null && e.epsEstimated != null)
-        .sort((a, b) => b.date.localeCompare(a.date));
 
-      for (const e of sorted) {
-        if (!map[e.symbol]) {
-          map[e.symbol] = {
-            beat: e.epsActual! >= e.epsEstimated!,
-            epsActual: e.epsActual!,
-            epsEstimated: e.epsEstimated!,
-          };
-        }
+      const fetchOne = async (symbol: string) => {
+        try {
+          const history: EarningsEntry[] = await fetchFmpRaw(
+            'stable/earnings',
+            { symbol }
+          );
+          // Find most recent entry with both epsActual and epsEstimated
+          const arr = Array.isArray(history) ? history : [];
+          const past = arr
+            .filter((h) => h.epsActual != null && h.epsEstimated != null)
+            .sort((a, b) => b.date.localeCompare(a.date));
+          if (past.length > 0) {
+            const recent = past[0];
+            map[symbol] = {
+              beat: recent.epsActual! >= recent.epsEstimated!,
+              epsActual: recent.epsActual!,
+              epsEstimated: recent.epsEstimated!,
+            };
+          }
+        } catch {}
+      };
+
+      // Process in batches of 6
+      const BATCH = 6;
+      for (let i = 0; i < symbols.length; i += BATCH) {
+        await Promise.all(symbols.slice(i, i + BATCH).map(fetchOne));
+        // Update progressively so user sees badges appear as they load
+        setPrevQMap({ ...map });
       }
-      setPrevQMap(map);
     } catch (err) {
       console.error('Earnings calendar fetch error:', err);
     } finally {
@@ -369,7 +377,8 @@ export default function EarningsPage() {
                                 <div className="flex items-center justify-between mb-1">
                                   <div
                                     className="flex items-center gap-2 cursor-pointer min-w-0"
-                                    onClick={() => router.push(`/analizar?ticker=${e.symbol}`)}
+                                    onClick={() => router.push(`/earnings/${e.symbol}`)}
+                                    title={es ? 'Ver prediccion neural' : 'View neural prediction'}
                                   >
                                     <img
                                       src={FMP_IMG(e.symbol)}

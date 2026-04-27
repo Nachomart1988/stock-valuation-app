@@ -33,6 +33,7 @@ def numpy_safe_response(data: Any) -> JSONResponse:
 from model import predictor
 from quality_model import quality_predictor
 from neural_resumen_engine import neural_engine
+from earnings_prediction_engine import predict_earnings_outcome
 from market_sentiment_engine import market_sentiment_engine
 from probability_engine import probability_engine
 from gap_analysis_engine import analyze_gaps
@@ -368,6 +369,52 @@ async def resumen_predict(req: ResumenRequest):
 
     except Exception as e:
         print(f"[NeuralEngine] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════════════════════════════════
+# Earnings Prediction - Post-earnings up/down probability scoring
+# ════════════════════════════════════════════════════════════════════
+
+class EarningsPredictionRequest(BaseModel):
+    ticker: str
+    currentPrice: Optional[float] = None
+    profile: Optional[Dict[str, Any]] = None
+    quality: Optional[Dict[str, Any]] = None
+    advance: Optional[Dict[str, Any]] = None
+    sgr: Optional[float] = None
+    ratiosTTM: Optional[Dict[str, Any]] = None
+    history: Optional[List[Dict[str, Any]]] = None
+    forecasts: Optional[List[Dict[str, Any]]] = None
+    news: Optional[List[Dict[str, Any]]] = None
+    probability: Optional[Dict[str, Any]] = None
+
+
+@app.post("/earnings-prediction")
+async def earnings_prediction(req: EarningsPredictionRequest):
+    """
+    Post-earnings outcome predictor.
+    Combines quality, valuation, growth, historical beat rate, sentiment,
+    and volatility into BEAT/MISS scenario probabilities.
+    """
+    try:
+        result = predict_earnings_outcome(
+            ticker=req.ticker,
+            profile=req.profile,
+            quality=req.quality,
+            advance=req.advance,
+            sgr=req.sgr,
+            ratios_ttm=req.ratiosTTM,
+            history=req.history,
+            forecasts=req.forecasts,
+            news=req.news,
+            probability_data=req.probability,
+            current_price=req.currentPrice,
+        )
+        return numpy_safe_response(result)
+    except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
