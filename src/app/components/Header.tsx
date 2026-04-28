@@ -93,6 +93,7 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
                   {t('common.analyze')}
                 </Link>
                 <Link href="/market-sentiment" className={navLinkClass(pathname === '/market-sentiment')}>{t('nav.market')}</Link>
+                <Link href="/earnings" className={navLinkClass(pathname?.startsWith('/earnings'))}>Earnings</Link>
                 <Link href="/screener" className={navLinkClass(pathname === '/screener')}>Screener</Link>
                 <Link href="/diario" className={navLinkClass(pathname === '/diario')}>Diario</Link>
                 <Link href="/pricing" className={navLinkClass(pathname === '/pricing')}>{t('nav.pricing')}</Link>
@@ -261,21 +262,23 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
             <div className="flex flex-col gap-3">
               {isLanding ? (
                 <>
-                  <a href="#features" className={navLinkClass()}>{t('nav.features')}</a>
-                  <a href="#market" className={navLinkClass()}>{t('nav.market')}</a>
-                  <a href="#pricing" className={navLinkClass()}>{t('nav.pricing')}</a>
-                  <a href="#about" className={navLinkClass()}>{t('nav.about')}</a>
-                  <Link href="/screener" className={navLinkClass()}>Screener</Link>
-                  <Link href="/diario" className={navLinkClass()}>Diario</Link>
+                  <a href="#features" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>{t('nav.features')}</a>
+                  <a href="#market" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>{t('nav.market')}</a>
+                  <Link href="/earnings" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>Earnings</Link>
+                  <a href="#pricing" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>{t('nav.pricing')}</a>
+                  <a href="#about" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>{t('nav.about')}</a>
+                  <Link href="/screener" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>Screener</Link>
+                  <Link href="/diario" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>Diario</Link>
                 </>
               ) : (
                 <>
-                  <Link href="/" className={navLinkClass()}>{t('nav.home')}</Link>
-                  <Link href="/analizar" className={navLinkClass(isAnalizar)}>{t('common.analyze')}</Link>
-                  <Link href="/market-sentiment" className={navLinkClass(pathname === '/market-sentiment')}>{t('nav.market')}</Link>
-                  <Link href="/screener" className={navLinkClass(pathname === '/screener')}>Screener</Link>
-                  <Link href="/diario" className={navLinkClass(pathname === '/diario')}>Diario</Link>
-                  <Link href="/pricing" className={navLinkClass(pathname === '/pricing')}>{t('nav.pricing')}</Link>
+                  <Link href="/" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>{t('nav.home')}</Link>
+                  <Link href="/analizar" className={navLinkClass(isAnalizar)} onClick={() => setMobileMenuOpen(false)}>{t('common.analyze')}</Link>
+                  <Link href="/market-sentiment" className={navLinkClass(pathname === '/market-sentiment')} onClick={() => setMobileMenuOpen(false)}>{t('nav.market')}</Link>
+                  <Link href="/earnings" className={navLinkClass(pathname?.startsWith('/earnings'))} onClick={() => setMobileMenuOpen(false)}>Earnings</Link>
+                  <Link href="/screener" className={navLinkClass(pathname === '/screener')} onClick={() => setMobileMenuOpen(false)}>Screener</Link>
+                  <Link href="/diario" className={navLinkClass(pathname === '/diario')} onClick={() => setMobileMenuOpen(false)}>Diario</Link>
+                  <Link href="/pricing" className={navLinkClass(pathname === '/pricing')} onClick={() => setMobileMenuOpen(false)}>{t('nav.pricing')}</Link>
                 </>
               )}
               <hr className="border-white/[0.06]" />

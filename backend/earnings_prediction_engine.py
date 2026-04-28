@@ -270,49 +270,276 @@ def predict_earnings_outcome(
     else:
         consensus = 'BEARISH'
 
-    # Drivers for each scenario
-    def build_drivers(scenario: str) -> List[Dict[str, Any]]:
+    # Drivers — DIFFERENTIATED per scenario
+    def build_beat_drivers() -> List[Dict[str, Any]]:
+        """In a BEAT scenario, what helps/hurts the upside reaction?"""
         drivers = []
+
+        # Quality — high quality means market trusts the beat is sustainable
         if f_quality['note'] != 'no_data':
-            sign = '+' if f_quality['normalized'] > 0 else ('=' if abs(f_quality['normalized']) < 0.2 else '-')
-            drivers.append({
-                'factor': 'Quality',
-                'value': round(f_quality['score'], 1),
-                'impact': sign,
-                'description': f"Quality score {round(f_quality['score'])}/100 — " +
-                    ('strong fundamentals support price defense' if f_quality['normalized'] > 0.5
-                     else 'average fundamentals' if abs(f_quality['normalized']) < 0.5
-                     else 'weak fundamentals add downside risk')
-            })
+            score = round(f_quality['score'])
+            if f_quality['normalized'] > 0.5:
+                drivers.append({
+                    'factor': 'Quality',
+                    'value': f"{score}/100",
+                    'impact': '+',
+                    'description': f"High quality ({score}) — market trusts the beat is sustainable, supports rally"
+                })
+            elif f_quality['normalized'] < -0.5:
+                drivers.append({
+                    'factor': 'Quality',
+                    'value': f"{score}/100",
+                    'impact': '-',
+                    'description': f"Weak fundamentals ({score}) — beat may be dismissed as one-off, limits rally"
+                })
+            else:
+                drivers.append({
+                    'factor': 'Quality',
+                    'value': f"{score}/100",
+                    'impact': '=',
+                    'description': f"Average quality ({score}) — neutral effect on beat reaction"
+                })
+
+        # Valuation — cheap stocks pop more on beats; expensive ones may be priced for perfection
         if f_value['note'] == 'ok':
             er_pct = f_value['expectedReturn'] * 100
-            sign = '+' if (er_pct > 5 if scenario == 'beat' else er_pct < -5) else '='
-            drivers.append({
-                'factor': 'Valuation',
-                'value': f"{er_pct:+.1f}%",
-                'impact': '+' if er_pct > 5 else ('-' if er_pct < -10 else '='),
-                'description': f"{'Undervalued by' if er_pct > 0 else 'Overvalued by'} {abs(er_pct):.1f}% vs intrinsic value"
-            })
+            if er_pct > 10:
+                drivers.append({
+                    'factor': 'Valuation',
+                    'value': f"{er_pct:+.1f}%",
+                    'impact': '+',
+                    'description': f"Undervalued {abs(er_pct):.0f}% — beat unlocks compressed upside, big rally potential"
+                })
+            elif er_pct < -10:
+                drivers.append({
+                    'factor': 'Valuation',
+                    'value': f"{er_pct:+.1f}%",
+                    'impact': '-',
+                    'description': f"Stretched {abs(er_pct):.0f}% above fair value — beat already priced in, muted upside"
+                })
+            else:
+                drivers.append({
+                    'factor': 'Valuation',
+                    'value': f"{er_pct:+.1f}%",
+                    'impact': '=',
+                    'description': f"Fairly valued ({er_pct:+.0f}%) — typical beat-driven rally expected"
+                })
+
+        # Track record — consistent beaters: bar is HIGH, beat may be expected
         if f_history['note'] == 'ok':
+            br = f_history['beatRate']
+            beats = int(br * f_history['sample'])
+            if br >= 0.85:
+                drivers.append({
+                    'factor': 'Track Record',
+                    'value': f"{beats}/{f_history['sample']}",
+                    'impact': '=',
+                    'description': f"Consistent beater ({beats}/{f_history['sample']}) — beat is EXPECTED, market needs surprise magnitude to react strongly"
+                })
+            elif br >= 0.6:
+                drivers.append({
+                    'factor': 'Track Record',
+                    'value': f"{beats}/{f_history['sample']}",
+                    'impact': '+',
+                    'description': f"Reliable execution ({beats}/{f_history['sample']}) — beat reinforces confidence, supports rally"
+                })
+            else:
+                drivers.append({
+                    'factor': 'Track Record',
+                    'value': f"{beats}/{f_history['sample']}",
+                    'impact': '+',
+                    'description': f"Inconsistent past ({beats}/{f_history['sample']}) — surprise beat catches market off-guard, bigger pop"
+                })
+
+        # Growth
+        gr = f_growth['growthRate']
+        if f_growth['sensitivity'] > 0.5:
             drivers.append({
-                'factor': 'Track Record',
-                'value': f"{round(f_history['beatRate']*100)}% beat rate",
-                'impact': '+' if f_history['normalized'] > 0.25 else ('-' if f_history['normalized'] < -0.25 else '='),
-                'description': f"Beat estimates in {int(f_history['beatRate'] * f_history['sample'])}/{f_history['sample']} of last quarters"
+                'factor': 'Growth',
+                'value': f"{gr:.1f}%",
+                'impact': '+',
+                'description': f"High growth ({gr:.0f}%) — beat validates growth thesis, momentum buyers pile in"
             })
-        drivers.append({
-            'factor': 'Growth',
-            'value': f"{f_growth['growthRate']:.1f}%",
-            'impact': '+' if f_growth['sensitivity'] > 0.3 else ('=' if f_growth['sensitivity'] > -0.1 else '-'),
-            'description': f"{'High' if f_growth['sensitivity'] > 0.3 else 'Moderate' if f_growth['sensitivity'] > -0.1 else 'Low'} growth rate amplifies reaction"
-        })
-        if abs(f_sentiment['normalized']) > 0.1:
+        elif f_growth['sensitivity'] < -0.1:
+            drivers.append({
+                'factor': 'Growth',
+                'value': f"{gr:.1f}%",
+                'impact': '-',
+                'description': f"Slow growth ({gr:.0f}%) — beat seen as cyclical, limited multiple expansion"
+            })
+        else:
+            drivers.append({
+                'factor': 'Growth',
+                'value': f"{gr:.1f}%",
+                'impact': '=',
+                'description': f"Moderate growth ({gr:.0f}%) — typical reaction"
+            })
+
+        # Volatility — high IV means options-driven moves can amplify
+        sigma = f_vol['sigma']
+        if sigma > 0.45:
+            drivers.append({
+                'factor': 'Volatility',
+                'value': f"{sigma*100:.0f}%",
+                'impact': '+',
+                'description': f"High IV ({sigma*100:.0f}%) — options unwind amplifies upside on beat"
+            })
+        elif sigma < 0.20:
+            drivers.append({
+                'factor': 'Volatility',
+                'value': f"{sigma*100:.0f}%",
+                'impact': '=',
+                'description': f"Low IV ({sigma*100:.0f}%) — limited move potential"
+            })
+
+        # Sentiment
+        if f_sentiment['normalized'] > 0.15:
             drivers.append({
                 'factor': 'Sentiment',
-                'value': 'positive' if f_sentiment['normalized'] > 0 else 'negative',
-                'impact': '+' if f_sentiment['normalized'] > 0 else '-',
-                'description': 'Analyst forecasts and news flow ' + ('lean positive' if f_sentiment['normalized'] > 0 else 'lean negative')
+                'value': 'positive',
+                'impact': '=',
+                'description': 'Bullish sentiment already priced in — beat needed to maintain momentum'
             })
+        elif f_sentiment['normalized'] < -0.15:
+            drivers.append({
+                'factor': 'Sentiment',
+                'value': 'negative',
+                'impact': '+',
+                'description': 'Bearish sentiment — beat catches shorts off-guard, squeeze potential'
+            })
+
+        return drivers
+
+    def build_miss_drivers() -> List[Dict[str, Any]]:
+        """In a MISS scenario, what cushions or amplifies the drop?"""
+        drivers = []
+
+        # Quality — high quality = downside protection
+        if f_quality['note'] != 'no_data':
+            score = round(f_quality['score'])
+            if f_quality['normalized'] > 0.5:
+                drivers.append({
+                    'factor': 'Quality',
+                    'value': f"{score}/100",
+                    'impact': '+',
+                    'description': f"High quality ({score}) — long-term holders defend the stock, cushions drop"
+                })
+            elif f_quality['normalized'] < -0.5:
+                drivers.append({
+                    'factor': 'Quality',
+                    'value': f"{score}/100",
+                    'impact': '-',
+                    'description': f"Weak fundamentals ({score}) — miss confirms bears thesis, accelerates selling"
+                })
+            else:
+                drivers.append({
+                    'factor': 'Quality',
+                    'value': f"{score}/100",
+                    'impact': '=',
+                    'description': f"Average quality ({score}) — limited downside cushion"
+                })
+
+        # Valuation — cheap stocks drop less; expensive get crushed
+        if f_value['note'] == 'ok':
+            er_pct = f_value['expectedReturn'] * 100
+            if er_pct > 10:
+                drivers.append({
+                    'factor': 'Valuation',
+                    'value': f"{er_pct:+.1f}%",
+                    'impact': '+',
+                    'description': f"Already cheap ({er_pct:+.0f}%) — limited downside room, value buyers step in"
+                })
+            elif er_pct < -10:
+                drivers.append({
+                    'factor': 'Valuation',
+                    'value': f"{er_pct:+.1f}%",
+                    'impact': '-',
+                    'description': f"Stretched {abs(er_pct):.0f}% above fair value — miss triggers severe multiple compression"
+                })
+            else:
+                drivers.append({
+                    'factor': 'Valuation',
+                    'value': f"{er_pct:+.1f}%",
+                    'impact': '=',
+                    'description': f"Fairly valued ({er_pct:+.0f}%) — typical miss-driven correction"
+                })
+
+        # Track record — first miss after long beat streak = SHARP correction
+        if f_history['note'] == 'ok':
+            br = f_history['beatRate']
+            beats = int(br * f_history['sample'])
+            if br >= 0.85:
+                drivers.append({
+                    'factor': 'Track Record',
+                    'value': f"{beats}/{f_history['sample']}",
+                    'impact': '-',
+                    'description': f"Streak breaker ({beats}/{f_history['sample']} prior beats) — first miss often sharply punished, narrative shift risk"
+                })
+            elif br >= 0.6:
+                drivers.append({
+                    'factor': 'Track Record',
+                    'value': f"{beats}/{f_history['sample']}",
+                    'impact': '=',
+                    'description': f"Reliable past ({beats}/{f_history['sample']}) — single miss tolerated if guidance stays intact"
+                })
+            else:
+                drivers.append({
+                    'factor': 'Track Record',
+                    'value': f"{beats}/{f_history['sample']}",
+                    'impact': '-',
+                    'description': f"Already inconsistent ({beats}/{f_history['sample']}) — miss confirms execution issues, deeper drop"
+                })
+
+        # Growth — high growth stocks lose multiple FAST on misses
+        gr = f_growth['growthRate']
+        if f_growth['sensitivity'] > 0.5:
+            drivers.append({
+                'factor': 'Growth',
+                'value': f"{gr:.1f}%",
+                'impact': '-',
+                'description': f"High growth ({gr:.0f}%) — premium multiple compresses violently on miss, biggest drawdown risk"
+            })
+        elif f_growth['sensitivity'] < -0.1:
+            drivers.append({
+                'factor': 'Growth',
+                'value': f"{gr:.1f}%",
+                'impact': '+',
+                'description': f"Low growth ({gr:.0f}%) — already low expectations, miss has limited downside surprise"
+            })
+        else:
+            drivers.append({
+                'factor': 'Growth',
+                'value': f"{gr:.1f}%",
+                'impact': '=',
+                'description': f"Moderate growth ({gr:.0f}%) — typical miss reaction"
+            })
+
+        # Volatility
+        sigma = f_vol['sigma']
+        if sigma > 0.45:
+            drivers.append({
+                'factor': 'Volatility',
+                'value': f"{sigma*100:.0f}%",
+                'impact': '-',
+                'description': f"High IV ({sigma*100:.0f}%) — large absolute drop expected, gap-down risk"
+            })
+
+        # Sentiment
+        if f_sentiment['normalized'] > 0.15:
+            drivers.append({
+                'factor': 'Sentiment',
+                'value': 'positive',
+                'impact': '-',
+                'description': 'Crowded long positioning — miss triggers heavier selling as momentum traders exit'
+            })
+        elif f_sentiment['normalized'] < -0.15:
+            drivers.append({
+                'factor': 'Sentiment',
+                'value': 'negative',
+                'impact': '=',
+                'description': 'Already bearish positioning — miss is partially priced in, less downside surprise'
+            })
+
         return drivers
 
     # Commentary
@@ -334,12 +561,12 @@ def predict_earnings_outcome(
         'beatScenario': {
             'upProbability': round(beat_up_prob * 100, 1),
             'expectedMagnitude': round(beat_magnitude, 2),
-            'drivers': build_drivers('beat'),
+            'drivers': build_beat_drivers(),
         },
         'missScenario': {
             'upProbability': round(miss_up_prob * 100, 1),
             'expectedMagnitude': round(miss_magnitude, 2),
-            'drivers': build_drivers('miss'),
+            'drivers': build_miss_drivers(),
         },
         'probBeatEstimate': round(prob_beat_estimate * 100, 1),
         'overallScore': overall_score,
