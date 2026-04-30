@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 const FMP_BASE = 'https://financialmodelingprep.com';
-const SCAN_CONCURRENCY = 5;
-const MAX_STOCKS = 1000;
+const SCAN_CONCURRENCY = 15;
+const MAX_STOCKS = 10000;
 
 export async function GET(req: NextRequest) {
   const apiKey = process.env.FMP_API_KEY;
