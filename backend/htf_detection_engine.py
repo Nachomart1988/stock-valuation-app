@@ -162,13 +162,22 @@ class HTFDetectionEngine:
         return peak_gain >= self.min_surge
 
     def _detect_surges(self, weekly: Dict) -> List[Dict]:
+        """
+        Find surge candidates whose peak leaves at least min_flag_weeks of room
+        for a flag to form afterward. Without this constraint, an all-time high on
+        the last bar (e.g. INTC mid-breakout) is picked as the peak and no flag fits.
+        """
         closes = weekly['close']
         highs = weekly['high']
         dates = weekly['dates']
         n = len(closes)
-        surges = []
 
         min_w, max_w = self.surge_weeks_range
+        min_fw = self.flag_weeks_range[0]
+        latest_peak_idx = n - min_fw - 1
+        if latest_peak_idx < min_w:
+            return []
+
         earliest_start_idx = 0
         if self.surge_lookback_months > 0 and n > 0:
             cutoff_date = datetime.now() - timedelta(days=self.surge_lookback_months * 30)
@@ -177,31 +186,47 @@ class HTFDetectionEngine:
                     earliest_start_idx = idx
                     break
 
-        for end_idx in range(min_w, n):
-            for start_idx in range(max(earliest_start_idx, end_idx - max_w), end_idx - min_w + 1):
-                low_point = np.min(closes[start_idx:start_idx + 4])
-                high_point = np.max(highs[start_idx:end_idx + 1])
+        candidates: List[Dict] = []
+        for start_idx in range(earliest_start_idx, latest_peak_idx - min_w + 2):
+            peak_min = start_idx + min_w - 1
+            peak_max = min(start_idx + max_w - 1, latest_peak_idx)
+            if peak_min > peak_max:
+                continue
+            for peak_idx in range(peak_min, peak_max + 1):
+                # peak_idx must be the highest high in [start_idx, peak_idx]
+                if highs[peak_idx] < np.max(highs[start_idx:peak_idx + 1]) - 1e-9:
+                    continue
+                low_window = closes[start_idx:start_idx + min(4, peak_idx - start_idx + 1)]
+                low_point = float(np.min(low_window))
                 if low_point <= 0:
                     continue
+                high_point = float(highs[peak_idx])
                 surge_pct = (high_point - low_point) / low_point
+                if surge_pct < self.min_surge:
+                    continue
+                candidates.append({
+                    'start_idx': int(start_idx),
+                    'peak_idx': int(peak_idx),
+                    'end_idx': int(peak_idx),
+                    'surge_pct': float(surge_pct),
+                    'low_price': low_point,
+                    'high_price': high_point,
+                    'start_date': dates[start_idx],
+                    'peak_date': dates[peak_idx],
+                    'weeks': int(peak_idx - start_idx + 1),
+                })
 
-                if surge_pct >= self.min_surge:
-                    peak_rel = np.argmax(highs[start_idx:end_idx + 1])
-                    peak_idx = start_idx + peak_rel
-                    surges.append({
-                        'start_idx': start_idx,
-                        'peak_idx': peak_idx,
-                        'end_idx': end_idx,
-                        'surge_pct': float(surge_pct),
-                        'low_price': float(low_point),
-                        'high_price': float(high_point),
-                        'start_date': dates[start_idx],
-                        'peak_date': dates[peak_idx],
-                        'weeks': end_idx - start_idx + 1,
-                    })
-
-        surges.sort(key=lambda s: (s['surge_pct'], -s['peak_idx']), reverse=True)
-        return surges[:5]
+        # Keep best surge per peak_idx, then take top 5 by recency-weighted strength
+        candidates.sort(key=lambda s: (s['surge_pct'], -s['peak_idx']), reverse=True)
+        seen_peaks = set()
+        unique: List[Dict] = []
+        for s in candidates:
+            if s['peak_idx'] in seen_peaks:
+                continue
+            seen_peaks.add(s['peak_idx'])
+            unique.append(s)
+        unique.sort(key=lambda s: (s['peak_idx'], s['surge_pct']), reverse=True)
+        return unique[:5]
 
     def _detect_flag(self, weekly: Dict, surge: Dict) -> Optional[Dict]:
         closes = weekly['close']
