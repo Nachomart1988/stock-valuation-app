@@ -81,8 +81,26 @@ export async function GET(req: NextRequest) {
       if (!res.ok) return;
       const data = await res.json();
       scanned++;
-      // Accept any result with patterns found (score > 0), not just detected=true
-      if (data.score > 0 && data.patterns?.length > 0) {
+      // Backend returns best_pattern as a nested dict: { surge: {...}, flag: {...} | null, breakout: {...}, ml_probability, fusion_score, ... }
+      // Frontend expects a flat shape — flatten + map fields here.
+      const bp = data.best_pattern;
+      if (!bp || !bp.surge || !bp.flag) return; // require both a surge AND a flag (real HTF)
+
+      const breakout = bp.breakout || {};
+      const breakoutStatus = breakout.breakout_triggered
+        ? (breakout.vol_confirmation ? 'confirmed' : 'triggered')
+        : (typeof breakout.proximity_pct === 'number' && breakout.proximity_pct > -3 ? 'approaching' : 'watching');
+
+      const flatBestPattern = {
+        surge_pct: bp.surge.surge_pct,                          // already a fraction (e.g. 1.05)
+        flag_range_pct: bp.flag.flag_range_pct != null ? bp.flag.flag_range_pct / 100 : null, // backend returns 12.5 → frontend wants 0.125
+        flag_weeks: bp.flag.weeks ?? null,
+        vol_dryup: bp.flag.vol_dryup_ratio ?? null,
+        ml_probability: bp.ml_probability ?? 0,
+        breakout_status: breakoutStatus,
+      };
+
+      if (data.score > 0) {
         results.push({
           symbol: stock.symbol,
           companyName: stock.companyName || stock.symbol,
@@ -91,7 +109,7 @@ export async function GET(req: NextRequest) {
           marketCap: stock.marketCap || 0,
           score: data.score,
           detected: data.detected,
-          bestPattern: data.best_pattern || null,
+          bestPattern: flatBestPattern,
           narrative: (data.narrative || '').slice(0, 200),
           patternsCount: data.patterns?.length || 0,
         });

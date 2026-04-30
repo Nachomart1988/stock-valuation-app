@@ -146,14 +146,20 @@ class HTFDetectionEngine:
         }
 
     def _check_total_lookback_gain(self, daily: Dict, surge_lookback_months: int) -> bool:
-        """Valida que la acción esté realmente +100% en el período del scanner (evita ORCL)."""
+        """Valida que la acción haya tenido un peak >= min_surge desde el inicio del lookback (no que el precio actual esté +X%, eso pierde flags después de pullbacks)."""
         if surge_lookback_months <= 0 or len(daily['close']) < 20:
             return True
         cutoff_idx = max(0, len(daily['close']) - int(surge_lookback_months * 21))
+        if cutoff_idx >= len(daily['close']) - 1:
+            return True
         price_then = daily['close'][cutoff_idx]
-        price_now = daily['close'][-1]
-        total_gain = (price_now - price_then) / price_then
-        return total_gain >= 1.00
+        if price_then <= 0:
+            return True
+        # Use the highest high reached AFTER cutoff, not just current price.
+        # Esto permite detectar HTF en consolidación/pullback después del surge.
+        peak_after = float(np.max(daily['high'][cutoff_idx:]))
+        peak_gain = (peak_after - price_then) / price_then
+        return peak_gain >= self.min_surge
 
     def _detect_surges(self, weekly: Dict) -> List[Dict]:
         closes = weekly['close']
