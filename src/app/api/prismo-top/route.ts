@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Allow up to 60s on Vercel Pro (hobby plan is capped at 10s)
-export const maxDuration = 60;
+export const maxDuration = 800;
 
 const FMP_BASE = 'https://financialmodelingprep.com';
-const DCF_CONCURRENCY = 20;   // parallel individual DCF requests
-const MAX_STOCKS = 250;       // keep fast — top 250 by market cap
+const DCF_CONCURRENCY = 50;   // parallel individual DCF requests
+const MAX_STOCKS = 10000;     // full active US universe (NYSE/NASDAQ/AMEX)
 
 export async function GET(req: NextRequest) {
   const apiKey = process.env.FMP_API_KEY;
