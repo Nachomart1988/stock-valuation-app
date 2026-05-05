@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export const maxDuration = 800;
+export const maxDuration = 300;
 
 const FMP_BASE = 'https://financialmodelingprep.com';
 const SCAN_CONCURRENCY = 15;
