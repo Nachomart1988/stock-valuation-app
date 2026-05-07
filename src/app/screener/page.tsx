@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import Header from '@/app/components/Header';
 import { useLanguage } from '@/i18n/LanguageContext';
+import HTFChartModal from './HTFChartModal';
 
 interface ScreenerResult {
   symbol: string;
@@ -47,6 +48,14 @@ interface HTFScanResult {
     vol_dryup: number | null;
     ml_probability: number;
     breakout_status: string;
+    surge_start_date?: string | null;
+    surge_peak_date?: string | null;
+    surge_low_price?: number | null;
+    surge_high_price?: number | null;
+    flag_start_date?: string | null;
+    flag_end_date?: string | null;
+    flag_high?: number | null;
+    flag_low?: number | null;
   } | null;
   narrative: string;
   patternsCount: number;
@@ -236,6 +245,7 @@ export default function ScreenerPage() {
     maxFlagRange: '15',
     surgeLookbackMonths: '3',
   });
+  const [htfChartTarget, setHtfChartTarget] = useState<HTFScanResult | null>(null);
 
   // EP Scanner state (GODMODE only)
   const [epResults, setEpResults] = useState<EPScanResult[]>([]);
@@ -1121,6 +1131,16 @@ export default function ScreenerPage() {
                                   className="px-3 py-1.5 bg-rose-500/15 hover:bg-rose-500/30 border border-rose-500/25 rounded-lg text-rose-300 text-xs font-semibold transition"
                                 >
                                   Analyze
+                                </button>
+                                <button
+                                  onClick={() => setHtfChartTarget(r)}
+                                  className="px-2 py-1.5 bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/25 rounded-lg text-amber-300 text-[10px] font-semibold transition flex items-center gap-1"
+                                  title="View HTF chart with flag overlay"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                                  </svg>
+                                  Chart
                                 </button>
                                 <button
                                   onClick={(e) => {
@@ -2578,6 +2598,17 @@ export default function ScreenerPage() {
           </div>
         )}
       </div>
+
+      {/* HTF Chart Modal */}
+      {htfChartTarget && (
+        <HTFChartModal
+          symbol={htfChartTarget.symbol}
+          companyName={htfChartTarget.companyName}
+          currentPrice={htfChartTarget.currentPrice}
+          pattern={htfChartTarget.bestPattern}
+          onClose={() => setHtfChartTarget(null)}
+        />
+      )}
     </div>
   );
 }

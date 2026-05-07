@@ -98,6 +98,15 @@ export async function GET(req: NextRequest) {
         vol_dryup: bp.flag.vol_dryup_ratio ?? null,
         ml_probability: bp.ml_probability ?? 0,
         breakout_status: breakoutStatus,
+        // Pattern coordinates for charting
+        surge_start_date: bp.surge.start_date ?? null,
+        surge_peak_date: bp.surge.peak_date ?? null,
+        surge_low_price: bp.surge.low_price ?? null,
+        surge_high_price: bp.surge.high_price ?? null,
+        flag_start_date: bp.flag.start_date ?? null,
+        flag_end_date: bp.flag.end_date ?? null,
+        flag_high: bp.flag.flag_high ?? null,
+        flag_low: bp.flag.flag_low ?? null,
       };
 
       if (data.score > 0) {
