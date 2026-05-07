@@ -23,29 +23,47 @@ export async function GET(req: NextRequest) {
   const maxFlagRange = parseFloat(sp.get('maxFlagRange') || '0.15');
   const surgeLookbackMonths = parseInt(sp.get('surgeLookbackMonths') || '0');
 
-  // 1. Fetch stocks from FMP screener
-  const screenerParams = new URLSearchParams({
-    priceMoreThan: priceMin,
-    priceLowerThan: priceMax,
-    marketCapMoreThan: marketCapMin,
-    country,
-    ...(sector ? { sector } : {}),
-    exchange: 'NYSE,NASDAQ,AMEX',
-    isActivelyTrading: 'true',
-    isEtf: 'false',
-    isFund: 'false',
-    limit: String(MAX_STOCKS),
-    apikey: apiKey,
-  });
-
-  let stocks: any[] = [];
-  try {
-    const res = await fetch(`${FMP_BASE}/stable/company-screener?${screenerParams}`, { cache: 'no-store' });
-    if (res.ok) {
+  // 1. Fetch stocks from FMP screener — split by market-cap bands to bypass
+  //    the screener's ~2.5k-row internal response cap. Each band stays under
+  //    the cap; results are merged and deduplicated below.
+  const fetchBand = async (capLo: string, capHi: string | null): Promise<any[]> => {
+    const params = new URLSearchParams({
+      priceMoreThan: priceMin,
+      priceLowerThan: priceMax,
+      marketCapMoreThan: capLo,
+      ...(capHi ? { marketCapLowerThan: capHi } : {}),
+      country,
+      ...(sector ? { sector } : {}),
+      exchange: 'NYSE,NASDAQ,AMEX',
+      isActivelyTrading: 'true',
+      isEtf: 'false',
+      isFund: 'false',
+      limit: String(MAX_STOCKS),
+      apikey: apiKey,
+    });
+    try {
+      const res = await fetch(`${FMP_BASE}/stable/company-screener?${params}`, { cache: 'no-store' });
+      if (!res.ok) return [];
       const data = await res.json();
-      if (Array.isArray(data)) stocks = data;
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
     }
-  } catch { /* skip */ }
+  };
+
+  // Logarithmic bands relative to user's marketCapMin floor.
+  // Boundaries are shared between bands; deduplication below drops any overlap.
+  const floor = Math.max(1, parseFloat(marketCapMin) || 0);
+  const bands: Array<[string, string | null]> = [
+    [String(floor),         String(floor * 5)],
+    [String(floor * 5),     String(floor * 25)],
+    [String(floor * 25),    String(floor * 125)],
+    [String(floor * 125),   String(floor * 625)],
+    [String(floor * 625),   null],
+  ];
+
+  const banded = await Promise.all(bands.map(([lo, hi]) => fetchBand(lo, hi)));
+  const stocks: any[] = banded.flat();
 
   // Deduplicate & validate
   const seen = new Set<string>();
