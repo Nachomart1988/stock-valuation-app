@@ -24,8 +24,8 @@ export async function GET(req: NextRequest) {
   const surgeLookbackMonths = parseInt(sp.get('surgeLookbackMonths') || '0');
 
   // 1. Fetch stocks from FMP screener — split by market-cap bands to bypass
-  //    the screener's ~2.5k-row internal response cap. Each band stays under
-  //    the cap; results are merged and deduplicated below.
+  //    the screener's silent per-call response cap. Each band must stay
+  //    under the cap; results are merged and deduplicated below.
   const fetchBand = async (capLo: string, capHi: string | null): Promise<any[]> => {
     const params = new URLSearchParams({
       priceMoreThan: priceMin,
@@ -51,18 +51,24 @@ export async function GET(req: NextRequest) {
     }
   };
 
-  // Logarithmic bands relative to user's marketCapMin floor.
-  // Boundaries are shared between bands; deduplication below drops any overlap.
+  // Dense logarithmic bands relative to user's marketCapMin floor.
+  // Bottom bands are tighter because that's where most stocks live and where
+  // we previously hit FMP's per-call cap. Boundaries are shared; dedup drops overlap.
   const floor = Math.max(1, parseFloat(marketCapMin) || 0);
   const bands: Array<[string, string | null]> = [
-    [String(floor),         String(floor * 5)],
-    [String(floor * 5),     String(floor * 25)],
-    [String(floor * 25),    String(floor * 125)],
-    [String(floor * 125),   String(floor * 625)],
-    [String(floor * 625),   null],
+    [String(floor),           String(floor * 1.5)],
+    [String(floor * 1.5),     String(floor * 2.25)],
+    [String(floor * 2.25),    String(floor * 3.5)],
+    [String(floor * 3.5),     String(floor * 5)],
+    [String(floor * 5),       String(floor * 10)],
+    [String(floor * 10),      String(floor * 25)],
+    [String(floor * 25),      String(floor * 100)],
+    [String(floor * 100),     String(floor * 500)],
+    [String(floor * 500),     null],
   ];
 
   const banded = await Promise.all(bands.map(([lo, hi]) => fetchBand(lo, hi)));
+  const bandCounts = banded.map((arr, i) => ({ band: i, lo: bands[i][0], hi: bands[i][1], n: arr.length }));
   const stocks: any[] = banded.flat();
 
   // Deduplicate & validate
@@ -157,5 +163,6 @@ export async function GET(req: NextRequest) {
     results: results.slice(0, 25),
     total: valid.length,
     scanned,
+    bandCounts,
   });
 }
