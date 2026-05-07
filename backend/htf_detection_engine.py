@@ -47,6 +47,7 @@ class HTFDetectionEngine:
         ml_mode: bool = True,
         surge_lookback_months: int = 0,
         ignore_vol_dryup: bool = False,
+        max_flag_end_age_weeks: int = 2,  # flag must end within last N weekly bars (live setup, not historical)
     ):
         self.api_key = api_key or os.environ.get('FMP_API_KEY')
         self.min_surge = min_surge
@@ -56,6 +57,7 @@ class HTFDetectionEngine:
         self.ml_mode = ml_mode and SKLEARN_AVAILABLE
         self.surge_lookback_months = surge_lookback_months
         self.ignore_vol_dryup = ignore_vol_dryup
+        self.max_flag_end_age_weeks = max_flag_end_age_weeks
         self._session = requests.Session()
         self._ml_model = HTFDetectionEngine._shared_ml_model
         self._scaler = HTFDetectionEngine._shared_scaler
@@ -247,7 +249,11 @@ class HTFDetectionEngine:
         # 2% tolerance allows intra-week wicks above pole_high without invalidating the flag.
         pole_break_tolerance = 1.02
 
-        for flag_end in range(peak_idx + min_fw, min(peak_idx + max_fw + 1, n)):
+        # Restrict flag_end to recent bars — we want flags forming NOW, not historical ones.
+        # max_flag_end_age_weeks=2 means flag_end must be in the last 2 weekly bars.
+        min_flag_end = max(peak_idx + min_fw, n - self.max_flag_end_age_weeks)
+
+        for flag_end in range(min_flag_end, min(peak_idx + max_fw + 1, n)):
             flag_slice_h = highs[peak_idx + 1:flag_end + 1]
             flag_slice_l = lows[peak_idx + 1:flag_end + 1]
             flag_slice_v = volumes[peak_idx + 1:flag_end + 1]

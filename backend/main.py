@@ -1901,6 +1901,7 @@ class HTFDetectionRequest(BaseModel):
     max_flag_range: float = 0.15
     surge_lookback_months: int = 0       # 0 = all history, 3/6/9/12 = recent months
     ignore_vol_dryup: bool = False       # True = screener mode, skip vol dryup
+    max_flag_end_age_weeks: int = 2      # flag must end within last N weekly bars (live setups only)
 
 class EPDetectionRequest(BaseModel):
     ticker: str
@@ -1920,6 +1921,7 @@ async def htf_detect(req: HTFDetectionRequest):
             max_flag_range=req.max_flag_range,
             surge_lookback_months=req.surge_lookback_months,
             ignore_vol_dryup=req.ignore_vol_dryup,
+            max_flag_end_age_weeks=req.max_flag_end_age_weeks,
         )
         result = await asyncio.to_thread(engine.analyze, req.ticker)
         if 'error' in result:
