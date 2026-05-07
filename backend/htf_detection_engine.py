@@ -244,13 +244,25 @@ class HTFDetectionEngine:
         best_score = -1
         pole_high = surge['high_price']
 
+        # 2% tolerance allows intra-week wicks above pole_high without invalidating the flag.
+        pole_break_tolerance = 1.02
+
         for flag_end in range(peak_idx + min_fw, min(peak_idx + max_fw + 1, n)):
             flag_slice_h = highs[peak_idx + 1:flag_end + 1]
             flag_slice_l = lows[peak_idx + 1:flag_end + 1]
             flag_slice_v = volumes[peak_idx + 1:flag_end + 1]
 
-            flag_high = np.max(flag_slice_h)
-            flag_low = np.min(flag_slice_l)
+            flag_high = float(np.max(flag_slice_h))
+            flag_low = float(np.min(flag_slice_l))
+
+            # A real HTF flag consolidates BELOW the pole high. If price broke meaningfully
+            # above pole_high during the flag window, this isn't a flag — it's a continuation
+            # of the surge (or a new leg up). Without this check, a flag_low that returns to
+            # pole_high yields flag_range≈0% and a fake "perfect tightness" score even though
+            # the price action between is wildly outside the consolidation.
+            if flag_high > pole_high * pole_break_tolerance:
+                continue
+
             flag_range = (pole_high - flag_low) / pole_high
 
             if flag_range > self.max_flag_range:
