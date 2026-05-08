@@ -239,7 +239,6 @@ export default function ScreenerPage() {
     priceMin: '5',
     priceMax: '500',
     marketCapMin: '500000000',
-    country: 'US',
     sector: '',
     minSurge: '80',
     maxFlagRange: '15',
@@ -464,7 +463,6 @@ export default function ScreenerPage() {
         priceMin: htfFilters.priceMin || '5',
         priceMax: htfFilters.priceMax || '500',
         marketCapMin: htfFilters.marketCapMin || '500000000',
-        country: htfFilters.country || 'US',
         ...(htfFilters.sector ? { sector: htfFilters.sector } : {}),
         minSurge: String(parseFloat(htfFilters.minSurge || '80') / 100),
         maxFlagRange: String(parseFloat(htfFilters.maxFlagRange || '15') / 100),
@@ -976,17 +974,6 @@ export default function ScreenerPage() {
                     <option value="10000000000">$10B+</option>
                     <option value="50000000000">$50B+</option>
                     <option value="200000000000">$200B+</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Country</label>
-                  <select
-                    value={htfFilters.country}
-                    onChange={e => setHtfFilters(f => ({ ...f, country: e.target.value }))}
-                    disabled={htfLoading}
-                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
-                  >
-                    {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
                   </select>
                 </div>
                 <div>

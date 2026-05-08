@@ -17,7 +17,6 @@ export async function GET(req: NextRequest) {
   const priceMin = sp.get('priceMin') || '5';
   const priceMax = sp.get('priceMax') || '500';
   const marketCapMin = sp.get('marketCapMin') || '500000000';
-  const country = sp.get('country') || 'US';
   const sector = sp.get('sector') || '';
   const minSurge = parseFloat(sp.get('minSurge') || '0.80');
   const maxFlagRange = parseFloat(sp.get('maxFlagRange') || '0.15');
@@ -32,7 +31,6 @@ export async function GET(req: NextRequest) {
       priceLowerThan: priceMax,
       marketCapMoreThan: capLo,
       ...(capHi ? { marketCapLowerThan: capHi } : {}),
-      country,
       ...(sector ? { sector } : {}),
       exchange: 'NYSE,NASDAQ,AMEX',
       isActivelyTrading: 'true',
