@@ -22,52 +22,29 @@ export async function GET(req: NextRequest) {
   const maxFlagRange = parseFloat(sp.get('maxFlagRange') || '0.15');
   const surgeLookbackMonths = parseInt(sp.get('surgeLookbackMonths') || '0');
 
-  // 1. Fetch stocks from FMP screener — split by market-cap bands to bypass
-  //    the screener's silent per-call response cap. Each band must stay
-  //    under the cap; results are merged and deduplicated below.
-  const fetchBand = async (capLo: string, capHi: string | null): Promise<any[]> => {
-    const params = new URLSearchParams({
-      priceMoreThan: priceMin,
-      priceLowerThan: priceMax,
-      marketCapMoreThan: capLo,
-      ...(capHi ? { marketCapLowerThan: capHi } : {}),
-      ...(sector ? { sector } : {}),
-      exchange: 'NYSE,NASDAQ,AMEX',
-      isActivelyTrading: 'true',
-      isEtf: 'false',
-      isFund: 'false',
-      limit: String(MAX_STOCKS),
-      apikey: apiKey,
-    });
-    try {
-      const res = await fetch(`${FMP_BASE}/stable/company-screener?${params}`, { cache: 'no-store' });
-      if (!res.ok) return [];
+  // 1. Fetch stocks from FMP screener (single call — verified that FMP returns
+  //    the full universe at this plan tier; no per-call cap to bypass).
+  const params = new URLSearchParams({
+    priceMoreThan: priceMin,
+    priceLowerThan: priceMax,
+    marketCapMoreThan: marketCapMin,
+    ...(sector ? { sector } : {}),
+    exchange: 'NYSE,NASDAQ,AMEX',
+    isActivelyTrading: 'true',
+    isEtf: 'false',
+    isFund: 'false',
+    limit: String(MAX_STOCKS),
+    apikey: apiKey,
+  });
+
+  let stocks: any[] = [];
+  try {
+    const res = await fetch(`${FMP_BASE}/stable/company-screener?${params}`, { cache: 'no-store' });
+    if (res.ok) {
       const data = await res.json();
-      return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
+      if (Array.isArray(data)) stocks = data;
     }
-  };
-
-  // Dense logarithmic bands relative to user's marketCapMin floor.
-  // Bottom bands are tighter because that's where most stocks live and where
-  // we previously hit FMP's per-call cap. Boundaries are shared; dedup drops overlap.
-  const floor = Math.max(1, parseFloat(marketCapMin) || 0);
-  const bands: Array<[string, string | null]> = [
-    [String(floor),           String(floor * 1.5)],
-    [String(floor * 1.5),     String(floor * 2.25)],
-    [String(floor * 2.25),    String(floor * 3.5)],
-    [String(floor * 3.5),     String(floor * 5)],
-    [String(floor * 5),       String(floor * 10)],
-    [String(floor * 10),      String(floor * 25)],
-    [String(floor * 25),      String(floor * 100)],
-    [String(floor * 100),     String(floor * 500)],
-    [String(floor * 500),     null],
-  ];
-
-  const banded = await Promise.all(bands.map(([lo, hi]) => fetchBand(lo, hi)));
-  const bandCounts = banded.map((arr, i) => ({ band: i, lo: bands[i][0], hi: bands[i][1], n: arr.length }));
-  const stocks: any[] = banded.flat();
+  } catch { /* skip */ }
 
   // Deduplicate & validate
   const seen = new Set<string>();
@@ -161,6 +138,5 @@ export async function GET(req: NextRequest) {
     results: results.slice(0, 25),
     total: valid.length,
     scanned,
-    bandCounts,
   });
 }
