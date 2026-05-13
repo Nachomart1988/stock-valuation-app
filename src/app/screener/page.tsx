@@ -968,6 +968,7 @@ export default function ScreenerPage() {
                     disabled={htfLoading}
                     className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
                   >
+                    <option value="0">$0+ (All)</option>
                     <option value="100000000">$100M+</option>
                     <option value="500000000">$500M+</option>
                     <option value="1000000000">$1B+</option>
