@@ -76,6 +76,7 @@ export async function GET(req: NextRequest) {
           surge_lookback_months: surgeLookbackMonths,
           ignore_vol_dryup: true,
         }),
+        signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) return;
       const data = await res.json();
