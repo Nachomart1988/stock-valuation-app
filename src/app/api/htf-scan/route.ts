@@ -92,8 +92,10 @@ export async function GET(req: NextRequest) {
         : (typeof breakout.proximity_pct === 'number' && breakout.proximity_pct > -3 ? 'approaching' : 'watching');
 
       const flatBestPattern = {
+        pattern_type: bp.flag.pattern_type ?? 'htf',            // htf | cup_handle | flat_base | vcp | pennant
         surge_pct: bp.surge.surge_pct,                          // already a fraction (e.g. 1.05)
-        flag_range_pct: bp.flag.flag_range_pct != null ? bp.flag.flag_range_pct / 100 : null, // backend returns 12.5 → frontend wants 0.125
+        flag_range_pct: bp.flag.flag_range_pct != null ? bp.flag.flag_range_pct / 100 : null, // current tightness, fraction
+        pullback_pct: bp.flag.pullback_pct != null ? bp.flag.pullback_pct / 100 : null,       // drawdown from pole, fraction
         flag_weeks: bp.flag.weeks ?? null,
         vol_dryup: bp.flag.vol_dryup_ratio ?? null,
         ml_probability: bp.ml_probability ?? 0,
@@ -107,6 +109,10 @@ export async function GET(req: NextRequest) {
         flag_end_date: bp.flag.end_date ?? null,
         flag_high: bp.flag.flag_high ?? null,
         flag_low: bp.flag.flag_low ?? null,
+        // Cup-and-handle extras (only present when pattern_type === 'cup_handle')
+        cup_low: bp.flag.cup_low ?? null,
+        cup_weeks: bp.flag.cup_weeks ?? null,
+        handle_weeks: bp.flag.handle_weeks ?? null,
       };
 
       if (data.score > 0) {

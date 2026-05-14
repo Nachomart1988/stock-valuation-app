@@ -42,8 +42,10 @@ interface HTFScanResult {
   marketCap: number;
   score: number;
   bestPattern: {
+    pattern_type?: 'htf' | 'cup_handle' | 'flat_base' | 'vcp' | 'pennant' | string;
     surge_pct: number;
     flag_range_pct: number | null;
+    pullback_pct?: number | null;
     flag_weeks: number | null;
     vol_dryup: number | null;
     ml_probability: number;
@@ -56,6 +58,9 @@ interface HTFScanResult {
     flag_end_date?: string | null;
     flag_high?: number | null;
     flag_low?: number | null;
+    cup_low?: number | null;
+    cup_weeks?: number | null;
+    handle_weeks?: number | null;
   } | null;
   narrative: string;
   patternsCount: number;
@@ -1079,7 +1084,25 @@ export default function ScreenerPage() {
                               </span>
                             </td>
                             <td className="px-3 py-2.5">
-                              <span className="font-data font-bold text-rose-300">{r.symbol}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-data font-bold text-rose-300">{r.symbol}</span>
+                                {r.bestPattern?.pattern_type && (() => {
+                                  const pt = r.bestPattern.pattern_type;
+                                  const map: Record<string, { label: string; cls: string }> = {
+                                    htf:        { label: 'HTF',  cls: 'bg-rose-500/15 text-rose-300 border-rose-500/25' },
+                                    cup_handle: { label: 'C&H',  cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25' },
+                                    flat_base:  { label: 'BASE', cls: 'bg-sky-500/15 text-sky-300 border-sky-500/25' },
+                                    vcp:        { label: 'VCP',  cls: 'bg-violet-500/15 text-violet-300 border-violet-500/25' },
+                                    pennant:    { label: 'PNT',  cls: 'bg-amber-500/15 text-amber-300 border-amber-500/25' },
+                                  };
+                                  const m = map[pt] ?? { label: pt.toUpperCase(), cls: 'bg-gray-700/40 text-gray-400 border-gray-600/30' };
+                                  return (
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${m.cls}`} title={pt}>
+                                      {m.label}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             </td>
                             <td className="px-3 py-2.5 text-gray-200 max-w-[160px] truncate">{r.companyName}</td>
                             <td className="px-3 py-2.5 text-center">

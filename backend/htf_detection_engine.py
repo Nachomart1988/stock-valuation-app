@@ -230,84 +230,387 @@ class HTFDetectionEngine:
         unique.sort(key=lambda s: (s['peak_idx'], s['surge_pct']), reverse=True)
         return unique[:5]
 
+    # ── Consolidation detection: multi-pattern dispatcher ──────────────
+    # Replaces the old single-shape `_detect_flag`. Each detector returns a
+    # dict with the same shape (so downstream code is unchanged) plus a
+    # `pattern_type` field and a `pullback_pct` field separate from
+    # `flag_range_pct` (which now means CURRENT TIGHTNESS, not pullback).
+    PATTERN_TYPES = ('htf', 'cup_handle', 'flat_base', 'vcp', 'pennant')
+
+    def _detect_consolidation(self, weekly: Dict, surge: Dict) -> Optional[Dict]:
+        """Try every supported bullish consolidation, return the best-scoring one."""
+        candidates: List[Dict] = []
+        for detector in (
+            self._try_htf,
+            self._try_cup_handle,
+            self._try_flat_base,
+            self._try_vcp,
+            self._try_pennant,
+        ):
+            try:
+                result = detector(weekly, surge)
+            except Exception as e:
+                logger.warning(f"{detector.__name__} failed: {e}")
+                result = None
+            if result is not None:
+                candidates.append(result)
+        if not candidates:
+            return None
+        return max(candidates, key=lambda c: c['flag_score'])
+
+    # Back-compat shim — anything outside this file that imported _detect_flag
+    # keeps working (returns the best consolidation regardless of shape).
     def _detect_flag(self, weekly: Dict, surge: Dict) -> Optional[Dict]:
-        closes = weekly['close']
+        return self._detect_consolidation(weekly, surge)
+
+    def _consolidation_metrics(self, weekly: Dict, surge: Dict,
+                                start_idx: int, end_idx: int,
+                                recent_window: int = 3) -> Dict:
+        """Compute the metrics every detector needs over [start_idx..end_idx] inclusive."""
         highs = weekly['high']
         lows = weekly['low']
         volumes = weekly['volume']
-        n = len(closes)
 
+        slice_h = highs[start_idx:end_idx + 1]
+        slice_l = lows[start_idx:end_idx + 1]
+        slice_v = volumes[start_idx:end_idx + 1]
+
+        cons_high = float(np.max(slice_h))
+        cons_low = float(np.min(slice_l))
+        pole_high = surge['high_price']
+
+        pullback_pct = (pole_high - cons_low) / pole_high if pole_high > 0 else 0.0
+        full_range = (cons_high - cons_low) / cons_low if cons_low > 0 else 1.0
+
+        rw = min(recent_window, len(slice_h))
+        recent_h = float(np.max(slice_h[-rw:])) if rw > 0 else cons_high
+        recent_l = float(np.min(slice_l[-rw:])) if rw > 0 else cons_low
+        recent_range = (recent_h - recent_l) / recent_l if recent_l > 0 else 1.0
+
+        surge_vol_slice = volumes[surge['start_idx']:surge['peak_idx'] + 1]
+        surge_vol = float(np.mean(surge_vol_slice)) if len(surge_vol_slice) > 0 else 0.0
+        cons_vol = float(np.mean(slice_v)) if len(slice_v) > 0 else surge_vol
+        vol_dryup = cons_vol / surge_vol if surge_vol > 0 else 1.0
+        if len(slice_v) >= 3:
+            vol_declining = bool(np.polyfit(np.arange(len(slice_v)), slice_v, 1)[0] < 0)
+        else:
+            vol_declining = vol_dryup < 0.65
+
+        return {
+            'cons_high': cons_high,
+            'cons_low': cons_low,
+            'pullback_pct': pullback_pct,
+            'full_range': full_range,
+            'recent_range': recent_range,
+            'vol_dryup': vol_dryup,
+            'vol_declining': vol_declining,
+        }
+
+    def _score_dryup(self, vol_dryup: float) -> float:
+        if self.ignore_vol_dryup:
+            return 0.5
+        return max(0.0, 1.0 - vol_dryup)
+
+    def _make_flag_dict(self, pattern_type: str, peak_idx: int, end_idx: int,
+                        flag_high: float, flag_low: float,
+                        tightness_pct: float, pullback_pct: float,
+                        m: Dict, weeks: int, score: float,
+                        start_date: str, end_date: str,
+                        extras: Optional[Dict] = None) -> Dict:
+        out = {
+            'pattern_type': pattern_type,
+            'start_idx': int(peak_idx),
+            'end_idx': int(end_idx),
+            'flag_high': float(flag_high),
+            'flag_low': float(flag_low),
+            'flag_range_pct': float(tightness_pct),   # CURRENT tightness, not pole drawdown
+            'pullback_pct': float(pullback_pct),      # max drawdown from pole_high
+            'vol_dryup_ratio': float(m['vol_dryup']),
+            'vol_declining': bool(m['vol_declining']),
+            'weeks': int(weeks),
+            'flag_score': float(score),
+            'start_date': start_date,
+            'end_date': end_date,
+        }
+        if extras:
+            out.update(extras)
+        return out
+
+    # ── Pattern detectors ──────────────────────────────────────────────
+
+    def _try_htf(self, weekly: Dict, surge: Dict) -> Optional[Dict]:
+        """Classic HTF: 3-8 weeks, pullback ≤ user max_flag_range, recent oscillation ≤ 15%."""
+        n = len(weekly['close'])
         peak_idx = surge['peak_idx']
+        pole_high = surge['high_price']
         min_fw, max_fw = self.flag_weeks_range
         if peak_idx + min_fw >= n:
             return None
-
-        best_flag = None
-        best_score = -1
-        pole_high = surge['high_price']
-
-        # 2% tolerance allows intra-week wicks above pole_high without invalidating the flag.
+        min_end = max(peak_idx + min_fw, n - self.max_flag_end_age_weeks)
+        max_pullback = self.max_flag_range
+        max_tightness = 0.15
         pole_break_tolerance = 1.02
 
-        # Restrict flag_end to recent bars — we want flags forming NOW, not historical ones.
-        # max_flag_end_age_weeks=2 means flag_end must be in the last 2 weekly bars.
-        min_flag_end = max(peak_idx + min_fw, n - self.max_flag_end_age_weeks)
-
-        for flag_end in range(min_flag_end, min(peak_idx + max_fw + 1, n)):
-            flag_slice_h = highs[peak_idx + 1:flag_end + 1]
-            flag_slice_l = lows[peak_idx + 1:flag_end + 1]
-            flag_slice_v = volumes[peak_idx + 1:flag_end + 1]
-
-            flag_high = float(np.max(flag_slice_h))
-            flag_low = float(np.min(flag_slice_l))
-
-            # A real HTF flag consolidates BELOW the pole high. If price broke meaningfully
-            # above pole_high during the flag window, this isn't a flag — it's a continuation
-            # of the surge (or a new leg up). Without this check, a flag_low that returns to
-            # pole_high yields flag_range≈0% and a fake "perfect tightness" score even though
-            # the price action between is wildly outside the consolidation.
-            if flag_high > pole_high * pole_break_tolerance:
+        best, best_score = None, -1.0
+        for end in range(min_end, min(peak_idx + max_fw + 1, n)):
+            m = self._consolidation_metrics(weekly, surge, peak_idx + 1, end)
+            if m['cons_high'] > pole_high * pole_break_tolerance:
                 continue
-
-            flag_range = (pole_high - flag_low) / pole_high
-
-            if flag_range > self.max_flag_range:
+            if m['pullback_pct'] > max_pullback:
                 continue
-
-            surge_vol = np.mean(volumes[surge['start_idx']:surge['peak_idx'] + 1])
-            flag_vol = np.mean(flag_slice_v)
-            vol_dryup = flag_vol / surge_vol if surge_vol > 0 else 1.0
-
-            vol_declining = np.polyfit(np.arange(len(flag_slice_v)), flag_slice_v, 1)[0] < 0 if len(flag_slice_v) >= 3 else vol_dryup < 0.65
-
-            weeks = flag_end - peak_idx
-
-            tightness_score = 1.0 - (flag_range / self.max_flag_range)
-            dryup_score = max(0, 1.0 - vol_dryup)
-            duration_score = 1.0 - abs(weeks - 5) / 5
-
+            if m['recent_range'] > max_tightness:
+                continue
+            weeks = end - peak_idx
+            tight_s = max(0.0, 1.0 - m['recent_range'] / max_tightness)
+            depth_s = max(0.0, 1.0 - m['pullback_pct'] / max_pullback)
+            dur_s = max(0.0, 1.0 - abs(weeks - 5) / 5)
+            dry_s = self._score_dryup(m['vol_dryup'])
             if self.ignore_vol_dryup:
-                flag_score = tightness_score * 0.65 + duration_score * 0.35
+                score = tight_s * 0.50 + depth_s * 0.25 + dur_s * 0.25
             else:
-                flag_score = tightness_score * 0.45 + dryup_score * 0.35 + duration_score * 0.20
+                score = tight_s * 0.40 + depth_s * 0.20 + dur_s * 0.20 + dry_s * 0.20
+            if score > best_score:
+                best_score = score
+                best = self._make_flag_dict(
+                    'htf', peak_idx, end, pole_high, m['cons_low'],
+                    m['recent_range'] * 100, m['pullback_pct'] * 100,
+                    m, weeks, score,
+                    weekly['dates'][peak_idx], weekly['dates'][end],
+                )
+        return best
 
-            if flag_score > best_score:
-                best_score = flag_score
-                best_flag = {
-                    'start_idx': peak_idx,
-                    'end_idx': flag_end,
-                    'flag_high': float(pole_high),
-                    'flag_low': float(flag_low),
-                    'flag_range_pct': float(flag_range * 100),
-                    'vol_dryup_ratio': float(vol_dryup),
-                    'vol_declining': bool(vol_declining),
-                    'weeks': weeks,
-                    'flag_score': float(flag_score),
-                    'start_date': weekly['dates'][peak_idx],
-                    'end_date': weekly['dates'][flag_end],
-                }
+    def _try_cup_handle(self, weekly: Dict, surge: Dict) -> Optional[Dict]:
+        """Cup-and-handle: 7-65w cup (12-50% drawdown, right side recovers) + 1-4w tight handle."""
+        n = len(weekly['close'])
+        peak_idx = surge['peak_idx']
+        pole_high = surge['high_price']
+        highs = weekly['high']
+        min_cup, max_cup = 7, 65
+        min_handle, max_handle = 1, 4
+        if peak_idx + min_cup + min_handle > n - 1:
+            return None
+        earliest_handle_end = max(peak_idx + min_cup + min_handle, n - self.max_flag_end_age_weeks)
+        latest_handle_end = n - 1
 
-        return best_flag
+        best, best_score = None, -1.0
+        for handle_end in range(earliest_handle_end, latest_handle_end + 1):
+            for handle_weeks in range(min_handle, max_handle + 1):
+                handle_start = handle_end - handle_weeks + 1
+                cup_end = handle_start - 1
+                cup_weeks = cup_end - peak_idx
+                if cup_weeks < min_cup or cup_weeks > max_cup:
+                    continue
+
+                cup_m = self._consolidation_metrics(weekly, surge, peak_idx + 1, cup_end)
+                if cup_m['cons_high'] > pole_high * 1.02:
+                    continue
+                if cup_m['pullback_pct'] < 0.12 or cup_m['pullback_pct'] > 0.50:
+                    continue
+                right_start = peak_idx + 1 + cup_weeks // 2
+                if cup_end < right_start:
+                    continue
+                right_high = float(np.max(highs[right_start:cup_end + 1]))
+                if right_high < pole_high * 0.92:
+                    continue
+
+                handle_m = self._consolidation_metrics(weekly, surge, handle_start, handle_end)
+                if handle_m['cons_low'] <= 0:
+                    continue
+                if handle_m['cons_high'] > cup_m['cons_high'] * 1.02:
+                    continue
+                handle_range = (handle_m['cons_high'] - handle_m['cons_low']) / handle_m['cons_low']
+                if handle_range > 0.12:
+                    continue
+                cup_mid = (cup_m['cons_high'] + cup_m['cons_low']) / 2
+                if handle_m['cons_low'] < cup_mid:
+                    continue
+
+                depth_s = max(0.0, 1.0 - abs(cup_m['pullback_pct'] - 0.25) / 0.25)
+                handle_s = max(0.0, 1.0 - handle_range / 0.12)
+                dry_s = self._score_dryup(handle_m['vol_dryup'])
+                dur_s = max(0.0, 1.0 - abs(cup_weeks - 20) / 30)
+                if self.ignore_vol_dryup:
+                    score = handle_s * 0.45 + depth_s * 0.35 + dur_s * 0.20
+                else:
+                    score = handle_s * 0.40 + depth_s * 0.25 + dry_s * 0.25 + dur_s * 0.10
+
+                if score > best_score:
+                    best_score = score
+                    weeks = handle_end - peak_idx
+                    best = self._make_flag_dict(
+                        'cup_handle', peak_idx, handle_end,
+                        cup_m['cons_high'], handle_m['cons_low'],
+                        handle_range * 100, cup_m['pullback_pct'] * 100,
+                        handle_m, weeks, score,
+                        weekly['dates'][peak_idx], weekly['dates'][handle_end],
+                        extras={
+                            'cup_low': float(cup_m['cons_low']),
+                            'cup_weeks': int(cup_weeks),
+                            'handle_weeks': int(handle_weeks),
+                        },
+                    )
+        return best
+
+    def _try_flat_base(self, weekly: Dict, surge: Dict) -> Optional[Dict]:
+        """Flat base: 5-15w sideways, ≤15% pullback, ≤15% overall range."""
+        n = len(weekly['close'])
+        peak_idx = surge['peak_idx']
+        pole_high = surge['high_price']
+        min_w, max_w = 5, 15
+        if peak_idx + min_w >= n:
+            return None
+        min_end = max(peak_idx + min_w, n - self.max_flag_end_age_weeks)
+
+        best, best_score = None, -1.0
+        for end in range(min_end, min(peak_idx + max_w + 1, n)):
+            m = self._consolidation_metrics(weekly, surge, peak_idx + 1, end)
+            if m['cons_high'] > pole_high * 1.02:
+                continue
+            if m['pullback_pct'] > 0.15:
+                continue
+            if m['full_range'] > 0.15:
+                continue
+            weeks = end - peak_idx
+            tight_s = max(0.0, 1.0 - m['full_range'] / 0.15)
+            flat_s = max(0.0, 1.0 - m['pullback_pct'] / 0.15)
+            dur_s = max(0.0, 1.0 - abs(weeks - 10) / 10)
+            dry_s = self._score_dryup(m['vol_dryup'])
+            if self.ignore_vol_dryup:
+                score = tight_s * 0.45 + flat_s * 0.30 + dur_s * 0.25
+            else:
+                score = tight_s * 0.35 + flat_s * 0.20 + dur_s * 0.20 + dry_s * 0.25
+            if score > best_score:
+                best_score = score
+                best = self._make_flag_dict(
+                    'flat_base', peak_idx, end, pole_high, m['cons_low'],
+                    m['full_range'] * 100, m['pullback_pct'] * 100,
+                    m, weeks, score,
+                    weekly['dates'][peak_idx], weekly['dates'][end],
+                )
+        return best
+
+    def _try_vcp(self, weekly: Dict, surge: Dict) -> Optional[Dict]:
+        """VCP: 3 sequential contractions, each tighter than the previous; final ≤ 12%."""
+        n = len(weekly['close'])
+        peak_idx = surge['peak_idx']
+        pole_high = surge['high_price']
+        highs = weekly['high']
+        lows = weekly['low']
+        min_w, max_w = 6, 25
+        if peak_idx + min_w >= n:
+            return None
+        min_end = max(peak_idx + min_w, n - self.max_flag_end_age_weeks)
+
+        best, best_score = None, -1.0
+        for end in range(min_end, min(peak_idx + max_w + 1, n)):
+            h = highs[peak_idx + 1:end + 1]
+            l = lows[peak_idx + 1:end + 1]
+            if len(h) < min_w:
+                continue
+            if float(np.max(h)) > pole_high * 1.02:
+                continue
+            segs = 3
+            seg_len = len(h) // segs
+            if seg_len < 2:
+                continue
+            ranges: List[float] = []
+            ok = True
+            for s in range(segs):
+                a = s * seg_len
+                b = (s + 1) * seg_len if s < segs - 1 else len(h)
+                seg_h = float(np.max(h[a:b]))
+                seg_l = float(np.min(l[a:b]))
+                if seg_l <= 0:
+                    ok = False; break
+                ranges.append((seg_h - seg_l) / seg_l)
+            if not ok:
+                continue
+            if not all(ranges[i] > ranges[i + 1] for i in range(segs - 1)):
+                continue
+            final_tight = ranges[-1]
+            if final_tight > 0.12:
+                continue
+            m = self._consolidation_metrics(weekly, surge, peak_idx + 1, end)
+            if m['pullback_pct'] > 0.40:
+                continue
+            weeks = end - peak_idx
+            contraction_ratio = ranges[0] / max(ranges[-1], 1e-4)
+            contract_s = min(contraction_ratio / 3.0, 1.0)
+            tight_s = max(0.0, 1.0 - final_tight / 0.12)
+            dry_s = self._score_dryup(m['vol_dryup'])
+            if self.ignore_vol_dryup:
+                score = contract_s * 0.45 + tight_s * 0.45 + 0.10
+            else:
+                score = contract_s * 0.35 + tight_s * 0.35 + dry_s * 0.20 + 0.10
+            if score > best_score:
+                best_score = score
+                best = self._make_flag_dict(
+                    'vcp', peak_idx, end, pole_high, m['cons_low'],
+                    final_tight * 100, m['pullback_pct'] * 100,
+                    m, weeks, score,
+                    weekly['dates'][peak_idx], weekly['dates'][end],
+                    extras={
+                        'contractions': int(segs),
+                        'contraction_ratio': float(contraction_ratio),
+                    },
+                )
+        return best
+
+    def _try_pennant(self, weekly: Dict, surge: Dict) -> Optional[Dict]:
+        """Pennant: 2-6w converging triangle (descending highs + ascending lows)."""
+        n = len(weekly['close'])
+        peak_idx = surge['peak_idx']
+        pole_high = surge['high_price']
+        highs = weekly['high']
+        lows = weekly['low']
+        min_w, max_w = 2, 6
+        if peak_idx + min_w >= n:
+            return None
+        min_end = max(peak_idx + min_w, n - self.max_flag_end_age_weeks)
+
+        best, best_score = None, -1.0
+        for end in range(min_end, min(peak_idx + max_w + 1, n)):
+            h = highs[peak_idx + 1:end + 1]
+            l = lows[peak_idx + 1:end + 1]
+            if len(h) < 3:
+                continue
+            if float(np.max(h)) > pole_high * 1.02:
+                continue
+            x = np.arange(len(h))
+            high_slope = float(np.polyfit(x, h, 1)[0])
+            low_slope = float(np.polyfit(x, l, 1)[0])
+            mean_price = float(np.mean(h))
+            if mean_price <= 0:
+                continue
+            high_slope_pct = high_slope / mean_price
+            low_slope_pct = low_slope / mean_price
+            if high_slope_pct >= 0 or low_slope_pct <= 0:
+                continue
+            convergence = abs(high_slope_pct) + abs(low_slope_pct)
+            if convergence < 0.005:
+                continue
+            m = self._consolidation_metrics(weekly, surge, peak_idx + 1, end)
+            if m['pullback_pct'] > 0.30:
+                continue
+            if m['full_range'] > 0.25:
+                continue
+            weeks = end - peak_idx
+            conv_s = min(convergence / 0.04, 1.0)
+            tight_s = max(0.0, 1.0 - m['full_range'] / 0.25)
+            dry_s = self._score_dryup(m['vol_dryup'])
+            if self.ignore_vol_dryup:
+                score = conv_s * 0.45 + tight_s * 0.40 + 0.15
+            else:
+                score = conv_s * 0.35 + tight_s * 0.30 + dry_s * 0.25 + 0.10
+            if score > best_score:
+                best_score = score
+                best = self._make_flag_dict(
+                    'pennant', peak_idx, end, pole_high, m['cons_low'],
+                    m['full_range'] * 100, m['pullback_pct'] * 100,
+                    m, weeks, score,
+                    weekly['dates'][peak_idx], weekly['dates'][end],
+                )
+        return best
 
     # ── Resto de métodos (sin cambios relevantes) ───────────────────────
     # (Mantengo _compute_rs, _match_catalyst, _compute_bollinger_width,
@@ -504,11 +807,13 @@ class HTFDetectionEngine:
         else:
             parts.append("No confirmed earnings catalyst — check for news")
         if flag:
-            parts.append(f"Flag: {flag['flag_range_pct']:.1f}% range over {flag['weeks']} weeks, "
-                         f"vol dry-up {flag['vol_dryup_ratio']:.2f} "
+            pt_label = flag.get('pattern_type', 'flag').replace('_', '-').upper()
+            pullback = flag.get('pullback_pct', 0)
+            parts.append(f"{pt_label}: {flag['flag_range_pct']:.1f}% range over {flag['weeks']} weeks "
+                         f"(pullback {pullback:.0f}%), vol dry-up {flag['vol_dryup_ratio']:.2f} "
                          f"({'declining ✓' if flag['vol_declining'] else 'not declining ✗'})")
         else:
-            parts.append("No valid flag detected")
+            parts.append("No valid consolidation detected")
         rs_status = "RS new highs ✓" if rs.get('rs_new_high') else f"RS at {rs.get('rs_percentile', 0):.0f}th percentile"
         parts.append(rs_status)
         if breakout.get('breakout_triggered') and breakout.get('vol_confirmation'):
@@ -594,7 +899,7 @@ class HTFDetectionEngine:
 
         patterns = []
         for surge in surges:
-            flag = self._detect_flag(weekly, surge)
+            flag = self._detect_consolidation(weekly, surge)
             catalyst = self._match_catalyst(surge, earnings)
             vol_dryup = flag['vol_dryup_ratio'] if flag else 1.0
 
