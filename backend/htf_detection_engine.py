@@ -452,11 +452,11 @@ class HTFDetectionEngine:
         return best
 
     def _try_flat_base(self, weekly: Dict, surge: Dict) -> Optional[Dict]:
-        """Flat base: 5-15w sideways, ≤15% pullback, ≤15% overall range."""
+        """Flat base: 5-26w sideways (up to ~6 months), ≤15% pullback, ≤15% overall range."""
         n = len(weekly['close'])
         peak_idx = surge['peak_idx']
         pole_high = surge['high_price']
-        min_w, max_w = 5, 15
+        min_w, max_w = 5, 26
         if peak_idx + min_w >= n:
             return None
         min_end = max(peak_idx + min_w, n - self.max_flag_end_age_weeks)
@@ -473,7 +473,7 @@ class HTFDetectionEngine:
             weeks = end - peak_idx
             tight_s = max(0.0, 1.0 - m['full_range'] / 0.15)
             flat_s = max(0.0, 1.0 - m['pullback_pct'] / 0.15)
-            dur_s = max(0.0, 1.0 - abs(weeks - 10) / 10)
+            dur_s = max(0.0, 1.0 - abs(weeks - 15) / 15)  # peaks at 15w, decays to 0 at 0/30w
             dry_s = self._score_dryup(m['vol_dryup'])
             if self.ignore_vol_dryup:
                 score = tight_s * 0.45 + flat_s * 0.30 + dur_s * 0.25
@@ -490,13 +490,13 @@ class HTFDetectionEngine:
         return best
 
     def _try_vcp(self, weekly: Dict, surge: Dict) -> Optional[Dict]:
-        """VCP: 3 sequential contractions, each tighter than the previous; final ≤ 12%."""
+        """VCP: 3 sequential contractions, each tighter than the previous; 6-40w (up to ~10 months); final ≤ 12%."""
         n = len(weekly['close'])
         peak_idx = surge['peak_idx']
         pole_high = surge['high_price']
         highs = weekly['high']
         lows = weekly['low']
-        min_w, max_w = 6, 25
+        min_w, max_w = 6, 40
         if peak_idx + min_w >= n:
             return None
         min_end = max(peak_idx + min_w, n - self.max_flag_end_age_weeks)
