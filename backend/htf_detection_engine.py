@@ -47,7 +47,7 @@ class HTFDetectionEngine:
         ml_mode: bool = True,
         surge_lookback_months: int = 0,
         ignore_vol_dryup: bool = False,
-        max_flag_end_age_weeks: int = 2,  # flag must end within last N weekly bars (live setup, not historical)
+        max_flag_end_age_weeks: int = 4,  # flag must end within last N weekly bars (live setup, not historical)
     ):
         self.api_key = api_key or os.environ.get('FMP_API_KEY')
         self.min_surge = min_surge

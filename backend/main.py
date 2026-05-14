@@ -1901,7 +1901,7 @@ class HTFDetectionRequest(BaseModel):
     max_flag_range: float = 0.15
     surge_lookback_months: int = 0       # 0 = all history, 3/6/9/12 = recent months
     ignore_vol_dryup: bool = False       # True = screener mode, skip vol dryup
-    max_flag_end_age_weeks: int = 2      # flag must end within last N weekly bars (live setups only)
+    max_flag_end_age_weeks: int = 4      # flag must end within last N weekly bars (live setups only)
 
 class EPDetectionRequest(BaseModel):
     ticker: str
