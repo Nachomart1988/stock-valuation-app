@@ -1935,6 +1935,113 @@ async def htf_detect(req: HTFDetectionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class HTFScanTicker(BaseModel):
+    symbol: str
+    companyName: Optional[str] = None
+    sector: Optional[str] = None
+    price: Optional[float] = None
+    marketCap: Optional[float] = None
+
+
+class HTFScanRequest(BaseModel):
+    tickers: List[HTFScanTicker]
+    min_surge: float = 0.80
+    max_flag_range: float = 0.15
+    surge_lookback_months: int = 0
+    ignore_vol_dryup: bool = True
+    max_flag_end_age_weeks: int = 4
+    max_workers: int = 28
+    top_n: int = 25
+
+
+@app.post("/htf/scan")
+async def htf_scan(req: HTFScanRequest):
+    """Batch HTF scanner — fans out across tickers internally so Vercel can stay
+    under its 300s function-invocation cap. Returns the flattened, sorted, top-N
+    results that the screener UI expects."""
+    if not HTF_AVAILABLE:
+        raise HTTPException(status_code=503, detail="HTF detection engine not available")
+    from htf_detection_engine import HTFDetectionEngine
+    from concurrent.futures import ThreadPoolExecutor
+
+    def scan_one(t: HTFScanTicker) -> Optional[Dict[str, Any]]:
+        try:
+            engine = HTFDetectionEngine(
+                min_surge=req.min_surge,
+                max_flag_range=req.max_flag_range,
+                surge_lookback_months=req.surge_lookback_months,
+                ignore_vol_dryup=req.ignore_vol_dryup,
+                max_flag_end_age_weeks=req.max_flag_end_age_weeks,
+            )
+            data = engine.analyze(t.symbol)
+            if not data or 'error' in data or data.get('score', 0) <= 0:
+                return None
+            bp = data.get('best_pattern')
+            if not bp or not bp.get('surge') or not bp.get('flag'):
+                return None
+            surge = bp['surge']; flag = bp['flag']
+            breakout = bp.get('breakout') or {}
+            triggered = breakout.get('breakout_triggered')
+            vol_conf = breakout.get('vol_confirmation')
+            prox = breakout.get('proximity_pct')
+            if triggered:
+                breakout_status = 'confirmed' if vol_conf else 'triggered'
+            elif isinstance(prox, (int, float)) and prox > -3:
+                breakout_status = 'approaching'
+            else:
+                breakout_status = 'watching'
+            flat_bp = {
+                'pattern_type': flag.get('pattern_type', 'htf'),
+                'surge_pct': surge.get('surge_pct'),
+                'flag_range_pct': (flag.get('flag_range_pct') / 100) if flag.get('flag_range_pct') is not None else None,
+                'pullback_pct': (flag.get('pullback_pct') / 100) if flag.get('pullback_pct') is not None else None,
+                'flag_weeks': flag.get('weeks'),
+                'vol_dryup': flag.get('vol_dryup_ratio'),
+                'ml_probability': bp.get('ml_probability', 0),
+                'breakout_status': breakout_status,
+                'surge_start_date': surge.get('start_date'),
+                'surge_peak_date': surge.get('peak_date'),
+                'surge_low_price': surge.get('low_price'),
+                'surge_high_price': surge.get('high_price'),
+                'flag_start_date': flag.get('start_date'),
+                'flag_end_date': flag.get('end_date'),
+                'flag_high': flag.get('flag_high'),
+                'flag_low': flag.get('flag_low'),
+                'cup_low': flag.get('cup_low'),
+                'cup_weeks': flag.get('cup_weeks'),
+                'handle_weeks': flag.get('handle_weeks'),
+            }
+            narrative = data.get('narrative') or ''
+            return {
+                'symbol': t.symbol,
+                'companyName': t.companyName or t.symbol,
+                'sector': t.sector or '',
+                'currentPrice': t.price,
+                'marketCap': t.marketCap or 0,
+                'score': data.get('score', 0),
+                'detected': data.get('detected', False),
+                'bestPattern': flat_bp,
+                'narrative': narrative[:200],
+                'patternsCount': len(data.get('patterns') or []),
+            }
+        except Exception as e:
+            print(f"[HTF Scan] {t.symbol} failed: {e}")
+            return None
+
+    loop = asyncio.get_running_loop()
+    max_workers = max(1, min(req.max_workers, 48))
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        tasks = [loop.run_in_executor(ex, scan_one, t) for t in req.tickers]
+        raw = await asyncio.gather(*tasks, return_exceptions=False)
+    results = [r for r in raw if r is not None]
+    results.sort(key=lambda x: x.get('score', 0), reverse=True)
+    return numpy_safe_response({
+        'results': results[:req.top_n],
+        'total': len(req.tickers),
+        'scanned': len(req.tickers),
+    })
+
+
 @app.post("/ep/detect")
 async def ep_detect(req: EPDetectionRequest):
     """Episodic Pivot detection — Quillamaggie style."""

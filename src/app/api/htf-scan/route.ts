@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 export const maxDuration = 300;
 
 const FMP_BASE = 'https://financialmodelingprep.com';
-const SCAN_CONCURRENCY = 15;
 const MAX_STOCKS = 10000;
+// Leave headroom under Vercel's 300s maxDuration for FMP screener call + response serialization.
+const BACKEND_SCAN_TIMEOUT_MS = 285_000;
 
 export async function GET(req: NextRequest) {
   const apiKey = process.env.FMP_API_KEY;
@@ -22,8 +23,7 @@ export async function GET(req: NextRequest) {
   const maxFlagRange = parseFloat(sp.get('maxFlagRange') || '0.15');
   const surgeLookbackMonths = parseInt(sp.get('surgeLookbackMonths') || '0');
 
-  // 1. Fetch stocks from FMP screener (single call — verified that FMP returns
-  //    the full universe at this plan tier; no per-call cap to bypass).
+  // 1. Fetch stocks from FMP screener
   const params = new URLSearchParams({
     priceMoreThan: priceMin,
     priceLowerThan: priceMax,
@@ -60,90 +60,48 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ results: [], total: 0, scanned: 0 });
   }
 
-  // 2. Scan each stock for HTF patterns via backend
-  const results: any[] = [];
-  let scanned = 0;
+  // 2. Single batch scan on the backend (Railway). The backend fans out across
+  //    tickers internally with a thread pool, so we don't hit Vercel's 300s cap
+  //    by issuing thousands of per-ticker HTTPS requests from this function.
+  try {
+    const scanRes = await fetch(`${backendUrl}/htf/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tickers: valid.map((s: any) => ({
+          symbol: s.symbol,
+          companyName: s.companyName || s.symbol,
+          sector: s.sector || '',
+          price: s.price,
+          marketCap: s.marketCap || 0,
+        })),
+        min_surge: minSurge,
+        max_flag_range: maxFlagRange,
+        surge_lookback_months: surgeLookbackMonths,
+        ignore_vol_dryup: true,
+        max_workers: 28,
+        top_n: 25,
+      }),
+      signal: AbortSignal.timeout(BACKEND_SCAN_TIMEOUT_MS),
+    });
 
-  const scanHTF = async (stock: any) => {
-    try {
-      const res = await fetch(`${backendUrl}/htf/detect`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticker: stock.symbol,
-          min_surge: minSurge,
-          max_flag_range: maxFlagRange,
-          surge_lookback_months: surgeLookbackMonths,
-          ignore_vol_dryup: true,
-        }),
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      scanned++;
-      // Backend returns best_pattern as a nested dict: { surge: {...}, flag: {...} | null, breakout: {...}, ml_probability, fusion_score, ... }
-      // Frontend expects a flat shape — flatten + map fields here.
-      const bp = data.best_pattern;
-      if (!bp || !bp.surge || !bp.flag) return; // require both a surge AND a flag (real HTF)
+    if (!scanRes.ok) {
+      return NextResponse.json(
+        { error: `backend scan failed (${scanRes.status})`, results: [], total: valid.length, scanned: 0 },
+        { status: 502 },
+      );
+    }
 
-      const breakout = bp.breakout || {};
-      const breakoutStatus = breakout.breakout_triggered
-        ? (breakout.vol_confirmation ? 'confirmed' : 'triggered')
-        : (typeof breakout.proximity_pct === 'number' && breakout.proximity_pct > -3 ? 'approaching' : 'watching');
-
-      const flatBestPattern = {
-        pattern_type: bp.flag.pattern_type ?? 'htf',            // htf | cup_handle | flat_base | vcp | pennant
-        surge_pct: bp.surge.surge_pct,                          // already a fraction (e.g. 1.05)
-        flag_range_pct: bp.flag.flag_range_pct != null ? bp.flag.flag_range_pct / 100 : null, // current tightness, fraction
-        pullback_pct: bp.flag.pullback_pct != null ? bp.flag.pullback_pct / 100 : null,       // drawdown from pole, fraction
-        flag_weeks: bp.flag.weeks ?? null,
-        vol_dryup: bp.flag.vol_dryup_ratio ?? null,
-        ml_probability: bp.ml_probability ?? 0,
-        breakout_status: breakoutStatus,
-        // Pattern coordinates for charting
-        surge_start_date: bp.surge.start_date ?? null,
-        surge_peak_date: bp.surge.peak_date ?? null,
-        surge_low_price: bp.surge.low_price ?? null,
-        surge_high_price: bp.surge.high_price ?? null,
-        flag_start_date: bp.flag.start_date ?? null,
-        flag_end_date: bp.flag.end_date ?? null,
-        flag_high: bp.flag.flag_high ?? null,
-        flag_low: bp.flag.flag_low ?? null,
-        // Cup-and-handle extras (only present when pattern_type === 'cup_handle')
-        cup_low: bp.flag.cup_low ?? null,
-        cup_weeks: bp.flag.cup_weeks ?? null,
-        handle_weeks: bp.flag.handle_weeks ?? null,
-      };
-
-      if (data.score > 0) {
-        results.push({
-          symbol: stock.symbol,
-          companyName: stock.companyName || stock.symbol,
-          sector: stock.sector || '',
-          currentPrice: stock.price,
-          marketCap: stock.marketCap || 0,
-          score: data.score,
-          detected: data.detected,
-          bestPattern: flatBestPattern,
-          narrative: (data.narrative || '').slice(0, 200),
-          patternsCount: data.patterns?.length || 0,
-        });
-      }
-    } catch { /* skip failed tickers */ }
-  };
-
-  // Process in waves of SCAN_CONCURRENCY
-  for (let i = 0; i < valid.length; i += SCAN_CONCURRENCY) {
-    const wave = valid.slice(i, i + SCAN_CONCURRENCY);
-    await Promise.all(wave.map(scanHTF));
+    const data = await scanRes.json();
+    return NextResponse.json({
+      results: data.results || [],
+      total: data.total ?? valid.length,
+      scanned: data.scanned ?? 0,
+    });
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: `backend scan error: ${e?.message || 'unknown'}`, results: [], total: valid.length, scanned: 0 },
+      { status: 502 },
+    );
   }
-
-  // Sort by score descending, return top 25
-  results.sort((a, b) => b.score - a.score);
-
-  return NextResponse.json({
-    results: results.slice(0, 25),
-    total: valid.length,
-    scanned,
-  });
 }
