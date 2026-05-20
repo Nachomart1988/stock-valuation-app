@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/app/components/Header';
+import FreeTierGuard from '@/app/components/FreeTierGuard';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import { fetchFmp, fetchFmpRaw } from '@/lib/fmpClient';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -45,6 +46,14 @@ function fmtRevenue(n: number | null | undefined): string {
 }
 
 export default function EarningsPredictionPage() {
+  return (
+    <FreeTierGuard feature="earnings">
+      <EarningsPredictionPageInner />
+    </FreeTierGuard>
+  );
+}
+
+function EarningsPredictionPageInner() {
   const params = useParams();
   const router = useRouter();
   const { locale } = useLanguage();

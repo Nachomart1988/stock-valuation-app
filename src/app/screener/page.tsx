@@ -4,8 +4,10 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import Header from '@/app/components/Header';
+import FreeTierGuard from '@/app/components/FreeTierGuard';
 import { useLanguage } from '@/i18n/LanguageContext';
 import HTFChartModal from './HTFChartModal';
+import StockChartModal from './StockChartModal';
 
 interface ScreenerResult {
   symbol: string;
@@ -199,6 +201,14 @@ const fmtMktCap = (v: number) => {
 };
 
 export default function ScreenerPage() {
+  return (
+    <FreeTierGuard feature="screener">
+      <ScreenerPageInner />
+    </FreeTierGuard>
+  );
+}
+
+function ScreenerPageInner() {
   const router = useRouter();
   const { t } = useLanguage();
   const { user } = useUser();
@@ -250,6 +260,15 @@ export default function ScreenerPage() {
     surgeLookbackMonths: '3',
   });
   const [htfChartTarget, setHtfChartTarget] = useState<HTFScanResult | null>(null);
+  // Generic chart modal (used by every scanner other than HTF, which has its own pattern-aware modal)
+  const [chartTarget, setChartTarget] = useState<{
+    symbol: string;
+    companyName: string;
+    currentPrice: number;
+    subtitle?: string;
+    markerDate?: string | null;
+    markerLabel?: string;
+  } | null>(null);
 
   // EP Scanner state (GODMODE only)
   const [epResults, setEpResults] = useState<EPScanResult[]>([]);
@@ -876,6 +895,21 @@ export default function ScreenerPage() {
                                 {t('screener.analyze')}
                               </button>
                               <button
+                                onClick={() => setChartTarget({
+                                  symbol: opp.symbol,
+                                  companyName: opp.companyName,
+                                  currentPrice: opp.currentPrice,
+                                  subtitle: `Intrinsic $${opp.intrinsicValue?.toFixed(2)} · Upside ${opp.upside?.toFixed(1)}%`,
+                                })}
+                                className="px-2 py-1.5 bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/25 rounded-lg text-amber-300 text-[10px] font-semibold transition flex items-center gap-1"
+                                title="View price chart"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                                </svg>
+                                Chart
+                              </button>
+                              <button
                                 onClick={(e) => {
                                   addToWatchlist(opp.symbol, opp.companyName, 'Others');
                                   const btn = e.currentTarget;
@@ -1430,6 +1464,23 @@ export default function ScreenerPage() {
                                   Analyze
                                 </button>
                                 <button
+                                  onClick={() => setChartTarget({
+                                    symbol: r.symbol,
+                                    companyName: r.companyName,
+                                    currentPrice: r.currentPrice,
+                                    subtitle: r.bestEpisode ? `Episodic Pivot · Gap ${r.bestEpisode.gap_pct.toFixed(1)}% · Vol ${r.bestEpisode.vol_spike.toFixed(1)}x` : 'Episodic Pivot',
+                                    markerDate: r.bestEpisode?.date,
+                                    markerLabel: 'EP date',
+                                  })}
+                                  className="px-2 py-1.5 bg-violet-500/10 hover:bg-violet-500/25 border border-violet-500/25 rounded-lg text-violet-300 text-[10px] font-semibold transition flex items-center gap-1"
+                                  title="View EP chart"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                                  </svg>
+                                  Chart
+                                </button>
+                                <button
                                   onClick={(e) => {
                                     addToWatchlist(r.symbol, r.companyName, 'Episodic Pivot');
                                     const btn = e.currentTarget;
@@ -1692,6 +1743,23 @@ export default function ScreenerPage() {
                                   className="px-3 py-1.5 bg-teal-500/15 hover:bg-teal-500/30 border border-teal-500/25 rounded-lg text-teal-300 text-xs font-semibold transition"
                                 >
                                   Analyze
+                                </button>
+                                <button
+                                  onClick={() => setChartTarget({
+                                    symbol: r.symbol,
+                                    companyName: r.companyName,
+                                    currentPrice: r.currentPrice,
+                                    subtitle: `MA${r.maPeriod} Bounce · ${r.bounceCount} bounce${r.bounceCount !== 1 ? 's' : ''} · Surge +${r.surgePct.toFixed(0)}%`,
+                                    markerDate: r.bestBounce?.date,
+                                    markerLabel: 'Last bounce',
+                                  })}
+                                  className="px-2 py-1.5 bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/25 rounded-lg text-teal-300 text-[10px] font-semibold transition flex items-center gap-1"
+                                  title="View MA bounce chart"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                                  </svg>
+                                  Chart
                                 </button>
                                 <button
                                   onClick={(e) => {
@@ -1960,6 +2028,23 @@ export default function ScreenerPage() {
                                     Analyze
                                   </button>
                                   <button
+                                    onClick={() => setChartTarget({
+                                      symbol: r.symbol,
+                                      companyName: r.companyName,
+                                      currentPrice: r.price,
+                                      subtitle: `${r.squeezeTier} Squeeze · Rotation ${r.rotation.toFixed(1)}x · Vol surge ${r.volSurge.toFixed(1)}x`,
+                                      markerDate: r.triggeredAt,
+                                      markerLabel: 'Trigger',
+                                    })}
+                                    className="px-2 py-1.5 bg-fuchsia-500/10 hover:bg-fuchsia-500/25 border border-fuchsia-500/25 rounded-lg text-fuchsia-300 text-[10px] font-semibold transition flex items-center gap-1"
+                                    title="View squeeze chart"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                                    </svg>
+                                    Chart
+                                  </button>
+                                  <button
                                     onClick={(e) => {
                                       addToWatchlist(r.symbol, r.companyName, 'Squeeze');
                                       const btn = e.currentTarget;
@@ -2175,12 +2260,50 @@ export default function ScreenerPage() {
                           <td className="px-4 py-2.5 text-right text-emerald-400 font-mono">{r.wakeVolumeMultiplier.toFixed(1)}x</td>
                           <td className="px-4 py-2.5 text-gray-500 text-xs">{r.peakDate}</td>
                           <td className="px-4 py-2.5">
-                            <button
-                              onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
-                              className="text-[11px] px-3 py-1 rounded-lg bg-emerald-900/30 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-900/50 transition"
-                            >
-                              Analyze
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                className="text-[11px] px-3 py-1 rounded-lg bg-emerald-900/30 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-900/50 transition"
+                              >
+                                Analyze
+                              </button>
+                              <button
+                                onClick={() => setChartTarget({
+                                  symbol: r.symbol,
+                                  companyName: r.companyName,
+                                  currentPrice: r.currentPrice,
+                                  subtitle: `Former Runner · Past surge +${r.pastSurgePct.toFixed(0)}% · Dormancy ${r.dormancyMonths.toFixed(1)}m · Wake vol ${r.wakeVolumeMultiplier.toFixed(1)}x`,
+                                  markerDate: r.peakDate,
+                                  markerLabel: 'Past peak',
+                                })}
+                                className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-semibold transition flex items-center gap-1"
+                                title="View chart"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                                </svg>
+                                Chart
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  addToWatchlist(r.symbol, r.companyName, 'Former Runner');
+                                  const btn = e.currentTarget;
+                                  btn.classList.remove('animate-foam-press');
+                                  void btn.offsetWidth;
+                                  btn.classList.add('animate-foam-press');
+                                  if (foamTimers.current[r.symbol]) clearTimeout(foamTimers.current[r.symbol]);
+                                  foamTimers.current[r.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
+                                }}
+                                className={`px-2 py-1 border rounded-lg text-[10px] font-semibold transition-colors ${
+                                  watchlistAdded.has(r.symbol)
+                                    ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                                }`}
+                                title="Add to Watchlist"
+                              >
+                                {watchlistAdded.has(r.symbol) ? 'Added' : '+ Watch'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2347,12 +2470,50 @@ export default function ScreenerPage() {
                           <td className="px-4 py-2.5 text-right text-gray-300">{r.totalBreakouts}</td>
                           <td className="px-4 py-2.5 text-gray-500 text-xs">{r.breakoutDate}</td>
                           <td className="px-4 py-2.5">
-                            <button
-                              onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
-                              className="text-[11px] px-3 py-1 rounded-lg bg-amber-900/30 text-amber-400 border border-amber-500/20 hover:bg-amber-900/50 transition"
-                            >
-                              Analyze
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                className="text-[11px] px-3 py-1 rounded-lg bg-amber-900/30 text-amber-400 border border-amber-500/20 hover:bg-amber-900/50 transition"
+                              >
+                                Analyze
+                              </button>
+                              <button
+                                onClick={() => setChartTarget({
+                                  symbol: r.symbol,
+                                  companyName: r.companyName,
+                                  currentPrice: r.currentPrice,
+                                  subtitle: `Cheap Breakout · +${r.breakoutPct.toFixed(1)}% on ${r.volumeMultiplier.toFixed(1)}x vol · ${r.totalBreakouts} breakout${r.totalBreakouts !== 1 ? 's' : ''}`,
+                                  markerDate: r.breakoutDate,
+                                  markerLabel: 'Breakout',
+                                })}
+                                className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/25 rounded-lg text-amber-300 text-[10px] font-semibold transition flex items-center gap-1"
+                                title="View chart"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                                </svg>
+                                Chart
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  addToWatchlist(r.symbol, r.companyName, 'Cheap Breakout');
+                                  const btn = e.currentTarget;
+                                  btn.classList.remove('animate-foam-press');
+                                  void btn.offsetWidth;
+                                  btn.classList.add('animate-foam-press');
+                                  if (foamTimers.current[r.symbol]) clearTimeout(foamTimers.current[r.symbol]);
+                                  foamTimers.current[r.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
+                                }}
+                                className={`px-2 py-1 border rounded-lg text-[10px] font-semibold transition-colors ${
+                                  watchlistAdded.has(r.symbol)
+                                    ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                                }`}
+                                title="Add to Watchlist"
+                              >
+                                {watchlistAdded.has(r.symbol) ? 'Added' : '+ Watch'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2555,6 +2716,21 @@ export default function ScreenerPage() {
                             {t('screener.analyze')}
                           </button>
                           <button
+                            onClick={() => setChartTarget({
+                              symbol: stock.symbol,
+                              companyName: stock.companyName,
+                              currentPrice: stock.price,
+                              subtitle: stock.sector ? `${stock.sector} · ${stock.exchangeShortName || stock.exchange || ''}` : undefined,
+                            })}
+                            className="px-2 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-semibold transition flex items-center gap-1"
+                            title="View price chart"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                            </svg>
+                            Chart
+                          </button>
+                          <button
                             onClick={(e) => {
                               addToWatchlist(stock.symbol, stock.companyName, 'Others');
                               const btn = e.currentTarget;
@@ -2618,6 +2794,19 @@ export default function ScreenerPage() {
           currentPrice={htfChartTarget.currentPrice}
           pattern={htfChartTarget.bestPattern}
           onClose={() => setHtfChartTarget(null)}
+        />
+      )}
+
+      {/* Generic chart modal (Top Opportunities, EP, MA Bounce, Squeeze, Former Runner, Cheap Breakout, Screener) */}
+      {chartTarget && (
+        <StockChartModal
+          symbol={chartTarget.symbol}
+          companyName={chartTarget.companyName}
+          currentPrice={chartTarget.currentPrice}
+          subtitle={chartTarget.subtitle}
+          markerDate={chartTarget.markerDate}
+          markerLabel={chartTarget.markerLabel}
+          onClose={() => setChartTarget(null)}
         />
       )}
     </div>

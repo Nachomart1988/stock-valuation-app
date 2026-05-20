@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Logo from '../components/Logo';
 import Header from '../components/Header';
+import FreeTierGuard from '../components/FreeTierGuard';
 import { LogoLoader } from '../components/ui/LogoLoader';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { fetchFmp } from '@/lib/fmpClient';
@@ -158,6 +159,14 @@ function FearGreedGauge({ score, label }: { score: number; label: string }) {
 }
 
 export default function MarketSentimentPage() {
+  return (
+    <FreeTierGuard feature="market-sentiment">
+      <MarketSentimentPageInner />
+    </FreeTierGuard>
+  );
+}
+
+function MarketSentimentPageInner() {
   const [data, setData] = useState<MarketSentimentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

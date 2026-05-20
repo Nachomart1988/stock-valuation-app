@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import Header from '@/app/components/Header';
 import Logo from '@/app/components/Logo';
+import UpgradeBanner from '@/app/components/UpgradeBanner';
 import { fetchFmp } from '@/lib/fmpClient';
 
 interface NewsItem {
@@ -86,6 +87,11 @@ export default function Home() {
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Navigation */}
       <Header />
+
+      {/* Upgrade banner — shown when redirected from a paywalled page */}
+      <Suspense fallback={null}>
+        <UpgradeBanner />
+      </Suspense>
 
       {/* Hero Section */}
       <section className="pt-36 pb-24 px-4">

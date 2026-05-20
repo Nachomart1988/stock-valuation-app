@@ -3,11 +3,20 @@
 import { useState } from 'react';
 import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/nextjs';
 import Header from '@/app/components/Header';
+import FreeTierGuard from '@/app/components/FreeTierGuard';
 import DiarioInversorTab from '@/app/components/tabs/DiarioInversorTab';
 import PortfolioOptimizerTab from '@/app/components/tabs/PortfolioOptimizerTab';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 export default function DiarioPage() {
+  return (
+    <FreeTierGuard feature="diario">
+      <DiarioPageInner />
+    </FreeTierGuard>
+  );
+}
+
+function DiarioPageInner() {
   const [activeTab, setActiveTab] = useState<'diario' | 'portfolio'>('diario');
   const { locale } = useLanguage();
   const es = locale === 'es';

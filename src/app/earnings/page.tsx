@@ -6,6 +6,7 @@ import { fetchFmpRaw } from '@/lib/fmpClient';
 import { LogoLoader } from '@/app/components/ui/LogoLoader';
 import { useLanguage } from '@/i18n/LanguageContext';
 import Header from '@/app/components/Header';
+import FreeTierGuard from '@/app/components/FreeTierGuard';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -81,6 +82,14 @@ const BIG_TICKERS = new Set([
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 export default function EarningsPage() {
+  return (
+    <FreeTierGuard feature="earnings">
+      <EarningsPageInner />
+    </FreeTierGuard>
+  );
+}
+
+function EarningsPageInner() {
   const { locale } = useLanguage();
   const es = locale === 'es';
   const router = useRouter();

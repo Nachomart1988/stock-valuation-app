@@ -66,6 +66,7 @@ import DCFGroup from '@/app/components/groups/DCFGroup';
 // Plan access control
 import LockedTab from '@/app/components/LockedTab';
 import PlanBadge from '@/app/components/PlanBadge';
+import FreeTierGuard from '@/app/components/FreeTierGuard';
 import {
   type PlanTier,
   TAB_MIN_PLAN,
@@ -1556,15 +1557,17 @@ function AnalizarContent() {
 
 export default function AnalizarPage() {
   return (
-    <Suspense fallback={
-      <main className="min-h-screen flex items-center justify-center bg-gray-950/80">
-        <div className="text-center">
-          <p className="text-2xl font-bold text-green-400">Cargando...</p>
-        </div>
-      </main>
-    }>
-      <AnalizarContent />
-    </Suspense>
+    <FreeTierGuard feature="analizar">
+      <Suspense fallback={
+        <main className="min-h-screen flex items-center justify-center bg-gray-950/80">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-green-400">Cargando...</p>
+          </div>
+        </main>
+      }>
+        <AnalizarContent />
+      </Suspense>
+    </FreeTierGuard>
   );
 }
 
