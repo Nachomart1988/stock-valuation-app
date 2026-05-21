@@ -12,29 +12,39 @@ interface CheapBreakoutTabProps {
   ticker?: string;
 }
 
-interface BreakoutData {
-  date: string;
-  breakout_pct: number;
-  volume_multiplier: number;
-  price: number;
-  volume: number;
+interface SetupData {
+  resistance: number;
+  dist_to_resistance_pct: number;
+  coil_pct: number;
+  coil_high: number;
+  coil_low: number;
+  days_in_range: number;
+  closes_position: number;
+  vol_dryness: number;
+  recent_avg_volume: number;
+  baseline_volume: number;
+  prior_spike_multiplier: number;
+  had_prior_spike: boolean;
+  prev_day_volume: number;
 }
 
 interface ChartPoint {
   date: string;
   close: number;
+  high?: number;
+  low?: number;
   volume: number;
-  avg_vol_50: number;
-  is_breakout: boolean;
-  in_range: boolean;
+  resistance: number | null;
+  coil_high?: number;
+  coil_low?: number;
+  in_coil?: boolean;
 }
 
 interface CheapBreakoutResult {
   detected: boolean;
   score: number;
   ticker: string;
-  breakouts: BreakoutData[];
-  best_breakout: BreakoutData | null;
+  setup: SetupData | null;
   narrative: string;
   current_price: number;
   chart_data: ChartPoint[];
@@ -63,7 +73,8 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
   const [tickerInput, setTickerInput] = useState(ticker || '');
   const [minPrice, setMinPrice] = useState(0.01);
   const [maxPrice, setMaxPrice] = useState(0.10);
-  const [minVolMultiplier, setMinVolMultiplier] = useState(15);
+  const [maxDistPct, setMaxDistPct] = useState(8);
+  const [maxCoilPct, setMaxCoilPct] = useState(25);
   const [minPrevDayVolume, setMinPrevDayVolume] = useState(0);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CheapBreakoutResult | null>(null);
@@ -87,7 +98,8 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
           ticker: tickerInput.toUpperCase().trim(),
           min_price: minPrice,
           max_price: maxPrice,
-          min_volume_multiplier: minVolMultiplier,
+          max_dist_to_resistance_pct: maxDistPct,
+          max_coil_pct: maxCoilPct,
           min_prev_day_volume: minPrevDayVolume,
         }),
       });
@@ -112,6 +124,13 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
     return raw.filter((_, i) => i % step === 0 || i === raw.length - 1);
   })();
 
+  const setup = result?.setup ?? null;
+  const distLabel = setup
+    ? (setup.dist_to_resistance_pct >= 0
+        ? `${fmt(setup.dist_to_resistance_pct, 1)}% ${es ? 'por debajo' : 'below'}`
+        : `+${fmt(-setup.dist_to_resistance_pct, 1)}% ${es ? 'sobre' : 'over'}`)
+    : '—';
+
   return (
     <div className="space-y-6 animate-fade-in-up">
       {/* Header */}
@@ -126,7 +145,7 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
             Cheap Breakout Scanner (.01-.10)
           </h2>
           <p className="text-xs text-gray-500">
-            Jack Sykes Classic — {es ? 'Breakouts en centavos + volumen explosivo' : 'Penny breakouts + explosive volume'}
+            {es ? 'Coiled Spring — setups pre-breakout en centavos' : 'Coiled Spring — pre-breakout setups in cents range'}
           </p>
         </div>
         <span className="ml-auto px-2 py-0.5 text-[10px] font-bold rounded bg-amber-900/50 text-amber-400 border border-amber-500/30 uppercase tracking-wider">
@@ -136,7 +155,7 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
 
       {/* Controls */}
       <div className="bg-black/40 rounded-xl border border-green-900/20 p-4">
-        <div className="grid sm:grid-cols-6 gap-4">
+        <div className="grid sm:grid-cols-3 lg:grid-cols-7 gap-4">
           <div>
             <label className="block text-xs text-gray-400 mb-1.5">Ticker</label>
             <input
@@ -164,17 +183,35 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1.5">{es ? 'Vol mín' : 'Min Vol'} (x)</label>
+            <label
+              className="block text-xs text-gray-400 mb-1.5"
+              title={es ? 'Distancia máxima al techo de resistencia (más chico = más cerca de romper)' : 'Max % below resistance high (smaller = closer to popping)'}
+            >
+              {es ? 'Dist máx %' : 'Max Dist %'}
+            </label>
             <input
-              type="number" value={minVolMultiplier} onChange={e => setMinVolMultiplier(+e.target.value)}
-              min={5} max={100} step={5}
+              type="number" value={maxDistPct} onChange={e => setMaxDistPct(+e.target.value)}
+              min={1} max={25} step={1}
               className="w-full px-3 py-2 rounded-lg bg-black/60 border border-green-900/30 text-white text-sm font-data focus:outline-none focus:border-amber-500"
             />
           </div>
           <div>
             <label
               className="block text-xs text-gray-400 mb-1.5"
-              title={es ? 'Volumen mínimo el día PREVIO al breakout (0 = sin filtro)' : 'Minimum volume on the day BEFORE the breakout (0 = disabled)'}
+              title={es ? 'Rango máximo de los últimos 10 días (más chico = coil más comprimido)' : 'Max 10-day range as % of mean close (tighter = better coil)'}
+            >
+              {es ? 'Coil máx %' : 'Max Coil %'}
+            </label>
+            <input
+              type="number" value={maxCoilPct} onChange={e => setMaxCoilPct(+e.target.value)}
+              min={5} max={60} step={5}
+              className="w-full px-3 py-2 rounded-lg bg-black/60 border border-green-900/30 text-white text-sm font-data focus:outline-none focus:border-amber-500"
+            />
+          </div>
+          <div>
+            <label
+              className="block text-xs text-gray-400 mb-1.5"
+              title={es ? 'Volumen mínimo el día previo (0 = sin filtro)' : 'Minimum volume yesterday (0 = disabled)'}
             >
               {es ? 'Vol día prev. mín' : 'Prev Day Vol Min'}
             </label>
@@ -219,7 +256,7 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
             <div className={`rounded-xl border p-4 ${result.detected ? 'bg-amber-900/20 border-amber-500/30' : 'bg-gray-900/40 border-gray-700/30'}`}>
               <div className="text-xs text-gray-400 mb-1">{es ? 'Estado' : 'Status'}</div>
               <div className={`text-lg font-bold ${result.detected ? 'text-amber-400' : 'text-gray-500'}`}>
-                {result.detected ? (es ? 'BREAKOUT DETECTADO' : 'BREAKOUT DETECTED') : (es ? 'No detectado' : 'Not detected')}
+                {result.detected ? (es ? 'COILED SPRING' : 'COILED SPRING') : (es ? 'Sin setup' : 'No setup')}
               </div>
             </div>
             <div className="rounded-xl border bg-gray-900/40 border-gray-700/30 p-4">
@@ -232,51 +269,51 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
             </div>
           </div>
 
-          {/* Best Breakout Details */}
-          {result.best_breakout && (
-            <div className="grid sm:grid-cols-3 gap-4">
-              <div className="rounded-xl border bg-amber-900/10 border-amber-500/20 p-4">
-                <div className="text-xs text-gray-400 mb-1">{es ? 'Mejor Breakout' : 'Best Breakout'}</div>
-                <div className="text-lg font-bold text-amber-400">+{fmt(result.best_breakout.breakout_pct)}%</div>
-                <div className="text-xs text-gray-500">{result.best_breakout.date}</div>
+          {/* Setup Metrics */}
+          {setup && (
+            <>
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div className="rounded-xl border bg-amber-900/10 border-amber-500/20 p-4">
+                  <div className="text-xs text-gray-400 mb-1">{es ? 'Resistencia' : 'Resistance'}</div>
+                  <div className="text-lg font-bold text-amber-400">${fmt(setup.resistance, 4)}</div>
+                  <div className="text-xs text-gray-500">{distLabel}</div>
+                </div>
+                <div className="rounded-xl border bg-orange-900/10 border-orange-500/20 p-4">
+                  <div className="text-xs text-gray-400 mb-1">{es ? 'Coil (rango 10d)' : 'Coil (10d range)'}</div>
+                  <div className="text-lg font-bold text-orange-400">{fmt(setup.coil_pct)}%</div>
+                  <div className="text-xs text-gray-500">${fmt(setup.coil_low, 4)} – ${fmt(setup.coil_high, 4)}</div>
+                </div>
+                <div className="rounded-xl border bg-gray-900/40 border-gray-700/30 p-4">
+                  <div className="text-xs text-gray-400 mb-1">{es ? 'Días consolidando' : 'Days in Range'}</div>
+                  <div className="text-lg font-bold text-white">{setup.days_in_range}d</div>
+                  <div className="text-xs text-gray-500">{es ? 'cierres en ' : 'closes at '}{Math.round(setup.closes_position * 100)}%{es ? ' del rango' : ' of range'}</div>
+                </div>
               </div>
-              <div className="rounded-xl border bg-orange-900/10 border-orange-500/20 p-4">
-                <div className="text-xs text-gray-400 mb-1">{es ? 'Volumen' : 'Volume'}</div>
-                <div className="text-lg font-bold text-orange-400">{fmt(result.best_breakout.volume_multiplier)}x</div>
-                <div className="text-xs text-gray-500">{es ? 'vs promedio 50d' : 'vs 50d avg'}</div>
-              </div>
-              <div className="rounded-xl border bg-gray-900/40 border-gray-700/30 p-4">
-                <div className="text-xs text-gray-400 mb-1">{es ? 'Total breakouts' : 'Total Breakouts'}</div>
-                <div className="text-lg font-bold text-white">{result.breakouts?.length || 0}</div>
-              </div>
-            </div>
-          )}
 
-          {/* Breakout History Table */}
-          {result.breakouts && result.breakouts.length > 0 && (
-            <div className="bg-black/40 rounded-xl border border-green-900/20 p-4 overflow-x-auto">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">{es ? 'Historial de Breakouts' : 'Breakout History'}</h3>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-gray-500 border-b border-gray-800">
-                    <th className="text-left py-2 px-2">{es ? 'Fecha' : 'Date'}</th>
-                    <th className="text-right py-2 px-2">{es ? 'Precio' : 'Price'}</th>
-                    <th className="text-right py-2 px-2">Breakout %</th>
-                    <th className="text-right py-2 px-2">{es ? 'Vol' : 'Vol'} (x)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.breakouts.map((b, i) => (
-                    <tr key={i} className="border-b border-gray-800/50 hover:bg-white/[0.02]">
-                      <td className="py-2 px-2 text-gray-300">{b.date}</td>
-                      <td className="py-2 px-2 text-right text-white font-mono">${b.price?.toFixed(4)}</td>
-                      <td className="py-2 px-2 text-right text-amber-400 font-mono">+{fmt(b.breakout_pct)}%</td>
-                      <td className="py-2 px-2 text-right text-orange-400 font-mono">{fmt(b.volume_multiplier)}x</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div className="rounded-xl border bg-gray-900/40 border-gray-700/30 p-4">
+                  <div className="text-xs text-gray-400 mb-1">{es ? 'Vol reciente / baseline' : 'Vol Dryness'}</div>
+                  <div className={`text-lg font-bold ${setup.vol_dryness < 1 ? 'text-emerald-400' : 'text-gray-300'}`}>
+                    {fmt(setup.vol_dryness, 2)}x
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {setup.vol_dryness < 1 ? (es ? 'secándose ✓' : 'drying up ✓') : (es ? 'activo' : 'active')}
+                  </div>
+                </div>
+                <div className="rounded-xl border bg-gray-900/40 border-gray-700/30 p-4">
+                  <div className="text-xs text-gray-400 mb-1">{es ? 'Spike previo' : 'Prior Spike'}</div>
+                  <div className={`text-lg font-bold ${setup.had_prior_spike ? 'text-emerald-400' : 'text-gray-500'}`}>
+                    {fmt(setup.prior_spike_multiplier, 1)}x{setup.had_prior_spike ? ' ✓' : ''}
+                  </div>
+                  <div className="text-xs text-gray-500">{es ? 'vs baseline 120d' : 'vs 120d baseline'}</div>
+                </div>
+                <div className="rounded-xl border bg-gray-900/40 border-gray-700/30 p-4">
+                  <div className="text-xs text-gray-400 mb-1">{es ? 'Volumen día previo' : 'Prev Day Volume'}</div>
+                  <div className="text-lg font-bold text-white">{setup.prev_day_volume.toLocaleString('en-US')}</div>
+                  <div className="text-xs text-gray-500">{es ? 'baseline:' : 'baseline:'} {setup.baseline_volume.toLocaleString('en-US')}</div>
+                </div>
+              </div>
+            </>
           )}
 
           {/* Chart */}
@@ -293,19 +330,29 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
                     contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px' }}
                     labelStyle={{ color: '#9ca3af' }}
                   />
-                  <ReferenceLine yAxisId="price" y={maxPrice} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: `$${maxPrice}`, fill: '#f59e0b', fontSize: 10 }} />
-                  <ReferenceLine yAxisId="price" y={minPrice} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: `$${minPrice}`, fill: '#f59e0b', fontSize: 10 }} />
+                  {setup && (
+                    <ReferenceLine
+                      yAxisId="price" y={setup.resistance} stroke="#f59e0b" strokeDasharray="5 5"
+                      label={{ value: `R $${setup.resistance.toFixed(4)}`, fill: '#f59e0b', fontSize: 10, position: 'right' }}
+                    />
+                  )}
+                  {setup && (
+                    <ReferenceLine
+                      yAxisId="price" y={setup.coil_low} stroke="#6b7280" strokeDasharray="2 4"
+                      label={{ value: `Coil low`, fill: '#6b7280', fontSize: 9, position: 'right' }}
+                    />
+                  )}
                   <Bar yAxisId="vol" dataKey="volume" opacity={0.3} radius={[2, 2, 0, 0]}>
                     {chartData.map((d, i) => (
-                      <Cell key={i} fill={d.is_breakout ? '#f59e0b' : d.in_range ? '#4b5563' : '#1f2937'} />
+                      <Cell key={i} fill={d.in_coil ? '#f59e0b' : '#1f2937'} />
                     ))}
                   </Bar>
                   <Line yAxisId="price" type="monotone" dataKey="close" stroke="#60a5fa" dot={false} strokeWidth={1.5} />
                 </ComposedChart>
               </ResponsiveContainer>
               <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-500" /> Breakout</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-gray-500" /> {es ? 'En rango' : 'In range'}</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-500" /> {es ? 'En coil' : 'In coil'}</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-4 border-t border-dashed border-amber-500" /> {es ? 'Resistencia' : 'Resistance'}</span>
               </div>
             </div>
           )}
@@ -326,7 +373,7 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
           <svg className="w-12 h-12 mx-auto mb-3 text-amber-700/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-sm">{es ? 'Ingresa un ticker OTC y ejecuta el scanner' : 'Enter an OTC ticker and run the scanner'}</p>
+          <p className="text-sm">{es ? 'Ingresá un ticker en centavos y ejecutá el scanner' : 'Enter a penny ticker and run the scanner'}</p>
         </div>
       )}
     </div>

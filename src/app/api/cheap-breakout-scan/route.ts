@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
   const marketCapMax = sp.get('marketCapMax') || '100000000';
   const country = sp.get('country') || '';
   const sector = sp.get('sector') || '';
-  const minVolumeMultiplier = parseFloat(sp.get('minVolumeMultiplier') || '15');
+  const maxDistPct = parseFloat(sp.get('maxDistPct') || '8');
+  const maxCoilPct = parseFloat(sp.get('maxCoilPct') || '25');
   const minPrevDayVolume = Math.max(0, parseInt(sp.get('minPrevDayVolume') || '0', 10) || 0);
 
   // 1. Fetch penny/OTC stocks from FMP screener — NO exchange filter to include OTC
@@ -28,11 +29,10 @@ export async function GET(req: NextRequest) {
     marketCapLowerThan: marketCapMax,
     ...(country ? { country } : {}),
     ...(sector ? { sector } : {}),
-    // NO exchange filter — include ALL exchanges (NYSE, NASDAQ, AMEX, OTC, PINK, etc.)
     isActivelyTrading: 'true',
     isEtf: 'false',
     isFund: 'false',
-    limit: '10000',      // Fetch full universe — no artificial cap
+    limit: '10000',
     apikey: apiKey,
   });
 
@@ -45,7 +45,6 @@ export async function GET(req: NextRequest) {
     }
   } catch { /* skip */ }
 
-  // If screener returned few results, also try the v3 stock-screener endpoint
   if (stocks.length < 50) {
     try {
       const v3Params = new URLSearchParams({
@@ -63,10 +62,7 @@ export async function GET(req: NextRequest) {
       const res = await fetch(`${FMP_BASE}/api/v3/stock-screener?${v3Params}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) {
-          // Merge with existing, dedup later
-          stocks = stocks.concat(data);
-        }
+        if (Array.isArray(data)) stocks = stocks.concat(data);
       }
     } catch { /* skip */ }
   }
@@ -83,11 +79,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ results: [], total: 0, scanned: 0 });
   }
 
-  // 2. Scan each stock via backend — no result cap
+  // 2. Scan each stock via backend
   const results: any[] = [];
   let scanned = 0;
 
-  const scanCheapBreakout = async (stock: any) => {
+  const scanCoiledSpring = async (stock: any) => {
     try {
       const res = await fetch(`${backendUrl}/cheap-breakout/detect`, {
         method: 'POST',
@@ -96,15 +92,16 @@ export async function GET(req: NextRequest) {
           ticker: stock.symbol,
           min_price: parseFloat(minPrice),
           max_price: parseFloat(maxPrice),
-          min_volume_multiplier: minVolumeMultiplier,
+          max_dist_to_resistance_pct: maxDistPct,
+          max_coil_pct: maxCoilPct,
           min_prev_day_volume: minPrevDayVolume,
         }),
       });
       if (!res.ok) return;
       const data = await res.json();
       scanned++;
-      if (data.score > 0 && data.detected) {
-        const best = data.best_breakout;
+      if (data.detected && data.setup && data.score > 0) {
+        const s = data.setup;
         results.push({
           symbol: stock.symbol,
           companyName: stock.companyName || stock.symbol,
@@ -113,12 +110,15 @@ export async function GET(req: NextRequest) {
           currentPrice: data.current_price || stock.price,
           marketCap: stock.marketCap || 0,
           score: data.score,
-          breakoutPct: best?.breakout_pct || 0,
-          volumeMultiplier: best?.volume_multiplier || 0,
-          breakoutDate: best?.date || '',
-          breakoutPrice: best?.price || 0,
-          totalBreakouts: data.breakouts?.length || 0,
-          narrative: (data.narrative || '').slice(0, 200),
+          resistance: s.resistance,
+          distToResistancePct: s.dist_to_resistance_pct,
+          coilPct: s.coil_pct,
+          daysInRange: s.days_in_range,
+          closesPosition: s.closes_position,
+          volDryness: s.vol_dryness,
+          priorSpikeMultiplier: s.prior_spike_multiplier,
+          hadPriorSpike: s.had_prior_spike,
+          narrative: (data.narrative || '').slice(0, 240),
         });
       }
     } catch { /* skip failed tickers */ }
@@ -126,10 +126,10 @@ export async function GET(req: NextRequest) {
 
   for (let i = 0; i < valid.length; i += SCAN_CONCURRENCY) {
     const wave = valid.slice(i, i + SCAN_CONCURRENCY);
-    await Promise.all(wave.map(scanCheapBreakout));
+    await Promise.all(wave.map(scanCoiledSpring));
   }
 
-  // Sort by score descending — return ALL qualifying results (no cap)
+  // Sort by score descending
   results.sort((a, b) => b.score - a.score);
 
   return NextResponse.json({

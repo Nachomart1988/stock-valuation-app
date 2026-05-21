@@ -2133,14 +2133,15 @@ class CheapBreakoutRequest(BaseModel):
     ticker: str
     min_price: float = 0.01
     max_price: float = 0.10
-    min_volume_multiplier: float = 15.0
+    max_dist_to_resistance_pct: float = 8.0
+    max_coil_pct: float = 25.0
     min_prev_day_volume: int = 0
     lookback_days: int = 504
 
 
 @app.post("/cheap-breakout/detect")
 async def cheap_breakout_detect(req: CheapBreakoutRequest):
-    """Cheap Breakout Scanner (.01-.10 + explosive volume) — Jack Sykes Classic."""
+    """Cheap Breakout Scanner — Coiled Spring (pre-breakout) edition."""
     if not CHEAP_BREAKOUT_AVAILABLE:
         raise HTTPException(status_code=503, detail="Cheap Breakout scanner not available")
     try:
@@ -2148,7 +2149,8 @@ async def cheap_breakout_detect(req: CheapBreakoutRequest):
         engine = CheapBreakoutScanner(
             min_price=req.min_price,
             max_price=req.max_price,
-            min_volume_multiplier=req.min_volume_multiplier,
+            max_dist_to_resistance_pct=req.max_dist_to_resistance_pct,
+            max_coil_pct=req.max_coil_pct,
             min_prev_day_volume=req.min_prev_day_volume,
             lookback_days=req.lookback_days,
         )

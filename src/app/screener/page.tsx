@@ -162,11 +162,14 @@ interface CheapBreakoutScanResult {
   currentPrice: number;
   marketCap: number;
   score: number;
-  breakoutPct: number;
-  volumeMultiplier: number;
-  breakoutDate: string;
-  breakoutPrice: number;
-  totalBreakouts: number;
+  resistance: number;
+  distToResistancePct: number;
+  coilPct: number;
+  daysInRange: number;
+  closesPosition: number;
+  volDryness: number;
+  priorSpikeMultiplier: number;
+  hadPriorSpike: boolean;
   narrative: string;
 }
 
@@ -340,11 +343,12 @@ function ScreenerPageInner() {
   const [cbkFilters, setCbkFilters] = useState({
     minPrice: '0.001',
     maxPrice: '0.10',
-    marketCapMax: '500000000',   // Larger cap to include more OTC
-    country: '',                  // All countries — OTC stocks may not be tagged as US
+    marketCapMax: '500000000',
+    country: '',
     sector: '',
-    minVolumeMultiplier: '15',
-    minPrevDayVolume: '0',        // Minimum volume on the day BEFORE the breakout (0 = disabled)
+    maxDistPct: '8',              // Max distance % below resistance (closer = better setup)
+    maxCoilPct: '25',             // Max 10-day range as % of mean close (tighter = better)
+    minPrevDayVolume: '0',        // Liquidity floor on yesterday's volume (0 = disabled)
   });
 
   // ── Persist scanner results in sessionStorage so they survive tab switches ──
@@ -682,7 +686,8 @@ function ScreenerPageInner() {
         marketCapMax: cbkFilters.marketCapMax || '100000000',
         country: cbkFilters.country || 'US',
         ...(cbkFilters.sector ? { sector: cbkFilters.sector } : {}),
-        minVolumeMultiplier: cbkFilters.minVolumeMultiplier || '15',
+        maxDistPct: cbkFilters.maxDistPct || '8',
+        maxCoilPct: cbkFilters.maxCoilPct || '25',
         minPrevDayVolume: cbkFilters.minPrevDayVolume || '0',
       });
 
@@ -2334,7 +2339,7 @@ function ScreenerPageInner() {
                     </span>
                   </h2>
                   <p className="text-gray-400 text-sm mt-1 max-w-xl">
-                    Find penny stocks ($0.01-$0.10) with explosive volume breakouts (15x+ average) — the classic Jack Sykes lottery ticket setup.
+                    Find penny stocks ($0.01-$0.10) coiled tight near resistance — pre-breakout setups, not the ones that already popped.
                   </p>
                 </div>
                 <button
@@ -2352,12 +2357,12 @@ function ScreenerPageInner() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 1v8m0 0v1" />
                     </svg>
                   )}
-                  {cbkLoading ? 'Scanning...' : 'Scan Cheap Breakouts'}
+                  {cbkLoading ? 'Scanning...' : 'Scan Coiled Springs'}
                 </button>
               </div>
 
               {/* Cheap Breakout Filters */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-amber-900/15">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-amber-900/15">
                 <div>
                   <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1">Min Price</label>
                   <input type="number" min="0.001" max="0.10" step="0.005" placeholder="0.01"
@@ -2391,16 +2396,25 @@ function ScreenerPageInner() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1">Min Vol (x)</label>
-                  <input type="number" min="5" max="100" step="5" placeholder="15"
-                    value={cbkFilters.minVolumeMultiplier}
-                    onChange={e => setCbkFilters(f => ({ ...f, minVolumeMultiplier: e.target.value }))}
+                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1" title="Max distance % below the recent resistance high (smaller = closer to popping)">Max Dist % to High</label>
+                  <input type="number" min="1" max="25" step="1" placeholder="8"
+                    value={cbkFilters.maxDistPct}
+                    onChange={e => setCbkFilters(f => ({ ...f, maxDistPct: e.target.value }))}
                     disabled={cbkLoading}
                     className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1" title="Minimum volume on the trading day BEFORE the breakout (0 = disabled)">Prev Day Vol Min</label>
+                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1" title="Max 10-day range as % of mean close (tighter = more compressed coil)">Max Coil %</label>
+                  <input type="number" min="5" max="60" step="5" placeholder="25"
+                    value={cbkFilters.maxCoilPct}
+                    onChange={e => setCbkFilters(f => ({ ...f, maxCoilPct: e.target.value }))}
+                    disabled={cbkLoading}
+                    className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1" title="Minimum volume on yesterday's session (0 = disabled)">Prev Day Vol Min</label>
                   <input type="number" min="0" step="1000" placeholder="0"
                     value={cbkFilters.minPrevDayVolume}
                     onChange={e => setCbkFilters(f => ({ ...f, minPrevDayVolume: e.target.value }))}
@@ -2457,10 +2471,12 @@ function ScreenerPageInner() {
                         <th className="text-left px-4 py-2.5">Exch</th>
                         <th className="text-right px-4 py-2.5">Score</th>
                         <th className="text-right px-4 py-2.5">Price</th>
-                        <th className="text-right px-4 py-2.5">Breakout %</th>
-                        <th className="text-right px-4 py-2.5">Vol (x)</th>
-                        <th className="text-right px-4 py-2.5">Breakouts</th>
-                        <th className="text-left px-4 py-2.5">Last Date</th>
+                        <th className="text-right px-4 py-2.5" title="Recent resistance high">Resist</th>
+                        <th className="text-right px-4 py-2.5" title="% below resistance — smaller = closer to popping">Dist %</th>
+                        <th className="text-right px-4 py-2.5" title="Range of last 10 days as % of mean close — tighter = better">Coil %</th>
+                        <th className="text-right px-4 py-2.5" title="Consecutive days the range stayed compressed">Days</th>
+                        <th className="text-right px-4 py-2.5" title="Recent volume vs 120d baseline (<1 = drying up)">Vol Dry</th>
+                        <th className="text-right px-4 py-2.5" title="Largest prior volume spike (institutional fingerprint)">Prior</th>
                         <th className="px-4 py-2.5" />
                       </tr>
                     </thead>
@@ -2476,10 +2492,18 @@ function ScreenerPageInner() {
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-right text-white font-mono">${r.currentPrice.toFixed(4)}</td>
-                          <td className="px-4 py-2.5 text-right text-amber-400 font-mono">+{r.breakoutPct.toFixed(1)}%</td>
-                          <td className="px-4 py-2.5 text-right text-orange-400 font-mono">{r.volumeMultiplier.toFixed(1)}x</td>
-                          <td className="px-4 py-2.5 text-right text-gray-300">{r.totalBreakouts}</td>
-                          <td className="px-4 py-2.5 text-gray-500 text-xs">{r.breakoutDate}</td>
+                          <td className="px-4 py-2.5 text-right text-gray-300 font-mono">${r.resistance.toFixed(4)}</td>
+                          <td className="px-4 py-2.5 text-right text-amber-400 font-mono">
+                            {r.distToResistancePct >= 0 ? `${r.distToResistancePct.toFixed(1)}%` : `+${(-r.distToResistancePct).toFixed(1)}%`}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-orange-400 font-mono">{r.coilPct.toFixed(1)}%</td>
+                          <td className="px-4 py-2.5 text-right text-gray-300 font-mono">{r.daysInRange}d</td>
+                          <td className="px-4 py-2.5 text-right text-gray-300 font-mono">{r.volDryness.toFixed(2)}x</td>
+                          <td className="px-4 py-2.5 text-right font-mono">
+                            <span className={r.hadPriorSpike ? 'text-emerald-400' : 'text-gray-500'}>
+                              {r.priorSpikeMultiplier.toFixed(1)}x{r.hadPriorSpike ? ' ✓' : ''}
+                            </span>
+                          </td>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center justify-end gap-1.5">
                               <button
@@ -2493,9 +2517,7 @@ function ScreenerPageInner() {
                                   symbol: r.symbol,
                                   companyName: r.companyName,
                                   currentPrice: r.currentPrice,
-                                  subtitle: `Cheap Breakout · +${r.breakoutPct.toFixed(1)}% on ${r.volumeMultiplier.toFixed(1)}x vol · ${r.totalBreakouts} breakout${r.totalBreakouts !== 1 ? 's' : ''}`,
-                                  markerDate: r.breakoutDate,
-                                  markerLabel: 'Breakout',
+                                  subtitle: `Coiled Spring · ${r.distToResistancePct >= 0 ? r.distToResistancePct.toFixed(1) + '% below' : '+' + (-r.distToResistancePct).toFixed(1) + '% over'} $${r.resistance.toFixed(4)} · coil ${r.coilPct.toFixed(1)}% · ${r.daysInRange}d`,
                                 })}
                                 className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/25 rounded-lg text-amber-300 text-[10px] font-semibold transition flex items-center gap-1"
                                 title="View chart"
