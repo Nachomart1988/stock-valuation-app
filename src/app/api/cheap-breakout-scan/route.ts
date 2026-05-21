@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   const country = sp.get('country') || '';
   const sector = sp.get('sector') || '';
   const minVolumeMultiplier = parseFloat(sp.get('minVolumeMultiplier') || '15');
+  const minPrevDayVolume = Math.max(0, parseInt(sp.get('minPrevDayVolume') || '0', 10) || 0);
 
   // 1. Fetch penny/OTC stocks from FMP screener — NO exchange filter to include OTC
   const screenerParams = new URLSearchParams({
@@ -96,6 +97,7 @@ export async function GET(req: NextRequest) {
           min_price: parseFloat(minPrice),
           max_price: parseFloat(maxPrice),
           min_volume_multiplier: minVolumeMultiplier,
+          min_prev_day_volume: minPrevDayVolume,
         }),
       });
       if (!res.ok) return;

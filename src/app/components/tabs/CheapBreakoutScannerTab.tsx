@@ -64,6 +64,7 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
   const [minPrice, setMinPrice] = useState(0.01);
   const [maxPrice, setMaxPrice] = useState(0.10);
   const [minVolMultiplier, setMinVolMultiplier] = useState(15);
+  const [minPrevDayVolume, setMinPrevDayVolume] = useState(0);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CheapBreakoutResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +88,7 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
           min_price: minPrice,
           max_price: maxPrice,
           min_volume_multiplier: minVolMultiplier,
+          min_prev_day_volume: minPrevDayVolume,
         }),
       });
       if (!resp.ok) {
@@ -134,7 +136,7 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
 
       {/* Controls */}
       <div className="bg-black/40 rounded-xl border border-green-900/20 p-4">
-        <div className="grid sm:grid-cols-5 gap-4">
+        <div className="grid sm:grid-cols-6 gap-4">
           <div>
             <label className="block text-xs text-gray-400 mb-1.5">Ticker</label>
             <input
@@ -166,6 +168,19 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
             <input
               type="number" value={minVolMultiplier} onChange={e => setMinVolMultiplier(+e.target.value)}
               min={5} max={100} step={5}
+              className="w-full px-3 py-2 rounded-lg bg-black/60 border border-green-900/30 text-white text-sm font-data focus:outline-none focus:border-amber-500"
+            />
+          </div>
+          <div>
+            <label
+              className="block text-xs text-gray-400 mb-1.5"
+              title={es ? 'Volumen mínimo el día PREVIO al breakout (0 = sin filtro)' : 'Minimum volume on the day BEFORE the breakout (0 = disabled)'}
+            >
+              {es ? 'Vol día prev. mín' : 'Prev Day Vol Min'}
+            </label>
+            <input
+              type="number" value={minPrevDayVolume} onChange={e => setMinPrevDayVolume(+e.target.value)}
+              min={0} step={1000}
               className="w-full px-3 py-2 rounded-lg bg-black/60 border border-green-900/30 text-white text-sm font-data focus:outline-none focus:border-amber-500"
             />
           </div>

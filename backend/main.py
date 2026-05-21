@@ -2134,6 +2134,7 @@ class CheapBreakoutRequest(BaseModel):
     min_price: float = 0.01
     max_price: float = 0.10
     min_volume_multiplier: float = 15.0
+    min_prev_day_volume: int = 0
     lookback_days: int = 504
 
 
@@ -2148,6 +2149,7 @@ async def cheap_breakout_detect(req: CheapBreakoutRequest):
             min_price=req.min_price,
             max_price=req.max_price,
             min_volume_multiplier=req.min_volume_multiplier,
+            min_prev_day_volume=req.min_prev_day_volume,
             lookback_days=req.lookback_days,
         )
         result = await asyncio.to_thread(engine.analyze, req.ticker)

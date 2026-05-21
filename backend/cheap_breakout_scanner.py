@@ -30,6 +30,7 @@ class CheapBreakoutScanner:
         max_price: float = 0.10,
         min_volume_multiplier: float = 15.0,
         min_absolute_volume: int = 50_000,   # Minimum raw volume to consider
+        min_prev_day_volume: int = 0,        # Minimum volume on the day BEFORE the breakout
         lookback_days: int = 504,
     ):
         self.api_key = api_key or os.environ.get('FMP_API_KEY')
@@ -37,6 +38,7 @@ class CheapBreakoutScanner:
         self.max_price = max_price
         self.min_volume_multiplier = min_volume_multiplier
         self.min_absolute_volume = min_absolute_volume
+        self.min_prev_day_volume = max(0, int(min_prev_day_volume or 0))
         self.lookback_days = lookback_days
         self._session = requests.Session()
 
@@ -130,6 +132,10 @@ class CheapBreakoutScanner:
             if volumes[i] < self.min_absolute_volume:
                 continue
 
+            # Skip if previous day's volume is below the configured minimum
+            if self.min_prev_day_volume > 0 and volumes[i - 1] < self.min_prev_day_volume:
+                continue
+
             # Skip if no reliable baseline
             if avg_vol[i] <= 0:
                 continue
@@ -144,6 +150,7 @@ class CheapBreakoutScanner:
                     'volume_multiplier': round(vol_multiplier, 1),
                     'price': round(float(closes[i]), 4),
                     'volume': int(volumes[i]),
+                    'prev_day_volume': int(volumes[i - 1]),
                     'avg_volume_120d': int(avg_vol[i]),
                 })
 

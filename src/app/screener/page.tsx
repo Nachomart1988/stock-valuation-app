@@ -344,6 +344,7 @@ function ScreenerPageInner() {
     country: '',                  // All countries — OTC stocks may not be tagged as US
     sector: '',
     minVolumeMultiplier: '15',
+    minPrevDayVolume: '0',        // Minimum volume on the day BEFORE the breakout (0 = disabled)
   });
 
   // ── Persist scanner results in sessionStorage so they survive tab switches ──
@@ -682,6 +683,7 @@ function ScreenerPageInner() {
         country: cbkFilters.country || 'US',
         ...(cbkFilters.sector ? { sector: cbkFilters.sector } : {}),
         minVolumeMultiplier: cbkFilters.minVolumeMultiplier || '15',
+        minPrevDayVolume: cbkFilters.minPrevDayVolume || '0',
       });
 
       const res = await fetch(`/api/cheap-breakout-scan?${params.toString()}`);
@@ -2355,7 +2357,7 @@ function ScreenerPageInner() {
               </div>
 
               {/* Cheap Breakout Filters */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-amber-900/15">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-amber-900/15">
                 <div>
                   <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1">Min Price</label>
                   <input type="number" min="0.001" max="0.10" step="0.005" placeholder="0.01"
@@ -2393,6 +2395,15 @@ function ScreenerPageInner() {
                   <input type="number" min="5" max="100" step="5" placeholder="15"
                     value={cbkFilters.minVolumeMultiplier}
                     onChange={e => setCbkFilters(f => ({ ...f, minVolumeMultiplier: e.target.value }))}
+                    disabled={cbkLoading}
+                    className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-amber-400/60 uppercase tracking-wider mb-1" title="Minimum volume on the trading day BEFORE the breakout (0 = disabled)">Prev Day Vol Min</label>
+                  <input type="number" min="0" step="1000" placeholder="0"
+                    value={cbkFilters.minPrevDayVolume}
+                    onChange={e => setCbkFilters(f => ({ ...f, minPrevDayVolume: e.target.value }))}
                     disabled={cbkLoading}
                     className="w-full bg-gray-900/60 border border-amber-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-amber-500 disabled:opacity-50"
                   />
