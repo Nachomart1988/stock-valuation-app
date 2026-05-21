@@ -15,12 +15,14 @@ interface CheapBreakoutTabProps {
 interface SetupData {
   resistance: number;
   dist_to_resistance_pct: number;
+  touch_count: number;
   coil_pct: number;
   coil_high: number;
   coil_low: number;
   days_in_range: number;
   closes_position: number;
   vol_dryness: number;
+  vol_signal: string;
   recent_avg_volume: number;
   baseline_volume: number;
   prior_spike_multiplier: number;
@@ -272,11 +274,18 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
           {/* Setup Metrics */}
           {setup && (
             <>
-              <div className="grid sm:grid-cols-3 gap-4">
+              <div className="grid sm:grid-cols-4 gap-4">
                 <div className="rounded-xl border bg-amber-900/10 border-amber-500/20 p-4">
                   <div className="text-xs text-gray-400 mb-1">{es ? 'Resistencia' : 'Resistance'}</div>
                   <div className="text-lg font-bold text-amber-400">${fmt(setup.resistance, 4)}</div>
                   <div className="text-xs text-gray-500">{distLabel}</div>
+                </div>
+                <div className="rounded-xl border bg-amber-900/10 border-amber-500/20 p-4">
+                  <div className="text-xs text-gray-400 mb-1">{es ? 'Toques de resistencia' : 'Resistance Touches'}</div>
+                  <div className={`text-lg font-bold ${setup.touch_count >= 4 ? 'text-emerald-400' : setup.touch_count >= 3 ? 'text-amber-400' : 'text-gray-300'}`}>
+                    {setup.touch_count}
+                  </div>
+                  <div className="text-xs text-gray-500">{es ? 'días tocando techo (±1%)' : 'days within 1% of high'}</div>
                 </div>
                 <div className="rounded-xl border bg-orange-900/10 border-orange-500/20 p-4">
                   <div className="text-xs text-gray-400 mb-1">{es ? 'Coil (rango 10d)' : 'Coil (10d range)'}</div>
@@ -292,13 +301,15 @@ export default function CheapBreakoutScannerTab({ ticker }: CheapBreakoutTabProp
 
               <div className="grid sm:grid-cols-3 gap-4">
                 <div className="rounded-xl border bg-gray-900/40 border-gray-700/30 p-4">
-                  <div className="text-xs text-gray-400 mb-1">{es ? 'Vol reciente / baseline' : 'Vol Dryness'}</div>
-                  <div className={`text-lg font-bold ${setup.vol_dryness < 1 ? 'text-emerald-400' : 'text-gray-300'}`}>
-                    {fmt(setup.vol_dryness, 2)}x
+                  <div className="text-xs text-gray-400 mb-1">{es ? 'Señal de volumen' : 'Volume Signal'}</div>
+                  <div className={`text-lg font-bold ${
+                    setup.vol_signal === 'accumulating' || setup.vol_signal === 'drying' ? 'text-emerald-400'
+                    : setup.vol_signal === 'neutral' ? 'text-gray-300'
+                    : 'text-orange-400'
+                  }`}>
+                    {setup.vol_signal}
                   </div>
-                  <div className="text-xs text-gray-500">
-                    {setup.vol_dryness < 1 ? (es ? 'secándose ✓' : 'drying up ✓') : (es ? 'activo' : 'active')}
-                  </div>
+                  <div className="text-xs text-gray-500">{fmt(setup.vol_dryness, 2)}x {es ? 'vs baseline' : 'vs baseline'}</div>
                 </div>
                 <div className="rounded-xl border bg-gray-900/40 border-gray-700/30 p-4">
                   <div className="text-xs text-gray-400 mb-1">{es ? 'Spike previo' : 'Prior Spike'}</div>

@@ -39,6 +39,10 @@ class CheapBreakoutScanner:
         min_prev_day_volume: int = 0,
         min_recent_avg_volume: int = 10_000,
         exclude_recent_breakout_days: int = 5,
+        min_resistance_touches: int = 3,
+        resistance_touch_threshold_pct: float = 1.0,
+        min_closes_position: float = 0.5,
+        near_resistance_threshold_pct: float = 6.0,
         lookback_days: int = 504,
     ):
         self.api_key = api_key or os.environ.get('FMP_API_KEY')
@@ -53,6 +57,10 @@ class CheapBreakoutScanner:
         self.min_prev_day_volume = max(0, int(min_prev_day_volume or 0))
         self.min_recent_avg_volume = max(0, int(min_recent_avg_volume or 0))
         self.exclude_recent_breakout_days = max(0, int(exclude_recent_breakout_days))
+        self.min_resistance_touches = max(1, int(min_resistance_touches))
+        self.resistance_touch_threshold_pct = max(0.1, float(resistance_touch_threshold_pct))
+        self.min_closes_position = max(0.0, min(1.0, float(min_closes_position)))
+        self.near_resistance_threshold_pct = max(0.0, float(near_resistance_threshold_pct))
         self.lookback_days = lookback_days
         self._session = requests.Session()
 
@@ -180,6 +188,18 @@ class CheapBreakoutScanner:
         if resistance <= 0:
             return {'error': f'Resistencia inválida para {ticker}'}
 
+        # Multi-touch validation: count days whose high is within X% of the resistance
+        # (inside the same window where resistance was formed).
+        touch_threshold = resistance * (1.0 - self.resistance_touch_threshold_pct / 100.0)
+        touch_count = int(np.sum(res_high_window >= touch_threshold))
+
+        if touch_count < self.min_resistance_touches:
+            return self._not_detected(
+                ticker, current_price, dates, closes, highs, lows, volumes, chart_window,
+                reason=f'{ticker} resistencia con sólo {touch_count} toque(s) — no multi-touch (min {self.min_resistance_touches})',
+                resistance=resistance,
+            )
+
         dist_pct = (resistance - current_price) / current_price * 100.0
 
         # Too far below — not close to popping
@@ -216,8 +236,15 @@ class CheapBreakoutScanner:
                 resistance=resistance,
             )
 
-        # 4. Closes-in-upper-half (accumulation pattern)
+        # 4. Closes-in-upper-half (accumulation pattern) — exclude if below min
         closes_position = (coil_mean - coil_low) / (coil_high - coil_low) if coil_high > coil_low else 0.5
+
+        if closes_position < self.min_closes_position:
+            return self._not_detected(
+                ticker, current_price, dates, closes, highs, lows, volumes, chart_window,
+                reason=f'{ticker} cierres en {int(closes_position * 100)}% del rango (< {int(self.min_closes_position * 100)}% — distribución, no acumulación)',
+                resistance=resistance,
+            )
 
         # 5. Recent volume vs baseline (dryness)
         recent_vol_window = volumes[-cwd:]
@@ -283,20 +310,31 @@ class CheapBreakoutScanner:
             ps_score = 0.0
         if not had_prior_spike:
             ps_score *= 0.5
-        # Volume dryness (0–15): vol_dryness < 1 ⇒ higher, capped at 0
-        if vol_dryness > 0:
-            dry_score = max(0.0, min(15.0, (1.0 - min(1.5, vol_dryness)) / 1.5 * 15.0))
+        # Volume signal (0–15) — CONTEXT-AWARE:
+        #   • Pressing resistance (dist ≤ near_threshold) ⇒ volume HOLDING/RISING is bullish
+        #     (active accumulation into the breakout). dryness ≥ 1.0 ⇒ full credit.
+        #   • Far from resistance ⇒ volume DRYING is bullish (quiet coil).
+        near_resistance = dist_pct <= self.near_resistance_threshold_pct
+        if vol_dryness <= 0:
+            vol_score = 0.0
+            vol_signal = 'unknown'
+        elif near_resistance:
+            # Want dryness >= 1.0 (vol confirming). Scale 0.5→0pts, 1.0+→15pts.
+            vol_score = max(0.0, min(15.0, (vol_dryness - 0.5) / 0.5 * 15.0))
+            vol_signal = 'accumulating' if vol_dryness >= 1.0 else ('neutral' if vol_dryness >= 0.7 else 'fading')
         else:
-            dry_score = 0.0
+            # Want dryness < 1.0. Scale 1.0→0pts, 0.4→15pts.
+            vol_score = max(0.0, min(15.0, (1.0 - min(1.2, vol_dryness)) / 0.6 * 15.0))
+            vol_signal = 'drying' if vol_dryness < 0.8 else ('neutral' if vol_dryness < 1.2 else 'active')
 
-        score = int(round(prox_score + tight_score + cp_score + ps_score + dry_score))
+        score = int(round(prox_score + tight_score + cp_score + ps_score + vol_score))
         score = max(0, min(100, score))
 
         # Narrative
         narrative = self._build_narrative(
             ticker, score, current_price, resistance, dist_pct,
-            coil_pct, days_in_range, closes_position, vol_dryness,
-            prior_spike_mult, had_prior_spike,
+            coil_pct, days_in_range, closes_position, vol_dryness, vol_signal,
+            prior_spike_mult, had_prior_spike, touch_count,
         )
 
         # Chart
@@ -314,12 +352,14 @@ class CheapBreakoutScanner:
             'setup': {
                 'resistance': round(resistance, 4),
                 'dist_to_resistance_pct': round(dist_pct, 2),
+                'touch_count': int(touch_count),
                 'coil_pct': round(coil_pct, 2),
                 'coil_high': round(coil_high, 4),
                 'coil_low': round(coil_low, 4),
                 'days_in_range': int(days_in_range),
                 'closes_position': round(float(closes_position), 3),
                 'vol_dryness': round(vol_dryness, 2),
+                'vol_signal': vol_signal,
                 'recent_avg_volume': int(recent_avg_vol),
                 'baseline_volume': int(baseline_vol),
                 'prior_spike_multiplier': round(prior_spike_mult, 1),
@@ -333,11 +373,19 @@ class CheapBreakoutScanner:
 
     def _build_narrative(
         self, ticker, score, price, resistance, dist_pct,
-        coil_pct, days, cp, dryness, prior_mult, had_prior,
+        coil_pct, days, cp, dryness, vol_signal, prior_mult, had_prior, touches,
     ) -> str:
+        signal_label = {
+            'accumulating': 'acumulando (vol confirmando) ✓',
+            'drying':       'secándose (coil tranquilo) ✓',
+            'neutral':      'neutro',
+            'fading':       'desinflando (sin compradores)',
+            'active':       'activo (lejos del techo)',
+            'unknown':      'sin datos',
+        }.get(vol_signal, vol_signal)
         lines = [
             f"**COILED SPRING** en {ticker} — Score {score}/100",
-            f"• Precio: ${price:.4f}  ·  Resistencia: ${resistance:.4f}",
+            f"• Precio: ${price:.4f}  ·  Resistencia: ${resistance:.4f}  ({touches} toques)",
         ]
         if dist_pct >= 0:
             lines.append(f"• Distancia al techo: {dist_pct:.1f}% por debajo")
@@ -346,7 +394,7 @@ class CheapBreakoutScanner:
         lines.append(f"• Coil (rango {self.coil_window_days}d): {coil_pct:.1f}%  ·  Días consolidando: ~{days}")
         lines.append(f"• Cierres en {int(cp * 100)}% superior del rango (≥50% = acumulación)")
         if dryness > 0:
-            lines.append(f"• Volumen reciente vs baseline: {dryness:.2f}x ({'secándose' if dryness < 1 else 'activo'})")
+            lines.append(f"• Volumen reciente vs baseline: {dryness:.2f}x — {signal_label}")
         if had_prior:
             lines.append(f"• Huella institucional previa: {prior_mult:.1f}x baseline ✓")
         else:

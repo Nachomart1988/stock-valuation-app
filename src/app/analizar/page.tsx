@@ -1173,6 +1173,7 @@ function AnalizarContent() {
       profile={profile}
       incomeTTM={incomeTTM}
       dividends={dividends}
+      ratiosTTM={ratiosTTM}
       sharedAverageVal={sharedAverageVal}
       onAnalizar={handleAnalizar}
       currencyInfo={currencyInfo}
@@ -1581,6 +1582,7 @@ function InicioTab({
   profile,
   incomeTTM,
   dividends,
+  ratiosTTM,
   sharedAverageVal,
   onAnalizar,
   currencyInfo,
@@ -1590,6 +1592,7 @@ function InicioTab({
   profile: any;
   incomeTTM: any;
   dividends: any[];
+  ratiosTTM?: any;
   sharedAverageVal: number | null;
   onAnalizar: (ticker: string) => void;
   currencyInfo?: { original: string; target: string; rate: number; marketRate?: number } | null;
@@ -1599,6 +1602,12 @@ function InicioTab({
   const [historical, setHistorical] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [technicalIndicators, setTechnicalIndicators] = useState<any>({});
+  const [priceRanges, setPriceRanges] = useState<{
+    y1: { high: number; low: number; highDate: string; lowDate: string } | null;
+    y3: { high: number; low: number; highDate: string; lowDate: string } | null;
+    y5: { high: number; low: number; highDate: string; lowDate: string } | null;
+    y10: { high: number; low: number; highDate: string; lowDate: string } | null;
+  }>({ y1: null, y3: null, y5: null, y10: null });
 
   const { t, locale } = useLanguage();
 
@@ -1646,6 +1655,64 @@ function InicioTab({
     }
 
     if (ticker) fetchHistory();
+  }, [ticker, currencyInfo?.marketRate, currencyInfo?.rate]);
+
+  // Fetch 10y price history → compute 1y / 3y / 5y / 10y highs & lows
+  useEffect(() => {
+    async function fetchRanges() {
+      try {
+        const today = new Date();
+        const tenYearsAgo = new Date(today.getFullYear() - 10, today.getMonth(), today.getDate());
+        const fromDate = tenYearsAgo.toISOString().split('T')[0];
+        const toDate = today.toISOString().split('T')[0];
+
+        const json = await fetchFmp('stable/historical-price-eod/full', {
+          symbol: ticker, from: fromDate, to: toDate,
+        }).catch(() => []);
+
+        const rows: any[] = Array.isArray(json) ? json : ((json as any)?.historical || []);
+        if (!rows.length) {
+          setPriceRanges({ y1: null, y3: null, y5: null, y10: null });
+          return;
+        }
+
+        const fxRate = currencyInfo?.marketRate ?? currencyInfo?.rate ?? 1;
+        const sorted = rows
+          .map((r: any) => ({
+            date: r.date as string,
+            ts: new Date(r.date).getTime(),
+            high: ((r.high ?? r.close ?? 0) as number) * fxRate,
+            low: ((r.low ?? r.close ?? 0) as number) * fxRate,
+          }))
+          .filter(r => Number.isFinite(r.high) && Number.isFinite(r.low) && r.high > 0)
+          .sort((a, b) => a.ts - b.ts);
+
+        const nowMs = Date.now();
+        const yearMs = 365.25 * 24 * 60 * 60 * 1000;
+        const compute = (years: number) => {
+          const cutoff = nowMs - years * yearMs;
+          const slice = sorted.filter(r => r.ts >= cutoff);
+          if (!slice.length) return null;
+          let hi = slice[0], lo = slice[0];
+          for (const r of slice) {
+            if (r.high > hi.high) hi = r;
+            if (r.low < lo.low) lo = r;
+          }
+          return { high: hi.high, low: lo.low, highDate: hi.date, lowDate: lo.date };
+        };
+
+        setPriceRanges({
+          y1: compute(1),
+          y3: compute(3),
+          y5: compute(5),
+          y10: compute(10),
+        });
+      } catch (err) {
+        console.error('[InicioTab] Error fetching ranges:', err);
+        setPriceRanges({ y1: null, y3: null, y5: null, y10: null });
+      }
+    }
+    if (ticker) fetchRanges();
   }, [ticker, currencyInfo?.marketRate, currencyInfo?.rate]);
 
   // Fetch technical indicators
@@ -1927,7 +1994,15 @@ function InicioTab({
           { label: t('analysis.precio.intrinseco'), value: sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A', color: 'text-emerald-400' },
           { label: t('analysis.precio.compraSugerida'), value: precioCompraSugerido ? `$${precioCompraSugerido.toFixed(2)}` : 'N/A', color: 'text-green-400' },
           { label: t('analysis.precio.upside'), value: sharedAverageVal && currentPrice ? `${(((sharedAverageVal - currentPrice) / currentPrice) * 100).toFixed(1)}%` : 'N/A', color: sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400' },
-          { label: t('analysis.precio.peRatio'), value: (() => { const ttmEPS = incomeTTM?.eps || incomeTTM?.epsdiluted || quote?.eps || profile?.ttmEPS; if (currentPrice && ttmEPS && ttmEPS > 0) return (currentPrice / ttmEPS).toFixed(1); return quote?.pe?.toFixed(1) || 'N/A'; })(), color: 'text-emerald-400' },
+          { label: t('analysis.precio.peRatio'), value: (() => {
+              const ttmEPS = incomeTTM?.eps ?? incomeTTM?.epsdiluted ?? quote?.eps ?? profile?.ttmEPS;
+              if (Number.isFinite(ttmEPS) && ttmEPS <= 0) return 'N/M';
+              const ratioPE = ratiosTTM?.priceEarningsRatioTTM ?? ratiosTTM?.peRatioTTM ?? ratiosTTM?.priceEarningsRatio ?? ratiosTTM?.peRatio;
+              if (Number.isFinite(ratioPE) && ratioPE > 0) return ratioPE.toFixed(1);
+              if (currentPrice && Number.isFinite(ttmEPS) && ttmEPS > 0) return (currentPrice / ttmEPS).toFixed(1);
+              if (Number.isFinite(quote?.pe) && quote.pe > 0) return quote.pe.toFixed(1);
+              return 'N/A';
+            })(), color: 'text-emerald-400' },
         ].map(({ label, value, color }) => (
           <div key={label} className="liquid-gold-card p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
             <p className="text-gray-400 text-[10px] sm:text-xs mb-1 leading-tight relative z-10">{label}</p>
@@ -2003,6 +2078,66 @@ function InicioTab({
             <p className="text-lg sm:text-2xl md:text-3xl font-semibold text-gray-100 truncate">{value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Highs & Lows by timeframe */}
+      <div className="bg-gray-950/80 p-4 sm:p-6 rounded-xl border border-amber-900/30">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-base sm:text-xl md:text-2xl font-bold text-amber-400">
+            {locale === 'es' ? 'Máximos y Mínimos por Período' : 'Highs & Lows by Timeframe'}
+          </h4>
+          {currentPrice > 0 && (
+            <span className="text-xs text-gray-500">{locale === 'es' ? 'actual:' : 'current:'} <span className="text-gray-200 font-mono">${currentPrice.toFixed(2)}</span></span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {[
+            { key: 'y1', label: locale === 'es' ? '52 Semanas' : '52 Weeks', range: priceRanges.y1 },
+            { key: 'y3', label: locale === 'es' ? '3 Años' : '3 Years', range: priceRanges.y3 },
+            { key: 'y5', label: locale === 'es' ? '5 Años' : '5 Years', range: priceRanges.y5 },
+            { key: 'y10', label: locale === 'es' ? '10 Años' : '10 Years', range: priceRanges.y10 },
+          ].map(({ key, label, range }) => {
+            const fromHigh = range && currentPrice > 0 ? ((currentPrice - range.high) / range.high) * 100 : null;
+            const fromLow = range && currentPrice > 0 && range.low > 0 ? ((currentPrice - range.low) / range.low) * 100 : null;
+            return (
+              <div key={key} className="bg-gray-900/40 p-3 sm:p-4 rounded-xl border border-white/[0.08]">
+                <p className="text-amber-400/80 text-[11px] sm:text-xs font-semibold uppercase tracking-wider mb-2">{label}</p>
+                {range ? (
+                  <>
+                    <div className="flex items-baseline justify-between gap-2 mb-1">
+                      <span className="text-[10px] sm:text-xs text-gray-500">{locale === 'es' ? 'Máx' : 'High'}</span>
+                      <span className="text-sm sm:text-lg font-bold text-green-400 font-mono">${range.high.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-2 mb-2">
+                      <span className="text-[10px] sm:text-xs text-gray-500">{locale === 'es' ? 'Mín' : 'Low'}</span>
+                      <span className="text-sm sm:text-lg font-bold text-red-400 font-mono">${range.low.toFixed(2)}</span>
+                    </div>
+                    <div className="border-t border-white/[0.05] pt-2 space-y-0.5">
+                      {fromHigh !== null && (
+                        <div className="flex justify-between text-[10px] text-gray-500">
+                          <span>{locale === 'es' ? 'desde máx' : 'from high'}</span>
+                          <span className={fromHigh >= 0 ? 'text-green-400' : 'text-red-400'}>
+                            {fromHigh >= 0 ? '+' : ''}{fromHigh.toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                      {fromLow !== null && (
+                        <div className="flex justify-between text-[10px] text-gray-500">
+                          <span>{locale === 'es' ? 'desde mín' : 'from low'}</span>
+                          <span className={fromLow >= 0 ? 'text-green-400' : 'text-red-400'}>
+                            {fromLow >= 0 ? '+' : ''}{fromLow.toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500">{locale === 'es' ? 'Sin datos' : 'No data'}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Technical Indicators */}

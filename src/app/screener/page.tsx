@@ -164,10 +164,12 @@ interface CheapBreakoutScanResult {
   score: number;
   resistance: number;
   distToResistancePct: number;
+  touchCount: number;
   coilPct: number;
   daysInRange: number;
   closesPosition: number;
   volDryness: number;
+  volSignal: string;
   priorSpikeMultiplier: number;
   hadPriorSpike: boolean;
   narrative: string;
@@ -2475,7 +2477,8 @@ function ScreenerPageInner() {
                         <th className="text-right px-4 py-2.5" title="% below resistance — smaller = closer to popping">Dist %</th>
                         <th className="text-right px-4 py-2.5" title="Range of last 10 days as % of mean close — tighter = better">Coil %</th>
                         <th className="text-right px-4 py-2.5" title="Consecutive days the range stayed compressed">Days</th>
-                        <th className="text-right px-4 py-2.5" title="Recent volume vs 120d baseline (<1 = drying up)">Vol Dry</th>
+                        <th className="text-right px-4 py-2.5" title="Days with high within 1% of resistance — more = confirmed multi-touch">Touches</th>
+                        <th className="text-right px-4 py-2.5" title="Volume context (accumulating near resistance / drying in coil)">Vol Sig</th>
                         <th className="text-right px-4 py-2.5" title="Largest prior volume spike (institutional fingerprint)">Prior</th>
                         <th className="px-4 py-2.5" />
                       </tr>
@@ -2498,7 +2501,20 @@ function ScreenerPageInner() {
                           </td>
                           <td className="px-4 py-2.5 text-right text-orange-400 font-mono">{r.coilPct.toFixed(1)}%</td>
                           <td className="px-4 py-2.5 text-right text-gray-300 font-mono">{r.daysInRange}d</td>
-                          <td className="px-4 py-2.5 text-right text-gray-300 font-mono">{r.volDryness.toFixed(2)}x</td>
+                          <td className="px-4 py-2.5 text-right font-mono">
+                            <span className={r.touchCount >= 4 ? 'text-emerald-400' : r.touchCount >= 3 ? 'text-amber-400' : 'text-gray-500'}>
+                              {r.touchCount}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-[11px]">
+                            <span className={
+                              r.volSignal === 'accumulating' || r.volSignal === 'drying' ? 'text-emerald-400'
+                              : r.volSignal === 'neutral' ? 'text-gray-400'
+                              : 'text-orange-400/70'
+                            }>
+                              {r.volSignal}
+                            </span>
+                          </td>
                           <td className="px-4 py-2.5 text-right font-mono">
                             <span className={r.hadPriorSpike ? 'text-emerald-400' : 'text-gray-500'}>
                               {r.priorSpikeMultiplier.toFixed(1)}x{r.hadPriorSpike ? ' ✓' : ''}
