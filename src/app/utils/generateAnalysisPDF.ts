@@ -423,15 +423,24 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   }
 
   // ── Narrative paragraph (justified, serif body for long-form) ────────
-  function paragraph(y: number, text: string, opts: { italic?: boolean; size?: number; color?: RGB; serif?: boolean } = {}): number {
+  function paragraph(y: number, text: string | null | undefined, opts: { italic?: boolean; size?: number; color?: RGB; serif?: boolean } = {}): number {
+    if (!text || typeof text !== 'string' || !text.trim()) return y;
     const size = opts.size ?? 8.5;
     const color = opts.color ?? TX_D;
     const font = opts.serif ? SERIF : SANS;
     const style = opts.italic ? 'italic' : 'normal';
-    doc.setFont(font, style); doc.setFontSize(size); st(color);
-    const lines: string[] = doc.splitTextToSize(text, CW);
+    const applyStyle = () => { doc.setFont(font, style); doc.setFontSize(size); st(color); };
+    applyStyle();
+    let lines: string[];
+    try {
+      lines = doc.splitTextToSize(text, CW);
+    } catch {
+      return y;
+    }
+    if (!Array.isArray(lines) || lines.length === 0) return y;
     for (const ln of lines) {
-      if (y > PH - 18) y = newPage();
+      if (!ln) continue;
+      if (y > PH - 18) { y = newPage(); applyStyle(); }
       doc.text(ln, M, y);
       y += size * 0.55;
     }
