@@ -1994,15 +1994,17 @@ function InicioTab({
           { label: t('analysis.precio.intrinseco'), value: sharedAverageVal ? `$${sharedAverageVal.toFixed(2)}` : 'N/A', color: 'text-emerald-400' },
           { label: t('analysis.precio.compraSugerida'), value: precioCompraSugerido ? `$${precioCompraSugerido.toFixed(2)}` : 'N/A', color: 'text-green-400' },
           { label: t('analysis.precio.upside'), value: sharedAverageVal && currentPrice ? `${(((sharedAverageVal - currentPrice) / currentPrice) * 100).toFixed(1)}%` : 'N/A', color: sharedAverageVal && currentPrice && sharedAverageVal > currentPrice ? 'text-green-400' : 'text-red-400' },
-          { label: t('analysis.precio.peRatio'), value: (() => {
+          { label: t('analysis.precio.peRatio'), ...(() => {
               const ttmEPS = incomeTTM?.eps ?? incomeTTM?.epsdiluted ?? quote?.eps ?? profile?.ttmEPS;
-              if (Number.isFinite(ttmEPS) && ttmEPS <= 0) return 'N/M';
               const ratioPE = ratiosTTM?.priceEarningsRatioTTM ?? ratiosTTM?.peRatioTTM ?? ratiosTTM?.priceEarningsRatio ?? ratiosTTM?.peRatio;
-              if (Number.isFinite(ratioPE) && ratioPE > 0) return ratioPE.toFixed(1);
-              if (currentPrice && Number.isFinite(ttmEPS) && ttmEPS > 0) return (currentPrice / ttmEPS).toFixed(1);
-              if (Number.isFinite(quote?.pe) && quote.pe > 0) return quote.pe.toFixed(1);
-              return 'N/A';
-            })(), color: 'text-emerald-400' },
+              let pe: number | null = null;
+              if (Number.isFinite(ratioPE) && ratioPE !== 0) pe = ratioPE;
+              else if (currentPrice && Number.isFinite(ttmEPS) && ttmEPS !== 0) pe = currentPrice / ttmEPS;
+              else if (Number.isFinite(quote?.pe) && quote.pe !== 0) pe = quote.pe;
+              if (pe === null) return { value: 'N/A', color: 'text-emerald-400' };
+              const color = pe >= 0 ? 'text-emerald-400' : 'text-red-400';
+              return { value: pe.toFixed(1), color };
+            })() },
         ].map(({ label, value, color }) => (
           <div key={label} className="liquid-gold-card p-3 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl text-center flex flex-col justify-center min-h-[90px] sm:min-h-[120px] md:min-h-[140px]">
             <p className="text-gray-400 text-[10px] sm:text-xs mb-1 leading-tight relative z-10">{label}</p>
