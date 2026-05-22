@@ -542,56 +542,62 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ── autoTable wrapper (Goldman style: black header, white body, gray rules) ──
   function atableV2(opts: any): number {
     const userDidParse = opts.didParseCell;
-    doc.autoTable({
-      theme: 'plain',
-      styles: {
-        font: SANS,
-        fontSize: 7.5,
-        cellPadding: [2.2, 3],
-        textColor: TX_D,
-        fillColor: WHITE,
-        lineColor: G3,
-        lineWidth: 0,
-      },
-      headStyles: {
-        fillColor: BLACK,
-        textColor: WHITE,
-        fontStyle: 'bold',
-        fontSize: 7.5,
-        cellPadding: [2.8, 3],
-      },
-      alternateRowStyles: { fillColor: G1 },
-      margin: { left: M, right: M },
-      ...opts,
-      didParseCell: (data: any) => {
-        if (data.section === 'body') {
-          const txt = data.cell.raw;
-          if (typeof txt === 'string') {
-            const num = parseFloat(txt.replace(/[%$,]/g, ''));
-            if (!isNaN(num) && txt.includes('%')) {
-              data.cell.styles.textColor = num > 0 ? POS : num < 0 ? NEG : TX_D;
+    try {
+      doc.autoTable({
+        theme: 'plain',
+        styles: {
+          font: SANS,
+          fontSize: 7.5,
+          cellPadding: [2.2, 3],
+          textColor: TX_D,
+          fillColor: WHITE,
+          lineColor: G3,
+          lineWidth: 0,
+        },
+        headStyles: {
+          fillColor: BLACK,
+          textColor: WHITE,
+          fontStyle: 'bold',
+          fontSize: 7.5,
+          cellPadding: [2.8, 3],
+        },
+        alternateRowStyles: { fillColor: G1 },
+        margin: { left: M, right: M },
+        ...opts,
+        didParseCell: (data: any) => {
+          try {
+            if (data.section === 'body') {
+              const txt = data.cell.raw;
+              if (typeof txt === 'string') {
+                const num = parseFloat(txt.replace(/[%$,]/g, ''));
+                if (!isNaN(num) && txt.includes('%')) {
+                  data.cell.styles.textColor = num > 0 ? POS : num < 0 ? NEG : TX_D;
+                }
+              }
             }
-          }
-        }
-        if (userDidParse) userDidParse(data);
-      },
-      didDrawCell: (data: any) => {
-        if (data.section === 'body' && data.column.index === 0 && data.row.index < data.table.body.length - 1) {
-          ss(G3); doc.setLineWidth(0.08);
-          doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.table.width, data.cell.y + data.cell.height);
-        }
-        if (opts.didDrawCell) opts.didDrawCell(data);
-      },
-    });
+            if (userDidParse) userDidParse(data);
+          } catch { /* swallow cell-coloring errors */ }
+        },
+      });
+    } catch (e) {
+      console.error('[PDF] autoTable failed', { startY: opts.startY, rows: opts.body?.length }, e);
+    }
     return (doc.lastAutoTable?.finalY || opts.startY + 20) + 5;
   }
 
+  // Section tracker for diagnostics
+  let __section = 'init';
+  const trace = (name: string) => { __section = name; console.log(`[PDF] → ${name}`); };
+
   let y = 0;
+
+  try {
 
   // ════════════════════════════════════════════════════════════════════════
   // PAGE 1 — COVER (Goldman style)
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('cover')) {
+    trace('cover');
     sf(WHITE); doc.rect(0, 0, PW, PH, 'F');
 
     // ── Top black bar with firm branding ────────────────────────────────
@@ -742,6 +748,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // EXECUTIVE SUMMARY
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('executive_summary')) {
+    trace('executive_summary');
     y = newPage();
     y = section(y, 'Executive Summary', 'Síntesis institucional del análisis: valuación, calidad, riesgos y conclusiones.');
 
@@ -806,6 +813,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // INVESTMENT THESIS (long form)
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('investment_thesis')) {
+    trace('investment_thesis');
     y = newPage();
     y = section(y, 'Investment Thesis', 'Tesis de inversión: argumentos centrales que respaldan la recomendación.');
 
@@ -856,6 +864,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // COMPANY OVERVIEW
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('company_overview') && profile) {
+    trace('company_overview');
     y = newPage();
     y = section(y, 'Company Overview', 'Perfil corporativo, descripción del negocio y datos clave.');
 
@@ -912,6 +921,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // MARKET SUMMARY
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('market_summary') && quote) {
+    trace('market_summary');
     y = newPage();
     y = section(y, 'Market Summary', 'Indicadores clave de precio, mercado y momentum técnico.');
 
@@ -980,6 +990,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // INCOME STATEMENT
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('income_statement')) {
+    trace('income_statement');
     const inc5 = (income || []).slice(0, 5).reverse();
     if (inc5.length > 0) {
       y = newPage();
@@ -1021,6 +1032,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // BALANCE SHEET
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('balance_sheet')) {
+    trace('balance_sheet');
     const bal5 = (balance || []).slice(0, 5).reverse();
     if (bal5.length > 0) {
       y = newPage();
@@ -1069,6 +1081,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // CASH FLOW
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('cash_flow')) {
+    trace('cash_flow');
     const cf5 = (cashFlow || []).slice(0, 5).reverse();
     if (cf5.length > 0) {
       y = newPage();
@@ -1119,6 +1132,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // KEY METRICS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('key_metrics')) {
+    trace('key_metrics');
     const kmRows = filterRows([
       ['P/E Ratio',             f(KM.peRatio ?? quote?.pe),             'P/B Ratio',             f(KM.priceToBook ?? KM.pbRatio)],
       ['P/S Ratio',             f(KM.priceToSalesRatio ?? KM.priceToSales), 'P/FCF',             f(KM.priceToFCF ?? KM.pfcfRatio)],
@@ -1155,6 +1169,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // DUPONT ANALYSIS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('dupont')) {
+    trace('dupont');
     const incLatest = (income || [])[0];
     const balLatest = (balance || [])[0];
     if (incLatest && balLatest) {
@@ -1204,6 +1219,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // QUALITY SCORE
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('quality_score') && qualityNet?.scores) {
+    trace('quality_score');
     y = newPage();
     y = section(y, 'Company Quality Assessment', 'Scoring de calidad empresarial en cinco dimensiones estandarizadas.');
 
@@ -1242,6 +1258,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // WACC & CAGR
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('wacc_cagr')) {
+    trace('wacc_cagr');
     const capRows: any[] = [];
     const waccVal = sharedWACC ?? dcfCustom?.wacc;
     const capmVal = sharedAvgCAPM ?? dcfCustom?.costOfEquity;
@@ -1278,6 +1295,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // BETA & CAPM
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('beta_capm')) {
+    trace('beta_capm');
     const beta = profile?.beta;
     const riskFree = dcfCustom?.riskFreeRate ?? 4.25;
     const erp = 5.5;
@@ -1316,6 +1334,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // SGR
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('sgr')) {
+    trace('sgr');
     const incSgr = (income || [])[0];
     const balSgr = (balance || [])[0];
     const cfSgr = (cashFlow || [])[0];
@@ -1357,6 +1376,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // VALUATION MODELS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('valuation_models')) {
+    trace('valuation_models');
     y = newPage();
     y = section(y, 'Valuation Model Triangulation', 'Triangulación de valuación intrínseca usando múltiples metodologías independientes.');
 
@@ -1436,6 +1456,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ANALYST FORECASTS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('analyst_forecasts') && forecasts.length > 0) {
+    trace('analyst_forecasts');
     const fcSlice = forecasts.slice(0, 6);
     const fcRows = filterRows(
       fcSlice.map((fcRow: any) => [
@@ -1479,6 +1500,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // REVENUE FORECAST (Holt's + Regression)
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('revenue_forecast') && income?.length >= 3) {
+    trace('revenue_forecast');
     y = newPage();
     y = section(y, 'Revenue Forecast Models', 'Proyección de ingresos usando suavizado exponencial de Holt y regresión lineal.');
 
@@ -1545,6 +1567,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // PRICE TARGET
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('price_target')) {
+    trace('price_target');
     const tgt = priceTarget?.priceTarget || priceTarget?.priceTargetAvg;
     const tgtH = priceTarget?.priceTargetHigh;
     const tgtL = priceTarget?.priceTargetLow;
@@ -1614,6 +1637,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // GROWTH ANALYSIS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('growth_analysis')) {
+    trace('growth_analysis');
     const fg = (financialGrowth || [])[0];
     const ig = (incomeGrowth || [])[0];
     const growthRows = filterRows([
@@ -1665,6 +1689,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ENTERPRISE VALUE
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('enterprise_value') && enterpriseValue?.length) {
+    trace('enterprise_value');
     const ev5 = (enterpriseValue || []).slice(0, 5).reverse();
     if (ev5.length > 0) {
       y = checkY(y, 60);
@@ -1691,6 +1716,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // DIVIDENDS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('dividends') && dividends?.length) {
+    trace('dividends');
     y = newPage();
     y = section(y, 'Dividend History', 'Historial de pagos de dividendos por acción y métricas de capital return.');
 
@@ -1740,6 +1766,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // OWNER EARNINGS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('owner_earnings') && ownerEarnings?.length) {
+    trace('owner_earnings');
     const oe5 = (ownerEarnings || []).slice(0, 5).reverse();
     if (oe5.length > 0) {
       y = newPage();
@@ -1768,6 +1795,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // TTM SNAPSHOT
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('ttm_snapshot')) {
+    trace('ttm_snapshot');
     const ttm = Array.isArray(incomeTTM) ? incomeTTM[0] : incomeTTM;
     if (ttm) {
       y = checkY(y, 50);
@@ -1795,6 +1823,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // 52-WEEK PRICE POSITION
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('technical_52w') && pivot) {
+    trace('technical_52w');
     const pa52 = pivot;
     if (pa52.low52Week && pa52.high52Week && price) {
       y = newPage();
@@ -1839,6 +1868,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // PIVOTS & FIBONACCI
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('pivots_fibonacci') && pivot?.pivotPoint) {
+    trace('pivots_fibonacci');
     const paFib = pivot;
     y = checkY(y, 50);
     if (y < 30) y = newPage();
@@ -1867,6 +1897,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // COMPETITORS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('competitors')) {
+    trace('competitors');
     const peersRaw = await fmpFetch(`stable/stock-peers`, { symbol: ticker });
     const peers: string[] = (Array.isArray(peersRaw) ? peersRaw[0]?.peersList : peersRaw?.peersList) || [];
     if (peers.length > 0) {
@@ -1926,6 +1957,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // INDUSTRY OVERVIEW
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('industry_overview')) {
+    trace('industry_overview');
     const [sectorPerf, sectorPE] = await Promise.all([
       fmpFetch('stable/sector-performance'),
       fmpFetch('stable/sector-pe-ratio', { exchange: 'NYSE' }),
@@ -1992,6 +2024,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // HOLDERS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('holders')) {
+    trace('holders');
     const instHolders = preloadedHolders?.institutionalHolders?.length
       ? preloadedHolders.institutionalHolders
       : await fmpFetch(`stable/institutional-holder`, { symbol: ticker });
@@ -2063,6 +2096,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // SEGMENTATION
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('segmentation')) {
+    trace('segmentation');
     const [prodSeg, geoSeg] = await Promise.all([
       fmpFetch(`stable/revenue-product-segmentation`, { symbol: ticker }),
       fmpFetch(`stable/revenue-geographic-segmentation`, { symbol: ticker }),
@@ -2136,6 +2170,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // NEWS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('news')) {
+    trace('news');
     const newsRaw = preloadedNews?.length ? preloadedNews : await fmpFetch(`stable/news/stock`, { symbol: ticker, limit: '15' });
     const newsData = Array.isArray(newsRaw) ? newsRaw : [];
     if (newsData.length > 0) {
@@ -2178,6 +2213,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // RISK FACTORS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('risk_factors')) {
+    trace('risk_factors');
     y = newPage();
     y = section(y, 'Risk Factors', 'Factores de riesgo materiales que podrían impactar negativamente la tesis de inversión.');
 
@@ -2205,6 +2241,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // GROWTH CATALYSTS
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('catalysts')) {
+    trace('catalysts');
     y = newPage();
     y = section(y, 'Growth Catalysts', 'Catalizadores potenciales que podrían acelerar la realización de valor.');
 
@@ -2229,6 +2266,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // ANALISIS FINAL — INVESTMENT VERDICT
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('analisis_final') && avgVal != null && price) {
+    trace('analisis_final');
     y = newPage();
     y = section(y, 'Investment Analysis — Final Verdict', 'Veredicto final consolidando valuación, calidad y perspectiva.');
 
@@ -2337,6 +2375,7 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
   // DISCLAIMER
   // ════════════════════════════════════════════════════════════════════════
   if (activeSections.has('disclaimer')) {
+    trace('disclaimer');
     y = newPage();
 
     doc.setFont(SERIF, 'bold'); doc.setFontSize(16); st(BLACK);
@@ -2376,6 +2415,11 @@ export async function generateAnalysisPDF(d: PDFData): Promise<string | void> {
     doc.text(`Generated by ${userCo} — Equity Research Analytics`, PW/2, y, { align: 'center' });
 
     pageFooter();
+  }
+
+  } catch (err) {
+    console.error(`[PDF] ✕ FAILED in section "${__section}"`, err);
+    throw new Error(`PDF generation failed in section "${__section}": ${(err as Error)?.message || err}`);
   }
 
   // ── Save or preview ──────────────────────────────────────────────────
