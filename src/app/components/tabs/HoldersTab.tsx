@@ -233,14 +233,31 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
         // Handle insider trading statistics
         try {
           console.log('[HoldersTab] Insider trading stats:', insiderStatsData);
+          const nowDate = new Date();
+          const curYear = nowDate.getFullYear();
+          const curQuarter = Math.floor(nowDate.getMonth() / 3) + 1;
+          const isValidStat = (s: InsiderTradingStats) => {
+            if (!s || typeof s.year !== 'number' || typeof s.quarter !== 'number') return false;
+            // Drop future-dated quarters (FMP sometimes returns empty placeholders)
+            if (s.year > curYear) return false;
+            if (s.year === curYear && s.quarter > curQuarter) return false;
+            // Drop records with no activity at all
+            const hasActivity = (s.purchases || 0) + (s.sales || 0) + (s.totalBought || 0) + (s.totalSold || 0) > 0;
+            return hasActivity;
+          };
           if (Array.isArray(insiderStatsData) && insiderStatsData.length > 0) {
-            const sorted = insiderStatsData.sort((a: InsiderTradingStats, b: InsiderTradingStats) => {
-              if (b.year !== a.year) return b.year - a.year;
-              return b.quarter - a.quarter;
-            });
-            setInsiderStats(sorted[0]);
+            const valid = (insiderStatsData as InsiderTradingStats[]).filter(isValidStat);
+            if (valid.length > 0) {
+              const sorted = valid.sort((a, b) => {
+                if (b.year !== a.year) return b.year - a.year;
+                return b.quarter - a.quarter;
+              });
+              setInsiderStats(sorted[0]);
+            }
           } else if (insiderStatsData && typeof insiderStatsData === 'object' && !Array.isArray(insiderStatsData)) {
-            setInsiderStats(insiderStatsData as any);
+            if (isValidStat(insiderStatsData as InsiderTradingStats)) {
+              setInsiderStats(insiderStatsData as any);
+            }
           }
         } catch {
           console.log('[HoldersTab] Insider stats parse error');
