@@ -34,8 +34,12 @@ const SECTION_GROUPS: SectionGroup[] = [
     label: 'Perfil & Resumen',
     color: 'text-emerald-400',
     sections: [
+      { key: 'executive_summary',  label: 'Executive Summary' },
+      { key: 'investment_thesis',  label: 'Investment Thesis' },
       { key: 'company_overview',   label: 'Company Overview (General)' },
       { key: 'market_summary',     label: 'Market Summary (precios, pills)' },
+      { key: 'risk_factors',       label: 'Risk Factors' },
+      { key: 'catalysts',          label: 'Growth Catalysts' },
       { key: 'analisis_final',     label: 'Análisis Final (Veredicto)' },
     ],
   },
@@ -163,10 +167,10 @@ interface Props {
 
 export default function PDFConfigModal({ isOpen, onClose, onGenerate, generating, ticker }: Props) {
   const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set(DEFAULT_SECTIONS));
-  const [bgHex,         setBgHex]         = useState('#000000');
-  const [accentHex,     setAccentHex]     = useState('#00A651');
-  const [bgInput,       setBgInput]       = useState('#000000');
-  const [accentInput,   setAccentInput]   = useState('#00A651');
+  const [bgHex,         setBgHex]         = useState('#FFFFFF');
+  const [accentHex,     setAccentHex]     = useState('#0B2D5E');
+  const [bgInput,       setBgInput]       = useState('#FFFFFF');
+  const [accentInput,   setAccentInput]   = useState('#0B2D5E');
   const [font,          setFont]          = useState<string>('helvetica');
   const [logoBase64,    setLogoBase64]    = useState<string | undefined>(undefined);
   const [logoName,      setLogoName]      = useState('');
