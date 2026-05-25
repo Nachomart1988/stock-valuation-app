@@ -23,10 +23,14 @@ interface TranscriptContent {
   content: string;
 }
 
-// FMP's v4 list endpoint returns rows shaped as [quarter, year, date] tuples
-// OR as objects {symbol, quarter, year, date}. Normalize both.
+// Normalize one row from the FMP list endpoints. Several shapes exist depending
+// on the API version / plan tier:
+//   • stable/earning-call-transcript-dates → { symbol, period: "Q4", fiscalYear: 2024, date }
+//   • api/v4/earning_call_transcript        → [quarter, year, date]
+//   • api/v3 batch endpoints                → { symbol, quarter, year, date }
 function normalizeListRow(row: any): AvailableTranscript | null {
   if (!row) return null;
+
   if (Array.isArray(row)) {
     const [q, y, d] = row;
     if (typeof q === 'number' && typeof y === 'number') {
@@ -34,21 +38,31 @@ function normalizeListRow(row: any): AvailableTranscript | null {
     }
     return null;
   }
+
   if (typeof row === 'object') {
-    const q = Number(row.quarter ?? row.q);
-    const y = Number(row.year ?? row.y);
-    if (Number.isFinite(q) && Number.isFinite(y)) {
-      return { quarter: q, year: y, date: row.date };
+    // Quarter can be 1..4 OR a string like "Q4"
+    let q: number | null = null;
+    const rawQ = row.quarter ?? row.q ?? row.period;
+    if (typeof rawQ === 'number' && Number.isFinite(rawQ)) {
+      q = rawQ;
+    } else if (typeof rawQ === 'string') {
+      const m = rawQ.match(/Q?(\d)/i);
+      if (m) q = Number(m[1]);
+    }
+
+    const rawY = row.year ?? row.fiscalYear ?? row.y;
+    const y = Number(rawY);
+
+    if (q !== null && Number.isFinite(y)) {
+      return { quarter: q, year: y, date: typeof row.date === 'string' ? row.date : undefined };
     }
   }
+
   return null;
 }
 
-// Heuristic speaker-detection so the transcript reads as a dialog instead of a wall of text.
-// FMP returns the content as a single string with patterns like "John Doe -- CFO\n...".
 function splitTranscriptByParagraphs(content: string): string[] {
   if (!content) return [];
-  // FMP usually separates speaker turns with double newlines. Fall back to single \n.
   const chunks = content.includes('\n\n')
     ? content.split(/\n\n+/)
     : content.split(/\n+/);
@@ -57,7 +71,6 @@ function splitTranscriptByParagraphs(content: string): string[] {
 
 function extractSpeaker(paragraph: string): { speaker: string | null; body: string } {
   // Common FMP format: "Tim Cook -- Chief Executive Officer\nThanks, ..."
-  // Or inline: "Operator: Thank you..."
   const dashMatch = paragraph.match(/^([^\n]{2,80}?)\s+--\s+([^\n]{2,120})\n([\s\S]*)$/);
   if (dashMatch) {
     return { speaker: `${dashMatch[1]} — ${dashMatch[2]}`, body: dashMatch[3].trim() };
@@ -69,10 +82,92 @@ function extractSpeaker(paragraph: string): { speaker: string | null; body: stri
   return { speaker: null, body: paragraph };
 }
 
+// Try multiple FMP endpoint variants for listing transcripts. Returns the first
+// non-empty response, or [] if all fail (caller falls back to a generic range).
+async function loadTranscriptList(ticker: string): Promise<AvailableTranscript[]> {
+  const attempts: Array<{ path: string; params?: Record<string, string | number> }> = [
+    { path: 'stable/earning-call-transcript-dates', params: { symbol: ticker } },
+    { path: 'api/v4/earning_call_transcript', params: { symbol: ticker } },
+  ];
+
+  for (const a of attempts) {
+    try {
+      const raw = await fetchFmp(a.path, a.params);
+      const normalized = (Array.isArray(raw) ? raw : [])
+        .map(normalizeListRow)
+        .filter((r): r is AvailableTranscript => r !== null);
+      if (normalized.length > 0) return normalized;
+    } catch (err) {
+      // Try next variant on 403 / 404 / network error
+      console.warn(`[EarningsTranscripts] List attempt failed for ${a.path}:`, (err as Error)?.message);
+    }
+  }
+  return [];
+}
+
+// Try stable first, fall back to v3. Returns null if no content is available.
+async function loadTranscriptContent(
+  ticker: string,
+  year: number,
+  quarter: number
+): Promise<TranscriptContent | null> {
+  const attempts: Array<{ path: string; params: Record<string, string | number> }> = [
+    { path: 'stable/earning-call-transcript', params: { symbol: ticker, year, quarter } },
+    { path: `api/v3/earning_call_transcript/${ticker}`, params: { year, quarter } },
+  ];
+
+  let lastError: Error | null = null;
+  for (const a of attempts) {
+    try {
+      const raw = await fetchFmp(a.path, a.params);
+      const item = Array.isArray(raw) ? raw[0] : raw;
+      if (item && typeof item.content === 'string' && item.content.trim().length > 0) {
+        return {
+          symbol: item.symbol ?? ticker,
+          quarter: Number(item.quarter ?? quarter),
+          year: Number(item.year ?? year),
+          date: item.date ?? '',
+          content: item.content,
+        };
+      }
+    } catch (err) {
+      lastError = err as Error;
+      console.warn(`[EarningsTranscripts] Content attempt failed for ${a.path}:`, lastError?.message);
+    }
+  }
+
+  if (lastError) throw lastError;
+  return null;
+}
+
+// Generate a generic year/quarter grid for when the list endpoint isn't accessible
+// (e.g. FMP plan doesn't include the dates endpoint). We only show quarters that
+// could plausibly have already been reported.
+function buildFallbackRange(): AvailableTranscript[] {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1..12
+  const rows: AvailableTranscript[] = [];
+
+  // 6 years back × 4 quarters
+  for (let y = currentYear; y >= currentYear - 5; y--) {
+    for (let q = 4; q >= 1; q--) {
+      if (y === currentYear) {
+        // Earnings for Qn are usually reported ~1 month after the quarter ends
+        // Q1 ends Mar → reported Apr, Q2 ends Jun → reported Jul, etc.
+        const reportMonth = q * 3 + 1;
+        if (currentMonth < reportMonth) continue;
+      }
+      rows.push({ year: y, quarter: q });
+    }
+  }
+  return rows;
+}
+
 export default function EarningsTranscriptsTab({ ticker }: EarningsTranscriptsTabProps) {
   const [available, setAvailable] = useState<AvailableTranscript[]>([]);
+  const [usingFallbackRange, setUsingFallbackRange] = useState(false);
   const [loadingList, setLoadingList] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
 
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedQuarter, setSelectedQuarter] = useState<number | null>(null);
@@ -81,56 +176,51 @@ export default function EarningsTranscriptsTab({ ticker }: EarningsTranscriptsTa
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
 
-  // Step 1: load the list of available year/quarter pairs for the ticker.
+  // Step 1: load list (with fallback to a generic year/quarter grid).
   useEffect(() => {
     let cancelled = false;
 
     const loadList = async () => {
       if (!ticker) return;
       setLoadingList(true);
-      setListError(null);
       setAvailable([]);
       setSelectedYear(null);
       setSelectedQuarter(null);
       setTranscript(null);
       setTranscriptError(null);
 
-      try {
-        const raw = await fetchFmp('api/v4/earning_call_transcript', { symbol: ticker });
-        if (cancelled) return;
+      const fromApi = await loadTranscriptList(ticker);
+      if (cancelled) return;
 
-        const normalized = (Array.isArray(raw) ? raw : [])
-          .map(normalizeListRow)
-          .filter((r): r is AvailableTranscript => r !== null)
-          // newest first
-          .sort((a, b) => (b.year - a.year) || (b.quarter - a.quarter));
-
-        setAvailable(normalized);
-        if (normalized.length > 0) {
-          setSelectedYear(normalized[0].year);
-          setSelectedQuarter(normalized[0].quarter);
-        }
-      } catch (err: any) {
-        if (!cancelled) {
-          setListError(err?.message || 'No se pudo obtener la lista de transcripts');
-        }
-      } finally {
-        if (!cancelled) setLoadingList(false);
+      let rows = fromApi;
+      let fallback = false;
+      if (rows.length === 0) {
+        rows = buildFallbackRange();
+        fallback = true;
       }
+
+      // Newest first
+      rows.sort((a, b) => (b.year - a.year) || (b.quarter - a.quarter));
+
+      setAvailable(rows);
+      setUsingFallbackRange(fallback);
+      if (rows.length > 0) {
+        setSelectedYear(rows[0].year);
+        setSelectedQuarter(rows[0].quarter);
+      }
+      setLoadingList(false);
     };
 
     loadList();
     return () => { cancelled = true; };
   }, [ticker]);
 
-  // Years (descending) — derived from `available`
   const years = useMemo(() => {
     const set = new Set<number>();
     for (const a of available) set.add(a.year);
     return [...set].sort((a, b) => b - a);
   }, [available]);
 
-  // Quarters available for the selected year (1..4 ascending)
   const quartersForYear = useMemo(() => {
     if (selectedYear === null) return [];
     return available
@@ -139,7 +229,7 @@ export default function EarningsTranscriptsTab({ ticker }: EarningsTranscriptsTa
       .sort((a, b) => a - b);
   }, [available, selectedYear]);
 
-  // If the selected quarter is not valid for the newly chosen year, snap to the latest available.
+  // If the selected quarter is not valid for the chosen year, snap to the latest available.
   useEffect(() => {
     if (selectedYear === null) return;
     if (quartersForYear.length === 0) {
@@ -151,39 +241,40 @@ export default function EarningsTranscriptsTab({ ticker }: EarningsTranscriptsTa
     }
   }, [selectedYear, quartersForYear, selectedQuarter]);
 
-  // Step 2: fetch transcript content whenever year/quarter selection changes.
+  // Step 2: fetch content whenever selection changes.
   useEffect(() => {
     let cancelled = false;
 
-    const loadTranscript = async () => {
+    const run = async () => {
       if (!ticker || selectedYear === null || selectedQuarter === null) return;
       setLoadingTranscript(true);
       setTranscriptError(null);
       setTranscript(null);
 
       try {
-        const raw = await fetchFmp(`api/v3/earning_call_transcript/${ticker}`, {
-          year: selectedYear,
-          quarter: selectedQuarter,
-        });
+        const content = await loadTranscriptContent(ticker, selectedYear, selectedQuarter);
         if (cancelled) return;
-
-        const item = Array.isArray(raw) ? raw[0] : raw;
-        if (!item || typeof item.content !== 'string' || item.content.trim().length === 0) {
+        if (!content) {
           setTranscriptError('No hay transcript disponible para este trimestre.');
         } else {
-          setTranscript(item as TranscriptContent);
+          setTranscript(content);
         }
       } catch (err: any) {
-        if (!cancelled) {
-          setTranscriptError(err?.message || 'No se pudo cargar el transcript');
+        if (cancelled) return;
+        const msg = String(err?.message || '');
+        if (msg.includes(' 403')) {
+          setTranscriptError('Tu plan de FMP no incluye acceso a earnings transcripts.');
+        } else if (msg.includes(' 404')) {
+          setTranscriptError('No hay transcript disponible para este trimestre.');
+        } else {
+          setTranscriptError(msg || 'No se pudo cargar el transcript');
         }
       } finally {
         if (!cancelled) setLoadingTranscript(false);
       }
     };
 
-    loadTranscript();
+    run();
     return () => { cancelled = true; };
   }, [ticker, selectedYear, selectedQuarter]);
 
@@ -205,28 +296,27 @@ export default function EarningsTranscriptsTab({ ticker }: EarningsTranscriptsTa
         </div>
       </div>
 
-      {/* Selectors */}
       {loadingList ? (
         <div className="flex justify-center py-16">
           <LogoLoader size="md" message="Cargando transcripts disponibles..." />
         </div>
-      ) : listError ? (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-red-300 text-sm">
-          {listError}
-        </div>
-      ) : available.length === 0 ? (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-6 text-amber-200/80 text-sm">
-          No se encontraron earnings transcripts para <span className="font-semibold">{ticker}</span>.
-        </div>
       ) : (
         <>
+          {usingFallbackRange && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-amber-200/70 text-xs">
+              No se pudo obtener la lista oficial de transcripts (puede que tu plan FMP no la exponga).
+              Mostramos un rango genérico — algunos trimestres pueden no tener transcript.
+            </div>
+          )}
+
+          {/* Selectors */}
           <div className="flex flex-wrap gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs uppercase tracking-wider text-gray-500 font-semibold">Año</label>
               <select
                 value={selectedYear ?? ''}
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="bg-black/60 border border-emerald-900/40 hover:border-emerald-700/60 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition"
+                className="bg-black/60 border border-emerald-900/40 hover:border-emerald-700/60 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition min-w-[110px]"
               >
                 {years.map(y => (
                   <option key={y} value={y}>{y}</option>
@@ -238,7 +328,7 @@ export default function EarningsTranscriptsTab({ ticker }: EarningsTranscriptsTa
               <select
                 value={selectedQuarter ?? ''}
                 onChange={(e) => setSelectedQuarter(Number(e.target.value))}
-                className="bg-black/60 border border-emerald-900/40 hover:border-emerald-700/60 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition"
+                className="bg-black/60 border border-emerald-900/40 hover:border-emerald-700/60 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition min-w-[110px]"
               >
                 {quartersForYear.map(q => (
                   <option key={q} value={q}>Q{q}</option>
@@ -257,7 +347,7 @@ export default function EarningsTranscriptsTab({ ticker }: EarningsTranscriptsTa
             )}
           </div>
 
-          {/* Transcript content */}
+          {/* Content */}
           {loadingTranscript ? (
             <div className="flex justify-center py-20">
               <LogoLoader size="md" message={`Cargando ${ticker} Q${selectedQuarter} ${selectedYear}...`} />
