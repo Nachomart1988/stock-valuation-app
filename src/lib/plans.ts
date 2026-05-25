@@ -61,7 +61,7 @@ export const GENERAL_INFO_ACCESS: TabSubAccess = {
   godmode: 'all',
 };
 
-// Tab 3 (sub-tab: Company) — Company: [0=Competidores, 1=Industry, 2=Segmentation, 3=Holders]
+// Tab 3 (sub-tab: Company) — Company: [0=Competidores, 1=Industry, 2=Segmentation, 3=Holders, 4=EarningsTranscripts]
 export const COMPANY_ACCESS: TabSubAccess = {
   free:    [0],      // Only Competidores
   pro:     'all',

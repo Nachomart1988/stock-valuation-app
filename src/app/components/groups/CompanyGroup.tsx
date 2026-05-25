@@ -10,6 +10,7 @@ interface CompanyGroupProps {
   IndustryTab: React.ReactNode;
   SegmentationTab: React.ReactNode;
   HoldersTab: React.ReactNode;
+  EarningsTranscriptsTab: React.ReactNode;
   lockedSubtabs?: number[];
   requiredPlan?: PlanTier;
   currentPlan?: PlanTier;
@@ -20,11 +21,12 @@ export default function CompanyGroup({
   IndustryTab,
   SegmentationTab,
   HoldersTab,
+  EarningsTranscriptsTab,
   lockedSubtabs = [],
   requiredPlan = 'pro',
   currentPlan = 'free',
 }: CompanyGroupProps) {
-  const subtabs = ['Competidores', 'Industry', 'Segmentation', 'Holders'];
+  const subtabs = ['Competidores', 'Industry', 'Segmentation', 'Holders', 'Earnings Transcripts'];
 
   return (
     <div className="space-y-4">
@@ -60,6 +62,9 @@ export default function CompanyGroup({
           </Tab.Panel>
           <Tab.Panel unmount={false}>
             {lockedSubtabs.includes(3) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : HoldersTab}
+          </Tab.Panel>
+          <Tab.Panel unmount={false}>
+            {lockedSubtabs.includes(4) ? <LockedSubTab requiredPlan={requiredPlan} currentPlan={currentPlan} /> : EarningsTranscriptsTab}
           </Tab.Panel>
         </Tab.Panels>
       </Tab.Group>

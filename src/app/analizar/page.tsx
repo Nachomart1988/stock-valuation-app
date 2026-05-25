@@ -34,6 +34,7 @@ import KeyMetricsTab from '@/app/components/tabs/KeyMetricsTab';
 import SegmentationTab from '@/app/components/tabs/SegmentationTab';
 import IndustryTab from '@/app/components/tabs/IndustryTab';
 import HoldersTab from '@/app/components/tabs/HoldersTab';
+import EarningsTranscriptsTab from '@/app/components/tabs/EarningsTranscriptsTab';
 import DuPontTab from '@/app/components/tabs/DuPontTab';
 import DiarioInversorTab from '@/app/components/tabs/DiarioInversorTab';
 import PivotsTab from '@/app/components/tabs/PivotsTab';
@@ -1234,7 +1235,8 @@ function AnalizarContent() {
             IndustryTab={<IndustryTab ticker={activeTicker} />}
             SegmentationTab={<SegmentationTab ticker={activeTicker} />}
             HoldersTab={<HoldersTab ticker={activeTicker} />}
-            lockedSubtabs={[0,1,2,3].filter(i => !canAccessSubTab(userPlan, COMPANY_ACCESS)(i))}
+            EarningsTranscriptsTab={<EarningsTranscriptsTab ticker={activeTicker} />}
+            lockedSubtabs={[0,1,2,3,4].filter(i => !canAccessSubTab(userPlan, COMPANY_ACCESS)(i))}
             requiredPlan="pro"
             currentPlan={userPlan}
           />
