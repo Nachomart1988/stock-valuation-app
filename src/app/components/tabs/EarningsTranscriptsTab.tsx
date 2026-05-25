@@ -82,27 +82,23 @@ function extractSpeaker(paragraph: string): { speaker: string | null; body: stri
   return { speaker: null, body: paragraph };
 }
 
-// Try multiple FMP endpoint variants for listing transcripts. Returns the first
-// non-empty response, or [] if all fail (caller falls back to a generic range).
+// Fetch the list of available transcripts for a ticker. We only call the
+// `stable/` endpoint — the legacy v4 endpoint is gated by the same FMP plan
+// tier, so trying it as a fallback just adds noise to the console. When this
+// fails or is empty, the caller falls back to a synthesized year/quarter grid.
 async function loadTranscriptList(ticker: string): Promise<AvailableTranscript[]> {
-  const attempts: Array<{ path: string; params?: Record<string, string | number> }> = [
-    { path: 'stable/earning-call-transcript-dates', params: { symbol: ticker } },
-    { path: 'api/v4/earning_call_transcript', params: { symbol: ticker } },
-  ];
-
-  for (const a of attempts) {
-    try {
-      const raw = await fetchFmp(a.path, a.params);
-      const normalized = (Array.isArray(raw) ? raw : [])
-        .map(normalizeListRow)
-        .filter((r): r is AvailableTranscript => r !== null);
-      if (normalized.length > 0) return normalized;
-    } catch (err) {
-      // Try next variant on 403 / 404 / network error
-      console.warn(`[EarningsTranscripts] List attempt failed for ${a.path}:`, (err as Error)?.message);
-    }
+  try {
+    const raw = await fetchFmp('stable/earning-call-transcript-dates', { symbol: ticker });
+    return (Array.isArray(raw) ? raw : [])
+      .map(normalizeListRow)
+      .filter((r): r is AvailableTranscript => r !== null);
+  } catch (err) {
+    console.info(
+      `[EarningsTranscripts] Dates endpoint unavailable, using fallback range:`,
+      (err as Error)?.message
+    );
+    return [];
   }
-  return [];
 }
 
 // Try stable first, fall back to v3. Returns null if no content is available.
