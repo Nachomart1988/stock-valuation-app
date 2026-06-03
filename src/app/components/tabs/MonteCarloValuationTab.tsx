@@ -2,21 +2,56 @@
 // Monte Carlo Advanced Valuation Tab — Dynamic Markov Regime Switching + Longstaff-Schwartz
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ReferenceLine, Cell,
 } from 'recharts';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { postBackend } from '@/lib/backendClient';
+import { fetchFmp } from '@/lib/fmpClient';
 
 interface MonteCarloValuationTabProps {
   ticker: string;
   income?: any[];
   balance?: any[];
+  cashFlow?: any[];
   quote?: any;
   profile?: any;
   wacc?: number | null;
+}
+
+interface AutoDefaults {
+  // value + human-readable source so the UI can show "auto · …" badges
+  operatingMarginMean: { value: number; source: string };
+  waccMean: { value: number; source: string };
+  terminalGrowth: { value: number; source: string };
+  taxRate: { value: number; source: string };
+  reinvestmentRate: { value: number; source: string };
+  riskFreeRate: { value: number; source: string };
+}
+
+const DEFAULT_FALLBACKS: AutoDefaults = {
+  operatingMarginMean: { value: 0.175, source: 'fallback 17.5%' },
+  waccMean: { value: 0.095, source: 'fallback 9.5%' },
+  terminalGrowth: { value: 0.025, source: 'fallback 2.5%' },
+  taxRate: { value: 0.21, source: 'US fed corp rate' },
+  reinvestmentRate: { value: 0.33, source: 'fallback 33%' },
+  riskFreeRate: { value: 0.042, source: 'fallback 4.2%' },
+};
+
+function avgOfFinite(nums: number[]): number | null {
+  const xs = nums.filter((n) => isFinite(n));
+  if (xs.length === 0) return null;
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+
+function stdOfFinite(nums: number[]): number | null {
+  const xs = nums.filter((n) => isFinite(n));
+  if (xs.length < 2) return null;
+  const m = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const v = xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1);
+  return Math.sqrt(v);
 }
 
 interface AdvMCResult {
@@ -74,13 +109,13 @@ function KpiCard({
 }
 
 export default function MonteCarloValuationTab({
-  ticker, income, balance, quote, profile, wacc,
+  ticker, income, balance, cashFlow, quote, profile, wacc,
 }: MonteCarloValuationTabProps) {
   const { locale } = useLanguage();
   const es = locale === 'es';
 
-  // ── Derive sane defaults from already-loaded fundamentals ──────────────
-  const defaults = useMemo(() => {
+  // ── Derive structural fundamentals (revenue, shares, net debt, price) ──
+  const fundamentals = useMemo(() => {
     const latestIncome = Array.isArray(income) && income.length > 0 ? income[0] : null;
     const latestBalance = Array.isArray(balance) && balance.length > 0 ? balance[0] : null;
     const currentRevenue = latestIncome?.revenue || 0;
@@ -92,38 +127,227 @@ export default function MonteCarloValuationTab({
     const totalDebt = (latestBalance?.totalDebt ?? 0);
     const cash = (latestBalance?.cashAndShortTermInvestments ?? latestBalance?.cashAndCashEquivalents ?? 0);
     const netDebt = Math.max(0, totalDebt - cash);
-    const opMargin = currentRevenue > 0 && latestIncome?.operatingIncome
-      ? Math.min(0.42, Math.max(0.04, latestIncome.operatingIncome / currentRevenue))
-      : 0.175;
-    const waccDefault = wacc && isFinite(wacc) && wacc > 0 ? wacc : 0.095;
     return {
       currentRevenue,
       sharesOutstanding,
       netDebt,
       currentPrice: quote?.price || 0,
-      operatingMarginMean: +opMargin.toFixed(4),
-      waccMean: +waccDefault.toFixed(4),
     };
-  }, [income, balance, quote, wacc]);
+  }, [income, balance, quote]);
+
+  // ── Async auto-defaults: combine historical fundamentals + FMP treasury ─
+  const [autoDefaults, setAutoDefaults] = useState<AutoDefaults>(DEFAULT_FALLBACKS);
+  const [autoLoading, setAutoLoading] = useState(true);
+  const lastAutoTicker = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!ticker) return;
+    let cancelled = false;
+    setAutoLoading(true);
+
+    (async () => {
+      const next: AutoDefaults = { ...DEFAULT_FALLBACKS };
+
+      // ── Operating Margin: avg of last 3 fiscal years (more robust than spot) ─
+      if (Array.isArray(income) && income.length > 0) {
+        const margins = income.slice(0, 3)
+          .map((r) => (r?.operatingIncome && r?.revenue) ? r.operatingIncome / r.revenue : NaN)
+          .filter(isFinite);
+        const m = avgOfFinite(margins);
+        if (m !== null) {
+          const clamped = Math.min(0.42, Math.max(0.04, m));
+          next.operatingMarginMean = {
+            value: +clamped.toFixed(4),
+            source: `avg ${margins.length}y income.operatingIncome/revenue · ${(clamped * 100).toFixed(1)}%`,
+          };
+        }
+      }
+
+      // ── Effective Tax Rate: avg of last 3y (incomeTaxExpense / incomeBeforeTax) ─
+      if (Array.isArray(income) && income.length > 0) {
+        const rates = income.slice(0, 3)
+          .map((r) => (r?.incomeBeforeTax && r.incomeBeforeTax > 0 && r?.incomeTaxExpense != null)
+            ? r.incomeTaxExpense / r.incomeBeforeTax
+            : NaN)
+          .filter((x) => isFinite(x) && x > 0 && x < 0.6);
+        const t = avgOfFinite(rates);
+        if (t !== null) {
+          const clamped = Math.min(0.35, Math.max(0.10, t));
+          next.taxRate = {
+            value: +clamped.toFixed(4),
+            source: `effective TR (avg ${rates.length}y) · ${(clamped * 100).toFixed(1)}%`,
+          };
+        }
+      }
+
+      // ── Reinvestment Rate: avg of (|capex| + ΔWC) / NOPAT over last 3y ───
+      if (Array.isArray(cashFlow) && cashFlow.length > 0 && Array.isArray(income) && income.length > 1) {
+        const rates: number[] = [];
+        const n = Math.min(3, cashFlow.length, income.length);
+        for (let i = 0; i < n; i++) {
+          const cf = cashFlow[i];
+          const inc = income[i];
+          const capex = Math.abs(cf?.capitalExpenditure ?? 0);
+          const dwc = -(cf?.changeInWorkingCapital ?? 0); // positive = absorbs cash
+          const ebit = inc?.operatingIncome ?? 0;
+          const taxR = next.taxRate.value;
+          const nopat = ebit * (1 - taxR);
+          if (nopat > 0) {
+            const r = (capex + Math.max(0, dwc)) / nopat;
+            if (isFinite(r) && r > 0 && r < 1.5) rates.push(r);
+          }
+        }
+        const r = avgOfFinite(rates);
+        if (r !== null) {
+          const clamped = Math.min(0.70, Math.max(0.05, r));
+          next.reinvestmentRate = {
+            value: +clamped.toFixed(4),
+            source: `(capex + ΔWC) / NOPAT avg ${rates.length}y · ${(clamped * 100).toFixed(1)}%`,
+          };
+        }
+      }
+
+      // ── Risk-Free Rate + Terminal Growth from FMP treasury rates ─────────
+      try {
+        const treasuryJson = await fetchFmp('stable/treasury-rates');
+        if (Array.isArray(treasuryJson) && treasuryJson.length > 0) {
+          const latest = treasuryJson[0];
+          const y10 = Number(latest.year10);
+          const y30 = Number(latest.year30);
+          if (isFinite(y10) && y10 > 0) {
+            next.riskFreeRate = {
+              value: +(y10 / 100).toFixed(4),
+              source: `10Y US Treasury · ${y10.toFixed(2)}%`,
+            };
+          }
+          // Terminal growth ≈ long-term nominal GDP. Best proxy in FMP:
+          // 30Y yield minus a small spread (capped 2-3.5%) — closer to real LT growth.
+          if (isFinite(y30) && y30 > 0) {
+            const gT = Math.min(0.035, Math.max(0.015, (y30 - 1.2) / 100));
+            next.terminalGrowth = {
+              value: +gT.toFixed(4),
+              source: `30Y Treasury ${y30.toFixed(2)}% − 1.2 spread · ${(gT * 100).toFixed(2)}%`,
+            };
+          } else if (isFinite(y10)) {
+            const gT = Math.min(0.030, Math.max(0.015, (y10 - 1.5) / 100));
+            next.terminalGrowth = {
+              value: +gT.toFixed(4),
+              source: `10Y Treasury ${y10.toFixed(2)}% − 1.5 spread · ${(gT * 100).toFixed(2)}%`,
+            };
+          }
+        }
+      } catch {/* fallback retained */}
+
+      // ── WACC: prefer shared WACC from WACCTab; else CAPM fallback ────────
+      if (wacc && isFinite(wacc) && wacc > 0) {
+        next.waccMean = {
+          value: +wacc.toFixed(4),
+          source: `WACC tab · ${(wacc * 100).toFixed(2)}%`,
+        };
+      } else {
+        // CAPM fallback: rf + beta * MRP (no debt weight — best we can do without WACCTab)
+        try {
+          const mrpJson = await fetchFmp('stable/market-risk-premium');
+          let mrp: number | null = null;
+          if (Array.isArray(mrpJson)) {
+            const us = mrpJson.find((x: any) =>
+              x?.country === 'United States' || x?.countryCode === 'US');
+            mrp = Number(us?.totalEquityRiskPremium ?? us?.equityRiskPremium ?? us?.premium ?? NaN);
+          }
+          const beta = Number(profile?.beta);
+          const rfPct = next.riskFreeRate.value * 100;
+          if (isFinite(beta) && beta > 0 && isFinite(mrp ?? NaN) && mrp! > 0 && isFinite(rfPct)) {
+            const capm = (rfPct + beta * mrp!) / 100;
+            const clamped = Math.min(0.18, Math.max(0.05, capm));
+            next.waccMean = {
+              value: +clamped.toFixed(4),
+              source: `CAPM fallback (β=${beta.toFixed(2)}, MRP=${mrp!.toFixed(1)}%) · ${(clamped * 100).toFixed(2)}%`,
+            };
+          }
+        } catch {/* keep DEFAULT_FALLBACKS.waccMean */}
+      }
+
+      if (!cancelled) {
+        setAutoDefaults(next);
+        setAutoLoading(false);
+        lastAutoTicker.current = ticker;
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [ticker, income, cashFlow, profile, wacc]);
+
+  // ── Revenue CAGR std from historical YoY growth (drives sim noise) ─────
+  const revenueCagrStd = useMemo(() => {
+    if (!Array.isArray(income) || income.length < 3) return 0.04;
+    const sorted = [...income].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 6);
+    const growths: number[] = [];
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const r0 = sorted[i + 1]?.revenue;
+      const r1 = sorted[i]?.revenue;
+      if (r0 > 0 && r1 > 0) growths.push((r1 - r0) / r0);
+    }
+    const s = stdOfFinite(growths);
+    return s !== null ? Math.min(0.20, Math.max(0.01, s)) : 0.04;
+  }, [income]);
 
   const [inputs, setInputs] = useState({
     years: 8,
     nSimulations: 12000,
-    operatingMarginMean: defaults.operatingMarginMean,
-    waccMean: defaults.waccMean,
-    terminalGrowth: 0.03,
-    taxRate: 0.25,
-    reinvestmentRate: 0.33,
+    operatingMarginMean: DEFAULT_FALLBACKS.operatingMarginMean.value,
+    waccMean: DEFAULT_FALLBACKS.waccMean.value,
+    terminalGrowth: DEFAULT_FALLBACKS.terminalGrowth.value,
+    taxRate: DEFAULT_FALLBACKS.taxRate.value,
+    reinvestmentRate: DEFAULT_FALLBACKS.reinvestmentRate.value,
     expansionStrike: Math.max(10, Math.round((quote?.price || 50) * 0.6)),
     abandonmentStrike: Math.max(20, Math.round((quote?.price || 50) * 1.05)),
-    riskFreeRate: 0.04,
+    riskFreeRate: DEFAULT_FALLBACKS.riskFreeRate.value,
   });
+
+  // Track which inputs the user has manually overridden — never auto-overwrite those
+  const [overrides, setOverrides] = useState<Set<string>>(new Set());
+  const markOverride = (key: string) => setOverrides((s) => new Set(s).add(key));
+  const isAuto = (key: string) => !overrides.has(key);
+
+  // Reset overrides + result when the ticker changes — defaults are now company-specific
+  useEffect(() => {
+    setOverrides(new Set());
+    setResult(null);
+  }, [ticker]);
+
+  // Sync auto-defaults into inputs (only for non-overridden fields)
+  useEffect(() => {
+    setInputs((prev) => ({
+      ...prev,
+      operatingMarginMean: overrides.has('operatingMarginMean') ? prev.operatingMarginMean : autoDefaults.operatingMarginMean.value,
+      waccMean: overrides.has('waccMean') ? prev.waccMean : autoDefaults.waccMean.value,
+      terminalGrowth: overrides.has('terminalGrowth') ? prev.terminalGrowth : autoDefaults.terminalGrowth.value,
+      taxRate: overrides.has('taxRate') ? prev.taxRate : autoDefaults.taxRate.value,
+      reinvestmentRate: overrides.has('reinvestmentRate') ? prev.reinvestmentRate : autoDefaults.reinvestmentRate.value,
+      riskFreeRate: overrides.has('riskFreeRate') ? prev.riskFreeRate : autoDefaults.riskFreeRate.value,
+    }));
+  }, [autoDefaults, overrides]);
+
+  const resetToAuto = () => {
+    setOverrides(new Set());
+    setInputs((prev) => ({
+      ...prev,
+      operatingMarginMean: autoDefaults.operatingMarginMean.value,
+      waccMean: autoDefaults.waccMean.value,
+      terminalGrowth: autoDefaults.terminalGrowth.value,
+      taxRate: autoDefaults.taxRate.value,
+      reinvestmentRate: autoDefaults.reinvestmentRate.value,
+      riskFreeRate: autoDefaults.riskFreeRate.value,
+      expansionStrike: Math.max(10, Math.round((quote?.price || 50) * 0.6)),
+      abandonmentStrike: Math.max(20, Math.round((quote?.price || 50) * 1.05)),
+    }));
+  };
 
   const [result, setResult] = useState<AdvMCResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canRun = defaults.currentRevenue > 0 && defaults.sharesOutstanding > 0;
+  const canRun = fundamentals.currentRevenue > 0 && fundamentals.sharesOutstanding > 0;
 
   const runSimulation = async () => {
     if (!canRun) {
@@ -137,10 +361,10 @@ export default function MonteCarloValuationTab({
     try {
       const payload = {
         ticker,
-        current_revenue: defaults.currentRevenue,
-        shares_outstanding: defaults.sharesOutstanding,
-        net_debt: defaults.netDebt,
-        current_price: defaults.currentPrice,
+        current_revenue: fundamentals.currentRevenue,
+        shares_outstanding: fundamentals.sharesOutstanding,
+        net_debt: fundamentals.netDebt,
+        current_price: fundamentals.currentPrice,
         years: inputs.years,
         n_simulations: inputs.nSimulations,
         operating_margin_mean: inputs.operatingMarginMean,
@@ -151,6 +375,7 @@ export default function MonteCarloValuationTab({
         expansion_strike: inputs.expansionStrike,
         abandonment_strike: inputs.abandonmentStrike,
         risk_free_rate: inputs.riskFreeRate,
+        revenue_cagr_std: revenueCagrStd,
       };
       const data = await postBackend<AdvMCResult>('/monte-carlo-advanced/predict', payload, 90_000);
       setResult(data);
@@ -191,6 +416,22 @@ export default function MonteCarloValuationTab({
 
       {/* Input controls */}
       <div className="bg-black/40 border border-green-900/20 rounded-2xl p-5 space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-500">
+            {es
+              ? 'Defaults cableados desde income / balance / cashFlow del ticker + FMP economic data. Podes overridear cualquier campo.'
+              : 'Defaults auto-derived from income / balance / cashFlow + FMP economic data. You can override any field.'}
+          </p>
+          {overrides.size > 0 && (
+            <button
+              onClick={resetToAuto}
+              className="text-xs px-3 py-1 rounded-lg bg-violet-900/30 border border-violet-500/30 text-violet-300 hover:bg-violet-900/50"
+            >
+              {es ? `Reset auto (${overrides.size})` : `Reset auto (${overrides.size})`}
+            </button>
+          )}
+        </div>
+
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           <div>
             <label className="text-xs text-gray-400 mb-1 block">{es ? 'Anos' : 'Years'}</label>
@@ -199,6 +440,7 @@ export default function MonteCarloValuationTab({
               onChange={(e) => setInputs({ ...inputs, years: Math.max(3, Math.min(15, parseInt(e.target.value) || 8)) })}
               className="w-full bg-black/60 border border-green-900/30 rounded-lg px-3 py-2 text-sm font-data text-white focus:outline-none focus:border-violet-500"
             />
+            <p className="text-[10px] text-gray-600 mt-1">{es ? 'horizonte de proyeccion' : 'projection horizon'}</p>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">{es ? 'Simulaciones' : 'Simulations'}</label>
@@ -212,46 +454,62 @@ export default function MonteCarloValuationTab({
               <option value={12000}>12,000 (default)</option>
               <option value={25000}>25,000 (preciso)</option>
             </select>
+            <p className="text-[10px] text-gray-600 mt-1">{es ? 'paths Monte Carlo' : 'Monte Carlo paths'}</p>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">{es ? 'Margen Op. medio' : 'Op Margin Mean'}</label>
             <input
               type="number" step="0.01" min={0.04} max={0.42} value={inputs.operatingMarginMean}
-              onChange={(e) => setInputs({ ...inputs, operatingMarginMean: parseFloat(e.target.value) || 0.175 })}
+              onChange={(e) => { markOverride('operatingMarginMean'); setInputs({ ...inputs, operatingMarginMean: parseFloat(e.target.value) || autoDefaults.operatingMarginMean.value }); }}
               className="w-full bg-black/60 border border-green-900/30 rounded-lg px-3 py-2 text-sm font-data text-white focus:outline-none focus:border-violet-500"
             />
+            <p className={`text-[10px] mt-1 ${isAuto('operatingMarginMean') ? 'text-emerald-500/70' : 'text-amber-400/80'}`}>
+              {isAuto('operatingMarginMean') ? `auto · ${autoDefaults.operatingMarginMean.source}` : (es ? 'manual override' : 'manual override')}
+            </p>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">WACC base</label>
             <input
               type="number" step="0.005" min={0.05} max={0.18} value={inputs.waccMean}
-              onChange={(e) => setInputs({ ...inputs, waccMean: parseFloat(e.target.value) || 0.095 })}
+              onChange={(e) => { markOverride('waccMean'); setInputs({ ...inputs, waccMean: parseFloat(e.target.value) || autoDefaults.waccMean.value }); }}
               className="w-full bg-black/60 border border-green-900/30 rounded-lg px-3 py-2 text-sm font-data text-white focus:outline-none focus:border-violet-500"
             />
+            <p className={`text-[10px] mt-1 ${isAuto('waccMean') ? 'text-emerald-500/70' : 'text-amber-400/80'}`}>
+              {isAuto('waccMean') ? `auto · ${autoDefaults.waccMean.source}` : (es ? 'manual override' : 'manual override')}
+            </p>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">{es ? 'Crecimiento terminal' : 'Terminal Growth'}</label>
             <input
               type="number" step="0.005" min={0} max={0.06} value={inputs.terminalGrowth}
-              onChange={(e) => setInputs({ ...inputs, terminalGrowth: parseFloat(e.target.value) || 0.03 })}
+              onChange={(e) => { markOverride('terminalGrowth'); setInputs({ ...inputs, terminalGrowth: parseFloat(e.target.value) || autoDefaults.terminalGrowth.value }); }}
               className="w-full bg-black/60 border border-green-900/30 rounded-lg px-3 py-2 text-sm font-data text-white focus:outline-none focus:border-violet-500"
             />
+            <p className={`text-[10px] mt-1 ${isAuto('terminalGrowth') ? 'text-emerald-500/70' : 'text-amber-400/80'}`}>
+              {isAuto('terminalGrowth') ? `auto · ${autoDefaults.terminalGrowth.source}` : (es ? 'manual override' : 'manual override')}
+            </p>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">{es ? 'Tasa de impuesto' : 'Tax Rate'}</label>
             <input
               type="number" step="0.01" min={0} max={0.4} value={inputs.taxRate}
-              onChange={(e) => setInputs({ ...inputs, taxRate: parseFloat(e.target.value) || 0.25 })}
+              onChange={(e) => { markOverride('taxRate'); setInputs({ ...inputs, taxRate: parseFloat(e.target.value) || autoDefaults.taxRate.value }); }}
               className="w-full bg-black/60 border border-green-900/30 rounded-lg px-3 py-2 text-sm font-data text-white focus:outline-none focus:border-violet-500"
             />
+            <p className={`text-[10px] mt-1 ${isAuto('taxRate') ? 'text-emerald-500/70' : 'text-amber-400/80'}`}>
+              {isAuto('taxRate') ? `auto · ${autoDefaults.taxRate.source}` : (es ? 'manual override' : 'manual override')}
+            </p>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">{es ? 'Reinversion' : 'Reinvestment'}</label>
             <input
               type="number" step="0.01" min={0} max={0.7} value={inputs.reinvestmentRate}
-              onChange={(e) => setInputs({ ...inputs, reinvestmentRate: parseFloat(e.target.value) || 0.33 })}
+              onChange={(e) => { markOverride('reinvestmentRate'); setInputs({ ...inputs, reinvestmentRate: parseFloat(e.target.value) || autoDefaults.reinvestmentRate.value }); }}
               className="w-full bg-black/60 border border-green-900/30 rounded-lg px-3 py-2 text-sm font-data text-white focus:outline-none focus:border-violet-500"
             />
+            <p className={`text-[10px] mt-1 ${isAuto('reinvestmentRate') ? 'text-emerald-500/70' : 'text-amber-400/80'}`}>
+              {isAuto('reinvestmentRate') ? `auto · ${autoDefaults.reinvestmentRate.source}` : (es ? 'manual override' : 'manual override')}
+            </p>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">{es ? 'Strike Expansion ($)' : 'Expansion Strike ($)'}</label>
@@ -260,6 +518,7 @@ export default function MonteCarloValuationTab({
               onChange={(e) => setInputs({ ...inputs, expansionStrike: parseFloat(e.target.value) || 28 })}
               className="w-full bg-black/60 border border-green-900/30 rounded-lg px-3 py-2 text-sm font-data text-white focus:outline-none focus:border-violet-500"
             />
+            <p className="text-[10px] text-gray-600 mt-1">{es ? '~60% del precio actual' : '~60% of current price'}</p>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">{es ? 'Strike Abandono ($)' : 'Abandonment Strike ($)'}</label>
@@ -268,38 +527,53 @@ export default function MonteCarloValuationTab({
               onChange={(e) => setInputs({ ...inputs, abandonmentStrike: parseFloat(e.target.value) || 52 })}
               className="w-full bg-black/60 border border-green-900/30 rounded-lg px-3 py-2 text-sm font-data text-white focus:outline-none focus:border-violet-500"
             />
+            <p className="text-[10px] text-gray-600 mt-1">{es ? '~105% del precio actual' : '~105% of current price'}</p>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">{es ? 'Tasa libre de riesgo' : 'Risk-free Rate'}</label>
             <input
               type="number" step="0.005" min={0} max={0.1} value={inputs.riskFreeRate}
-              onChange={(e) => setInputs({ ...inputs, riskFreeRate: parseFloat(e.target.value) || 0.04 })}
+              onChange={(e) => { markOverride('riskFreeRate'); setInputs({ ...inputs, riskFreeRate: parseFloat(e.target.value) || autoDefaults.riskFreeRate.value }); }}
               className="w-full bg-black/60 border border-green-900/30 rounded-lg px-3 py-2 text-sm font-data text-white focus:outline-none focus:border-violet-500"
             />
+            <p className={`text-[10px] mt-1 ${isAuto('riskFreeRate') ? 'text-emerald-500/70' : 'text-amber-400/80'}`}>
+              {isAuto('riskFreeRate') ? `auto · ${autoDefaults.riskFreeRate.source}` : (es ? 'manual override' : 'manual override')}
+            </p>
           </div>
         </div>
 
         {/* Auto-detected fundamentals */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-green-900/15 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-3 border-t border-green-900/15 text-xs">
           <div>
-            <div className="text-gray-500">Revenue (TTM)</div>
-            <div className="font-data text-gray-200">{fmtUSD(defaults.currentRevenue, 0)}</div>
+            <div className="text-gray-500">Revenue (FY)</div>
+            <div className="font-data text-gray-200">{fmtUSD(fundamentals.currentRevenue, 0)}</div>
           </div>
           <div>
             <div className="text-gray-500">Shares Out.</div>
             <div className="font-data text-gray-200">
-              {defaults.sharesOutstanding ? (defaults.sharesOutstanding / 1e6).toFixed(1) + 'M' : 'N/A'}
+              {fundamentals.sharesOutstanding ? (fundamentals.sharesOutstanding / 1e6).toFixed(1) + 'M' : 'N/A'}
             </div>
           </div>
           <div>
             <div className="text-gray-500">Net Debt</div>
-            <div className="font-data text-gray-200">{fmtUSD(defaults.netDebt, 0)}</div>
+            <div className="font-data text-gray-200">{fmtUSD(fundamentals.netDebt, 0)}</div>
           </div>
           <div>
             <div className="text-gray-500">{es ? 'Precio actual' : 'Current price'}</div>
-            <div className="font-data text-gray-200">{fmtUSD(defaults.currentPrice)}</div>
+            <div className="font-data text-gray-200">{fmtUSD(fundamentals.currentPrice)}</div>
+          </div>
+          <div>
+            <div className="text-gray-500">{es ? 'Revenue CAGR σ' : 'Revenue CAGR σ'}</div>
+            <div className="font-data text-gray-200">{(revenueCagrStd * 100).toFixed(1)}%</div>
+            <div className="text-[10px] text-emerald-500/70">{es ? 'auto · std YoY hist.' : 'auto · YoY std'}</div>
           </div>
         </div>
+
+        {autoLoading && (
+          <p className="text-[11px] text-violet-300/70">
+            {es ? 'Cargando defaults desde FMP economic data…' : 'Loading defaults from FMP economic data…'}
+          </p>
+        )}
 
         <button
           onClick={runSimulation}

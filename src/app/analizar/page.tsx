@@ -1379,6 +1379,7 @@ function AnalizarContent() {
         ticker={activeTicker}
         income={income}
         balance={balance}
+        cashFlow={cashFlow}
         quote={quote}
         profile={profile}
         wacc={sharedWACC}
