@@ -229,6 +229,7 @@
       "intraday": "Intradiario",
       "dcf": "DCF",
       "valuations": "Valuaciones",
+      "monteCarloAdvanced": "Monte Carlo Advanced",
       "probability": "Probabilidad",
       "options": "Opciones",
       "investorJournal": "Diario Inversor",

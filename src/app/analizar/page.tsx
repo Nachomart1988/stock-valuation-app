@@ -25,6 +25,7 @@ import CalculosTab from '@/app/components/tabs/CalculosTab';
 import RevenueForecastTab from '@/app/components/tabs/RevenueForecastTab';
 import SustainableGrowthTab from '@/app/components/tabs/SustainableGrowthTab';
 import ValuacionesTab from '@/app/components/tabs/ValuacionesTab';
+import MonteCarloValuationTab from '@/app/components/tabs/MonteCarloValuationTab';
 import ProbabilityTab from '@/app/components/tabs/ProbabilityTab';
 // AnalisisFinalTab removed as per user request
 import WACCTab from '@/app/components/tabs/WACCTab';
@@ -490,12 +491,15 @@ function AnalizarContent() {
     const urlTab = searchParams.get('tab');
     if (!urlTab) return;
     const tabMap: Record<string, number> = {
-      diario: 13,       // Investor Journal
-      summary: 12,      // Resumen Maestro
-      options: 11,      // Options
-      valuaciones: 9,   // Valuaciones
-      probability: 10,  // Probability
       inicio: 0,
+      valuaciones: 6,
+      'monte-carlo': 7,
+      montecarlo: 7,
+      probability: 8,
+      options: 9,
+      summary: 10,
+      'quantum-risk': 11,
+      diario: 12, // approximate — Investor Journal is the last category, dynamic
     };
     const idx = tabMap[urlTab.toLowerCase()];
     if (idx !== undefined) setSelectedTabIndex(idx);
@@ -1062,18 +1066,19 @@ function AnalizarContent() {
     `${t('analysis.categories.inputs')} & DCF`,             // 4  — merged: Inputs + DCF
     t('analysis.categories.intraday'),                       // 5
     t('analysis.categories.valuations'),                     // 6
-    t('analysis.categories.probability'),                    // 7
-    t('analysis.categories.options'),                        // 8
-    `${t('analysis.categories.summary')} (Beta)`,            // 9
-    `${t('analysis.categories.quantumRisk')} (Beta)`,        // 10
+    `${t('analysis.categories.monteCarloAdvanced')} (Beta)`, // 7  — NEW: Monte Carlo Advanced Valuation
+    t('analysis.categories.probability'),                    // 8
+    t('analysis.categories.options'),                        // 9
+    `${t('analysis.categories.summary')} (Beta)`,            // 10
+    `${t('analysis.categories.quantumRisk')} (Beta)`,        // 11
     ...(isGodMode ? [
-      `${t('analysis.categories.quantumPortfolio')} (Beta)`, // 11 (GOD MODE only)
-      `${t('analysis.categories.drlTrading')} (Beta)`,       // 12 (GOD MODE only)
-      `${t('analysis.categories.supplyChain')} (Beta)`,      // 13 (GOD MODE only)
-      `${t('analysis.categories.htfDetection')} (Beta)`,     // 14 (GOD MODE only)
-      `${t('analysis.categories.epDetection')} (Beta)`,      // 15 (GOD MODE only)
-      t('analysis.categories.mcpIntegration'),                // 16 (GOD MODE only)
-      t('analysis.categories.strategyBacktester'),            // 17 (GOD MODE only)
+      `${t('analysis.categories.quantumPortfolio')} (Beta)`, // 12 (GOD MODE only)
+      `${t('analysis.categories.drlTrading')} (Beta)`,       // 13 (GOD MODE only)
+      `${t('analysis.categories.supplyChain')} (Beta)`,      // 14 (GOD MODE only)
+      `${t('analysis.categories.htfDetection')} (Beta)`,     // 15 (GOD MODE only)
+      `${t('analysis.categories.epDetection')} (Beta)`,      // 16 (GOD MODE only)
+      t('analysis.categories.mcpIntegration'),                // 17 (GOD MODE only)
+      t('analysis.categories.strategyBacktester'),            // 18 (GOD MODE only)
     ] : []),
     t('analysis.categories.investorJournal'),                // last — always detached
   ];
@@ -1367,9 +1372,25 @@ function AnalizarContent() {
     />
   </Tab.Panel>
 
-  {/* 7. Probability */}
+  {/* 7. Monte Carlo Advanced Valuation */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 7) ? (
+      <MonteCarloValuationTab
+        ticker={activeTicker}
+        income={income}
+        balance={balance}
+        quote={quote}
+        profile={profile}
+        wacc={sharedWACC}
+      />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[7]} currentPlan={userPlan} tabName="Monte Carlo Advanced" />
+    )}
+  </Tab.Panel>
+
+  {/* 8. Probability */}
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
+    {canAccessTab(userPlan, 8) ? (
       <ProbabilityTab
         ticker={activeTicker}
         quote={quote}
@@ -1379,22 +1400,22 @@ function AnalizarContent() {
         dividends={dividends}
       />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[7]} currentPlan={userPlan} tabName="Probability" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[8]} currentPlan={userPlan} tabName="Probability" />
     )}
   </Tab.Panel>
 
-  {/* 8. Options */}
-  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    {canAccessTab(userPlan, 8) ? (
-      <OptionsTab ticker={activeTicker} currentPrice={quote?.price || 0} />
-    ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[8]} currentPlan={userPlan} tabName="Options" />
-    )}
-  </Tab.Panel>
-
-  {/* 9. Resumen Maestro */}
+  {/* 9. Options */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
     {canAccessTab(userPlan, 9) ? (
+      <OptionsTab ticker={activeTicker} currentPrice={quote?.price || 0} />
+    ) : (
+      <LockedTab requiredPlan={TAB_MIN_PLAN[9]} currentPlan={userPlan} tabName="Options" />
+    )}
+  </Tab.Panel>
+
+  {/* 10. Resumen Maestro */}
+  <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
+    {canAccessTab(userPlan, 10) ? (
       <ResumenTab
         ticker={activeTicker}
         currentPrice={quote?.price || 0}
@@ -1414,62 +1435,62 @@ function AnalizarContent() {
         ratiosTTM={ratiosTTM}
       />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[9]} currentPlan={userPlan} tabName="Resumen Maestro" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[10]} currentPlan={userPlan} tabName="Resumen Maestro" />
     )}
   </Tab.Panel>
 
-  {/* 10. Quantum Risk Model */}
+  {/* 11. Quantum Risk Model */}
   <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
-    {canAccessTab(userPlan, 10) ? (
+    {canAccessTab(userPlan, 11) ? (
       <QuantumRiskTab ticker={activeTicker} />
     ) : (
-      <LockedTab requiredPlan={TAB_MIN_PLAN[10]} currentPlan={userPlan} tabName="Quantum Risk" />
+      <LockedTab requiredPlan={TAB_MIN_PLAN[11]} currentPlan={userPlan} tabName="Quantum Risk" />
     )}
   </Tab.Panel>
 
-  {/* 11. Quantum Portfolio — GOD MODE only (hidden for other plans) */}
+  {/* 12. Quantum Portfolio — GOD MODE only (hidden for other plans) */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <QuantumPortfolioTab ticker={activeTicker} />
     </Tab.Panel>
   )}
 
-  {/* 12. DRL Trading — GOD MODE only (hidden for other plans) */}
+  {/* 13. DRL Trading — GOD MODE only (hidden for other plans) */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <DRLTradingTab ticker={activeTicker} />
     </Tab.Panel>
   )}
 
-  {/* 13. Supply Chain — GOD MODE only (hidden for other plans) */}
+  {/* 14. Supply Chain — GOD MODE only (hidden for other plans) */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <SupplyChainTab ticker={activeTicker} profile={profile} />
     </Tab.Panel>
   )}
 
-  {/* 14. HTF Detection — GOD MODE only */}
+  {/* 15. HTF Detection — GOD MODE only */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <HTFDetectionTab ticker={activeTicker} />
     </Tab.Panel>
   )}
 
-  {/* 15. EP Detection — GOD MODE only */}
+  {/* 16. EP Detection — GOD MODE only */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <EPDetectionTab ticker={activeTicker} />
     </Tab.Panel>
   )}
 
-  {/* 16. MCP AI Integration — GOD MODE only */}
+  {/* 17. MCP AI Integration — GOD MODE only */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <MCPIntegrationTab />
     </Tab.Panel>
   )}
 
-  {/* 17. AI Strategy Backtester — GOD MODE only */}
+  {/* 18. AI Strategy Backtester — GOD MODE only */}
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <StrategyBacktesterTab />

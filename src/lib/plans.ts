@@ -9,12 +9,13 @@
 //  4 - Inputs & DCF       (merged: Inputs + DCF — sub-tab gating inline)
 //  5 - Intraday           (sub-tabs: Pivots, Gaps, Momentum)
 //  6 - Valuaciones
-//  7 - Probability
-//  8 - Options            (sub-tabs: Chain, Strategy Simulator, Suggestions)
-//  9 - Resumen Maestro
-// 10 - Quantum Risk Model
-// 11 - Quantum Portfolio  (GOD MODE only — hidden for other plans)
-// 12 - DRL Trading        (GOD MODE only — hidden for other plans)
+//  7 - Monte Carlo Advanced Valuation (Markov regime switching + Longstaff-Schwartz)
+//  8 - Probability
+//  9 - Options            (sub-tabs: Chain, Strategy Simulator, Suggestions)
+// 10 - Resumen Maestro
+// 11 - Quantum Risk Model
+// 12 - Quantum Portfolio  (GOD MODE only — hidden for other plans)
+// 13 - DRL Trading        (GOD MODE only — hidden for other plans)
 // last - Investor Journal (sub-tabs: Diario, Portfolio Optimization) — dynamic index
 
 export type PlanTier = 'free' | 'pro' | 'elite' | 'gold' | 'godmode';
@@ -33,10 +34,11 @@ export const PLAN_METADATA: Record<PlanTier, { name: string; price: number; colo
 export const TAB_MIN_PLAN: Record<number, PlanTier> = {
   2:  'pro',   // Forecasts (incl. ML Prediction)
   5:  'pro',   // Intraday (Pivots + Gaps + Momentum)
-  7:  'pro',   // Probability
-  8:  'pro',   // Options
-  9:  'elite', // Resumen Maestro
-  10: 'gold',  // Quantum Risk Model
+  7:  'pro',   // Monte Carlo Advanced Valuation
+  8:  'pro',   // Probability
+  9:  'pro',   // Options
+  10: 'elite', // Resumen Maestro
+  11: 'gold',  // Quantum Risk Model
   // Quantum Portfolio & DRL Trading are hidden (not in categories) for non-GODMODE
   // Investor Journal (elite) is gated inline since its index is dynamic
 };

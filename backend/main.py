@@ -120,6 +120,13 @@ except ImportError:
     BACKTEST_AVAILABLE = False
     get_strategy_backtest_engine = None
 
+try:
+    from advanced_monte_carlo_dcf_engine import get_advanced_monte_carlo_engine
+    ADV_MC_AVAILABLE = True
+except ImportError:
+    ADV_MC_AVAILABLE = False
+    get_advanced_monte_carlo_engine = None
+
 app = FastAPI(
     title="Stock Analysis AI API",
     description="Neural Ensemble for Stock Valuation & Company Quality Assessment",
@@ -2212,6 +2219,77 @@ async def run_backtest(req: BacktestRequest):
             return numpy_safe_response(result)
     except Exception as e:
         print(f"[Backtest] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Advanced Monte Carlo DCF + Regime Switching + LSM ─────────
+
+class AdvancedMonteCarloRequest(BaseModel):
+    ticker: str
+    current_revenue: float
+    shares_outstanding: float
+    net_debt: float = 0.0
+    current_price: float = 0.0
+    years: int = 8
+    n_simulations: int = 12000
+    operating_margin_mean: float = 0.175
+    operating_margin_std: float = 0.03
+    wacc_mean: float = 0.095
+    wacc_std: float = 0.015
+    revenue_cagr_std: float = 0.04
+    terminal_growth_mean: float = 0.03
+    tax_rate: float = 0.25
+    reinvestment_rate: float = 0.33
+    expansion_strike: float = 28.0
+    abandonment_strike: float = 52.0
+    risk_free_rate: float = 0.04
+
+
+@app.post("/monte-carlo-advanced/predict")
+async def monte_carlo_advanced_predict(req: AdvancedMonteCarloRequest):
+    """
+    Advanced Monte Carlo DCF: Dynamic Markov regime switching + Longstaff-Schwartz real options.
+
+    Path-dependent simulation over `years` periods with regime-conditional GBM (revenue)
+    and OU-mean-reverting margin / WACC, plus LSM-priced early-exercise option premium.
+    """
+    if not ADV_MC_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Advanced Monte Carlo engine not available")
+    if req.current_revenue <= 0:
+        raise HTTPException(status_code=400, detail="current_revenue must be positive")
+    if req.shares_outstanding <= 0:
+        raise HTTPException(status_code=400, detail="shares_outstanding must be positive")
+    try:
+        engine = get_advanced_monte_carlo_engine(n_simulations=req.n_simulations)
+        result = await asyncio.to_thread(
+            engine.run,
+            current_revenue=req.current_revenue,
+            shares_outstanding=req.shares_outstanding,
+            net_debt=req.net_debt,
+            current_price=req.current_price,
+            years=req.years,
+            revenue_cagr_std=req.revenue_cagr_std,
+            operating_margin_mean=req.operating_margin_mean,
+            operating_margin_std=req.operating_margin_std,
+            wacc_mean=req.wacc_mean,
+            wacc_std=req.wacc_std,
+            terminal_growth_mean=req.terminal_growth_mean,
+            tax_rate=req.tax_rate,
+            reinvestment_rate=req.reinvestment_rate,
+            expansion_strike=req.expansion_strike,
+            abandonment_strike=req.abandonment_strike,
+            risk_free_rate=req.risk_free_rate,
+        )
+        payload = result.to_dict()
+        payload["ticker"] = req.ticker
+        return numpy_safe_response(payload)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[AdvancedMonteCarlo] Error: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
