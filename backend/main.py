@@ -86,6 +86,13 @@ except ImportError:
     get_ep_engine = None
 
 try:
+    from gap_cycle_engine import get_gap_cycle_engine
+    GAP_CYCLE_AVAILABLE = True
+except ImportError:
+    GAP_CYCLE_AVAILABLE = False
+    get_gap_cycle_engine = None
+
+try:
     from ma_bounce_engine import get_ma_bounce_engine
     MA_BOUNCE_AVAILABLE = True
 except ImportError:
@@ -2066,6 +2073,44 @@ async def ep_detect(req: EPDetectionRequest):
         raise
     except Exception as e:
         print(f"[EP Detection] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Gap Cycle — universe gap-up scan + intraday Reclaim/Fade/Choppy classification ──
+class GapCycleRequest(BaseModel):
+    gapThresholdPct: float = 20.0
+    windowDaysShort: int = 7
+    windowDaysLong: int = 30
+    maxSymbols: int = 2000
+    minPrice: float = 1.0
+    minVolume: float = 200000
+    refresh: bool = False
+    language: Optional[str] = 'en'
+
+
+@app.post("/gap-cycle/scan")
+async def gap_cycle_scan(req: GapCycleRequest):
+    """Scan a broad small/mid-cap US universe for >= threshold gap-ups over the last
+    7d (weekly) and 30d (monthly), classifying each gap day's intraday behaviour into
+    Reclaim / Fade / Choppy / Other. Results are cached server-side (short TTL)."""
+    if not GAP_CYCLE_AVAILABLE or get_gap_cycle_engine is None:
+        raise HTTPException(status_code=503, detail="Gap Cycle engine not available")
+    try:
+        engine = get_gap_cycle_engine()
+        result = await asyncio.to_thread(
+            engine.scan,
+            gap_threshold_pct=req.gapThresholdPct,
+            window_short=req.windowDaysShort,
+            window_long=req.windowDaysLong,
+            max_symbols=req.maxSymbols,
+            min_price=req.minPrice,
+            min_volume=req.minVolume,
+            refresh=req.refresh,
+        )
+        return numpy_safe_response(result)
+    except Exception as e:
+        print(f"[Gap Cycle] Error: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 

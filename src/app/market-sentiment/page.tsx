@@ -82,6 +82,35 @@ interface MarketSentimentData {
   trends?: SentimentTrends;
 }
 
+interface GapCycleStock {
+  symbol: string;
+  date: string;
+  gapPct: number;
+  classification: 'reclaim' | 'fade' | 'choppy' | 'other';
+  open: number;
+  close: number;
+  dayHigh: number;
+  dayLow: number;
+}
+
+interface GapCycleWindow {
+  window: number;
+  totalGappers: number;
+  categories: Record<'reclaim' | 'fade' | 'choppy' | 'other', { count: number; pct: number }>;
+  stocks: GapCycleStock[];
+}
+
+interface GapCycleData {
+  version: string;
+  timestamp: string;
+  cached: boolean;
+  universeSize: number;
+  gappersFound: number;
+  error?: string;
+  weekly: GapCycleWindow;
+  monthly: GapCycleWindow;
+}
+
 function ScoreBar({ score, label }: { score: number; label: string }) {
   const color = score >= 60 ? 'bg-green-500' : score >= 45 ? 'bg-yellow-500' : 'bg-red-500';
   const textColor = score >= 60 ? 'text-green-400' : score >= 45 ? 'text-yellow-400' : 'text-red-400';
@@ -158,6 +187,129 @@ function FearGreedGauge({ score, label }: { score: number; label: string }) {
   );
 }
 
+// ── Gap Cycle: per-category visual metadata ──
+const GAP_CAT_META: Record<'reclaim' | 'fade' | 'choppy' | 'other', { color: string; bg: string; border: string; emoji: string }> = {
+  reclaim: { color: 'text-emerald-400', bg: 'bg-emerald-900/20', border: 'border-emerald-700/40', emoji: '↩️' },
+  fade:    { color: 'text-red-400',     bg: 'bg-red-900/20',     border: 'border-red-700/40',     emoji: '📉' },
+  choppy:  { color: 'text-amber-400',   bg: 'bg-amber-900/20',   border: 'border-amber-700/40',   emoji: '🌊' },
+  other:   { color: 'text-gray-400',    bg: 'bg-gray-800/30',    border: 'border-white/[0.08]',   emoji: '•' },
+};
+
+function GapCycleWindowPanel({ win, label, t, locale }: { win: GapCycleWindow; label: string; t: (k: string) => string; locale: string }) {
+  const [showList, setShowList] = useState(false);
+  const cats: Array<'reclaim' | 'fade' | 'choppy' | 'other'> = ['reclaim', 'fade', 'choppy', 'other'];
+  return (
+    <div className="bg-gray-900/40 border border-white/[0.06] rounded-2xl p-4 sm:p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-bold text-gray-200 text-sm sm:text-base">{label}</h4>
+        <span className="text-[11px] text-gray-500">
+          {win.totalGappers} {t('marketSentiment.gapCycle.gappers')}
+        </span>
+      </div>
+      {win.totalGappers === 0 ? (
+        <p className="text-gray-500 text-xs py-4 text-center">{t('marketSentiment.gapCycle.noGappers')}</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+            {cats.map((c) => {
+              const m = GAP_CAT_META[c];
+              const d = win.categories[c];
+              return (
+                <div key={c} className={`${m.bg} border ${m.border} rounded-xl p-2.5 sm:p-3 text-center`}>
+                  <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-gray-400 mb-1">
+                    {m.emoji} {t(`marketSentiment.gapCycle.${c}`)}
+                  </div>
+                  <div className={`text-xl sm:text-2xl font-black ${m.color}`}>{d.pct.toFixed(0)}%</div>
+                  <div className="text-[9px] text-gray-500 mt-0.5">{d.count}</div>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => setShowList(!showList)}
+            className="mt-3 w-full text-[11px] text-gray-400 hover:text-gray-200 flex items-center justify-center gap-1 transition"
+          >
+            {showList ? '▲' : '▼'} {win.stocks.length} {t('marketSentiment.gapCycle.gappers')}
+          </button>
+          {showList && (
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full text-[11px] sm:text-xs">
+                <thead>
+                  <tr className="text-gray-500 border-b border-white/[0.06]">
+                    <th className="text-left py-1.5 px-2">{t('marketSentiment.gapCycle.ticker')}</th>
+                    <th className="text-left py-1.5 px-2 hidden sm:table-cell">{t('marketSentiment.gapCycle.date')}</th>
+                    <th className="text-right py-1.5 px-2">{t('marketSentiment.gapCycle.gap')}</th>
+                    <th className="text-right py-1.5 px-2">{t('marketSentiment.gapCycle.type')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {win.stocks.map((s, i) => {
+                    const m = GAP_CAT_META[s.classification];
+                    return (
+                      <tr key={`${s.symbol}-${s.date}-${i}`} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                        <td className="py-1.5 px-2">
+                          <Link href={`/analizar?ticker=${s.symbol}`} className="font-semibold text-cyan-400 hover:text-cyan-300">{s.symbol}</Link>
+                        </td>
+                        <td className="py-1.5 px-2 text-gray-500 hidden sm:table-cell font-mono">{s.date}</td>
+                        <td className="py-1.5 px-2 text-right text-green-400 font-semibold">+{s.gapPct.toFixed(1)}%</td>
+                        <td className="py-1.5 px-2 text-right">
+                          <span className={`px-1.5 py-0.5 rounded ${m.bg} ${m.color} text-[10px] font-semibold`}>
+                            {t(`marketSentiment.gapCycle.${s.classification}`)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function GapCycleSection({ data, loading, t, locale }: { data: GapCycleData | null; loading: boolean; t: (k: string) => string; locale: string }) {
+  return (
+    <div className="bg-gray-900/50 border border-white/[0.06] rounded-2xl sm:rounded-3xl p-5 sm:p-8">
+      <h3 className="text-base sm:text-lg font-bold text-violet-400 mb-2 flex items-center gap-2">
+        🔁 {t('marketSentiment.gapCycle.title')}
+      </h3>
+      <p className="text-xs sm:text-sm text-gray-400 leading-relaxed mb-4">
+        {t('marketSentiment.gapCycle.description')}
+      </p>
+
+      {loading && !data ? (
+        <div className="flex items-center gap-3 py-6 justify-center">
+          <LogoLoader size="md" />
+          <span className="text-sm text-gray-500">{t('marketSentiment.gapCycle.loading')}</span>
+        </div>
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <GapCycleWindowPanel win={data.weekly} label={`${t('marketSentiment.gapCycle.weekly')} (7d)`} t={t} locale={locale} />
+            <GapCycleWindowPanel win={data.monthly} label={`${t('marketSentiment.gapCycle.monthly')} (30d)`} t={t} locale={locale} />
+          </div>
+
+          {/* Legend / definitions */}
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-gray-500">
+            <div><span className="text-emerald-400 font-semibold">{t('marketSentiment.gapCycle.reclaim')}:</span> {t('marketSentiment.gapCycle.reclaimDef')}</div>
+            <div><span className="text-red-400 font-semibold">{t('marketSentiment.gapCycle.fade')}:</span> {t('marketSentiment.gapCycle.fadeDef')}</div>
+            <div><span className="text-amber-400 font-semibold">{t('marketSentiment.gapCycle.choppy')}:</span> {t('marketSentiment.gapCycle.choppyDef')}</div>
+          </div>
+
+          <div className="mt-3 text-[10px] text-gray-600 font-mono">
+            {data.universeSize} {t('marketSentiment.gapCycle.scanned')} · {data.gappersFound} gappers{data.cached ? ' · cached' : ''}
+          </div>
+        </>
+      ) : (
+        <p className="text-gray-500 text-xs py-4 text-center">{t('marketSentiment.gapCycle.noGappers')}</p>
+      )}
+    </div>
+  );
+}
+
 export default function MarketSentimentPage() {
   return (
     <FreeTierGuard feature="market-sentiment">
@@ -174,6 +326,8 @@ function MarketSentimentPageInner() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [backendStatus, setBackendStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
   const [showReasoning, setShowReasoning] = useState(false);
+  const [gapCycle, setGapCycle] = useState<GapCycleData | null>(null);
+  const [gapCycleLoading, setGapCycleLoading] = useState(false);
   const { t, locale } = useLanguage();
   const { user } = useUser();
   const isGodMode = (user?.publicMetadata?.plan as string) === 'godmode';
@@ -332,6 +486,32 @@ function MarketSentimentPageInner() {
     const interval = autoRefresh ? setInterval(fetchMarketData, 300000) : null;
     return () => { if (interval) clearInterval(interval); };
   }, [fetchMarketData, autoRefresh]);
+
+  // Gap Cycle scan — GODMODE only. Heavy universe scan, cached server-side.
+  // Runs on mount and on each auto-refresh tick (the backend TTL absorbs near-simultaneous calls).
+  const fetchGapCycle = useCallback(async () => {
+    if (!isGodMode) return;
+    try {
+      setGapCycleLoading(true);
+      const res = await postBackend<GapCycleData>(
+        '/gap-cycle/scan',
+        { gapThresholdPct: 20, windowDaysShort: 7, windowDaysLong: 30, language: locale },
+        120000,
+      );
+      setGapCycle(res);
+    } catch {
+      // leave previous result in place on failure
+    } finally {
+      setGapCycleLoading(false);
+    }
+  }, [isGodMode, locale]);
+
+  useEffect(() => {
+    if (!isGodMode) return;
+    fetchGapCycle();
+    const interval = autoRefresh ? setInterval(fetchGapCycle, 300000) : null;
+    return () => { if (interval) clearInterval(interval); };
+  }, [fetchGapCycle, autoRefresh, isGodMode]);
 
   const scoreLabels: Record<string, string> = {
     news: t('marketSentiment.scoreLabels.news'),
@@ -858,6 +1038,11 @@ function MarketSentimentPageInner() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ── GAP CYCLE (GODMODE only) ── */}
+        {isGodMode && (
+          <GapCycleSection data={gapCycle} loading={gapCycleLoading} t={t} locale={locale} />
         )}
 
         {/* ── REASONING CHAIN (GODMODE only, collapsible) ── */}
