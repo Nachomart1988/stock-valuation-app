@@ -37,7 +37,7 @@ export async function postBackend<T = any>(
     body: JSON.stringify(body),
     timeoutMs,
   });
-  if (!res.ok) throw new Error(`Backend ${path} error: ${res.status}`);
+  if (!res.ok) throw new Error(await backendErrorMessage(path, res));
   return res.json();
 }
 
@@ -47,8 +47,21 @@ export async function getBackend<T = any>(
   timeoutMs = DEFAULT_TIMEOUT_MS
 ): Promise<T> {
   const res = await fetchBackend(path, { timeoutMs });
-  if (!res.ok) throw new Error(`Backend ${path} error: ${res.status}`);
+  if (!res.ok) throw new Error(await backendErrorMessage(path, res));
   return res.json();
+}
+
+/** Build a descriptive error including the FastAPI `detail` body when present. */
+async function backendErrorMessage(path: string, res: Response): Promise<string> {
+  let detail = '';
+  try {
+    const body = await res.json();
+    const d = body?.detail ?? body?.message;
+    if (d) detail = ` — ${typeof d === 'string' ? d : JSON.stringify(d)}`;
+  } catch {
+    /* body not JSON — ignore */
+  }
+  return `Backend ${path} error: ${res.status}${detail}`;
 }
 
 export { BACKEND_URL };
