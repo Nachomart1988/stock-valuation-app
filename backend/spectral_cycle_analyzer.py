@@ -166,7 +166,9 @@ class HistoricalDataFetcher:
                 response.raise_for_status()
 
                 raw = response.json()
-                historical = raw.get('historical', [])
+                # FMP /stable devuelve a veces un array directo y a veces
+                # {"historical": [...]} — soportamos ambos formatos.
+                historical = raw.get('historical', []) if isinstance(raw, dict) else raw
 
                 if not historical:
                     logger.warning("No historical data returned for %s", ticker)
