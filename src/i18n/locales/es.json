@@ -243,7 +243,8 @@
       "formerRunner": "Former Runner",
       "cheapBreakout": "Cheap Breakout",
       "mcpIntegration": "MCP AI",
-      "strategyBacktester": "AI Backtester"
+      "strategyBacktester": "AI Backtester",
+      "cycleModels": "Modelos de Ciclos"
     },
     "precio": {
       "actual": "Precio Actual",

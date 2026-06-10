@@ -134,6 +134,13 @@ except ImportError:
     ADV_MC_AVAILABLE = False
     get_advanced_monte_carlo_engine = None
 
+try:
+    from cycle_models_engine import get_cycle_models_engine
+    CYCLE_MODELS_AVAILABLE = True
+except ImportError:
+    CYCLE_MODELS_AVAILABLE = False
+    get_cycle_models_engine = None
+
 app = FastAPI(
     title="Stock Analysis AI API",
     description="Neural Ensemble for Stock Valuation & Company Quality Assessment",
@@ -2335,6 +2342,58 @@ async def monte_carlo_advanced_predict(req: AdvancedMonteCarloRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"[AdvancedMonteCarlo] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════════════════════════════════
+# Modelos Avanzados de Ciclos — MS Unobserved Components (Kim filter) + UC
+# ════════════════════════════════════════════════════════════════════
+
+class CycleModelsRequest(BaseModel):
+    ticker: str
+    variable: str = "log_price"        # log_price | earnings_yield (fase futura)
+    frequency: str = "weekly"
+    models: List[str] = ["ms_uc", "uc"]
+    lookback_weeks: int = 520          # ~10 años
+    system_tickers: Optional[List[str]] = None  # Modelo 3 (MS-VECM): sistema, default SPY+TLT
+
+
+@app.post("/cycle-models/analyze")
+async def cycle_models_analyze(req: CycleModelsRequest):
+    """
+    Modelos econométricos de ciclos + regímenes (Kim & Nelson 1999).
+
+    Fase 1: Modelo 1 (MS Unobserved Components + filtro de Kim, 2 regímenes) y
+    Modelo 6 (Unobserved Components raíz unitaria + ciclo AR(2)). Estimación en
+    frecuencia semanal; probabilidades suavizadas para histórico y filtradas para
+    el régimen actual. Cómputo pesado → corre en thread aparte.
+    """
+    if not CYCLE_MODELS_AVAILABLE or get_cycle_models_engine is None:
+        raise HTTPException(status_code=503, detail="Cycle Models engine no disponible")
+
+    fmp_api_key = os.environ.get("FMP_API_KEY")
+    if not fmp_api_key:
+        raise HTTPException(status_code=400, detail="FMP_API_KEY no configurada en el servidor")
+
+    try:
+        engine = get_cycle_models_engine()
+        result = await asyncio.to_thread(
+            engine.analyze,
+            req.ticker,
+            req.variable,
+            req.frequency,
+            req.models,
+            req.lookback_weeks,
+            req.system_tickers,
+        )
+        return numpy_safe_response(result)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[CycleModels] Error: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -52,6 +52,7 @@ import HTFDetectionTab from '@/app/components/tabs/HTFDetectionTab';
 import EPDetectionTab from '@/app/components/tabs/EPDetectionTab';
 import MCPIntegrationTab from '@/app/components/tabs/MCPIntegrationTab';
 import StrategyBacktesterTab from '@/app/components/tabs/StrategyBacktesterTab';
+import CycleModelsTab from '@/app/components/tabs/CycleModelsTab';
 import QuantumRiskTab from '@/app/components/tabs/QuantumRiskTab';
 import PDFConfigModal, { PDFConfig } from '@/app/components/PDFConfigModal';
 import { fetchFmp } from '@/lib/fmpClient';
@@ -1079,6 +1080,7 @@ function AnalizarContent() {
       `${t('analysis.categories.epDetection')} (Beta)`,      // 16 (GOD MODE only)
       t('analysis.categories.mcpIntegration'),                // 17 (GOD MODE only)
       t('analysis.categories.strategyBacktester'),            // 18 (GOD MODE only)
+      `${t('analysis.categories.cycleModels')} (Beta)`,       // 19 (GOD MODE only)
     ] : []),
     t('analysis.categories.investorJournal'),                // last — always detached
   ];
@@ -1495,6 +1497,13 @@ function AnalizarContent() {
   {isGodMode && (
     <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
       <StrategyBacktesterTab />
+    </Tab.Panel>
+  )}
+
+  {/* 19. Modelos Avanzados de Ciclos — GOD MODE only */}
+  {isGodMode && (
+    <Tab.Panel unmount={false} className="rounded-xl sm:rounded-2xl bg-gray-900/50 backdrop-blur-sm bg-grid p-3 sm:p-6 md:p-10 shadow-2xl border border-amber-900/15">
+      <CycleModelsTab ticker={activeTicker} />
     </Tab.Panel>
   )}
 
