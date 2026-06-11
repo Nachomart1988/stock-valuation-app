@@ -70,14 +70,23 @@ _KNOWN_BANKS = [
     "Seaport Global", "AC Sunshine",
 ]
 
-# Contrapartes típicas de equity lines (ELOC)
+# Firmas dedicadas a equity lines (ELOC) — su presencia + purchase agreement
+# es señal fuerte de ELOC
 _ELOC_PARTIES = [
     "Lincoln Park Capital", "B. Riley Principal Capital", "Keystone Capital",
     "White Lion Capital", "Tumim Stone Capital", "YA II PN", "Yorkville",
     "Ionic Ventures", "Arena Business", "Alumni Capital", "Triton Funds",
-    "Hudson Bay", "Anson Investments", "Sabby", "Armistice", "L1 Capital",
-    "C/M Capital", "Helena Global", "ClearThink", "Coventry Enterprises",
+    "C/M Capital", "ClearThink", "Coventry Enterprises",
     "GHS Investments", "Mast Hill", "1800 Diagonal",
+]
+
+# Hedge funds que hacen PIPEs/registered directs/convertibles (no ELOCs):
+# sirven para identificar tenedores, no para clasificar equity lines
+_PIPE_FUNDS = [
+    "Hudson Bay", "Anson Investments", "Sabby", "Armistice", "L1 Capital",
+    "Helena Global", "Intracoastal Capital", "Bigger Capital", "District 2",
+    "Alto Opportunity", "Ayrton Capital", "CVI Investments", "Heights Capital",
+    "Empery", "Iroquois", "Lind Global", "3i, LP", "Streeterville",
 ]
 
 # Cache simple en memoria (las llamadas SEC son costosas)
@@ -323,6 +332,7 @@ class DilutionEngine:
         ) and not is_atm
         is_eloc = bool(
             ("equity line" in low or "committed equity" in low
+             or "equity purchase agreement" in low
              or (any(p.lower() in low for p in _ELOC_PARTIES) and "purchase agreement" in low))
         ) and not is_atm and not is_convert
 
@@ -347,19 +357,50 @@ class DilutionEngine:
             principal = _find_money(text, [
                 r"aggregate principal amount of (?:up to )?\$([\d,]+(?:\.\d+)?)\s*(million|billion)?",
                 r"\$([\d,]+(?:\.\d+)?)\s*(million|billion)?\s*(?:in )?aggregate principal amount",
-                r"principal amount of \$([\d,]+(?:\.\d+)?)\s*(million|billion)?",
+                r"original principal amount of \$([\d,]+(?:\.\d+)?)\s*(million|billion)?",
+                r"principal amount of (?:up to )?\$([\d,]+(?:\.\d+)?)\s*(million|billion)?",
+                r"\$([\d,]+(?:\.\d+)?)\s*(million|billion)?\s*(?:of|in) (?:senior |secured )?convertible",
+                r"convertible (?:promissory )?notes?[^.]{0,80}\$([\d,]+(?:\.\d+)?)\s*(million|billion)?",
             ])
             conv_price = None
             m = re.search(r"conversion price of \$([\d,]+(?:\.\d+)?)", text, re.IGNORECASE)
+            if not m:
+                m = re.search(r"conversion price (?:equal to|of)[^$]{0,60}\$([\d,]+(?:\.\d+)?)", text, re.IGNORECASE)
             if m:
                 conv_price = _parse_money(m.group(1), None)
+            # vencimiento: fecha completa si existe, año si no
             maturity = None
-            m = re.search(r"(?:due|matur\w+ (?:date )?(?:of|on)?)[^.]{0,40}?((?:19|20)\d{2})", text, re.IGNORECASE)
+            m = re.search(
+                r"(?:due|mature[s]? on|maturity date (?:of|is|will be))[^.]{0,40}?"
+                r"([A-Z][a-z]+ \d{1,2}, (?:19|20)\d{2})", text)
             if m:
-                maturity = m.group(1)
+                try:
+                    maturity = datetime.strptime(m.group(1), "%B %d, %Y").strftime("%Y-%m-%d")
+                except Exception:
+                    maturity = None
+            if not maturity:
+                m = re.search(r"(?:notes? due|due in|maturity (?:date )?(?:of|in))\s*((?:19|20)\d{2})", text, re.IGNORECASE)
+                if m:
+                    maturity = m.group(1)
+            # acciones a emitir al convertir: explícito en el prospecto o derivado
             shares_converted = None
-            if principal and conv_price and conv_price > 0:
+            for pat in (
+                r"([\d,]{4,})\s+shares[^.]{0,100}?issuable upon (?:the )?conversion",
+                r"(?:upon )?conversion of (?:the |our )?(?:convertible )?notes?[^.]{0,80}?(?:up to |aggregate of )?([\d,]{4,})\s+shares",
+                r"up to ([\d,]{4,})\s+shares of (?:our )?common stock issuable upon conversion",
+                r"resale of (?:up to )?([\d,]{4,})\s+shares[^.]{0,100}conver",
+            ):
+                m = re.search(pat, text, re.IGNORECASE)
+                if m:
+                    try:
+                        shares_converted = int(m.group(1).replace(",", ""))
+                        break
+                    except Exception:
+                        pass
+            if shares_converted is None and principal and conv_price and conv_price > 0:
                 shares_converted = int(principal / conv_price)
+            if principal is None and shares_converted and conv_price:
+                principal = shares_converted * conv_price
             return {
                 **base,
                 "category": "convertible",
@@ -367,9 +408,9 @@ class DilutionEngine:
                 "principalAmount": principal,
                 "conversionPrice": conv_price,
                 "sharesWhenConverted": shares_converted,
-                "maturityYear": maturity,
+                "maturityDate": maturity,
                 "issueDate": filing["filingDate"],
-                "knownOwners": _find_bank(text, _ELOC_PARTIES),
+                "knownOwners": _find_bank(text, _PIPE_FUNDS + _ELOC_PARTIES),
             }
 
         if is_eloc:
@@ -418,6 +459,10 @@ class DilutionEngine:
                 warrants = int(m.group(1).replace(",", ""))
             except Exception:
                 warrants = None
+        warrant_px = None
+        m = re.search(r"warrants?[^.]{0,160}?exercise price of \$([\d,]+(?:\.\d+)?)", text, re.IGNORECASE)
+        if m:
+            warrant_px = _parse_money(m.group(1), None)
         low2 = low
         if "registered direct" in low2:
             method = "Registered Direct"
@@ -442,6 +487,7 @@ class DilutionEngine:
             "shares": shares,
             "price": price,
             "warrants": warrants,
+            "warrantExercisePrice": warrant_px,
             "offeringAmount": gross,
             "bank": _find_bank(text, _KNOWN_BANKS),
             "date": filing["filingDate"],
@@ -700,7 +746,14 @@ class DilutionEngine:
         if not subs:
             return {"error": f"No se pudieron obtener los filings SEC para {ticker}"}
 
-        facts = self._sec_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json") or {}
+        facts_resp = self._sec_get(
+            f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json", timeout=45)
+        facts = {}
+        if facts_resp is not None:
+            try:
+                facts = facts_resp.json()
+            except Exception:
+                facts = {}
 
         # --- FMP: quote, float, precios 60d ---
         quote = self._fmp_json("quote", f"symbol={ticker}")
@@ -733,13 +786,28 @@ class DilutionEngine:
             shares_out = shares_history[-1]["shares"]
 
         # --- Dilución potencial desde XBRL ---
-        warrants_fact = self._latest_fact(facts, "us-gaap", "ClassOfWarrantOrRightOutstanding")
+        warrants_fact = None
+        for tag in ("ClassOfWarrantOrRightNumberOfSecuritiesCalledByWarrantsOrRights",
+                    "ClassOfWarrantOrRightOutstanding",
+                    "ClassOfWarrantOrRightNumberOfSecuritiesCalledByEachWarrantOrRight"):
+            warrants_fact = self._latest_fact(facts, "us-gaap", tag, max_age_days=800)
+            if warrants_fact and warrants_fact.get("val", 0) > 1000:
+                break
+            warrants_fact = None
+        warrant_px_fact = self._latest_fact(
+            facts, "us-gaap", "ClassOfWarrantOrRightExercisePriceOfWarrantsOrRights1", max_age_days=800)
         options_fact = self._latest_fact(
             facts, "us-gaap",
-            "ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsOutstandingNumber")
+            "ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsOutstandingNumber",
+            max_age_days=800)
+        options_px_fact = self._latest_fact(
+            facts, "us-gaap",
+            "ShareBasedCompensationArrangementByShareBasedPaymentAwardOptionsOutstandingWeightedAverageExercisePrice",
+            max_age_days=800)
         rsu_fact = self._latest_fact(
             facts, "us-gaap",
-            "ShareBasedCompensationArrangementByShareBasedPaymentAwardEquityInstrumentsOtherThanOptionsNonvestedNumber")
+            "ShareBasedCompensationArrangementByShareBasedPaymentAwardEquityInstrumentsOtherThanOptionsNonvestedNumber",
+            max_age_days=800)
         conv_principal_fact = None
         for tag in ("ConvertibleNotesPayable", "ConvertibleDebt", "ConvertibleDebtNoncurrent",
                     "ConvertibleNotesPayableCurrent", "ConvertibleDebtCurrent"):
@@ -757,16 +825,18 @@ class DilutionEngine:
                 conv_shares_est = int(conv_principal_fact["val"] / conv_price_fact["val"])
             except Exception:
                 conv_shares_est = None
-        total_potential = sum(v for v in (warrants_n, options_n, rsu_n, conv_shares_est) if v)
         potential = {
             "warrants": warrants_n,
+            "warrantsExercisePrice": warrant_px_fact["val"] if warrant_px_fact else None,
             "options": options_n,
+            "optionsExercisePrice": options_px_fact["val"] if options_px_fact else None,
             "rsus": rsu_n,
             "convertiblePrincipal": conv_principal_fact["val"] if conv_principal_fact else None,
             "convertiblePrice": conv_price_fact["val"] if conv_price_fact else None,
             "convertibleSharesEst": conv_shares_est,
-            "totalPotentialShares": total_potential or None,
+            "totalPotentialShares": None,  # se completa tras parsear filings (fallbacks)
             "asOf": warrants_fact.get("end") if warrants_fact else None,
+            "source": "xbrl",
         }
 
         # --- Filings recientes ---
@@ -828,14 +898,32 @@ class DilutionEngine:
                 deduped.append(o)
         offerings = deduped
 
+        # dedupe ATMs/ELOCs: amendments del mismo acuerdo (misma contraparte y
+        # misma capacidad) aparecen como múltiples 424B — conservar el más nuevo
+        def _dedupe_agreements(items: List[Dict], party_key: str) -> List[Dict]:
+            seen = set()
+            out = []
+            for it in items:  # newest first
+                key = (it.get(party_key), it.get("totalCapacity"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(it)
+            return out
+
+        atms = _dedupe_agreements(atms, "agent")
+        elocs = _dedupe_agreements(elocs, "counterparty")
+
         # marcar ATMs viejos como superseded (solo el más reciente se asume activo)
         for i, a in enumerate(atms):
             a["status"] = "Registered" if i == 0 else "Superseded"
         for e in elocs:
             e["status"] = "Registered"
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
         for c in converts:
-            today = datetime.utcnow().strftime("%Y")
-            c["status"] = "Matured" if (c.get("maturityYear") and c["maturityYear"] < today) else "Registered"
+            mat = c.get("maturityDate") or ""
+            matured = (len(mat) == 10 and mat < today_str) or (len(mat) == 4 and mat < today_str[:4])
+            c["status"] = "Matured" if matured else "Registered"
 
         # Registros S-1/F-1 recientes (contexto)
         cutoff_2y = (datetime.utcnow() - timedelta(days=730)).strftime("%Y-%m-%d")
@@ -848,6 +936,122 @@ class DilutionEngine:
             for f in filings
             if f["form"] in _REGISTRATION_FORMS and f["filingDate"] >= cutoff_2y
         ][:6]
+
+        # --- Fallbacks: si XBRL no trae warrants/converts, derivarlos de los filings ---
+        cutoff_3y = (datetime.utcnow() - timedelta(days=3 * 365)).strftime("%Y-%m-%d")
+        if not potential["warrants"]:
+            offering_warrants = [
+                o for o in offerings
+                if o.get("warrants") and (o.get("date") or "") >= cutoff_3y
+            ]
+            total_w = sum(o["warrants"] for o in offering_warrants)
+            if total_w:
+                potential["warrants"] = total_w
+                potential["source"] = "filings"
+                px_list = [o["warrantExercisePrice"] for o in offering_warrants if o.get("warrantExercisePrice")]
+                if px_list and not potential["warrantsExercisePrice"]:
+                    potential["warrantsExercisePrice"] = sum(px_list) / len(px_list)
+        if not potential["convertibleSharesEst"]:
+            live_convert_shares = sum(
+                c["sharesWhenConverted"] for c in converts
+                if c.get("sharesWhenConverted") and c.get("status") != "Matured"
+            )
+            if live_convert_shares:
+                potential["convertibleSharesEst"] = live_convert_shares
+                potential["source"] = "filings" if potential["source"] == "xbrl" and not potential["warrants"] else potential["source"]
+                if not potential["convertiblePrice"]:
+                    px_list = [c["conversionPrice"] for c in converts
+                               if c.get("conversionPrice") and c.get("status") != "Matured"]
+                    if px_list:
+                        potential["convertiblePrice"] = sum(px_list) / len(px_list)
+        potential["totalPotentialShares"] = sum(
+            v for v in (potential["warrants"], potential["options"], potential["rsus"],
+                        potential["convertibleSharesEst"]) if v
+        ) or None
+
+        # --- Niveles de precio con dilución latente (overhead supply por precio) ---
+        dilution_levels: List[Dict] = []
+        for c in converts:
+            if c.get("status") == "Matured" or not c.get("conversionPrice"):
+                continue
+            dilution_levels.append({
+                "type": "convertible",
+                "name": c["name"],
+                "price": c["conversionPrice"],
+                "shares": c.get("sharesWhenConverted"),
+                "date": c.get("fileDate"),
+            })
+        seen_warrant_offerings = False
+        for o in offerings:
+            if o.get("warrants") and o.get("warrantExercisePrice") and (o.get("date") or "") >= cutoff_3y:
+                seen_warrant_offerings = True
+                dilution_levels.append({
+                    "type": "warrant",
+                    "name": _fmt_name(o["date"], f"Warrants ({o.get('bank') or 'offering'})"),
+                    "price": o["warrantExercisePrice"],
+                    "shares": o["warrants"],
+                    "date": o.get("date"),
+                })
+        if not seen_warrant_offerings and potential["warrants"] and potential["warrantsExercisePrice"]:
+            dilution_levels.append({
+                "type": "warrant",
+                "name": "Warrants (XBRL aggregate)",
+                "price": potential["warrantsExercisePrice"],
+                "shares": potential["warrants"],
+                "date": potential.get("asOf"),
+            })
+        if potential["options"] and potential["optionsExercisePrice"]:
+            dilution_levels.append({
+                "type": "options",
+                "name": "Stock options (avg. exercise price)",
+                "price": potential["optionsExercisePrice"],
+                "shares": potential["options"],
+                "date": potential.get("asOf"),
+            })
+        for a in atms:
+            if a.get("status") == "Registered":
+                est_shares = int(a["totalCapacity"] / price) if (a.get("totalCapacity") and price) else None
+                dilution_levels.append({
+                    "type": "atm",
+                    "name": a["name"],
+                    "price": None,  # vende a precio de mercado
+                    "shares": est_shares,
+                    "date": a.get("fileDate"),
+                })
+        for e in elocs:
+            est_shares = int(e["totalCapacity"] / price) if (e.get("totalCapacity") and price) else None
+            dilution_levels.append({
+                "type": "equityLine",
+                "name": e["name"],
+                "price": None,  # vende a precio de mercado (usualmente con descuento)
+                "shares": est_shares,
+                "date": e.get("fileDate"),
+            })
+        for lvl in dilution_levels:
+            lvl["pctOfOS"] = round(lvl["shares"] / shares_out * 100, 1) if (lvl.get("shares") and shares_out) else None
+            lvl["inTheMoney"] = (lvl["price"] is None) or (price is not None and lvl["price"] <= price)
+        dilution_levels.sort(key=lambda x: (x["price"] is None, x["price"] or 0))
+
+        # --- Capacidad disponible para diluir (estimada) ---
+        effective_shelfs = [s for s in shelfs if s["status"] == "Effective"]
+        shelf_remaining_total = None
+        for s in effective_shelfs:
+            cap = s.get("totalShelfCapacity")
+            if not cap or not s.get("effectDate"):
+                s["estimatedRemainingCapacity"] = None
+                continue
+            used = sum(
+                o["offeringAmount"] for o in offerings
+                if o.get("offeringAmount") and (o.get("date") or "") >= s["effectDate"]
+            )
+            s["estimatedRemainingCapacity"] = max(0.0, cap - used)
+            shelf_remaining_total = (shelf_remaining_total or 0.0) + s["estimatedRemainingCapacity"]
+
+        cutoff_12m = (datetime.utcnow() - timedelta(days=365)).strftime("%Y-%m-%d")
+        raised_12m = sum(
+            o["offeringAmount"] for o in offerings
+            if o.get("offeringAmount") and (o.get("date") or "") >= cutoff_12m
+        ) or None
 
         # --- Cash position ---
         cash = self._build_cash_position(ticker)
@@ -864,6 +1068,24 @@ class DilutionEngine:
                 "maxRaisableIB6": fv / 3.0,
             }
 
+        # --- Resumen: cuánto puede diluir ya mismo ---
+        active_atm_capacity = sum(
+            a["totalCapacity"] for a in atms
+            if a.get("status") == "Registered" and a.get("totalCapacity")
+        ) or None
+        eloc_capacity = sum(e["totalCapacity"] for e in elocs if e.get("totalCapacity")) or None
+        ib6_available = None
+        if baby_shelf and baby_shelf["isRestricted"]:
+            ib6_available = max(0.0, baby_shelf["maxRaisableIB6"] - (raised_12m or 0.0))
+        available_to_dilute = {
+            "shelfRemainingEst": shelf_remaining_total,
+            "atmCapacity": active_atm_capacity,
+            "equityLineCapacity": eloc_capacity,
+            "raisedLast12Months": raised_12m,
+            "ib6AvailableNow": ib6_available,  # tope real si hay baby shelf
+            "babyShelfRestricted": bool(baby_shelf and baby_shelf["isRestricted"]),
+        }
+
         # --- Risk scores ---
         risk = self._build_risk_scores(
             cash, shelfs, [a for a in atms if a.get("status") == "Registered"],
@@ -879,6 +1101,8 @@ class DilutionEngine:
             "riskScores": risk,
             "sharesHistory": shares_history,
             "potentialDilution": potential,
+            "dilutionLevels": dilution_levels,
+            "availableToDilute": available_to_dilute,
             "cashPosition": cash,
             "babyShelf": baby_shelf,
             "instruments": {

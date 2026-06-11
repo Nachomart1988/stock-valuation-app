@@ -30,13 +30,33 @@ interface DilutionResult {
   sharesHistory: { date: string; shares: number; current?: boolean }[];
   potentialDilution: {
     warrants: number | null;
+    warrantsExercisePrice: number | null;
     options: number | null;
+    optionsExercisePrice: number | null;
     rsus: number | null;
     convertiblePrincipal: number | null;
     convertiblePrice: number | null;
     convertibleSharesEst: number | null;
     totalPotentialShares: number | null;
     asOf: string | null;
+    source: 'xbrl' | 'filings';
+  };
+  dilutionLevels: {
+    type: 'convertible' | 'warrant' | 'options' | 'atm' | 'equityLine';
+    name: string;
+    price: number | null;
+    shares: number | null;
+    date: string | null;
+    pctOfOS: number | null;
+    inTheMoney: boolean;
+  }[];
+  availableToDilute: {
+    shelfRemainingEst: number | null;
+    atmCapacity: number | null;
+    equityLineCapacity: number | null;
+    raisedLast12Months: number | null;
+    ib6AvailableNow: number | null;
+    babyShelfRestricted: boolean;
   };
   cashPosition: {
     quarters: { date: string; cash: number | null }[];
@@ -325,12 +345,27 @@ export default function DilutionTab({ ticker }: DilutionTabProps) {
 
       {/* Potential dilution breakdown */}
       <div className="bg-black/40 border border-gray-800 rounded-xl p-4">
-        <SectionTitle icon="⚠️" title={t('Potential Dilution Sources (latest XBRL)', 'Fuentes de Dilución Potencial (XBRL más reciente)')} />
+        <SectionTitle
+          icon="⚠️"
+          title={
+            pd.source === 'filings'
+              ? t('Potential Dilution Sources (from SEC filings)', 'Fuentes de Dilución Potencial (desde filings SEC)')
+              : t('Potential Dilution Sources (latest XBRL)', 'Fuentes de Dilución Potencial (XBRL más reciente)')
+          }
+        />
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           {[
-            { label: 'Warrants', value: fmtNum(pd.warrants) },
-            { label: t('Options', 'Opciones'), value: fmtNum(pd.options) },
-            { label: 'RSUs', value: fmtNum(pd.rsus) },
+            {
+              label: 'Warrants',
+              value: fmtNum(pd.warrants),
+              sub: pd.warrantsExercisePrice != null ? `${t('avg. exercise', 'ejercicio prom.')} ${fmtPrice(pd.warrantsExercisePrice)}` : null,
+            },
+            {
+              label: t('Options', 'Opciones'),
+              value: fmtNum(pd.options),
+              sub: pd.optionsExercisePrice != null ? `${t('avg. exercise', 'ejercicio prom.')} ${fmtPrice(pd.optionsExercisePrice)}` : null,
+            },
+            { label: 'RSUs', value: fmtNum(pd.rsus), sub: null },
             {
               label: t('Convertible (est. shares)', 'Convertibles (acciones est.)'),
               value: pd.convertibleSharesEst != null
@@ -338,15 +373,22 @@ export default function DilutionTab({ ticker }: DilutionTabProps) {
                 : pd.convertiblePrincipal != null
                   ? `${fmtMoney(pd.convertiblePrincipal)} ppal.`
                   : '—',
+              sub: pd.convertiblePrice != null ? `${t('conversion', 'conversión')} ${fmtPrice(pd.convertiblePrice)}` : null,
             },
           ].map((c) => (
             <div key={c.label} className="bg-gray-900/60 rounded-lg p-3 text-center">
               <p className="text-xs text-gray-500">{c.label}</p>
               <p className="font-mono text-amber-400 mt-1">{c.value}</p>
+              {c.sub && <p className="text-xs text-gray-600 mt-0.5">{c.sub}</p>}
             </div>
           ))}
         </div>
-        {pd.asOf && <p className="text-xs text-gray-600 mt-2">{t('As of', 'Al')} {pd.asOf}</p>}
+        <p className="text-xs text-gray-600 mt-2">
+          {pd.asOf && <>{t('As of', 'Al')} {pd.asOf} · </>}
+          {pd.source === 'filings'
+            ? t('XBRL had no data — derived from prospectus parsing (last 3 years).', 'XBRL sin datos — derivado del parsing de prospectos (últimos 3 años).')
+            : t('Source: XBRL structured data from 10-K/10-Q.', 'Fuente: datos estructurados XBRL de 10-K/10-Q.')}
+        </p>
       </div>
 
       {/* Cash Position */}
@@ -430,7 +472,7 @@ export default function DilutionTab({ ticker }: DilutionTabProps) {
                 <Field label={t('Total principal amount', 'Principal total')} value={fmtMoneyFull(c.principalAmount)} />
                 <Field label={t('Conversion price', 'Precio de conversión')} value={fmtPrice(c.conversionPrice)} />
                 <Field label={t('Shares issued when converted', 'Acciones al convertir')} value={fmtNum(c.sharesWhenConverted)} />
-                <Field label={t('Maturity year', 'Año de vencimiento')} value={c.maturityYear || '—'} />
+                <Field label={t('Maturity date', 'Vencimiento')} value={c.maturityDate || '—'} />
                 <Field label={t('Prospectus date', 'Fecha del prospecto')} value={c.fileDate} />
                 {c.knownOwners && <Field label={t('Known owners', 'Tenedores conocidos')} value={c.knownOwners} mono={false} />}
               </div>
@@ -503,6 +545,9 @@ export default function DilutionTab({ ticker }: DilutionTabProps) {
                   </div>
                 </div>
                 <Field label={t('Total shelf capacity', 'Capacidad total del shelf')} value={fmtMoneyFull(s.totalShelfCapacity)} />
+                {s.status === 'Effective' && (
+                  <Field label={t('Est. remaining capacity', 'Capacidad remanente (est.)')} value={fmtMoneyFull(s.estimatedRemainingCapacity)} />
+                )}
                 <Field label={t('Baby shelf restriction', 'Restricción baby shelf')} value={s.babyShelfRestriction == null ? '—' : s.babyShelfRestriction ? t('Yes', 'Sí') : 'No'} />
                 <Field label={t('Outstanding shares', 'Acciones en circulación')} value={fmtNum(s.outstandingShares)} />
                 <Field label="Float" value={fmtNum(s.float)} />
@@ -556,6 +601,113 @@ export default function DilutionTab({ ticker }: DilutionTabProps) {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      {/* Disponible para diluir */}
+      {result.availableToDilute && (
+        <div className="bg-black/40 border border-amber-900/40 rounded-xl p-4">
+          <SectionTitle icon="🚰" title={t('Available to Dilute Right Now (est.)', 'Disponible para Diluir Ahora (est.)')} />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+            {[
+              { label: t('Shelf remaining', 'Remanente de shelfs'), value: fmtMoney(result.availableToDilute.shelfRemainingEst) },
+              { label: t('Active ATM capacity', 'Capacidad ATM activa'), value: fmtMoney(result.availableToDilute.atmCapacity) },
+              { label: 'Equity lines', value: fmtMoney(result.availableToDilute.equityLineCapacity) },
+              { label: t('Raised last 12 mo.', 'Levantado últimos 12 m.'), value: fmtMoney(result.availableToDilute.raisedLast12Months) },
+            ].map((c) => (
+              <div key={c.label} className="bg-gray-900/60 rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500">{c.label}</p>
+                <p className="font-mono text-amber-400 mt-1">{c.value}</p>
+              </div>
+            ))}
+          </div>
+          {result.availableToDilute.babyShelfRestricted && (
+            <p className="text-sm text-red-400/90 mt-3">
+              🍼 {t('Baby shelf restricted — real cap under IB6 right now:', 'Restringida por baby shelf — tope real bajo IB6 ahora:')}{' '}
+              <span className="font-mono font-bold">{fmtMoney(result.availableToDilute.ib6AvailableNow)}</span>
+            </p>
+          )}
+          <p className="text-xs text-gray-600 mt-2">
+            {t(
+              'Shelf remaining = capacity minus detected offerings since effect date (estimate; ATM/ELOC usage not netted).',
+              'Remanente de shelf = capacidad menos offerings detectados desde la fecha de efectividad (estimación; no descuenta uso de ATM/ELOC).',
+            )}
+          </p>
+        </div>
+      )}
+
+      {/* Niveles de precio con dilución latente */}
+      <div className="space-y-3">
+        <SectionTitle
+          icon="🎯"
+          title={t('Price Levels With Dilution Waiting to Be Sold', 'Niveles de Precio con Dilución Esperando a Venderse')}
+          count={result.dilutionLevels?.length || 0}
+        />
+        {!result.dilutionLevels || result.dilutionLevels.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            {t('No priced dilution overhead detected (warrants, converts, options, ATM/ELOC).', 'No se detectó dilución latente con precio (warrants, convertibles, opciones, ATM/ELOC).')}
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-gray-400">
+              {t('Current price', 'Precio actual')}: <span className="font-mono text-green-400">{fmtPrice(result.price)}</span> —{' '}
+              {t(
+                'levels at or below it are in the money: those shares can be sold profitably now.',
+                'los niveles iguales o por debajo están in the money: esas acciones pueden venderse con ganancia ya mismo.',
+              )}
+            </p>
+            <div className="overflow-x-auto rounded-xl border border-gray-800">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-900/80 text-gray-400 text-xs uppercase">
+                    <th className="px-3 py-2 text-right">{t('Price', 'Precio')}</th>
+                    <th className="px-3 py-2 text-left">{t('Type', 'Tipo')}</th>
+                    <th className="px-3 py-2 text-left">{t('Instrument', 'Instrumento')}</th>
+                    <th className="px-3 py-2 text-right">{t('Shares', 'Acciones')}</th>
+                    <th className="px-3 py-2 text-right">% O/S</th>
+                    <th className="px-3 py-2 text-left">{t('Status', 'Estado')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.dilutionLevels.map((l, i) => {
+                    const typeLabel: Record<string, string> = {
+                      convertible: t('Convertible', 'Convertible'),
+                      warrant: 'Warrant',
+                      options: t('Options', 'Opciones'),
+                      atm: 'ATM',
+                      equityLine: 'Equity Line',
+                    };
+                    return (
+                      <tr key={i} className={`border-t border-gray-800/60 ${l.inTheMoney ? 'bg-red-900/10' : ''}`}>
+                        <td className="px-3 py-2 text-right font-mono text-gray-200">
+                          {l.price == null ? t('Market', 'Mercado') : fmtPrice(l.price)}
+                        </td>
+                        <td className="px-3 py-2 text-gray-400">{typeLabel[l.type] || l.type}</td>
+                        <td className="px-3 py-2 text-gray-300">{l.name}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-300">{fmtNum(l.shares)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-amber-400/90">{l.pctOfOS != null ? `${l.pctOfOS}%` : '—'}</td>
+                        <td className="px-3 py-2">
+                          {l.price == null ? (
+                            <span className="text-xs px-2 py-0.5 rounded-full border bg-amber-900/30 text-amber-400 border-amber-500/40">
+                              {t('Sells at market', 'Vende a mercado')}
+                            </span>
+                          ) : l.inTheMoney ? (
+                            <span className="text-xs px-2 py-0.5 rounded-full border bg-red-900/30 text-red-400 border-red-500/40">
+                              {t('In the money — ready to sell', 'In the money — listo para venderse')}
+                            </span>
+                          ) : (
+                            <span className="text-xs px-2 py-0.5 rounded-full border bg-gray-800/60 text-gray-400 border-gray-600/40">
+                              {t('Above current price', 'Por encima del precio actual')}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
