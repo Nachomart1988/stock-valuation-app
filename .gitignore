@@ -184,3 +184,6 @@ cython_debug/
 .spyderproject
 .spyproject
 .ropeproject
+
+# Local databases
+backend/*.db

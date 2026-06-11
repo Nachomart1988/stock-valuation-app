@@ -43,6 +43,35 @@ interface InsiderTradingStats {
   sSales: number;
 }
 
+// FMP's `stable/insider-trading/statistics` returns new field names
+// (acquiredTransactions, totalAcquired, etc.). Map them to the legacy
+// shape the UI uses so a schema change doesn't blank out the cards.
+function normalizeInsiderStat(raw: any): InsiderTradingStats | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const purchases = raw.purchases ?? raw.acquiredTransactions ?? raw.totalPurchases ?? 0;
+  const sales = raw.sales ?? raw.disposedTransactions ?? raw.totalSales ?? 0;
+  const totalBought = raw.totalBought ?? raw.totalAcquired ?? 0;
+  const totalSold = raw.totalSold ?? raw.totalDisposed ?? 0;
+  const averageBought = raw.averageBought ?? raw.averageAcquired ?? 0;
+  const averageSold = raw.averageSold ?? raw.averageDisposed ?? 0;
+  const buySellRatio = raw.buySellRatio ?? raw.acquiredDisposedRatio
+    ?? (sales > 0 ? purchases / sales : 0);
+  return {
+    symbol: raw.symbol,
+    year: raw.year,
+    quarter: raw.quarter,
+    purchases,
+    sales,
+    buySellRatio,
+    totalBought,
+    totalSold,
+    averageBought,
+    averageSold,
+    pPurchases: raw.pPurchases ?? 0,
+    sSales: raw.sSales ?? 0,
+  };
+}
+
 interface PositionsSummary {
   symbol: string;
   year: number;
@@ -236,28 +265,25 @@ export default function HoldersTab({ ticker }: HoldersTabProps) {
           const nowDate = new Date();
           const curYear = nowDate.getFullYear();
           const curQuarter = Math.floor(nowDate.getMonth() / 3) + 1;
-          const isValidStat = (s: InsiderTradingStats) => {
+          const isNotFuture = (s: InsiderTradingStats) => {
             if (!s || typeof s.year !== 'number' || typeof s.quarter !== 'number') return false;
-            // Drop future-dated quarters (FMP sometimes returns empty placeholders)
             if (s.year > curYear) return false;
             if (s.year === curYear && s.quarter > curQuarter) return false;
-            // Drop records with no activity at all
-            const hasActivity = (s.purchases || 0) + (s.sales || 0) + (s.totalBought || 0) + (s.totalSold || 0) > 0;
-            return hasActivity;
+            return true;
           };
-          if (Array.isArray(insiderStatsData) && insiderStatsData.length > 0) {
-            const valid = (insiderStatsData as InsiderTradingStats[]).filter(isValidStat);
-            if (valid.length > 0) {
-              const sorted = valid.sort((a, b) => {
-                if (b.year !== a.year) return b.year - a.year;
-                return b.quarter - a.quarter;
-              });
-              setInsiderStats(sorted[0]);
-            }
-          } else if (insiderStatsData && typeof insiderStatsData === 'object' && !Array.isArray(insiderStatsData)) {
-            if (isValidStat(insiderStatsData as InsiderTradingStats)) {
-              setInsiderStats(insiderStatsData as any);
-            }
+          const rawList: any[] = Array.isArray(insiderStatsData)
+            ? insiderStatsData
+            : (insiderStatsData && typeof insiderStatsData === 'object' ? [insiderStatsData] : []);
+          const normalized = rawList
+            .map(normalizeInsiderStat)
+            .filter((s): s is InsiderTradingStats => s !== null)
+            .filter(isNotFuture);
+          if (normalized.length > 0) {
+            normalized.sort((a, b) => {
+              if (b.year !== a.year) return b.year - a.year;
+              return b.quarter - a.quarter;
+            });
+            setInsiderStats(normalized[0]);
           }
         } catch {
           console.log('[HoldersTab] Insider stats parse error');
