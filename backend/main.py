@@ -633,6 +633,34 @@ async def gaps_analyze(req: GapAnalysisRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ════════════════════════════════════════════════════════════════════
+# Dilution Tracking (SEC EDGAR + FMP)
+# ════════════════════════════════════════════════════════════════════
+
+class DilutionRequest(BaseModel):
+    ticker: str
+
+
+@app.post("/dilution/analyze")
+async def dilution_analyze(req: DilutionRequest):
+    """Perfil de dilución: shelfs, ATMs, equity lines, convertibles, offerings,
+    historial de O/S, cash runway y scores de riesgo (SEC EDGAR + FMP)."""
+    try:
+        from dilution_engine import get_dilution_engine
+        api_key = os.environ.get('FMP_API_KEY', '')
+        engine = get_dilution_engine(api_key)
+        result = engine.analyze(req.ticker)
+        if result.get("error"):
+            raise HTTPException(status_code=400, detail=result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/fft-signal")
 async def fft_signal(req: FFTSignalRequest):
     """

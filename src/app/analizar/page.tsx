@@ -41,6 +41,7 @@ import DiarioInversorTab from '@/app/components/tabs/DiarioInversorTab';
 import PivotsTab from '@/app/components/tabs/PivotsTab';
 import GapsTab from '@/app/components/tabs/GapsTab';
 import MomentumTab from '@/app/components/tabs/MomentumTab';
+import DilutionTab from '@/app/components/tabs/DilutionTab';
 import ResumenTab from '@/app/components/tabs/ResumenTab';
 import MLPredictionTab from '@/app/components/tabs/MLPredictionTab';
 import PortfolioOptimizerTab from '@/app/components/tabs/PortfolioOptimizerTab';
@@ -1343,6 +1344,7 @@ function AnalizarContent() {
         PivotsTab={<PivotsTab ticker={activeTicker} />}
         GapsTab={<GapsTab ticker={activeTicker} />}
         MomentumTab={<MomentumTab ticker={activeTicker} />}
+        DilutionTab={<DilutionTab ticker={activeTicker} />}
       />
     ) : (
       <LockedTab requiredPlan={TAB_MIN_PLAN[5]} currentPlan={userPlan} tabName="Intraday" />

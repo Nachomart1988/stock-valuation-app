@@ -8,12 +8,14 @@ interface IntradayGroupProps {
   PivotsTab:   React.ReactNode;
   GapsTab:     React.ReactNode;
   MomentumTab: React.ReactNode;
+  DilutionTab: React.ReactNode;
 }
 
 export default function IntradayGroup({
   PivotsTab,
   GapsTab,
   MomentumTab,
+  DilutionTab,
 }: IntradayGroupProps) {
   const { locale } = useLanguage();
   const es = locale === 'es';
@@ -22,6 +24,7 @@ export default function IntradayGroup({
     'Pivots',
     'Gaps',
     es ? 'Momentum (Beta)' : 'Momentum (Beta)',
+    'Dilution',
   ];
 
   return (
@@ -54,6 +57,7 @@ export default function IntradayGroup({
           <Tab.Panel unmount={false}>{PivotsTab}</Tab.Panel>
           <Tab.Panel unmount={false}>{GapsTab}</Tab.Panel>
           <Tab.Panel unmount={false}>{MomentumTab}</Tab.Panel>
+          <Tab.Panel unmount={false}>{DilutionTab}</Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
     </div>
