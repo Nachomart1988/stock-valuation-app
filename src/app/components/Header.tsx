@@ -8,7 +8,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { useTheme } from './ThemeProvider';
 import LanguageSelector from './LanguageSelector';
 import Logo from './Logo';
-import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
+import { SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs';
 
 interface HeaderProps {
   activeTicker?: string;
@@ -25,6 +25,8 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
   const pathname = usePathname();
   const { t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
+  const { user } = useUser();
+  const isGodMode = (user?.publicMetadata?.plan as string) === 'godmode';
 
   const isLanding = pathname === '/';
   const isAnalizar = pathname === '/analizar';
@@ -85,6 +87,7 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
                 <a href="#about" className={navLinkClass()}>{t('nav.about')}</a>
                 <Link href="/screener" className={navLinkClass()}>Screener</Link>
                 <Link href="/diario" className={navLinkClass()}>Diario</Link>
+                {isGodMode && <Link href="/backtest" className={navLinkClass()}>Backtest</Link>}
               </>
             ) : (
               <>
@@ -96,6 +99,7 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
                 <Link href="/earnings" className={navLinkClass(pathname?.startsWith('/earnings'))}>Earnings</Link>
                 <Link href="/screener" className={navLinkClass(pathname === '/screener')}>Screener</Link>
                 <Link href="/diario" className={navLinkClass(pathname === '/diario')}>Diario</Link>
+                {isGodMode && <Link href="/backtest" className={navLinkClass(pathname === '/backtest')}>Backtest</Link>}
                 <Link href="/pricing" className={navLinkClass(pathname === '/pricing')}>{t('nav.pricing')}</Link>
               </>
             )}
@@ -269,6 +273,7 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
                   <a href="#about" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>{t('nav.about')}</a>
                   <Link href="/screener" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>Screener</Link>
                   <Link href="/diario" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>Diario</Link>
+                  {isGodMode && <Link href="/backtest" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>Backtest</Link>}
                 </>
               ) : (
                 <>
@@ -278,6 +283,7 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
                   <Link href="/earnings" className={navLinkClass(pathname?.startsWith('/earnings'))} onClick={() => setMobileMenuOpen(false)}>Earnings</Link>
                   <Link href="/screener" className={navLinkClass(pathname === '/screener')} onClick={() => setMobileMenuOpen(false)}>Screener</Link>
                   <Link href="/diario" className={navLinkClass(pathname === '/diario')} onClick={() => setMobileMenuOpen(false)}>Diario</Link>
+                  {isGodMode && <Link href="/backtest" className={navLinkClass(pathname === '/backtest')} onClick={() => setMobileMenuOpen(false)}>Backtest</Link>}
                   <Link href="/pricing" className={navLinkClass(pathname === '/pricing')} onClick={() => setMobileMenuOpen(false)}>{t('nav.pricing')}</Link>
                 </>
               )}
