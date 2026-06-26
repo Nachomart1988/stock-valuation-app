@@ -38,6 +38,29 @@ interface Trade {
   symbol: string; date: string; gap_pct: number;
   entry: number; exit: number; stop: number | null; target: number | null;
   shares: number; pnl: number; r_multiple: number; equity: number; reason: string;
+  weekday: string | null;
+  spy_open_above: boolean | null;
+  spy_close_up: boolean | null;
+  spy_open_pct: number | null;
+  spy_close_pct: number | null;
+}
+
+interface BacktestAnalysis {
+  wins_count: number;
+  losses_count: number;
+  spy_coverage_pct: number;
+  spy_open: {
+    wins_above_pct: number | null; wins_below_pct: number | null;
+    losses_above_pct: number | null; losses_below_pct: number | null;
+  };
+  spy_close: {
+    wins_up_pct: number | null; wins_down_pct: number | null;
+    losses_up_pct: number | null; losses_down_pct: number | null;
+  };
+  weekday: Array<{
+    weekday: string; trades: number; win_rate_pct: number;
+    pct_of_wins: number; pct_of_losses: number;
+  }>;
 }
 
 interface BacktestResult {
@@ -56,6 +79,7 @@ interface BacktestResult {
   equity_curve: number[];
   r_multiples: number[];
   trades: Trade[];
+  analysis: BacktestAnalysis;
   meta: {
     universe_size: number; events_found: number; trades_taken: number;
     no_trade_count: number; date_from: string; date_to: string; warnings: string[];
@@ -127,6 +151,30 @@ function StatCard({ label, value, tone = 'neutral', hint }: {
       <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
       <p className={`text-2xl font-black mt-1 font-mono ${toneCls}`}>{value}</p>
       {hint && <p className="text-[10px] text-gray-500 mt-0.5">{hint}</p>}
+    </div>
+  );
+}
+
+function AnalysisRow({ label, winPct, lossPct }: {
+  label: string; winPct: number | null; lossPct: number | null;
+}) {
+  const bar = (pct: number | null, tone: 'pos' | 'neg') => (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 rounded-full bg-gray-800 overflow-hidden">
+        <div className={`h-full ${tone === 'pos' ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${pct ?? 0}%` }} />
+      </div>
+      <span className={`w-12 text-right font-mono text-xs ${tone === 'pos' ? 'text-emerald-400' : 'text-rose-400'}`}>
+        {pct == null ? '–' : `${pct}%`}
+      </span>
+    </div>
+  );
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-gray-300 mb-1">{label}</p>
+      <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+        <span className="text-[10px] text-emerald-400/70 uppercase">Ganancias</span>{bar(winPct, 'pos')}
+        <span className="text-[10px] text-rose-400/70 uppercase">Pérdidas</span>{bar(lossPct, 'neg')}
+      </div>
     </div>
   );
 }
@@ -442,6 +490,70 @@ export default function BacktestPage() {
                   </ResponsiveContainer>
                 </div>
 
+                {/* SPY context + weekday analysis */}
+                {result.analysis && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* SPY context */}
+                    <div className="rounded-2xl border border-rose-500/15 bg-gray-900/40 p-5">
+                      <h3 className="text-sm font-bold text-rose-300 mb-1">Contexto SPY</h3>
+                      <p className="text-[11px] text-gray-500 mb-3">vs cierre del día anterior · cobertura {result.analysis.spy_coverage_pct}%</p>
+                      <div className="space-y-3 text-sm">
+                        <AnalysisRow
+                          label="SPY abrió POR ENCIMA"
+                          winPct={result.analysis.spy_open.wins_above_pct}
+                          lossPct={result.analysis.spy_open.losses_above_pct}
+                        />
+                        <AnalysisRow
+                          label="SPY abrió POR DEBAJO"
+                          winPct={result.analysis.spy_open.wins_below_pct}
+                          lossPct={result.analysis.spy_open.losses_below_pct}
+                        />
+                        <div className="h-px bg-gray-800 my-1" />
+                        <AnalysisRow
+                          label="SPY cerró EN VERDE"
+                          winPct={result.analysis.spy_close.wins_up_pct}
+                          lossPct={result.analysis.spy_close.losses_up_pct}
+                        />
+                        <AnalysisRow
+                          label="SPY cerró EN ROJO"
+                          winPct={result.analysis.spy_close.wins_down_pct}
+                          lossPct={result.analysis.spy_close.losses_down_pct}
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-600 mt-3">
+                        % de las {result.analysis.wins_count} ganancias / {result.analysis.losses_count} pérdidas que ocurrieron bajo cada condición del SPY.
+                      </p>
+                    </div>
+
+                    {/* Weekday */}
+                    <div className="rounded-2xl border border-rose-500/15 bg-gray-900/40 p-5">
+                      <h3 className="text-sm font-bold text-rose-300 mb-3">Por día de la semana</h3>
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-gray-400 text-left border-b border-gray-800">
+                            <th className="py-1.5 pr-2">Día</th>
+                            <th className="pr-2 text-right">Trades</th>
+                            <th className="pr-2 text-right">Win rate</th>
+                            <th className="pr-2 text-right">% ganancias</th>
+                            <th className="pr-2 text-right">% pérdidas</th>
+                          </tr>
+                        </thead>
+                        <tbody className="font-mono">
+                          {result.analysis.weekday.map((d) => (
+                            <tr key={d.weekday} className="border-b border-gray-800/50">
+                              <td className="py-1.5 pr-2 font-sans text-gray-200">{d.weekday}</td>
+                              <td className="pr-2 text-right text-gray-400">{d.trades}</td>
+                              <td className={`pr-2 text-right ${d.win_rate_pct >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>{d.win_rate_pct}%</td>
+                              <td className="pr-2 text-right text-emerald-400/80">{d.pct_of_wins}%</td>
+                              <td className="pr-2 text-right text-rose-400/80">{d.pct_of_losses}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 {/* Warnings */}
                 {result.meta.warnings.length > 0 && (
                   <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-amber-300/90">
@@ -451,12 +563,16 @@ export default function BacktestPage() {
 
                 {/* Trades table */}
                 <div className="rounded-2xl border border-rose-500/15 bg-gray-900/40 p-5">
-                  <h3 className="text-sm font-bold text-rose-300 mb-3">Trades ({result.trades.length}{result.total_trades > result.trades.length ? ` de ${result.total_trades}` : ''})</h3>
+                  <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
+                    <h3 className="text-sm font-bold text-rose-300">Trades ({result.trades.length}{result.total_trades > result.trades.length ? ` de ${result.total_trades}` : ''})</h3>
+                    <span className="text-[10px] text-gray-500">SPY = apertura / cierre vs día anterior (▲ por encima · ▼ por debajo)</span>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="text-gray-400 text-left border-b border-gray-800">
-                          <th className="py-2 pr-3">Fecha</th><th className="pr-3">Símbolo</th><th className="pr-3 text-right">Gap%</th>
+                          <th className="py-2 pr-3">Fecha</th><th className="pr-3">Día</th><th className="pr-3">Símbolo</th><th className="pr-3 text-right">Gap%</th>
+                          <th className="pr-3 text-center">SPY</th>
                           <th className="pr-3 text-right">Entry</th><th className="pr-3 text-right">Exit</th><th className="pr-3 text-right">Stop</th>
                           <th className="pr-3 text-right">Target</th><th className="pr-3 text-right">Shares</th>
                           <th className="pr-3 text-right">P&L</th><th className="pr-3 text-right">R</th><th className="pr-3">Salida</th>
@@ -466,8 +582,20 @@ export default function BacktestPage() {
                         {result.trades.map((t, i) => (
                           <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                             <td className="py-1.5 pr-3 text-gray-400">{t.date}</td>
+                            <td className="pr-3 font-sans text-gray-400">{t.weekday ?? '–'}</td>
                             <td className="pr-3 text-gray-100 font-sans font-semibold">{t.symbol}</td>
                             <td className="pr-3 text-right text-gray-300">{t.gap_pct}%</td>
+                            <td className="pr-3 text-center whitespace-nowrap">
+                              {t.spy_open_above == null ? (
+                                <span className="text-gray-600">–</span>
+                              ) : (
+                                <span title={`SPY abrió ${t.spy_open_pct}% · cerró ${t.spy_close_pct}% (vs día anterior)`}>
+                                  <span className={t.spy_open_above ? 'text-emerald-400' : 'text-rose-400'}>{t.spy_open_above ? '▲' : '▼'}</span>
+                                  <span className="text-gray-600 mx-0.5">/</span>
+                                  <span className={t.spy_close_up ? 'text-emerald-400' : 'text-rose-400'}>{t.spy_close_up ? '▲' : '▼'}</span>
+                                </span>
+                              )}
+                            </td>
                             <td className="pr-3 text-right text-gray-300">{t.entry}</td>
                             <td className="pr-3 text-right text-gray-300">{t.exit}</td>
                             <td className="pr-3 text-right text-gray-500">{t.stop ?? '–'}</td>

@@ -59,6 +59,9 @@ MARKET_CAP_BUCKETS: Dict[str, Tuple[float, float]] = {
 
 TRADING_DAYS_PER_YEAR = 252
 
+# Short weekday labels (Mon..Sun); gap-up trades only land on Mon-Fri.
+WEEKDAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Job registry (in-process; single uvicorn worker is enough for a God Mode tool)
@@ -456,8 +459,34 @@ class GapShortBacktestEngine:
         # ran out of data
         return (last_reg_close if last_reg_close is not None else bars[-1]["close"]), "carry_end"
 
+    # ── SPY market-context map ───────────────────────────────────────────────
+    def _build_spy_map(self, date_from: str, date_to: str) -> Dict[str, Dict[str, Any]]:
+        """Per trading day SPY context: how it opened vs the prior close and how it
+        closed vs the prior close. Returns { 'YYYY-MM-DD': {open_above, close_up, ...} }."""
+        hist = self._daily_history("SPY", date_from, date_to)
+        out: Dict[str, Dict[str, Any]] = {}
+        for i in range(1, len(hist)):
+            prev, cur = hist[i - 1], hist[i]
+            try:
+                prev_close = float(prev["close"])
+                o = float(cur["open"]); c = float(cur["close"])
+                day = cur["date"]
+            except (KeyError, TypeError, ValueError):
+                continue
+            if prev_close <= 0:
+                continue
+            out[day] = {
+                "open_above": o > prev_close,        # gapped up vs prior close
+                "close_up": c > prev_close,          # finished above prior close
+                "open_pct": round((o - prev_close) / prev_close * 100, 2),
+                "close_pct": round((c - prev_close) / prev_close * 100, 2),
+            }
+        return out
+
     # ── Step 4: aggregation / metrics ────────────────────────────────────────
-    def _aggregate(self, raw_trades: List[Dict], cfg: Dict, meta: Dict) -> Dict[str, Any]:
+    def _aggregate(self, raw_trades: List[Dict], cfg: Dict, meta: Dict,
+                   spy_map: Optional[Dict[str, Dict]] = None) -> Dict[str, Any]:
+        spy_map = spy_map or {}
         trades = sorted(raw_trades, key=lambda t: t["date"])
         equity = cfg["portfolio_usd"]
         equity_curve = [round(equity, 2)]
@@ -487,6 +516,13 @@ class GapShortBacktestEngine:
             equity += pnl
             r_mult = pnl / r_dollars if r_dollars > 0 else 0.0
 
+            # weekday + SPY market context for the trade day
+            try:
+                wd_idx = datetime.strptime(t["date"], "%Y-%m-%d").weekday()
+            except Exception:
+                wd_idx = None
+            spy = spy_map.get(t["date"])
+
             pnls.append(pnl)
             r_multiples.append(r_mult)
             equity_curve.append(round(equity, 2))
@@ -496,15 +532,71 @@ class GapShortBacktestEngine:
                 "pnl": round(pnl, 2),
                 "r_multiple": round(r_mult, 3),
                 "equity": round(equity, 2),
+                "weekday_idx": wd_idx,
+                "weekday": WEEKDAY_LABELS[wd_idx] if wd_idx is not None else None,
+                "spy_open_above": spy["open_above"] if spy else None,
+                "spy_close_up": spy["close_up"] if spy else None,
+                "spy_open_pct": spy["open_pct"] if spy else None,
+                "spy_close_pct": spy["close_pct"] if spy else None,
             })
 
         stats = self._compute_stats(equity_curve, pnls, r_multiples, cfg, meta)
+        analysis = self._compute_analysis(out_trades)
         return {
             **stats,
             "equity_curve": equity_curve,
             "r_multiples": [round(x, 3) for x in r_multiples],
             "trades": out_trades[:500],
+            "analysis": analysis,
             "meta": meta,
+        }
+
+    # ── Distribution analysis (SPY context + weekday) ────────────────────────
+    def _compute_analysis(self, trades: List[Dict]) -> Dict[str, Any]:
+        wins = [t for t in trades if t["pnl"] > 0]
+        losses = [t for t in trades if t["pnl"] < 0]
+
+        def share(sub: List[Dict], field: str, want: bool) -> Optional[float]:
+            cov = [t for t in sub if t.get(field) is not None]
+            if not cov:
+                return None
+            return round(100.0 * sum(1 for t in cov if t[field] is want) / len(cov), 1)
+
+        # weekday breakdown (only days that actually appear)
+        weekday: List[Dict[str, Any]] = []
+        nwin, nloss = len(wins), len(losses)
+        for idx in range(7):
+            day_trades = [t for t in trades if t.get("weekday_idx") == idx]
+            if not day_trades:
+                continue
+            w = sum(1 for t in day_trades if t["pnl"] > 0)
+            l = sum(1 for t in day_trades if t["pnl"] < 0)
+            weekday.append({
+                "weekday": WEEKDAY_LABELS[idx],
+                "trades": len(day_trades),
+                "win_rate_pct": round(100.0 * w / len(day_trades), 1),
+                "pct_of_wins": round(100.0 * w / nwin, 1) if nwin else 0.0,
+                "pct_of_losses": round(100.0 * l / nloss, 1) if nloss else 0.0,
+            })
+
+        spy_coverage = sum(1 for t in trades if t.get("spy_open_above") is not None)
+        return {
+            "wins_count": nwin,
+            "losses_count": nloss,
+            "spy_coverage_pct": round(100.0 * spy_coverage / len(trades), 1) if trades else 0.0,
+            "spy_open": {
+                "wins_above_pct": share(wins, "spy_open_above", True),
+                "wins_below_pct": share(wins, "spy_open_above", False),
+                "losses_above_pct": share(losses, "spy_open_above", True),
+                "losses_below_pct": share(losses, "spy_open_above", False),
+            },
+            "spy_close": {
+                "wins_up_pct": share(wins, "spy_close_up", True),
+                "wins_down_pct": share(wins, "spy_close_up", False),
+                "losses_up_pct": share(losses, "spy_close_up", True),
+                "losses_down_pct": share(losses, "spy_close_up", False),
+            },
+            "weekday": weekday,
         }
 
     def _compute_stats(self, equity_curve: List[float], pnls: List[float],
@@ -625,7 +717,10 @@ class GapShortBacktestEngine:
 
         if not events:
             meta = self._meta(cfg, len(universe), 0, 0, 0, warnings)
-            return self._aggregate([], cfg, meta)
+            return self._aggregate([], cfg, meta, {})
+
+        # SPY market-context for the date range (one fetch, cached)
+        spy_map = self._build_spy_map(cfg["date_from"], cfg["date_to"])
 
         # ── Intraday simulation (concurrent fetch + simulate) ─────────────────
         trades: List[Dict] = []
@@ -651,7 +746,7 @@ class GapShortBacktestEngine:
 
         progress(97, "Calculando métricas")
         meta = self._meta(cfg, len(universe), events_found, len(trades), no_trade, warnings)
-        result = self._aggregate(trades, cfg, meta)
+        result = self._aggregate(trades, cfg, meta, spy_map)
         progress(100, "Listo")
         return result
 
