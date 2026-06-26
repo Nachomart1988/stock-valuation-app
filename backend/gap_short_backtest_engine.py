@@ -266,6 +266,36 @@ class GapShortBacktestEngine:
         bars.sort(key=lambda x: x["date"])
         return bars
 
+    def trade_chart_5min(self, symbol: str, day: str) -> List[Dict]:
+        """5-minute OHLC for one session (premarket + regular + after-hours), for the
+        per-trade chart. Lazy-loaded by the frontend so the backtest payload stays small."""
+        data = self._fetch_json(
+            "historical-chart/5min",
+            {"symbol": symbol, "from": day, "to": day, "extended": "true"},
+        )
+        if not isinstance(data, list):
+            return []
+        out: List[Dict] = []
+        for b in data:
+            ts = b.get("date", "")
+            if not ts.startswith(day):
+                continue
+            mn = self._minutes_et(ts)
+            if mn is None:
+                continue
+            try:
+                out.append({
+                    "t": ts.split(" ")[1][:5],  # HH:MM
+                    "min": mn,
+                    "open": float(b["open"]), "high": float(b["high"]),
+                    "low": float(b["low"]), "close": float(b["close"]),
+                    "premarket": mn < REGULAR_OPEN or mn >= REGULAR_CLOSE,
+                })
+            except (KeyError, TypeError, ValueError):
+                continue
+        out.sort(key=lambda x: x["min"])
+        return out
+
     def _intraday_bars(self, symbol: str, gap_day: str, carry_days: int) -> List[Dict]:
         """Gap-day bars, plus up to ``carry_days`` subsequent trading days (day-by-day)."""
         bars = self._intraday_day(symbol, gap_day)

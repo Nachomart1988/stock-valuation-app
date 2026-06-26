@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, ReferenceLine, Cell,
+  CartesianGrid, ReferenceLine, Cell, ComposedChart,
 } from 'recharts';
 import Header from '@/app/components/Header';
 import { postBackend, getBackend } from '@/lib/backendClient';
@@ -225,6 +225,32 @@ function OptStats({ c }: { c: OptConfig }) {
   );
 }
 
+interface ChartBar {
+  t: string; min: number; open: number; high: number; low: number; close: number;
+  premarket: boolean; range: [number, number];
+}
+
+// Custom candlestick shape: the Bar is fed range=[low,high], so y/height map the
+// high-low span to pixels; we draw the wick + open/close body from the payload.
+function Candle(props: any) {
+  const { x, y, width, height, payload } = props;
+  const { open, high, low, close } = payload as ChartBar;
+  if (high <= low) return null;
+  const ratio = height / (high - low);
+  const px = (p: number) => y + (high - p) * ratio;
+  const up = close >= open;
+  const color = up ? '#10b981' : '#f43f5e';
+  const cx = x + width / 2;
+  const bodyTop = px(Math.max(open, close));
+  const bodyH = Math.max(1, px(Math.min(open, close)) - bodyTop);
+  return (
+    <g>
+      <line x1={cx} x2={cx} y1={y} y2={y + height} stroke={color} strokeWidth={1} />
+      <rect x={x + width * 0.2} width={Math.max(1, width * 0.6)} y={bodyTop} height={bodyH} fill={color} />
+    </g>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────
 export default function BacktestPage() {
   const { user, isLoaded } = useUser();
@@ -236,6 +262,26 @@ export default function BacktestPage() {
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // per-trade 5-min chart modal
+  const [chartTrade, setChartTrade] = useState<Trade | null>(null);
+  const [chartBars, setChartBars] = useState<ChartBar[] | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState('');
+
+  const openChart = useCallback(async (t: Trade) => {
+    setChartTrade(t); setChartBars(null); setChartError(''); setChartLoading(true);
+    try {
+      const data = await postBackend<{ bars: Omit<ChartBar, 'range'>[] }>(
+        '/backtest/gap-short/chart', { symbol: t.symbol, date: t.date }, 20000,
+      );
+      setChartBars((data.bars || []).map((b) => ({ ...b, range: [b.low, b.high] as [number, number] })));
+    } catch (e: any) {
+      setChartError(e?.message || 'No se pudo cargar el gráfico');
+    } finally {
+      setChartLoading(false);
+    }
+  }, []);
 
   const set = <K extends keyof BacktestConfig>(k: K, v: BacktestConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }));
@@ -735,7 +781,7 @@ export default function BacktestPage() {
                           <th className="pr-3 text-center">SPY</th>
                           <th className="pr-3 text-right">Entry</th><th className="pr-3 text-right">Exit</th><th className="pr-3 text-right">Stop</th>
                           <th className="pr-3 text-right">Target</th><th className="pr-3 text-right">Shares</th>
-                          <th className="pr-3 text-right">P&L</th><th className="pr-3 text-right">R</th><th className="pr-3">Salida</th>
+                          <th className="pr-3 text-right">P&L</th><th className="pr-3 text-right">R</th><th className="pr-3">Salida</th><th className="pr-3 text-center">5M</th>
                         </tr>
                       </thead>
                       <tbody className="font-mono">
@@ -769,6 +815,14 @@ export default function BacktestPage() {
                             <td className={`pr-3 text-right ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{t.pnl >= 0 ? '+' : ''}{t.pnl}</td>
                             <td className={`pr-3 text-right ${t.r_multiple >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{t.r_multiple}R</td>
                             <td className="pr-3 text-gray-500">{t.reason}</td>
+                            <td className="pr-3 text-center">
+                              <button onClick={() => openChart(t)} title="Ver gráfico 5M"
+                                className="text-cyan-400 hover:text-cyan-300 transition" aria-label="Ver gráfico 5 minutos">
+                                <svg className="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M3 3v18h18" />
+                                </svg>
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -789,6 +843,58 @@ export default function BacktestPage() {
           </div>
         )}
       </div>
+
+      {/* Per-trade 5M chart modal */}
+      {chartTrade && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setChartTrade(null)}>
+          <div className="w-full max-w-4xl rounded-2xl border border-cyan-500/25 bg-gray-950 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-lg font-black text-cyan-300">{chartTrade.symbol} <span className="text-gray-500 text-sm font-normal">· {chartTrade.date} ({chartTrade.weekday}) · gap {chartTrade.gap_pct}%</span></h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Entry {chartTrade.entry} · Exit {chartTrade.exit} ({chartTrade.reason}) ·{' '}
+                  <span className={chartTrade.r_multiple >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{chartTrade.r_multiple >= 0 ? '+' : ''}{chartTrade.r_multiple}R</span>
+                  {chartTrade.pyramided && <span className="text-amber-400"> · piramidó @{chartTrade.add_price} (×{chartTrade.add_size_mult})</span>}
+                </p>
+              </div>
+              <button onClick={() => setChartTrade(null)} className="text-gray-400 hover:text-white text-xl leading-none">×</button>
+            </div>
+
+            {chartLoading && <div className="h-80 flex items-center justify-center text-gray-400 text-sm">Cargando gráfico 5M…</div>}
+            {chartError && <div className="h-80 flex items-center justify-center text-rose-400 text-sm">⚠ {chartError}</div>}
+            {chartBars && chartBars.length > 0 && (
+              <>
+                <ResponsiveContainer width="100%" height={360}>
+                  <ComposedChart data={chartBars} margin={{ top: 8, right: 56, bottom: 4, left: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.25} />
+                    <XAxis dataKey="t" stroke="#6b7280" fontSize={10} interval={Math.ceil(chartBars.length / 12)} minTickGap={20} />
+                    <YAxis stroke="#6b7280" fontSize={10} domain={['auto', 'auto']} tickFormatter={(v) => `$${Number(v).toFixed(2)}`} width={52} orientation="right" />
+                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #06b6d433', borderRadius: 8, fontSize: 11 }}
+                      formatter={(_v: any, _n: any, p: any) => {
+                        const b = p?.payload as ChartBar;
+                        return [`O ${b.open} H ${b.high} L ${b.low} C ${b.close}`, b.t];
+                      }} />
+                    <ReferenceLine x="09:30" stroke="#64748b" strokeDasharray="4 4" label={{ value: 'open', fill: '#94a3b8', fontSize: 9, position: 'top' }} />
+                    <ReferenceLine y={chartTrade.entry} stroke="#e5e7eb" strokeDasharray="5 3" label={{ value: 'entry', fill: '#e5e7eb', fontSize: 9, position: 'right' }} />
+                    <ReferenceLine y={chartTrade.exit} stroke="#06b6d4" label={{ value: 'exit', fill: '#06b6d4', fontSize: 9, position: 'right' }} />
+                    {chartTrade.stop != null && <ReferenceLine y={chartTrade.stop} stroke="#f43f5e" strokeDasharray="4 4" label={{ value: 'stop', fill: '#f43f5e', fontSize: 9, position: 'right' }} />}
+                    {chartTrade.target != null && <ReferenceLine y={chartTrade.target} stroke="#10b981" strokeDasharray="4 4" label={{ value: 'target', fill: '#10b981', fontSize: 9, position: 'right' }} />}
+                    {chartTrade.pyramided && chartTrade.add_price != null && <ReferenceLine y={chartTrade.add_price} stroke="#f59e0b" label={{ value: 'add', fill: '#f59e0b', fontSize: 9, position: 'right' }} />}
+                    {chartTrade.pyramided && chartTrade.add_stop != null && <ReferenceLine y={chartTrade.add_stop} stroke="#f59e0b" strokeDasharray="2 3" label={{ value: 'add-stop', fill: '#f59e0b', fontSize: 9, position: 'right' }} />}
+                    <Bar dataKey="range" shape={<Candle />} isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <p className="text-[10px] text-gray-600 mt-2">Velas de 5 minutos · sesión completa (premarket + regular + after-hours, hora ET). Líneas: entry/exit/stop/target{chartTrade.pyramided ? ' + add/add-stop' : ''}.</p>
+              </>
+            )}
+            {chartBars && chartBars.length === 0 && !chartLoading && (
+              <div className="h-80 flex items-center justify-center text-gray-500 text-sm">Sin datos intradía de 5M para este día.</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
