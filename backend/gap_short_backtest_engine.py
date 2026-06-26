@@ -59,6 +59,21 @@ MARKET_CAP_BUCKETS: Dict[str, Tuple[float, float]] = {
 
 TRADING_DAYS_PER_YEAR = 252
 
+# Price tick: prices are quoted in pennies (2 decimals) and the stop must sit at least
+# one tick (1¢) away from the entry — a half-penny stop is unrealistic and inflates R.
+PRICE_TICK = 0.01
+
+
+def _r2(price: float) -> float:
+    """Round a price to the penny tick (2 decimals)."""
+    return round(float(price) + 1e-9, 2)
+
+
+def _clamp_short_stop(entry: float, raw_stop: float) -> float:
+    """Round a SHORT stop to the penny and force it ≥ entry + 1 tick (e.g. entry 6.05
+    → stop ≥ 6.06)."""
+    return round(max(_r2(raw_stop), _r2(entry) + PRICE_TICK), 2)
+
 # Short weekday labels (Mon..Sun); gap-up trades only land on Mon-Fri.
 WEEKDAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
@@ -363,6 +378,9 @@ class GapShortBacktestEngine:
         if entry is None:
             return None
         entry_idx, entry_price, stop_override = entry
+        entry_price = _r2(entry_price)
+        if stop_override is not None:
+            stop_override = _r2(stop_override)
 
         # ── Pyramiding ───────────────────────────────────────────────────────
         if cfg.get("pyramid"):
@@ -389,10 +407,10 @@ class GapShortBacktestEngine:
             "symbol": symbol,
             "date": gap_day,
             "gap_pct": event["gap_pct"],
-            "entry": round(entry_price, 4),
-            "exit": round(exit_price, 4),
-            "stop": round(stop_level, 4) if stop_level is not None else None,
-            "target": round(target, 4) if target is not None else None,
+            "entry": _r2(entry_price),
+            "exit": _r2(exit_price),
+            "stop": _r2(stop_level) if stop_level is not None else None,
+            "target": _r2(target) if target is not None else None,
             "risk_per_share": round(risk_per_share, 4) if risk_per_share else None,
             "reason": reason,
         }
@@ -442,17 +460,18 @@ class GapShortBacktestEngine:
             return r
 
         def finish(x: float, reason: str) -> Dict:
+            x = _r2(x)
             return {
                 "symbol": symbol, "date": gap_day, "gap_pct": event["gap_pct"],
-                "entry": round(E1, 4), "exit": round(x, 4),
-                "stop": round(state["S2"], 4) if state["pyr"] else round(S1, 4),
-                "target": round(target, 4) if target is not None else None,
+                "entry": _r2(E1), "exit": x,
+                "stop": _r2(state["S2"]) if state["pyr"] else _r2(S1),
+                "target": _r2(target) if target is not None else None,
                 "risk_per_share": round(rps1, 4),
                 "r_multiple": round(r_at(x), 4),
                 "reason": reason,
                 "pyramided": state["pyr"],
-                "add_price": round(state["E2"], 4) if state["pyr"] else None,
-                "add_stop": round(state["S2"], 4) if state["pyr"] else None,
+                "add_price": _r2(state["E2"]) if state["pyr"] else None,
+                "add_stop": _r2(state["S2"]) if state["pyr"] else None,
                 "add_size_mult": round(state["n2_ratio"], 3) if state["pyr"] else 0.0,
             }
 
@@ -463,6 +482,8 @@ class GapShortBacktestEngine:
             The add size is capped at ``_MAX_ADD_MULT``× the initial leg: a very tight new
             stop would otherwise demand an untradeable position (e.g. 90× on a micro-cap).
             When capped the trade risks slightly LESS than 1R (conservative)."""
+            p_add = _r2(p_add)
+            s2 = _clamp_short_stop(p_add, s2)   # penny + ≥ add price + 1 tick
             if not (p_add < s2 < E1):
                 return
             n2 = (1.0 - n1 * (s2 - E1)) / (s2 - p_add)
@@ -593,37 +614,37 @@ class GapShortBacktestEngine:
     def _resolve_stop(self, cfg: Dict, reg: List[Dict], pmh: Optional[float],
                       entry_price: float, stop_override: Optional[float]) -> Optional[float]:
         mode = cfg["stop_loss"]
-        if stop_override is not None and mode == "premarket_high":
-            return stop_override
         if mode == "none":
             return None
-        if mode == "trailing_pct":
-            return entry_price * (1 + cfg["trailing_pct"] / 100.0)
-        if mode == "premarket_high":
-            if pmh is not None and pmh > entry_price:
-                return pmh
-            # fallback when no premarket data / pmh below entry -> first-bar high
-            return max(reg[0]["high"], entry_price * 1.001)
-        if mode == "one_min_high":
-            return max(reg[0]["high"], entry_price * 1.001)
-        return None
+        if stop_override is not None and mode == "premarket_high":
+            raw = stop_override
+        elif mode == "trailing_pct":
+            raw = entry_price * (1 + cfg["trailing_pct"] / 100.0)
+        elif mode == "premarket_high":
+            raw = pmh if (pmh is not None and pmh > entry_price) else reg[0]["high"]
+        elif mode == "one_min_high":
+            raw = reg[0]["high"]
+        else:
+            return None
+        # round to penny and force ≥ entry + 1 tick (no half-penny / sub-tick stops)
+        return _clamp_short_stop(entry_price, raw)
 
     def _resolve_target(self, cfg: Dict, pml: Optional[float], event: Dict,
                         entry_price: float, stop_level: Optional[float]) -> Optional[float]:
         mode = cfg["take_profit"]
         if mode == "premarket_low":
-            return pml if (pml is not None and pml < entry_price) else None
+            return _r2(pml) if (pml is not None and pml < entry_price) else None
         if mode == "yesterday_high":
             ph = event.get("prev_high")
-            return ph if (ph and ph < entry_price) else None
+            return _r2(ph) if (ph and ph < entry_price) else None
         if mode == "yesterday_close":
             pc = event.get("prev_close")
-            return pc if (pc and pc < entry_price) else None
+            return _r2(pc) if (pc and pc < entry_price) else None
         if mode == "risk_reward":
             if stop_level is None:
                 return None  # R:R needs a defined stop (disabled in UI otherwise)
             risk = stop_level - entry_price
-            return entry_price - cfg["rr_ratio"] * risk
+            return _r2(entry_price - cfg["rr_ratio"] * risk)
         return None
 
     def _walk(self, bars: List[Dict], g_idx: int, gap_day: str, entry_price: float,
@@ -647,7 +668,7 @@ class GapShortBacktestEngine:
             day_count = len(days_seen) - 1  # 0 on the gap day
 
             # current stop (trailing uses lowest seen on PRIOR bars -> conservative)
-            cur_stop = (lowest * (1 + trail_pct)) if trailing else stop_level
+            cur_stop = _clamp_short_stop(lowest, lowest * (1 + trail_pct)) if trailing else stop_level
 
             # conservative intrabar order: short stop (high) before target (low)
             if cur_stop is not None and b["high"] >= cur_stop:
