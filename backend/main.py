@@ -1,6 +1,39 @@
 # backend/main.py
 # FastAPI server for AdvanceValue Net & CompanyQuality Net
 
+import os as _os
+
+
+def _load_env_files() -> None:
+    """Load FMP_API_KEY (and other vars) from local .env files without requiring
+    python-dotenv. Checks the repo-root `.env.local` and `backend/.env`. Variables
+    already present in the real environment take precedence and are never overwritten."""
+    here = _os.path.dirname(_os.path.abspath(__file__))
+    candidates = [
+        _os.path.join(_os.path.dirname(here), ".env.local"),  # repo root
+        _os.path.join(here, ".env"),                          # backend/.env
+        _os.path.join(here, ".env.local"),
+    ]
+    for path in candidates:
+        if not _os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, val = line.partition("=")
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    if key and key not in _os.environ:
+                        _os.environ[key] = val
+        except Exception as e:  # noqa: BLE001
+            print(f"[env] could not read {path}: {e}")
+
+
+_load_env_files()
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
