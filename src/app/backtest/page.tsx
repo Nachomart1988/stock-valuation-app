@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, ReferenceLine, Cell, ComposedChart,
+  CartesianGrid, ReferenceLine, ReferenceDot, Cell, ComposedChart,
 } from 'recharts';
 import Header from '@/app/components/Header';
 import { postBackend, getBackend } from '@/lib/backendClient';
@@ -57,6 +57,12 @@ interface Trade {
   add_price?: number | null;
   add_stop?: number | null;
   add_size_mult?: number;
+  entry_min?: number | null;
+  entry_time?: string | null;
+  exit_min?: number | null;
+  exit_time?: string | null;
+  add_min?: number | null;
+  add_time?: string | null;
 }
 
 interface BacktestAnalysis {
@@ -257,6 +263,22 @@ function Candle(props: any) {
   );
 }
 
+// Trade-action arrow for the chart (ReferenceDot clones this with cx/cy).
+function ArrowMarker(props: any) {
+  const { cx, cy, color, dir, label } = props;
+  if (cx == null || cy == null) return null;
+  const s = 6, h = 12;
+  const tipY = cy;
+  const baseY = dir === 'up' ? cy + h : cy - h;
+  const ty = dir === 'up' ? cy + h + 11 : cy - h - 4;
+  return (
+    <g>
+      <polygon points={`${cx},${tipY} ${cx - s},${baseY} ${cx + s},${baseY}`} fill={color} stroke="#0b0f19" strokeWidth={0.5} />
+      <text x={cx} y={ty} textAnchor="middle" fill={color} fontSize={9} fontWeight="bold">{label}</text>
+    </g>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────
 export default function BacktestPage() {
   const { user, isLoaded } = useUser();
@@ -269,17 +291,18 @@ export default function BacktestPage() {
   const [running, setRunning] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // per-trade 5-min chart modal
+  // per-trade chart modal
   const [chartTrade, setChartTrade] = useState<Trade | null>(null);
   const [chartBars, setChartBars] = useState<ChartBar[] | null>(null);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState('');
+  const [chartInterval, setChartInterval] = useState<'5min' | '1min'>('5min');
 
-  const openChart = useCallback(async (t: Trade) => {
-    setChartTrade(t); setChartBars(null); setChartError(''); setChartLoading(true);
+  const loadChart = useCallback(async (t: Trade, interval: '5min' | '1min') => {
+    setChartBars(null); setChartError(''); setChartLoading(true);
     try {
       const data = await postBackend<{ bars: Omit<ChartBar, 'range'>[] }>(
-        '/backtest/gap-short/chart', { symbol: t.symbol, date: t.date }, 20000,
+        '/backtest/gap-short/chart', { symbol: t.symbol, date: t.date, interval }, 20000,
       );
       setChartBars((data.bars || []).map((b) => ({ ...b, range: [b.low, b.high] as [number, number] })));
     } catch (e: any) {
@@ -288,6 +311,15 @@ export default function BacktestPage() {
       setChartLoading(false);
     }
   }, []);
+
+  const openChart = useCallback((t: Trade) => {
+    setChartTrade(t); setChartInterval('5min'); loadChart(t, '5min');
+  }, [loadChart]);
+
+  const changeInterval = useCallback((interval: '5min' | '1min') => {
+    setChartInterval(interval);
+    if (chartTrade) loadChart(chartTrade, interval);
+  }, [chartTrade, loadChart]);
 
   const set = <K extends keyof BacktestConfig>(k: K, v: BacktestConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }));
@@ -853,53 +885,77 @@ export default function BacktestPage() {
         )}
       </div>
 
-      {/* Per-trade 5M chart modal */}
+      {/* Per-trade chart modal */}
       {chartTrade && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-6"
           onClick={() => setChartTrade(null)}>
-          <div className="w-full max-w-4xl rounded-2xl border border-cyan-500/25 bg-gray-950 p-5 shadow-2xl"
+          <div className="w-full max-w-6xl rounded-2xl border border-cyan-500/25 bg-gray-950 p-4 sm:p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between mb-3">
+            <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
               <div>
-                <h3 className="text-lg font-black text-cyan-300">{chartTrade.symbol} <span className="text-gray-500 text-sm font-normal">· {chartTrade.date} ({chartTrade.weekday}) · gap {chartTrade.gap_pct}%</span></h3>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  Entry {chartTrade.entry} · Exit {chartTrade.exit} ({chartTrade.reason}) ·{' '}
+                <h3 className="text-xl font-black text-cyan-300">{chartTrade.symbol} <span className="text-gray-500 text-sm font-normal">· {chartTrade.date} ({chartTrade.weekday}) · gap {chartTrade.gap_pct}%</span></h3>
+                <p className="text-[12px] text-gray-400 mt-0.5">
+                  Entry {chartTrade.entry} ({chartTrade.entry_time}) · Exit {chartTrade.exit} ({chartTrade.exit_time}, {chartTrade.reason}) ·{' '}
                   <span className={chartTrade.r_multiple >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{chartTrade.r_multiple >= 0 ? '+' : ''}{chartTrade.r_multiple}R</span>
-                  {chartTrade.pyramided && <span className="text-amber-400"> · piramidó @{chartTrade.add_price} (×{chartTrade.add_size_mult})</span>}
+                  {chartTrade.pyramided && <span className="text-amber-400"> · piramidó @{chartTrade.add_price} ({chartTrade.add_time}, ×{chartTrade.add_size_mult})</span>}
                 </p>
               </div>
-              <button onClick={() => setChartTrade(null)} className="text-gray-400 hover:text-white text-xl leading-none">×</button>
+              <div className="flex items-center gap-3">
+                <div className="inline-flex rounded-lg border border-gray-700 bg-gray-900 p-0.5">
+                  {(['1min', '5min'] as const).map((iv) => (
+                    <button key={iv} onClick={() => changeInterval(iv)}
+                      className={`px-3 py-1 rounded-md text-xs font-semibold transition ${chartInterval === iv ? 'bg-cyan-500/25 text-cyan-200' : 'text-gray-400 hover:text-gray-200'}`}>
+                      {iv === '1min' ? '1M' : '5M'}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setChartTrade(null)} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+              </div>
             </div>
 
-            {chartLoading && <div className="h-80 flex items-center justify-center text-gray-400 text-sm">Cargando gráfico 5M…</div>}
-            {chartError && <div className="h-80 flex items-center justify-center text-rose-400 text-sm">⚠ {chartError}</div>}
-            {chartBars && chartBars.length > 0 && (
-              <>
-                <ResponsiveContainer width="100%" height={360}>
-                  <ComposedChart data={chartBars} margin={{ top: 8, right: 56, bottom: 4, left: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.25} />
-                    <XAxis dataKey="t" stroke="#6b7280" fontSize={10} interval={Math.ceil(chartBars.length / 12)} minTickGap={20} />
-                    <YAxis stroke="#6b7280" fontSize={10} domain={['auto', 'auto']} tickFormatter={(v) => `$${Number(v).toFixed(2)}`} width={52} orientation="right" />
-                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #06b6d433', borderRadius: 8, fontSize: 11 }}
-                      formatter={(_v: any, _n: any, p: any) => {
-                        const b = p?.payload as ChartBar;
-                        return [`O ${b.open} H ${b.high} L ${b.low} C ${b.close}`, b.t];
-                      }} />
-                    <ReferenceLine x="09:30" stroke="#64748b" strokeDasharray="4 4" label={{ value: 'open', fill: '#94a3b8', fontSize: 9, position: 'top' }} />
-                    <ReferenceLine y={chartTrade.entry} stroke="#e5e7eb" strokeDasharray="5 3" label={{ value: 'entry', fill: '#e5e7eb', fontSize: 9, position: 'right' }} />
-                    <ReferenceLine y={chartTrade.exit} stroke="#06b6d4" label={{ value: 'exit', fill: '#06b6d4', fontSize: 9, position: 'right' }} />
-                    {chartTrade.stop != null && <ReferenceLine y={chartTrade.stop} stroke="#f43f5e" strokeDasharray="4 4" label={{ value: 'stop', fill: '#f43f5e', fontSize: 9, position: 'right' }} />}
-                    {chartTrade.target != null && <ReferenceLine y={chartTrade.target} stroke="#10b981" strokeDasharray="4 4" label={{ value: 'target', fill: '#10b981', fontSize: 9, position: 'right' }} />}
-                    {chartTrade.pyramided && chartTrade.add_price != null && <ReferenceLine y={chartTrade.add_price} stroke="#f59e0b" label={{ value: 'add', fill: '#f59e0b', fontSize: 9, position: 'right' }} />}
-                    {chartTrade.pyramided && chartTrade.add_stop != null && <ReferenceLine y={chartTrade.add_stop} stroke="#f59e0b" strokeDasharray="2 3" label={{ value: 'add-stop', fill: '#f59e0b', fontSize: 9, position: 'right' }} />}
-                    <Bar dataKey="range" shape={<Candle />} isAnimationActive={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-                <p className="text-[10px] text-gray-600 mt-2">Velas de 5 minutos · sesión completa (premarket + regular + after-hours, hora ET). Líneas: entry/exit/stop/target{chartTrade.pyramided ? ' + add/add-stop' : ''}.</p>
-              </>
-            )}
+            {chartLoading && <div className="flex items-center justify-center text-gray-400 text-sm" style={{ height: '70vh' }}>Cargando gráfico {chartInterval === '1min' ? '1M' : '5M'}…</div>}
+            {chartError && <div className="flex items-center justify-center text-rose-400 text-sm" style={{ height: '70vh' }}>⚠ {chartError}</div>}
+            {chartBars && chartBars.length > 0 && (() => {
+              const snapT = (mn: number | null | undefined): string | undefined => {
+                if (mn == null) return undefined;
+                let best: ChartBar | undefined;
+                for (const b of chartBars) { if (b.min <= mn) best = b; else break; }
+                return (best ?? chartBars[0]).t;
+              };
+              return (
+                <>
+                  <ResponsiveContainer width="100%" height={Math.round(typeof window !== 'undefined' ? window.innerHeight * 0.66 : 560)}>
+                    <ComposedChart data={chartBars} margin={{ top: 14, right: 64, bottom: 4, left: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.25} />
+                      <XAxis dataKey="t" stroke="#6b7280" fontSize={11} interval={Math.ceil(chartBars.length / 14)} minTickGap={24} />
+                      <YAxis stroke="#6b7280" fontSize={11} domain={['auto', 'auto']} tickFormatter={(v) => `$${Number(v).toFixed(2)}`} width={58} orientation="right" />
+                      <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #06b6d433', borderRadius: 8, fontSize: 11 }}
+                        formatter={(_v: any, _n: any, p: any) => {
+                          const b = p?.payload as ChartBar;
+                          return [`O ${b.open} H ${b.high} L ${b.low} C ${b.close}`, b.t];
+                        }} />
+                      <ReferenceLine x="09:30" stroke="#64748b" strokeDasharray="4 4" label={{ value: 'open', fill: '#94a3b8', fontSize: 9, position: 'top' }} />
+                      {/* stop / target / add-stop → líneas */}
+                      {chartTrade.stop != null && <ReferenceLine y={chartTrade.stop} stroke="#f43f5e" strokeDasharray="4 4" label={{ value: `stop ${chartTrade.stop}`, fill: '#f43f5e', fontSize: 9, position: 'right' }} />}
+                      {chartTrade.target != null && <ReferenceLine y={chartTrade.target} stroke="#10b981" strokeDasharray="4 4" label={{ value: `target ${chartTrade.target}`, fill: '#10b981', fontSize: 9, position: 'right' }} />}
+                      {chartTrade.pyramided && chartTrade.add_stop != null && <ReferenceLine y={chartTrade.add_stop} stroke="#f59e0b" strokeDasharray="2 3" label={{ value: `add-stop ${chartTrade.add_stop}`, fill: '#f59e0b', fontSize: 9, position: 'right' }} />}
+                      <Bar dataKey="range" shape={<Candle />} isAnimationActive={false} />
+                      {/* entry / add / exit → flechas */}
+                      <ReferenceDot x={snapT(chartTrade.entry_min)} y={chartTrade.entry} r={0} ifOverflow="extendDomain" shape={<ArrowMarker color="#f43f5e" dir="down" label="SHORT" />} />
+                      {chartTrade.pyramided && chartTrade.add_price != null &&
+                        <ReferenceDot x={snapT(chartTrade.add_min)} y={chartTrade.add_price} r={0} ifOverflow="extendDomain" shape={<ArrowMarker color="#f59e0b" dir="down" label="ADD" />} />}
+                      <ReferenceDot x={snapT(chartTrade.exit_min)} y={chartTrade.exit} r={0} ifOverflow="extendDomain" shape={<ArrowMarker color="#06b6d4" dir="up" label="COVER" />} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                  <p className="text-[10px] text-gray-600 mt-2">
+                    Velas de {chartInterval === '1min' ? '1' : '5'} min · sesión completa (premarket + regular + after-hours, hora ET).
+                    Flechas: ▼ SHORT (entrada){chartTrade.pyramided ? ' · ▼ ADD (piramidó)' : ''} · ▲ COVER (salida). Líneas: stop/target{chartTrade.pyramided ? '/add-stop' : ''}.
+                  </p>
+                </>
+              );
+            })()}
             {chartBars && chartBars.length === 0 && !chartLoading && (
-              <div className="h-80 flex items-center justify-center text-gray-500 text-sm">Sin datos intradía de 5M para este día.</div>
+              <div className="flex items-center justify-center text-gray-500 text-sm" style={{ height: '70vh' }}>Sin datos intradía de {chartInterval === '1min' ? '1M' : '5M'} para este día.</div>
             )}
           </div>
         </div>

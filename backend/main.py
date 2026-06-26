@@ -2401,17 +2401,18 @@ async def gap_short_backtest_status(job_id: str):
 class GapShortChartRequest(BaseModel):
     symbol: str
     date: str  # YYYY-MM-DD (the gap day)
+    interval: str = "5min"  # "1min" | "5min"
 
 
 @app.post("/backtest/gap-short/chart")
 async def gap_short_backtest_chart(req: GapShortChartRequest):
-    """5-minute OHLC for one trade's session (lazy-loaded per-trade chart)."""
+    """1- or 5-minute OHLC for one trade's session (lazy-loaded per-trade chart)."""
     if not GAP_SHORT_BACKTEST_AVAILABLE:
         raise HTTPException(status_code=503, detail="Gap short backtest engine not available")
     try:
         from gap_short_backtest_engine import get_gap_short_backtest_engine
         engine = get_gap_short_backtest_engine()
-        bars = await asyncio.to_thread(engine.trade_chart_5min, req.symbol, req.date)
+        bars = await asyncio.to_thread(engine.trade_chart, req.symbol, req.date, req.interval)
         return numpy_safe_response({"bars": bars})
     except Exception as e:
         print(f"[GapShortBT] chart error: {e}")

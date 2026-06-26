@@ -179,6 +179,12 @@ class GapShortBacktestEngine:
     def _day_of(bar_date: str) -> str:
         return bar_date.split(" ")[0]
 
+    @staticmethod
+    def _hhmm(minutes: Optional[int]) -> Optional[str]:
+        if minutes is None:
+            return None
+        return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
     # ── Step 1: universe ─────────────────────────────────────────────────────
     def _build_universe(self, cfg: Dict[str, Any]) -> List[str]:
         lo, hi = MARKET_CAP_BUCKETS.get(cfg["market_cap_bucket"], (0, 10_000_000_000))
@@ -287,11 +293,12 @@ class GapShortBacktestEngine:
         bars.sort(key=lambda x: x["date"])
         return bars
 
-    def trade_chart_5min(self, symbol: str, day: str) -> List[Dict]:
-        """5-minute OHLC for one session (premarket + regular + after-hours), for the
-        per-trade chart. Lazy-loaded by the frontend so the backtest payload stays small."""
+    def trade_chart(self, symbol: str, day: str, interval: str = "5min") -> List[Dict]:
+        """1- or 5-minute OHLC for one session (premarket + regular + after-hours), for
+        the per-trade chart. Lazy-loaded by the frontend so the backtest payload stays small."""
+        interval = "1min" if interval == "1min" else "5min"
         data = self._fetch_json(
-            "historical-chart/5min",
+            f"historical-chart/{interval}",
             {"symbol": symbol, "from": day, "to": day, "extended": "true"},
         )
         if not isinstance(data, list):
@@ -399,7 +406,8 @@ class GapShortBacktestEngine:
         target = self._resolve_target(cfg, pml, event, entry_price, stop_level)
         risk_per_share = (stop_level - entry_price) if (stop_level is not None) else None
 
-        exit_price, reason = self._walk(
+        entry_min = reg[entry_idx]["min"]
+        exit_price, reason, exit_min = self._walk(
             bars, g_idx, gap_day, entry_price, stop_level, target, cfg, trailing,
         )
 
@@ -413,6 +421,9 @@ class GapShortBacktestEngine:
             "target": _r2(target) if target is not None else None,
             "risk_per_share": round(risk_per_share, 4) if risk_per_share else None,
             "reason": reason,
+            "entry_min": entry_min, "entry_time": self._hhmm(entry_min),
+            "exit_min": exit_min, "exit_time": self._hhmm(exit_min),
+            "add_min": None, "add_time": None,
         }
 
     def _simulate_pyramid(self, prepared: Dict, event: Dict, cfg: Dict,
@@ -451,7 +462,8 @@ class GapShortBacktestEngine:
         carry_max = int(cfg["carry_max_days"])
         n1 = 1.0 / rps1  # normalize so the initial leg risks exactly 1R
 
-        state = {"pyr": False, "E2": None, "S2": None, "n2_ratio": 0.0}
+        entry_min = reg[entry_idx]["min"]
+        state = {"pyr": False, "E2": None, "S2": None, "n2_ratio": 0.0, "add_min": None}
 
         def r_at(x: float) -> float:
             r = n1 * (E1 - x)                       # leg 1 (held from entry)
@@ -459,7 +471,7 @@ class GapShortBacktestEngine:
                 r += (state["n2_ratio"] * n1) * (state["E2"] - x)  # leg 2 (the add)
             return r
 
-        def finish(x: float, reason: str) -> Dict:
+        def finish(x: float, reason: str, exit_min: Optional[int]) -> Dict:
             x = _r2(x)
             return {
                 "symbol": symbol, "date": gap_day, "gap_pct": event["gap_pct"],
@@ -473,6 +485,9 @@ class GapShortBacktestEngine:
                 "add_price": _r2(state["E2"]) if state["pyr"] else None,
                 "add_stop": _r2(state["S2"]) if state["pyr"] else None,
                 "add_size_mult": round(state["n2_ratio"], 3) if state["pyr"] else 0.0,
+                "entry_min": entry_min, "entry_time": self._hhmm(entry_min),
+                "exit_min": exit_min, "exit_time": self._hhmm(exit_min),
+                "add_min": state["add_min"], "add_time": self._hhmm(state["add_min"]),
             }
 
         def commit_add(p_add: float, s2: float) -> None:
@@ -501,6 +516,7 @@ class GapShortBacktestEngine:
         lod, pull_high = float("inf"), float("-inf")      # new_low_after_window
         days_seen: List[str] = []
         last_reg_close: Optional[float] = None
+        last_reg_min: Optional[int] = None
 
         for i in range(g_idx, len(bars)):
             b = bars[i]
@@ -512,9 +528,9 @@ class GapShortBacktestEngine:
             active_stop = state["S2"] if state["pyr"] else S1
             # conservative intrabar: short stop (high) before target (low)
             if active_stop is not None and b["high"] >= active_stop:
-                return finish(active_stop, "stop")
+                return finish(active_stop, "stop", b["min"])
             if target is not None and b["low"] <= target:
-                return finish(target, "target")
+                return finish(target, "target", b["min"])
 
             if b["low"] < E1:
                 went_profit = True
@@ -542,6 +558,8 @@ class GapShortBacktestEngine:
                     # after the window, a fresh low-of-day breakdown; stop = last bounce high
                     if gap_day_bar and b["min"] >= window_end and b["low"] < lod and pull_high > float("-inf"):
                         commit_add(b["open"], pull_high)
+                if state["pyr"] and state["add_min"] is None:
+                    state["add_min"] = b["min"]   # timestamp of the add
 
             # update per-rule running state (after detection, so it reads prior values)
             ema = b["close"] if ema is None else ema + EMA_ALPHA * (b["close"] - ema)
@@ -551,16 +569,19 @@ class GapShortBacktestEngine:
                 pull_high = max(pull_high, b["high"])
 
             if is_reg:
-                last_reg_close = b["close"]
+                last_reg_close, last_reg_min = b["close"], b["min"]
 
             if not carry and b["day"] == gap_day:
                 nxt = bars[i + 1] if i + 1 < len(bars) else None
                 if nxt is None or nxt["day"] != gap_day or nxt["min"] >= REGULAR_CLOSE:
-                    return finish(last_reg_close if last_reg_close is not None else b["close"], "eod")
+                    return finish(last_reg_close if last_reg_close is not None else b["close"], "eod",
+                                  last_reg_min if last_reg_min is not None else b["min"])
             if carry and day_count > carry_max:
-                return finish(last_reg_close if last_reg_close is not None else b["close"], "carry_end")
+                return finish(last_reg_close if last_reg_close is not None else b["close"], "carry_end",
+                              last_reg_min if last_reg_min is not None else b["min"])
 
-        return finish(last_reg_close if last_reg_close is not None else bars[-1]["close"], "carry_end")
+        return finish(last_reg_close if last_reg_close is not None else bars[-1]["close"], "carry_end",
+                      last_reg_min if last_reg_min is not None else bars[-1]["min"])
 
     def _simulate_event(self, event: Dict, cfg: Dict[str, Any]) -> Optional[Dict]:
         carry_days = int(cfg["carry_max_days"]) if cfg["eod_close"] == "carry_next_day" else 0
@@ -649,14 +670,15 @@ class GapShortBacktestEngine:
 
     def _walk(self, bars: List[Dict], g_idx: int, gap_day: str, entry_price: float,
               stop_level: Optional[float], target: Optional[float], cfg: Dict,
-              trailing: bool) -> Tuple[float, str]:
-        """Walk bars from the entry bar; return (exit_price, reason)."""
+              trailing: bool) -> Tuple[float, str, Optional[int]]:
+        """Walk bars from the entry bar; return (exit_price, reason, exit_minute)."""
         carry = cfg["eod_close"] == "carry_next_day"
         carry_max = int(cfg["carry_max_days"])
         lowest = entry_price
         trail_pct = cfg.get("trailing_pct", 0) / 100.0
         days_seen: List[str] = []
         last_reg_close: Optional[float] = None
+        last_reg_min: Optional[int] = None
 
         for i in range(g_idx, len(bars)):
             b = bars[i]
@@ -672,26 +694,29 @@ class GapShortBacktestEngine:
 
             # conservative intrabar order: short stop (high) before target (low)
             if cur_stop is not None and b["high"] >= cur_stop:
-                return cur_stop, "stop"
+                return cur_stop, "stop", b["min"]
             if target is not None and b["low"] <= target:
-                return target, "target"
+                return target, "target", b["min"]
 
             if trailing:
                 lowest = min(lowest, b["low"])
             if is_reg:
-                last_reg_close = b["close"]
+                last_reg_close, last_reg_min = b["close"], b["min"]
 
             # end-of-day handling for the non-carry case
             if not carry and b["day"] == gap_day:
                 nxt = bars[i + 1] if i + 1 < len(bars) else None
                 if nxt is None or nxt["day"] != gap_day or nxt["min"] >= REGULAR_CLOSE:
-                    return (last_reg_close if last_reg_close is not None else b["close"]), "eod"
+                    return (last_reg_close if last_reg_close is not None else b["close"]), "eod", \
+                        (last_reg_min if last_reg_min is not None else b["min"])
 
             if carry and day_count > carry_max:
-                return (last_reg_close if last_reg_close is not None else b["close"]), "carry_end"
+                return (last_reg_close if last_reg_close is not None else b["close"]), "carry_end", \
+                    (last_reg_min if last_reg_min is not None else b["min"])
 
         # ran out of data
-        return (last_reg_close if last_reg_close is not None else bars[-1]["close"]), "carry_end"
+        return (last_reg_close if last_reg_close is not None else bars[-1]["close"]), "carry_end", \
+            (last_reg_min if last_reg_min is not None else bars[-1]["min"])
 
     # ── SPY market-context map ───────────────────────────────────────────────
     def _build_spy_map(self, date_from: str, date_to: str) -> Dict[str, Dict[str, Any]]:
