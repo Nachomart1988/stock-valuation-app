@@ -106,7 +106,7 @@ const DEFAULT_CONFIG: BacktestConfig = {
   fixed_risk_usd: 100, pct_portfolio_risk: 1,
   entry: 'opening_bell', orb_minutes: 5,
   date_from: yearAgo(), date_to: today(),
-  max_universe: 1500, max_events: 1500,
+  max_universe: 6000, max_events: 3000,
 };
 
 // ── Small UI primitives ──────────────────────────────────────────────────

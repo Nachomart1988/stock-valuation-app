@@ -165,7 +165,9 @@ class GapShortBacktestEngine:
             "isActivelyTrading": "true",
             "isEtf": "false",
             "isFund": "false",
-            "limit": int(cfg["max_universe"]),
+            # request well above any real bucket size so FMP returns the FULL universe;
+            # the optional safety cap is applied (with a warning) in run_backtest.
+            "limit": 10000,
         }
         data = self._fetch_json("company-screener", params)
         if not isinstance(data, list):
@@ -179,7 +181,7 @@ class GapShortBacktestEngine:
             if exch and exch not in ("NASDAQ", "NYSE", "AMEX"):
                 continue
             symbols.append(sym)
-        return symbols[: int(cfg["max_universe"])]
+        return symbols
 
     # ── Step 2: daily history + gap detection ────────────────────────────────
     def _daily_history(self, symbol: str, date_from: str, date_to: str) -> List[Dict]:
@@ -690,7 +692,15 @@ class GapShortBacktestEngine:
         universe = self._build_universe(cfg)
         if not universe:
             raise RuntimeError("No se obtuvieron tickers del screener (revisa filtros / API key)")
-        progress(10, f"Universo: {len(universe)} tickers — escaneando gaps")
+        full_universe = len(universe)
+        cap = int(cfg["max_universe"])
+        if full_universe > cap:
+            warnings.append(
+                f"Universo completo: {full_universe} tickers; limitado por seguridad a {cap}. "
+                f"Subí 'max_universe' para escanear todos."
+            )
+            universe = universe[:cap]
+        progress(10, f"Universo: {len(universe)}/{full_universe} tickers — escaneando gaps")
 
         # ── Gap scan (concurrent) ────────────────────────────────────────────
         events: List[Dict] = []
@@ -802,8 +812,8 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
         "orb_minutes": int(raw.get("orb_minutes", 5) or 5),
         "date_from": str(raw.get("date_from") or default_from),
         "date_to": str(raw.get("date_to") or default_to),
-        "max_universe": int(max(f("max_universe", 1500), 1)),
-        "max_events": int(max(f("max_events", 1500), 1)),
+        "max_universe": int(max(f("max_universe", 6000), 1)),
+        "max_events": int(max(f("max_events", 3000), 1)),
     }
     return cfg
 

@@ -2332,8 +2332,8 @@ class GapShortBacktestRequest(BaseModel):
     orb_minutes: int = 5                  # 1 | 5 | 15
     date_from: Optional[str] = None       # YYYY-MM-DD
     date_to: Optional[str] = None
-    max_universe: int = 1500
-    max_events: int = 1500
+    max_universe: int = 6000
+    max_events: int = 3000
 
 
 @app.post("/backtest/gap-short/start")
