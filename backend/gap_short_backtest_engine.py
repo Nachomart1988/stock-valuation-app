@@ -62,6 +62,12 @@ TRADING_DAYS_PER_YEAR = 252
 # Short weekday labels (Mon..Sun); gap-up trades only land on Mon-Fri.
 WEEKDAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
+# Pyramiding add-on rules (all keep TOTAL position risk at exactly 1R):
+#   failed_reclaim_open  — bounce in first N min fails to reclaim the session open
+#   ema9_reject          — price rallies up to the 9-EMA and rejects, then rolls over
+#   new_low_after_window — after the window, a fresh low-of-day breakdown (trend add)
+PYRAMID_RULES = ("failed_reclaim_open", "ema9_reject", "new_low_after_window")
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Job registry (in-process; single uvicorn worker is enough for a God Mode tool)
@@ -450,7 +456,28 @@ class GapShortBacktestEngine:
                 "add_size_mult": round(state["n2_ratio"], 3) if state["pyr"] else 0.0,
             }
 
-        hod_w, went_profit, evaluated = float("-inf"), False, False
+        def commit_add(p_add: float, s2: float) -> None:
+            """Add a 2nd leg at p_add with new stop s2, re-sized so TOTAL risk stays 1R.
+            Requires p_add < s2 < E1 (the original leg is already in profit at s2).
+
+            The add size is capped at ``_MAX_ADD_MULT``× the initial leg: a very tight new
+            stop would otherwise demand an untradeable position (e.g. 90× on a micro-cap).
+            When capped the trade risks slightly LESS than 1R (conservative)."""
+            if not (p_add < s2 < E1):
+                return
+            n2 = (1.0 - n1 * (s2 - E1)) / (s2 - p_add)
+            if n2 <= 0:
+                return
+            n2 = min(n2, self._MAX_ADD_MULT * n1)  # cap add to a tradeable size
+            state.update({"pyr": True, "E2": p_add, "S2": s2, "n2_ratio": n2 / n1})
+
+        rule = cfg.get("pyramid_rule", "failed_reclaim_open")
+        EMA_ALPHA = 2.0 / (9 + 1)  # EMA9 on 1-min closes (ema9_reject)
+        went_profit = False
+        hod_w, evaluated = float("-inf"), False           # failed_reclaim_open
+        ema: Optional[float] = None
+        pend_high: Optional[float] = None                 # ema9_reject (add next bar)
+        lod, pull_high = float("inf"), float("-inf")      # new_low_after_window
         days_seen: List[str] = []
         last_reg_close: Optional[float] = None
 
@@ -470,22 +497,37 @@ class GapShortBacktestEngine:
 
             if b["low"] < E1:
                 went_profit = True
-            # Track the failed-rally high from bars AFTER the entry bar (the entry/open
-            # bar's own high would otherwise count as a false "reclaim" of the open).
-            in_window = (b["day"] == gap_day) and (REGULAR_OPEN <= b["min"] < window_end)
-            if in_window and i > g_idx:
-                hod_w = max(hod_w, b["high"])
+            gap_day_bar = b["day"] == gap_day
+            after_entry = i > g_idx
 
-            # pyramid trigger: first bar at/after the window end (evaluated once)
-            if (not state["pyr"]) and (not evaluated) and b["day"] == gap_day and b["min"] >= window_end:
-                evaluated = True
-                if hod_w > float("-inf") and hod_w < open_price and went_profit:
-                    p_add, cand_s2 = b["open"], hod_w
-                    if cand_s2 > p_add and cand_s2 < E1:
-                        n2 = (1.0 - n1 * (cand_s2 - E1)) / (cand_s2 - p_add)
-                        if n2 > 0:
-                            state.update({"pyr": True, "E2": p_add, "S2": cand_s2,
-                                          "n2_ratio": n2 / n1})
+            # ── add-on detection (single add; only the configured rule) ──────────
+            if not state["pyr"] and went_profit and after_entry:
+                if rule == "failed_reclaim_open":
+                    # bounce in the first window fails to reclaim the session open
+                    if gap_day_bar and REGULAR_OPEN <= b["min"] < window_end:
+                        hod_w = max(hod_w, b["high"])
+                    if (not evaluated) and gap_day_bar and b["min"] >= window_end:
+                        evaluated = True
+                        if hod_w > float("-inf") and hod_w < open_price:
+                            commit_add(b["open"], hod_w)
+                elif rule == "ema9_reject":
+                    # price rallies up to the 9-EMA and rejects → add on the next bar
+                    if pend_high is not None:
+                        commit_add(b["open"], pend_high)
+                        pend_high = None
+                    elif ema is not None and b["high"] >= ema and b["close"] < ema and b["high"] < E1:
+                        pend_high = b["high"]
+                elif rule == "new_low_after_window":
+                    # after the window, a fresh low-of-day breakdown; stop = last bounce high
+                    if gap_day_bar and b["min"] >= window_end and b["low"] < lod and pull_high > float("-inf"):
+                        commit_add(b["open"], pull_high)
+
+            # update per-rule running state (after detection, so it reads prior values)
+            ema = b["close"] if ema is None else ema + EMA_ALPHA * (b["close"] - ema)
+            if b["low"] < lod:
+                lod, pull_high = b["low"], float("-inf")  # reset bounce high on a new low
+            else:
+                pull_high = max(pull_high, b["high"])
 
             if is_reg:
                 last_reg_close = b["close"]
@@ -927,6 +969,8 @@ class GapShortBacktestEngine:
     # 1-min stop that lets a runner reach yesterday's close at +40R) don't dominate
     # the ranking and recommend a fragile, low-win-rate "lottery" config.
     _R_CAP = 10.0
+    # Max pyramid add size as a multiple of the initial leg (keeps adds tradeable).
+    _MAX_ADD_MULT = 20.0
 
     def _score_config(self, prepared_events: List[Tuple[Dict, Dict]],
                       base_cfg: Dict, overrides: Dict) -> Optional[Dict]:
@@ -1150,7 +1194,9 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
         "max_events": int(max(f("max_events", 3000), 1)),
         "optimize": bool(raw.get("optimize", True)),
         "pyramid": bool(raw.get("pyramid", False)),
-        "pyramid_rule": str(raw.get("pyramid_rule", "failed_reclaim_open")),
+        "pyramid_rule": (str(raw.get("pyramid_rule", "failed_reclaim_open"))
+                         if str(raw.get("pyramid_rule", "")) in PYRAMID_RULES
+                         else "failed_reclaim_open"),
         "pyramid_window_min": int(max(f("pyramid_window_min", 30), 1)),
     }
     return cfg

@@ -34,9 +34,15 @@ interface BacktestConfig {
   max_events: number;
   optimize: boolean;
   pyramid: boolean;
-  pyramid_rule: 'failed_reclaim_open';
+  pyramid_rule: 'failed_reclaim_open' | 'ema9_reject' | 'new_low_after_window';
   pyramid_window_min: number;
 }
+
+const PYRAMID_RULE_DESC: Record<BacktestConfig['pyramid_rule'], string> = {
+  failed_reclaim_open: 'Cuando el precio ya está abajo de la entrada y el rebote no supera el open en los primeros {N} min, se agrega y se baja el stop al high del rebote.',
+  ema9_reject: 'Cuando el precio rebota hasta la EMA9 (1-min) y la rechaza (cierra por debajo), se agrega en la vela siguiente y se baja el stop al high del rechazo.',
+  new_low_after_window: 'Pasados los primeros {N} min, cada vez que el precio hace un nuevo mínimo del día tras un rebote, se agrega y se baja el stop al high de ese rebote.',
+};
 
 interface Trade {
   symbol: string; date: string; gap_pct: number;
@@ -517,13 +523,15 @@ export default function BacktestPage() {
                 <Field label="Regla de agregado">
                   <Select value={cfg.pyramid_rule} onChange={(v) => set('pyramid_rule', v)} options={[
                     { value: 'failed_reclaim_open', label: 'Falla en reclamar el open' },
+                    { value: 'ema9_reject', label: 'Rechazo en EMA9 (1-min)' },
+                    { value: 'new_low_after_window', label: 'Nuevo mínimo del día (trend)' },
                   ]} />
                 </Field>
-                <Field label="Ventana (min)" hint="busca el rebote fallido dentro de estos minutos">
+                <Field label="Ventana (min)" hint="referencia temporal de la regla">
                   <NumberInput value={cfg.pyramid_window_min} min={1} step={5} onChange={(v) => set('pyramid_window_min', v)} />
                 </Field>
                 <p className="text-[11px] text-gray-400 md:col-span-1 self-center">
-                  Cuando el precio ya está abajo de la entrada y el rebote no supera el open en los primeros {cfg.pyramid_window_min} min, se agrega y se baja el stop al high del rebote. Si te frena perdés 1R; si funciona, ganás sobre una posición mayor.
+                  {PYRAMID_RULE_DESC[cfg.pyramid_rule].replace('{N}', String(cfg.pyramid_window_min))} Si te frena perdés 1R; si funciona, ganás sobre una posición mayor.
                 </p>
               </div>
             )}
@@ -839,6 +847,7 @@ export default function BacktestPage() {
               <p>• Orden intrabar conservador: si una vela de 1-min toca stop (high) y target (low), se asume el stop primero.</p>
               <p>• No se modelan disponibilidad de borrow/locate ni costos de short.</p>
               <p>• Cobertura del universo sujeta a rate limits de FMP y al cap de seguridad de tickers.</p>
+              <p>• Piramidado: el agregado se limita a 20× la pata inicial (un stop nuevo muy ajustado pediría un tamaño intradeable). En esos casos el riesgo total queda algo por debajo de 1R, nunca por encima.</p>
             </div>
           </div>
         )}
