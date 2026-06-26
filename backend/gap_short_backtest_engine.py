@@ -328,6 +328,13 @@ class GapShortBacktestEngine:
             return None
         entry_idx, entry_price, stop_override = entry
 
+        # ── Pyramiding ───────────────────────────────────────────────────────
+        if cfg.get("pyramid"):
+            pyr = self._simulate_pyramid(prepared, event, cfg, entry_idx, entry_price, stop_override)
+            if pyr is not None:
+                return pyr
+            # else (no defined stop / not applicable) → fall through to single-leg
+
         entry_bar = reg[entry_idx]
         g_idx = next((i for i, b in enumerate(bars) if b["date"] == entry_bar["date"]), None)
         if g_idx is None:
@@ -353,6 +360,114 @@ class GapShortBacktestEngine:
             "risk_per_share": round(risk_per_share, 4) if risk_per_share else None,
             "reason": reason,
         }
+
+    def _simulate_pyramid(self, prepared: Dict, event: Dict, cfg: Dict,
+                          entry_idx: int, E1: float,
+                          stop_override: Optional[float]) -> Optional[Dict]:
+        """Short with a pyramid add-on (rule: failed_reclaim_open).
+
+        Once price is BELOW entry (short in profit) and, within the first
+        ``pyramid_window_min`` minutes, the bounce fails to reclaim the session open,
+        we ADD shares and move the stop DOWN to that failed-rally high. Because the
+        original leg is already in profit at the new (lower) stop, we can add many
+        shares and still keep TOTAL risk at exactly 1R: if stopped we lose 1R, if it
+        works we win on a much larger position.
+
+        Returns a trade dict with a pre-computed 1R-normalized ``r_multiple``, or None
+        when pyramiding isn't applicable (no defined stop) → caller uses the single leg.
+        """
+        symbol, gap_day = prepared["symbol"], prepared["gap_day"]
+        bars, reg = prepared["bars"], prepared["reg"]
+        pmh, pml = prepared["pmh"], prepared["pml"]
+
+        S1 = self._resolve_stop(cfg, reg, pmh, E1, stop_override)
+        if S1 is None or S1 <= E1:
+            return None  # need a defined stop above entry to keep 1R
+        rps1 = S1 - E1
+        target = self._resolve_target(cfg, pml, event, E1, S1)
+        open_price = reg[0]["open"]
+        window_end = REGULAR_OPEN + int(cfg["pyramid_window_min"])
+
+        entry_bar = reg[entry_idx]
+        g_idx = next((i for i, b in enumerate(bars) if b["date"] == entry_bar["date"]), None)
+        if g_idx is None:
+            return None
+
+        carry = cfg["eod_close"] == "carry_next_day"
+        carry_max = int(cfg["carry_max_days"])
+        n1 = 1.0 / rps1  # normalize so the initial leg risks exactly 1R
+
+        state = {"pyr": False, "E2": None, "S2": None, "n2_ratio": 0.0}
+
+        def r_at(x: float) -> float:
+            r = n1 * (E1 - x)                       # leg 1 (held from entry)
+            if state["pyr"]:
+                r += (state["n2_ratio"] * n1) * (state["E2"] - x)  # leg 2 (the add)
+            return r
+
+        def finish(x: float, reason: str) -> Dict:
+            return {
+                "symbol": symbol, "date": gap_day, "gap_pct": event["gap_pct"],
+                "entry": round(E1, 4), "exit": round(x, 4),
+                "stop": round(state["S2"], 4) if state["pyr"] else round(S1, 4),
+                "target": round(target, 4) if target is not None else None,
+                "risk_per_share": round(rps1, 4),
+                "r_multiple": round(r_at(x), 4),
+                "reason": reason,
+                "pyramided": state["pyr"],
+                "add_price": round(state["E2"], 4) if state["pyr"] else None,
+                "add_stop": round(state["S2"], 4) if state["pyr"] else None,
+                "add_size_mult": round(state["n2_ratio"], 3) if state["pyr"] else 0.0,
+            }
+
+        hod_w, went_profit, evaluated = float("-inf"), False, False
+        days_seen: List[str] = []
+        last_reg_close: Optional[float] = None
+
+        for i in range(g_idx, len(bars)):
+            b = bars[i]
+            is_reg = REGULAR_OPEN <= b["min"] < REGULAR_CLOSE
+            if b["day"] not in days_seen:
+                days_seen.append(b["day"])
+            day_count = len(days_seen) - 1
+
+            active_stop = state["S2"] if state["pyr"] else S1
+            # conservative intrabar: short stop (high) before target (low)
+            if active_stop is not None and b["high"] >= active_stop:
+                return finish(active_stop, "stop")
+            if target is not None and b["low"] <= target:
+                return finish(target, "target")
+
+            if b["low"] < E1:
+                went_profit = True
+            # Track the failed-rally high from bars AFTER the entry bar (the entry/open
+            # bar's own high would otherwise count as a false "reclaim" of the open).
+            in_window = (b["day"] == gap_day) and (REGULAR_OPEN <= b["min"] < window_end)
+            if in_window and i > g_idx:
+                hod_w = max(hod_w, b["high"])
+
+            # pyramid trigger: first bar at/after the window end (evaluated once)
+            if (not state["pyr"]) and (not evaluated) and b["day"] == gap_day and b["min"] >= window_end:
+                evaluated = True
+                if hod_w > float("-inf") and hod_w < open_price and went_profit:
+                    p_add, cand_s2 = b["open"], hod_w
+                    if cand_s2 > p_add and cand_s2 < E1:
+                        n2 = (1.0 - n1 * (cand_s2 - E1)) / (cand_s2 - p_add)
+                        if n2 > 0:
+                            state.update({"pyr": True, "E2": p_add, "S2": cand_s2,
+                                          "n2_ratio": n2 / n1})
+
+            if is_reg:
+                last_reg_close = b["close"]
+
+            if not carry and b["day"] == gap_day:
+                nxt = bars[i + 1] if i + 1 < len(bars) else None
+                if nxt is None or nxt["day"] != gap_day or nxt["min"] >= REGULAR_CLOSE:
+                    return finish(last_reg_close if last_reg_close is not None else b["close"], "eod")
+            if carry and day_count > carry_max:
+                return finish(last_reg_close if last_reg_close is not None else b["close"], "carry_end")
+
+        return finish(last_reg_close if last_reg_close is not None else bars[-1]["close"], "carry_end")
 
     def _simulate_event(self, event: Dict, cfg: Dict[str, Any]) -> Optional[Dict]:
         carry_days = int(cfg["carry_max_days"]) if cfg["eod_close"] == "carry_next_day" else 0
@@ -531,16 +646,23 @@ class GapShortBacktestEngine:
                 r_dollars = cfg["fixed_risk_usd"]
             r_dollars = max(r_dollars, 0.01)
 
-            # shares
-            if rps and rps > 0:
+            if t.get("pyramided") and t.get("r_multiple") is not None:
+                # pyramided trade: risk is held at 1R total; R-multiple is pre-computed.
+                r_mult = t["r_multiple"]
+                n1 = r_dollars / rps if (rps and rps > 0) else 0.0
+                shares = n1 * (1.0 + t.get("add_size_mult", 0.0))  # combined position
+                pnl = r_mult * r_dollars
+            elif rps and rps > 0:
                 shares = r_dollars / rps
+                pnl = shares * (entry_p - exit_p)  # short P&L
+                r_mult = pnl / r_dollars if r_dollars > 0 else 0.0
             else:
                 # no stop -> size R as a notional position (documented fallback)
                 shares = r_dollars / entry_p if entry_p > 0 else 0.0
+                pnl = shares * (entry_p - exit_p)
+                r_mult = pnl / r_dollars if r_dollars > 0 else 0.0
 
-            pnl = shares * (entry_p - exit_p)  # short P&L
             equity += pnl
-            r_mult = pnl / r_dollars if r_dollars > 0 else 0.0
 
             # weekday + SPY market context for the trade day
             try:
@@ -788,8 +910,11 @@ class GapShortBacktestEngine:
             rps = tr.get("risk_per_share")
             if not rps or rps <= 0:
                 continue  # need a defined stop to express risk in R
-            r = (tr["entry"] - tr["exit"]) / rps  # short R-multiple, exactly 1R risked
-            r = max(min(r, self._R_CAP), -1.5)    # winsorize for robustness
+            if tr.get("pyramided") and tr.get("r_multiple") is not None:
+                r = tr["r_multiple"]                 # pre-computed 1R-normalized total
+            else:
+                r = (tr["entry"] - tr["exit"]) / rps  # short R-multiple, exactly 1R risked
+            r = max(min(r, self._R_CAP), -1.5)        # winsorize for robustness
             rs.append(r)
         if not rs:
             return None
@@ -994,6 +1119,9 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
         "max_universe": int(max(f("max_universe", 6000), 1)),
         "max_events": int(max(f("max_events", 3000), 1)),
         "optimize": bool(raw.get("optimize", True)),
+        "pyramid": bool(raw.get("pyramid", False)),
+        "pyramid_rule": str(raw.get("pyramid_rule", "failed_reclaim_open")),
+        "pyramid_window_min": int(max(f("pyramid_window_min", 30), 1)),
     }
     return cfg
 

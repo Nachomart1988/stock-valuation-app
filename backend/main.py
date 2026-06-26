@@ -2368,6 +2368,9 @@ class GapShortBacktestRequest(BaseModel):
     max_universe: int = 6000
     max_events: int = 3000
     optimize: bool = True
+    pyramid: bool = False
+    pyramid_rule: str = "failed_reclaim_open"  # add when first-30m rally fails to reclaim the open
+    pyramid_window_min: int = 30
 
 
 @app.post("/backtest/gap-short/start")

@@ -33,6 +33,9 @@ interface BacktestConfig {
   max_universe: number;
   max_events: number;
   optimize: boolean;
+  pyramid: boolean;
+  pyramid_rule: 'failed_reclaim_open';
+  pyramid_window_min: number;
 }
 
 interface Trade {
@@ -44,6 +47,10 @@ interface Trade {
   spy_close_up: boolean | null;
   spy_open_pct: number | null;
   spy_close_pct: number | null;
+  pyramided?: boolean;
+  add_price?: number | null;
+  add_stop?: number | null;
+  add_size_mult?: number;
 }
 
 interface BacktestAnalysis {
@@ -128,6 +135,7 @@ const DEFAULT_CONFIG: BacktestConfig = {
   date_from: yearAgo(), date_to: today(),
   max_universe: 6000, max_events: 3000,
   optimize: true,
+  pyramid: false, pyramid_rule: 'failed_reclaim_open', pyramid_window_min: 30,
 };
 
 // ── Small UI primitives ──────────────────────────────────────────────────
@@ -451,6 +459,30 @@ export default function BacktestPage() {
             </Field>
           </div>
 
+          {/* Pyramiding */}
+          <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={cfg.pyramid} onChange={(e) => set('pyramid', e.target.checked)}
+                className="accent-amber-500 w-4 h-4" />
+              <span className="text-sm font-bold text-amber-300">Piramidar (agregar manteniendo 1R)</span>
+            </label>
+            {cfg.pyramid && (
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Field label="Regla de agregado">
+                  <Select value={cfg.pyramid_rule} onChange={(v) => set('pyramid_rule', v)} options={[
+                    { value: 'failed_reclaim_open', label: 'Falla en reclamar el open' },
+                  ]} />
+                </Field>
+                <Field label="Ventana (min)" hint="busca el rebote fallido dentro de estos minutos">
+                  <NumberInput value={cfg.pyramid_window_min} min={1} step={5} onChange={(v) => set('pyramid_window_min', v)} />
+                </Field>
+                <p className="text-[11px] text-gray-400 md:col-span-1 self-center">
+                  Cuando el precio ya está abajo de la entrada y el rebote no supera el open en los primeros {cfg.pyramid_window_min} min, se agrega y se baja el stop al high del rebote. Si te frena perdés 1R; si funciona, ganás sobre una posición mayor.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-wrap items-center gap-4 mt-6">
             <button onClick={run} disabled={running}
               className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-bold rounded-xl shadow-lg shadow-rose-500/20 disabled:opacity-50 transition-all text-sm">
@@ -693,7 +725,7 @@ export default function BacktestPage() {
                 <div className="rounded-2xl border border-rose-500/15 bg-gray-900/40 p-5">
                   <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
                     <h3 className="text-sm font-bold text-rose-300">Trades ({result.trades.length}{result.total_trades > result.trades.length ? ` de ${result.total_trades}` : ''})</h3>
-                    <span className="text-[10px] text-gray-500">SPY = apertura / cierre vs día anterior (▲ por encima · ▼ por debajo)</span>
+                    <span className="text-[10px] text-gray-500">SPY = apertura / cierre vs día anterior (▲ por encima · ▼ por debajo){cfg.pyramid ? ' · ▲+ = piramidó' : ''}</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
@@ -711,7 +743,12 @@ export default function BacktestPage() {
                           <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                             <td className="py-1.5 pr-3 text-gray-400">{t.date}</td>
                             <td className="pr-3 font-sans text-gray-400">{t.weekday ?? '–'}</td>
-                            <td className="pr-3 text-gray-100 font-sans font-semibold">{t.symbol}</td>
+                            <td className="pr-3 text-gray-100 font-sans font-semibold whitespace-nowrap">
+                              {t.symbol}
+                              {t.pyramided && (
+                                <span className="ml-1 text-amber-400" title={`Piramidó: agregó en ${t.add_price} (×${t.add_size_mult} del tamaño inicial), stop bajado a ${t.add_stop}`}>▲+</span>
+                              )}
+                            </td>
                             <td className="pr-3 text-right text-gray-300">{t.gap_pct}%</td>
                             <td className="pr-3 text-center whitespace-nowrap">
                               {t.spy_open_above == null ? (
