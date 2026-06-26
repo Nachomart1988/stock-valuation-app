@@ -118,6 +118,9 @@ class GapShortBacktestEngine:
         # in-memory per-process cache of daily history keyed by symbol
         self._daily_cache: Dict[str, List[Dict]] = {}
         self._daily_cache_lock = threading.Lock()
+        # prepared-event cache (fetched intraday bars) → makes the optimization grid cheap
+        self._event_cache: Dict[str, Dict] = {}
+        self._event_cache_lock = threading.Lock()
 
     # ── FMP fetch with light retry/backoff on rate limits ────────────────────
     def _fetch_json(self, endpoint: str, params: Optional[Dict] = None,
@@ -282,22 +285,42 @@ class GapShortBacktestEngine:
         bars.sort(key=lambda x: x["date"])
         return bars
 
-    def _simulate_event(self, event: Dict, cfg: Dict[str, Any]) -> Optional[Dict]:
+    def _prepare_event(self, event: Dict, carry_days: int) -> Optional[Dict]:
+        """Fetch + split intraday bars once for an event (cached). The result feeds
+        ``_run_rules`` for ANY entry/stop/tp config — this is what makes the
+        optimization grid cheap (fetch once, simulate many combos in memory)."""
         symbol, gap_day = event["symbol"], self._day_of(event["date"])
-        carry = cfg["eod_close"] == "carry_next_day"
-        carry_days = int(cfg["carry_max_days"]) if carry else 0
+        ckey = f"{symbol}:{gap_day}:{carry_days}"
+        with self._event_cache_lock:
+            cached = self._event_cache.get(ckey)
+        if cached is not None:
+            return cached if cached.get("ok") else None
+
         bars = self._intraday_bars(symbol, gap_day, carry_days)
-        if not bars:
-            return None
+        prepared: Dict[str, Any] = {"ok": False}
+        if bars:
+            day_bars = [b for b in bars if b["day"] == gap_day]
+            pre = [b for b in day_bars if b["min"] < REGULAR_OPEN]
+            reg = [b for b in day_bars if REGULAR_OPEN <= b["min"] < REGULAR_CLOSE]
+            if len(reg) >= 2:
+                prepared = {
+                    "ok": True,
+                    "symbol": symbol,
+                    "gap_day": gap_day,
+                    "bars": bars,
+                    "reg": reg,
+                    "pmh": max((b["high"] for b in pre), default=None),
+                    "pml": min((b["low"] for b in pre), default=None),
+                }
+        with self._event_cache_lock:
+            self._event_cache[ckey] = prepared
+        return prepared if prepared.get("ok") else None
 
-        day_bars = [b for b in bars if b["day"] == gap_day]
-        pre = [b for b in day_bars if b["min"] < REGULAR_OPEN]
-        reg = [b for b in day_bars if REGULAR_OPEN <= b["min"] < REGULAR_CLOSE]
-        if len(reg) < 2:
-            return None
-
-        pmh = max((b["high"] for b in pre), default=None)
-        pml = min((b["low"] for b in pre), default=None)
+    def _run_rules(self, prepared: Dict, event: Dict, cfg: Dict[str, Any]) -> Optional[Dict]:
+        """Apply entry/stop/take-profit/walk rules to a prepared event. Pure compute."""
+        symbol, gap_day = prepared["symbol"], prepared["gap_day"]
+        bars, reg = prepared["bars"], prepared["reg"]
+        pmh, pml = prepared["pmh"], prepared["pml"]
 
         # ── Entry ────────────────────────────────────────────────────────────
         entry = self._resolve_entry(cfg, reg, pmh)
@@ -305,22 +328,16 @@ class GapShortBacktestEngine:
             return None
         entry_idx, entry_price, stop_override = entry
 
-        # global index of the entry bar within the full (multi-day) bar stream
         entry_bar = reg[entry_idx]
         g_idx = next((i for i, b in enumerate(bars) if b["date"] == entry_bar["date"]), None)
         if g_idx is None:
             return None
 
-        # ── Stop level at entry ──────────────────────────────────────────────
         trailing = cfg["stop_loss"] == "trailing_pct"
         stop_level = self._resolve_stop(cfg, reg, pmh, entry_price, stop_override)
-
-        # ── Take-profit level ────────────────────────────────────────────────
         target = self._resolve_target(cfg, pml, event, entry_price, stop_level)
-
         risk_per_share = (stop_level - entry_price) if (stop_level is not None) else None
 
-        # ── Walk forward ─────────────────────────────────────────────────────
         exit_price, reason = self._walk(
             bars, g_idx, gap_day, entry_price, stop_level, target, cfg, trailing,
         )
@@ -336,6 +353,13 @@ class GapShortBacktestEngine:
             "risk_per_share": round(risk_per_share, 4) if risk_per_share else None,
             "reason": reason,
         }
+
+    def _simulate_event(self, event: Dict, cfg: Dict[str, Any]) -> Optional[Dict]:
+        carry_days = int(cfg["carry_max_days"]) if cfg["eod_close"] == "carry_next_day" else 0
+        prepared = self._prepare_event(event, carry_days)
+        if prepared is None:
+            return None
+        return self._run_rules(prepared, event, cfg)
 
     def _resolve_entry(self, cfg: Dict, reg: List[Dict], pmh: Optional[float]
                        ) -> Optional[Tuple[int, float, Optional[float]]]:
@@ -683,6 +707,149 @@ class GapShortBacktestEngine:
         except Exception:
             return 1.0
 
+    # ── Optimization (grid sweep over entries/stops/take-profits, 1R-normalized) ──
+    _ENTRY_LABELS = {
+        "opening_bell": "Opening bell",
+        "opening_range_break": "Opening range break",
+        "second_red_after_green": "2ª barra tras verde",
+        "failed_premarket_high_break": "Fallo de premarket high",
+    }
+    _STOP_LABELS = {
+        "premarket_high": "stop Pre-market high",
+        "one_min_high": "stop 1-min high",
+        "trailing_pct": "stop trailing",
+    }
+    _TP_LABELS = {
+        "risk_reward": "TP R:R",
+        "premarket_low": "TP Pre-market low",
+        "yesterday_close": "TP Yesterday close",
+        "yesterday_high": "TP Yesterday high",
+    }
+
+    @classmethod
+    def _config_label(cls, combo: Dict) -> str:
+        entry = cls._ENTRY_LABELS.get(combo["entry"], combo["entry"])
+        if combo["entry"] == "opening_range_break":
+            entry += f" ({combo['orb_minutes']}m)"
+        stop = cls._STOP_LABELS.get(combo["stop_loss"], combo["stop_loss"])
+        if combo["stop_loss"] == "trailing_pct":
+            stop += f" {combo['trailing_pct']}%"
+        tp = cls._TP_LABELS.get(combo["take_profit"], combo["take_profit"])
+        if combo["take_profit"] == "risk_reward":
+            tp += f" {combo['rr_ratio']:g}:1"
+        return f"{entry} · {stop} · {tp}"
+
+    @staticmethod
+    def _grid() -> List[Dict]:
+        """Candidate entry × stop × take-profit combos. Only risk-DEFINED stops are
+        included so every combo keeps exactly 1R of risk per trade."""
+        entries = [
+            {"entry": "opening_bell", "orb_minutes": 5},
+            {"entry": "opening_range_break", "orb_minutes": 1},
+            {"entry": "opening_range_break", "orb_minutes": 5},
+            {"entry": "opening_range_break", "orb_minutes": 15},
+            {"entry": "second_red_after_green", "orb_minutes": 5},
+            {"entry": "failed_premarket_high_break", "orb_minutes": 5},
+        ]
+        stops = [
+            {"stop_loss": "premarket_high", "trailing_pct": 10},
+            {"stop_loss": "one_min_high", "trailing_pct": 10},
+            {"stop_loss": "trailing_pct", "trailing_pct": 5},
+            {"stop_loss": "trailing_pct", "trailing_pct": 10},
+        ]
+        tps = [
+            {"take_profit": "risk_reward", "rr_ratio": 2},
+            {"take_profit": "risk_reward", "rr_ratio": 3},
+            {"take_profit": "premarket_low", "rr_ratio": 2},
+            {"take_profit": "yesterday_close", "rr_ratio": 2},
+            {"take_profit": "yesterday_high", "rr_ratio": 2},
+        ]
+        grid = []
+        for e in entries:
+            for s in stops:
+                for t in tps:
+                    grid.append({**e, **s, **t})
+        return grid
+
+    # Per-trade R is winsorized so a few tiny-stop / far-target outliers (e.g. a
+    # 1-min stop that lets a runner reach yesterday's close at +40R) don't dominate
+    # the ranking and recommend a fragile, low-win-rate "lottery" config.
+    _R_CAP = 10.0
+
+    def _score_config(self, prepared_events: List[Tuple[Dict, Dict]],
+                      base_cfg: Dict, overrides: Dict) -> Optional[Dict]:
+        """Run one config over all prepared events; return 1R-normalized stats."""
+        cfg = {**base_cfg, **overrides}
+        rs: List[float] = []
+        for prepared, event in prepared_events:
+            tr = self._run_rules(prepared, event, cfg)
+            if tr is None:
+                continue
+            rps = tr.get("risk_per_share")
+            if not rps or rps <= 0:
+                continue  # need a defined stop to express risk in R
+            r = (tr["entry"] - tr["exit"]) / rps  # short R-multiple, exactly 1R risked
+            r = max(min(r, self._R_CAP), -1.5)    # winsorize for robustness
+            rs.append(r)
+        if not rs:
+            return None
+        wins = sum(1 for r in rs if r > 0)
+        combo = {**cfg}
+        return {
+            "label": self._config_label(combo),
+            "entry": cfg["entry"], "orb_minutes": cfg["orb_minutes"],
+            "stop_loss": cfg["stop_loss"], "trailing_pct": cfg["trailing_pct"],
+            "take_profit": cfg["take_profit"], "rr_ratio": cfg["rr_ratio"],
+            "trades": len(rs),
+            "total_r": round(float(np.sum(rs)), 2),
+            "expectancy_r": round(float(np.mean(rs)), 3),
+            "win_rate_pct": round(100.0 * wins / len(rs), 1),
+        }
+
+    def _optimize(self, events: List[Dict], base_cfg: Dict,
+                  progress: Callable[[int, str], None]) -> Optional[Dict]:
+        # bound grid runtime: reuse cached prepared events (already fetched in main run)
+        carry_days = int(base_cfg["carry_max_days"]) if base_cfg["eod_close"] == "carry_next_day" else 0
+        sample = events[-1000:] if len(events) > 1000 else events
+        prepared_events: List[Tuple[Dict, Dict]] = []
+        for ev in sample:
+            p = self._prepare_event(ev, carry_days)
+            if p is not None:
+                prepared_events.append((p, ev))
+        if not prepared_events:
+            return None
+
+        min_trades = max(10, int(0.05 * len(prepared_events)))
+        grid = self._grid()
+        results: List[Dict] = []
+        for i, overrides in enumerate(grid):
+            sc = self._score_config(prepared_events, base_cfg, overrides)
+            if sc and sc["trades"] >= min_trades:
+                results.append(sc)
+            if i % 20 == 0:
+                progress(95 + int(4 * i / len(grid)), f"Optimizando {i}/{len(grid)}")
+        if not results:
+            return None
+
+        # baseline = the user's own chosen config
+        baseline = self._score_config(prepared_events, base_cfg, {
+            "entry": base_cfg["entry"], "orb_minutes": base_cfg["orb_minutes"],
+            "stop_loss": base_cfg["stop_loss"], "trailing_pct": base_cfg["trailing_pct"],
+            "take_profit": base_cfg["take_profit"], "rr_ratio": base_cfg["rr_ratio"],
+        })
+
+        by_profit = sorted(results, key=lambda r: r["total_r"], reverse=True)
+        by_edge = sorted(results, key=lambda r: r["expectancy_r"], reverse=True)
+        return {
+            "baseline": baseline,                    # may be None if user used stop=none
+            "best_profit": by_profit[0],             # max total R (profit, 1R risk)
+            "best_expectancy": by_edge[0],           # best edge per trade
+            "top": by_profit[:6],
+            "sample_size": len(prepared_events),
+            "sampled": len(sample) < len(events),
+            "min_trades": min_trades,
+        }
+
     # ── Orchestration ────────────────────────────────────────────────────────
     def run_backtest(self, cfg: Dict[str, Any],
                      progress: Callable[[int, str], None]) -> Dict[str, Any]:
@@ -754,9 +921,21 @@ class GapShortBacktestEngine:
                     pct = 55 + int(40 * done / max(total, 1))
                     progress(pct, f"Simulando {done}/{total} — {len(trades)} trades")
 
-        progress(97, "Calculando métricas")
+        progress(94, "Calculando métricas")
         meta = self._meta(cfg, len(universe), events_found, len(trades), no_trade, warnings)
         result = self._aggregate(trades, cfg, meta, spy_map)
+
+        # ── Optimization sweep (1R-normalized) ───────────────────────────────
+        if cfg.get("optimize", True) and trades:
+            try:
+                progress(95, "Optimizando entries/exits")
+                result["optimization"] = self._optimize(events, cfg, progress)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[GapShortBT] optimize failed: %s", e)
+                result["optimization"] = None
+        else:
+            result["optimization"] = None
+
         progress(100, "Listo")
         return result
 
@@ -814,6 +993,7 @@ def _normalize_config(raw: Dict[str, Any]) -> Dict[str, Any]:
         "date_to": str(raw.get("date_to") or default_to),
         "max_universe": int(max(f("max_universe", 6000), 1)),
         "max_events": int(max(f("max_events", 3000), 1)),
+        "optimize": bool(raw.get("optimize", True)),
     }
     return cfg
 

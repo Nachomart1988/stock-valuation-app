@@ -2367,6 +2367,7 @@ class GapShortBacktestRequest(BaseModel):
     date_to: Optional[str] = None
     max_universe: int = 6000
     max_events: int = 3000
+    optimize: bool = True
 
 
 @app.post("/backtest/gap-short/start")

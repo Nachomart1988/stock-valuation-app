@@ -32,6 +32,7 @@ interface BacktestConfig {
   date_to: string;
   max_universe: number;
   max_events: number;
+  optimize: boolean;
 }
 
 interface Trade {
@@ -80,10 +81,29 @@ interface BacktestResult {
   r_multiples: number[];
   trades: Trade[];
   analysis: BacktestAnalysis;
+  optimization: BacktestOptimization | null;
   meta: {
     universe_size: number; events_found: number; trades_taken: number;
     no_trade_count: number; date_from: string; date_to: string; warnings: string[];
   };
+}
+
+interface OptConfig {
+  label: string;
+  entry: BacktestConfig['entry']; orb_minutes: number;
+  stop_loss: BacktestConfig['stop_loss']; trailing_pct: number;
+  take_profit: BacktestConfig['take_profit']; rr_ratio: number;
+  trades: number; total_r: number; expectancy_r: number; win_rate_pct: number;
+}
+
+interface BacktestOptimization {
+  baseline: OptConfig | null;
+  best_profit: OptConfig;
+  best_expectancy: OptConfig;
+  top: OptConfig[];
+  sample_size: number;
+  sampled: boolean;
+  min_trades: number;
 }
 
 interface JobStatus {
@@ -107,6 +127,7 @@ const DEFAULT_CONFIG: BacktestConfig = {
   entry: 'opening_bell', orb_minutes: 5,
   date_from: yearAgo(), date_to: today(),
   max_universe: 6000, max_events: 3000,
+  optimize: true,
 };
 
 // ── Small UI primitives ──────────────────────────────────────────────────
@@ -179,6 +200,23 @@ function AnalysisRow({ label, winPct, lossPct }: {
   );
 }
 
+function OptStats({ c }: { c: OptConfig }) {
+  const item = (label: string, value: string, tone?: 'pos' | 'neg') => (
+    <div>
+      <p className="text-[9px] uppercase tracking-wider text-gray-500">{label}</p>
+      <p className={`text-sm font-mono font-bold ${tone === 'pos' ? 'text-emerald-400' : tone === 'neg' ? 'text-rose-400' : 'text-gray-100'}`}>{value}</p>
+    </div>
+  );
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {item('Total R', `${c.total_r >= 0 ? '+' : ''}${c.total_r}`, c.total_r >= 0 ? 'pos' : 'neg')}
+      {item('Exp/trade', `${c.expectancy_r >= 0 ? '+' : ''}${c.expectancy_r}R`, c.expectancy_r >= 0 ? 'pos' : 'neg')}
+      {item('Win rate', `${c.win_rate_pct}%`)}
+      {item('Trades', `${c.trades}`)}
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────
 export default function BacktestPage() {
   const { user, isLoaded } = useUser();
@@ -193,6 +231,19 @@ export default function BacktestPage() {
 
   const set = <K extends keyof BacktestConfig>(k: K, v: BacktestConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }));
+
+  const applyOptConfig = useCallback((o: OptConfig) => {
+    setCfg((c) => ({
+      ...c,
+      entry: o.entry,
+      orb_minutes: (o.orb_minutes as 1 | 5 | 15) ?? c.orb_minutes,
+      stop_loss: o.stop_loss,
+      trailing_pct: o.trailing_pct,
+      take_profit: o.take_profit,
+      rr_ratio: o.rr_ratio,
+    }));
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -411,6 +462,11 @@ export default function BacktestPage() {
               ) : null}
               {running ? 'Corriendo…' : 'Run Backtest'}
             </button>
+            <label className="flex items-center gap-2 text-[11px] text-gray-400 cursor-pointer select-none">
+              <input type="checkbox" checked={cfg.optimize} onChange={(e) => set('optimize', e.target.checked)}
+                className="accent-violet-500 w-3.5 h-3.5" />
+              Sugerir optimización (entries/exits, 1R)
+            </label>
             <span className="text-[11px] text-gray-500">
               Universo amplio: el escaneo día-a-día puede tardar varios minutos.
             </span>
@@ -551,6 +607,78 @@ export default function BacktestPage() {
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                )}
+
+                {/* Optimization suggestion */}
+                {result.optimization && (
+                  <div className="rounded-2xl border border-violet-500/25 bg-violet-500/[0.04] p-5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-sm font-bold text-violet-300">Optimización</h3>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30 uppercase tracking-wider">1R de riesgo</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mb-4">
+                      Maximizando profit sobre los mismos {result.optimization.sample_size} gaps, manteniendo siempre 1R de riesgo por trade (R por trade acotado a 10R para robustez).
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                      {result.optimization.baseline && (
+                        <div className="rounded-xl border border-gray-700/50 bg-gray-950/50 p-4">
+                          <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Tu configuración</p>
+                          <p className="text-sm text-gray-200 font-semibold mb-2">{result.optimization.baseline.label}</p>
+                          <OptStats c={result.optimization.baseline} />
+                        </div>
+                      )}
+                      <div className="rounded-xl border border-violet-500/40 bg-violet-500/[0.06] p-4">
+                        <p className="text-[10px] uppercase tracking-wider text-violet-400 mb-1">Óptimo (máx. profit)</p>
+                        <p className="text-sm text-violet-100 font-semibold mb-2">{result.optimization.best_profit.label}</p>
+                        <OptStats c={result.optimization.best_profit} />
+                        <button onClick={() => applyOptConfig(result.optimization!.best_profit)}
+                          className="mt-3 w-full px-3 py-2 rounded-lg bg-violet-500/20 border border-violet-500/40 text-violet-200 text-xs font-semibold hover:bg-violet-500/30 transition">
+                          Aplicar esta configuración ↑
+                        </button>
+                      </div>
+                    </div>
+
+                    {result.optimization.baseline && (
+                      <p className="text-xs text-gray-400 mb-4">
+                        El óptimo habría rendido <span className="text-violet-300 font-semibold">{result.optimization.best_profit.total_r >= 0 ? '+' : ''}{result.optimization.best_profit.total_r}R</span> (expectancy {result.optimization.best_profit.expectancy_r >= 0 ? '+' : ''}{result.optimization.best_profit.expectancy_r}R/trade) vs tu <span className="text-gray-300 font-semibold">{result.optimization.baseline.total_r >= 0 ? '+' : ''}{result.optimization.baseline.total_r}R</span> (expectancy {result.optimization.baseline.expectancy_r >= 0 ? '+' : ''}{result.optimization.baseline.expectancy_r}R).
+                      </p>
+                    )}
+
+                    {/* Top alternatives */}
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Mejores combinaciones</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-gray-400 text-left border-b border-gray-800">
+                            <th className="py-1.5 pr-2">Configuración</th>
+                            <th className="pr-2 text-right">Total R</th>
+                            <th className="pr-2 text-right">Exp/trade</th>
+                            <th className="pr-2 text-right">Win rate</th>
+                            <th className="pr-2 text-right">Trades</th>
+                            <th className="pr-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {result.optimization.top.map((o, i) => (
+                            <tr key={i} className="border-b border-gray-800/50">
+                              <td className="py-1.5 pr-2 text-gray-200">{o.label}</td>
+                              <td className={`pr-2 text-right font-mono ${o.total_r >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{o.total_r >= 0 ? '+' : ''}{o.total_r}R</td>
+                              <td className={`pr-2 text-right font-mono ${o.expectancy_r >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{o.expectancy_r >= 0 ? '+' : ''}{o.expectancy_r}</td>
+                              <td className="pr-2 text-right font-mono text-gray-300">{o.win_rate_pct}%</td>
+                              <td className="pr-2 text-right font-mono text-gray-400">{o.trades}</td>
+                              <td className="pr-2 text-right">
+                                <button onClick={() => applyOptConfig(o)} className="text-violet-300 hover:text-violet-200 text-[10px] font-semibold underline-offset-2 hover:underline">Aplicar</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-[10px] text-gray-600 mt-3">
+                      Compara solo configuraciones con stop definido (riesgo = 1R). Mín. {result.optimization.min_trades} trades por combinación{result.optimization.sampled ? ' · muestra de los 1000 gaps más recientes' : ''}.
+                    </p>
                   </div>
                 )}
 
