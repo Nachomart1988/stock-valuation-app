@@ -7,13 +7,21 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { useUser } from '@clerk/nextjs';
 import { fetchFmp } from '@/lib/fmpClient';
 import WatchlistTab from './WatchlistSubTab';
+import TradeChartModal, { type TradeChartInfo } from './TradeChartModal';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES - Estructura principal según especificaciones
 // ═══════════════════════════════════════════════════════════════
 
 // Trade Setup Types
-type TradeSetup = 'WB' | 'WBPB' | 'BORS' | 'BORL' | 'BO10PB' | 'BO21PB' | 'BO50PB' | 'Breakout' | 'Power Play' | 'Other';
+// Opciones actuales seleccionables + valores legacy (se conservan para no perder trades antiguos)
+type TradeSetup =
+  | 'Momentum Breakout' | 'Gap Up Short' | 'EP Pivot' | 'Long Term Value'
+  | 'WB' | 'WBPB' | 'BORS' | 'BORL' | 'BO10PB' | 'BO21PB' | 'BO50PB' | 'Breakout' | 'Power Play' | 'Other';
+
+// Setups que el usuario puede elegir hoy (los legacy siguen mostrándose si un trade ya los tiene)
+const ACTIVE_SETUPS: TradeSetup[] = ['Momentum Breakout', 'Gap Up Short', 'EP Pivot', 'Long Term Value'];
+const LEGACY_SETUPS: TradeSetup[] = ['WB', 'WBPB', 'BORS', 'BORL', 'BO10PB', 'BO21PB', 'BO50PB', 'Breakout', 'Power Play', 'Other'];
 type TradeSide = 'Long' | 'Short';
 type TradeState = 'Open' | 'Closed';
 type SellReason = 'Stopped' | 'EOD' | 'Sold into Strength' | 'Target Hit' | 'Time Stop' | 'Other';
@@ -200,37 +208,55 @@ export default function DiarioInversorTab() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [importToast, setImportToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
-  // ── Save to DB (debounced 1.5s) ──────────────────────────────────
+  // ── Save to DB (debounced 1.5s, con reintentos) ──────────────────
+  // Reintenta fallos transitorios (red / rate-limit) antes de mostrar error.
+  // localStorage siempre tiene una copia, así que nunca se pierde nada aunque falle.
   const saveToDB = useCallback(async (
     t: Trade[], wpl: WeeklyPL[], pta: PTAEntry[], bal: number, wl?: WatchlistItem[]
   ) => {
     if (!user) return;
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(async () => {
-      setSyncStatus('saving');
-      setSyncError(null);
+
+    const attemptSave = async (): Promise<{ ok: true } | { ok: false; msg: string }> => {
       try {
         const res = await fetch('/api/diary', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ trades: t, weekly_pl: wpl, pta, balance: bal, watchlist: wl ?? [] }),
         });
-        if (res.ok) {
-          setSyncStatus('saved');
-          setTimeout(() => setSyncStatus('idle'), 3000);
-        } else {
-          const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-          const msg = errData.error || `HTTP ${res.status}`;
-          console.error('[DiarioInversor] Sync error:', msg);
-          setSyncError(msg);
-          setSyncStatus('error');
-        }
+        if (res.ok) return { ok: true };
+        const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        return { ok: false, msg: errData.error || `HTTP ${res.status}` };
       } catch (e: any) {
-        const msg = e?.message || 'Network error';
-        console.error('[DiarioInversor] Sync exception:', msg);
-        setSyncError(msg);
-        setSyncStatus('error');
+        return { ok: false, msg: e?.message || 'Network error' };
       }
+    };
+
+    syncTimerRef.current = setTimeout(async () => {
+      setSyncStatus('saving');
+      setSyncError(null);
+
+      const MAX_ATTEMPTS = 3;
+      let lastMsg = '';
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const result = await attemptSave();
+        if (result.ok) {
+          setSyncStatus('saved');
+          setSyncError(null);
+          setTimeout(() => setSyncStatus(prev => (prev === 'saved' ? 'idle' : prev)), 3000);
+          return;
+        }
+        lastMsg = result.msg;
+        // Backoff antes de reintentar (0.8s, 1.6s)
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, attempt * 800));
+        }
+      }
+
+      // Todos los intentos fallaron — los datos siguen seguros en localStorage
+      console.error('[DiarioInversor] Sync error tras reintentos:', lastMsg);
+      setSyncError(lastMsg);
+      setSyncStatus('error');
     }, 1500);
   }, [user]);
 
@@ -337,8 +363,20 @@ export default function DiarioInversorTab() {
   }, [watchlist, dataLoaded]);
 
   // ── Save to DB whenever data changes (debounced) ─────────────────
+  // `currentPrice` se actualiza cada 10s (precio en vivo) y NO debe disparar
+  // escrituras a la DB: es efímero. Filtrándolo evitamos el spam de writes que
+  // saturaba el sync (causa del "Sync Error" intermitente).
+  const lastSavedSigRef = useRef<string>('');
   useEffect(() => {
     if (!dataLoaded || !user) return;
+    // El replacer omite los campos en vivo (precio/volumen) para que sólo cuenten los cambios reales.
+    const EPHEMERAL = new Set(['currentPrice', 'volume', 'change', 'changePct']);
+    const sig = JSON.stringify(
+      { trades, weeklyPL, ptaEntries, accountBalance, watchlist },
+      (key, value) => (EPHEMERAL.has(key) ? undefined : value)
+    );
+    if (sig === lastSavedSigRef.current) return; // sólo cambió el precio en vivo → no persistir
+    lastSavedSigRef.current = sig;
     saveToDB(trades, weeklyPL, ptaEntries, accountBalance, watchlist);
   }, [trades, weeklyPL, ptaEntries, accountBalance, watchlist, dataLoaded, user, saveToDB]);
 
@@ -446,9 +484,36 @@ export default function DiarioInversorTab() {
     const avgRR = withMetrics.length > 0 ? withMetrics.reduce((s, w) => s + w.metrics.rr, 0) / withMetrics.length : 0;
     const winLossRatio = avgLossPct !== 0 ? Math.abs(avgWinPct / avgLossPct) : 0;
 
-    // Stats por setup
-    const setupStats: Record<TradeSetup, { count: number; wins: number; avgGain: number; avgLoss: number; rr: number }> = {} as any;
-    const setups: TradeSetup[] = ['WB', 'WBPB', 'BORS', 'BORL', 'BO10PB', 'BO21PB', 'BO50PB', 'Breakout', 'Power Play', 'Other'];
+    // ── Métricas avanzadas ──
+    const grossProfit = wins.reduce((s, w) => s + w.metrics.pnl, 0);
+    const grossLoss = Math.abs(losses.reduce((s, w) => s + w.metrics.pnl, 0));
+    const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
+    // Expectancy ($ esperado por trade)
+    const expectancy = closed.length > 0 ? totalPnl / closed.length : 0;
+    const totalCommissions = closed.reduce((s, tr) => s + (tr.commission || 0), 0);
+    const breakeven = withMetrics.filter(w => w.metrics.pnl === 0).length;
+
+    // Rachas (orden cronológico por fecha de salida)
+    const chrono = [...withMetrics].sort((a, b) =>
+      (a.trade.exitDate || a.trade.date).localeCompare(b.trade.exitDate || b.trade.date));
+    let maxWinStreak = 0, maxLossStreak = 0, curWin = 0, curLoss = 0;
+    let curStreak = 0; // positivo = wins seguidos, negativo = losses seguidos (estado actual)
+    chrono.forEach(w => {
+      if (w.metrics.pnl > 0) {
+        curWin++; curLoss = 0;
+        maxWinStreak = Math.max(maxWinStreak, curWin);
+        curStreak = curStreak >= 0 ? curStreak + 1 : 1;
+      } else if (w.metrics.pnl < 0) {
+        curLoss++; curWin = 0;
+        maxLossStreak = Math.max(maxLossStreak, curLoss);
+        curStreak = curStreak <= 0 ? curStreak - 1 : -1;
+      }
+    });
+
+    // Stats por setup — incluye los setups activos + cualquier setup legacy presente en los trades
+    const setupStats: Record<string, { count: number; wins: number; avgGain: number; avgLoss: number; rr: number }> = {} as any;
+    const presentSetups = Array.from(new Set(withMetrics.map(w => w.trade.setup).filter(Boolean)));
+    const setups: TradeSetup[] = Array.from(new Set([...ACTIVE_SETUPS, ...presentSetups])) as TradeSetup[];
     setups.forEach(setup => {
       const setupTrades = withMetrics.filter(w => w.trade.setup === setup);
       const setupWins = setupTrades.filter(w => w.metrics.pnl > 0);
@@ -497,6 +562,16 @@ export default function DiarioInversorTab() {
       winLossRatio,
       setupStats,
       recentPerformance,
+      // Avanzadas
+      grossProfit,
+      grossLoss,
+      profitFactor,
+      expectancy,
+      totalCommissions,
+      breakeven,
+      maxWinStreak,
+      maxLossStreak,
+      curStreak,
     };
   }, [closedTrades, calculateTradeMetrics]);
 
@@ -678,7 +753,7 @@ export default function DiarioInversorTab() {
     sl: 0,
     initialSL: 0,
     initialRisk: 0,
-    setup: 'WB',
+    setup: 'Momentum Breakout',
     sellReason: null,
     postAnalysis: '',
     chartLink: '',
@@ -1253,36 +1328,74 @@ function SwingTab({
 }) {
   const { t } = useLanguage();
   const [closeModal, setCloseModal] = useState<{ trade: Trade; price: string } | null>(null);
+  const [chartTrade, setChartTrade] = useState<Trade | null>(null);
 
   return (
     <div className="space-y-6">
       {/* Stats Summary */}
       {stats && (
-        <div className="bg-black/60 rounded-lg p-4 border border-white/[0.06]">
-          <h3 className="text-lg font-bold text-green-400 mb-4">📈 {t('diarioTab.statistics')}</h3>
+        <div className="space-y-4">
+          {/* ── Hero row: las 4 métricas que más importan ── */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <HeroCard
+              label="P&L Total"
+              value={formatCurrency(stats.totalPnl)}
+              sub={`${stats.totalTrades} trades cerrados`}
+              positive={stats.totalPnl >= 0}
+              accent
+            />
+            <HeroCard
+              label="Win Rate"
+              value={formatPercent(stats.winRate)}
+              sub={`${stats.wins}W · ${stats.losses}L${stats.breakeven ? ` · ${stats.breakeven}BE` : ''}`}
+              positive={stats.winRate >= 0.5}
+            />
+            <HeroCard
+              label="Profit Factor"
+              value={stats.profitFactor === Infinity ? '∞' : formatNumber(stats.profitFactor)}
+              sub={stats.profitFactor >= 1.5 ? 'Sólido (≥1.5)' : stats.profitFactor >= 1 ? 'Rentable' : 'En pérdida'}
+              positive={stats.profitFactor >= 1}
+            />
+            <HeroCard
+              label="Expectancy / trade"
+              value={formatCurrency(stats.expectancy)}
+              sub="Ganancia esperada por trade"
+              positive={stats.expectancy >= 0}
+            />
+          </div>
 
-          {/* Main stats grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-            <StatCard label="Total Trades" value={stats.totalTrades} />
-            <StatCard label="Win Rate" value={formatPercent(stats.winRate)} color={stats.winRate >= 0.5 ? 'green' : 'red'} />
-            <StatCard label="P&L Total" value={formatCurrency(stats.totalPnl)} color={stats.totalPnl >= 0 ? 'green' : 'red'} />
-            <StatCard label="Avg Win %" value={formatPercent(stats.avgWinPct)} color="green" />
-            <StatCard label="Avg Loss %" value={formatPercent(stats.avgLossPct)} color="red" />
-            <StatCard label="Win/Loss Ratio" value={formatNumber(stats.winLossRatio)} />
-            <StatCard label="Avg Win $" value={formatCurrency(stats.avgWinDollar)} color="green" />
-            <StatCard label="Avg Loss $" value={formatCurrency(stats.avgLossDollar)} color="red" />
-            <StatCard label="Avg Hold Win" value={`${formatNumber(stats.avgHoldWin, 1)}d`} />
-            <StatCard label="Avg Hold Loss" value={`${formatNumber(stats.avgHoldLoss, 1)}d`} />
-            <StatCard label="Largest Win %" value={formatPercent(stats.largestWinPct)} color="green" />
-            <StatCard label="Largest Loss %" value={formatPercent(stats.largestLossPct)} color="red" />
-            <StatCard label="Largest Win $" value={formatCurrency(stats.largestWinDollar)} color="green" />
-            <StatCard label="Largest Loss $" value={formatCurrency(stats.largestLossDollar)} color="red" />
-            <StatCard label="Avg R:R" value={formatNumber(stats.avgRR)} />
+          {/* ── Detalle ── */}
+          <div className="bg-black/50 rounded-xl p-5 border border-white/[0.06]">
+            <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
+              📈 {t('diarioTab.statistics')}
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <StatCard label="Avg Win %" value={formatPercent(stats.avgWinPct)} color="green" />
+              <StatCard label="Avg Loss %" value={formatPercent(stats.avgLossPct)} color="red" />
+              <StatCard label="Avg Win $" value={formatCurrency(stats.avgWinDollar)} color="green" />
+              <StatCard label="Avg Loss $" value={formatCurrency(stats.avgLossDollar)} color="red" />
+              <StatCard label="Win/Loss Ratio" value={formatNumber(stats.winLossRatio)} />
+              <StatCard label="Avg R:R" value={formatNumber(stats.avgRR)} />
+              <StatCard label="Largest Win $" value={formatCurrency(stats.largestWinDollar)} color="green" />
+              <StatCard label="Largest Loss $" value={formatCurrency(stats.largestLossDollar)} color="red" />
+              <StatCard label="Largest Win %" value={formatPercent(stats.largestWinPct)} color="green" />
+              <StatCard label="Largest Loss %" value={formatPercent(stats.largestLossPct)} color="red" />
+              <StatCard label="Avg Hold Win" value={`${formatNumber(stats.avgHoldWin, 1)}d`} />
+              <StatCard label="Avg Hold Loss" value={`${formatNumber(stats.avgHoldLoss, 1)}d`} />
+              <StatCard label="Max Win Streak" value={`${stats.maxWinStreak} 🔥`} color="green" />
+              <StatCard label="Max Loss Streak" value={`${stats.maxLossStreak} ❄️`} color="red" />
+              <StatCard
+                label="Racha Actual"
+                value={stats.curStreak === 0 ? '—' : `${Math.abs(stats.curStreak)} ${stats.curStreak > 0 ? 'W' : 'L'}`}
+                color={stats.curStreak > 0 ? 'green' : stats.curStreak < 0 ? 'red' : 'gray'}
+              />
+              <StatCard label="Comisiones" value={formatCurrency(stats.totalCommissions)} color="yellow" />
+            </div>
           </div>
 
           {/* Recent Performance */}
-          <div className="mb-6">
-            <h4 className="text-md font-semibold text-gray-300 mb-2">📊 Recent Trades Performance</h4>
+          <div className="bg-black/50 rounded-xl p-5 border border-white/[0.06]">
+            <h4 className="text-sm font-semibold text-gray-300 mb-3">📊 Recent Trades Performance</h4>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -1314,18 +1427,27 @@ function SwingTab({
           </div>
 
           {/* Setup Performance */}
-          <div>
-            <h4 className="text-md font-semibold text-gray-300 mb-2">🎯 Performance by Setup</h4>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <div className="bg-black/50 rounded-xl p-5 border border-white/[0.06]">
+            <h4 className="text-sm font-semibold text-gray-300 mb-3">🎯 Performance by Setup</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {Object.entries(stats.setupStats).map(([setup, data]: [string, any]) => (
                 data.count > 0 && (
-                  <div key={setup} className="bg-black/50 rounded p-2 text-sm">
-                    <div className="font-semibold text-green-300">{setup}</div>
-                    <div className="text-gray-400">Trades: {data.count}</div>
-                    <div className={data.wins / data.count >= 0.5 ? 'text-green-400' : 'text-red-400'}>
-                      Win: {formatPercent(data.count > 0 ? data.wins / data.count : 0)}
+                  <div key={setup} className="bg-gradient-to-br from-white/[0.04] to-transparent rounded-lg p-3 border border-white/[0.06]">
+                    <div className="font-semibold text-emerald-300 text-sm mb-1.5 truncate" title={setup}>{setup}</div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{data.count} trades</span>
+                      <span className={`font-semibold ${data.wins / data.count >= 0.5 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {formatPercent(data.count > 0 ? data.wins / data.count : 0)} win
+                      </span>
                     </div>
-                    <div className="text-gray-400">R:R: {formatNumber(data.rr)}</div>
+                    {/* Mini barra de win rate */}
+                    <div className="mt-1.5 h-1.5 bg-black/50 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${data.wins / data.count >= 0.5 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                        style={{ width: `${(data.count > 0 ? data.wins / data.count : 0) * 100}%` }}
+                      />
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-1.5">R:R {formatNumber(data.rr)}</div>
                   </div>
                 )
               ))}
@@ -1335,92 +1457,111 @@ function SwingTab({
       )}
 
       {/* Actions */}
-      <div className="flex gap-2">
-        <button onClick={onAddTrade} className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-semibold">
+      <div className="flex items-center justify-between gap-2">
+        <button onClick={onAddTrade} className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 rounded-lg text-white font-semibold shadow-lg shadow-emerald-500/20 transition-all">
           ➕ Nuevo Trade
         </button>
+        {trades.length > 0 && (
+          <span className="text-xs text-gray-500">{trades.length} trade{trades.length !== 1 ? 's' : ''} · 📈 ver gráfico con entrada/salida</span>
+        )}
       </div>
 
       {/* Trades Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-gray-400 border-b border-white/[0.06] text-left">
-              <th className="px-2 py-2">#</th>
-              <th className="px-2 py-2">Symbol</th>
-              <th className="px-2 py-2">Name</th>
-              <th className="px-2 py-2">Side</th>
-              <th className="px-2 py-2">Date</th>
-              <th className="px-2 py-2">Entry</th>
-              <th className="px-2 py-2">Qty</th>
-              <th className="px-2 py-2">Value</th>
-              <th className="px-2 py-2">SL</th>
-              <th className="px-2 py-2">PT1</th>
-              <th className="px-2 py-2">Setup</th>
-              <th className="px-2 py-2">State</th>
-              <th className="px-2 py-2">Exit</th>
-              <th className="px-2 py-2">P&L</th>
-              <th className="px-2 py-2">P&L %</th>
-              <th className="px-2 py-2">R:R</th>
-              <th className="px-2 py-2">Days</th>
-              <th className="px-2 py-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trades.map((trade, idx) => {
-              const metrics = calculateMetrics(trade);
-              return (
-                <tr key={trade.id} className="border-b border-green-900/20 hover:bg-green-900/10">
-                  <td className="px-2 py-2 text-gray-500">{idx + 1}</td>
-                  <td className="px-2 py-2 font-semibold text-green-300">{trade.symbol}</td>
-                  <td className="px-2 py-2 text-gray-300">{trade.name}</td>
-                  <td className={`px-2 py-2 ${trade.side === 'Long' ? 'text-green-400' : 'text-red-400'}`}>
-                    {trade.side}
-                  </td>
-                  <td className="px-2 py-2 text-gray-400">{trade.date}</td>
-                  <td className="px-2 py-2">{formatCurrency(metrics.entryPrice)}</td>
-                  <td className="px-2 py-2">{trade.qty}</td>
-                  <td className="px-2 py-2">{formatCurrency(trade.value)}</td>
-                  <td className="px-2 py-2 text-red-400">{formatCurrency(trade.sl)}</td>
-                  <td className="px-2 py-2 text-green-400">{trade.pt1Price ? formatCurrency(trade.pt1Price) : '-'}</td>
-                  <td className="px-2 py-2 text-emerald-300">{trade.setup}</td>
-                  <td className={`px-2 py-2 font-semibold ${trade.state === 'Open' ? 'text-yellow-400' : 'text-gray-400'}`}>
-                    {trade.state}
-                  </td>
-                  <td className="px-2 py-2">{trade.exitPrice ? formatCurrency(trade.exitPrice) : '-'}</td>
-                  <td className={`px-2 py-2 font-semibold ${metrics.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {formatCurrency(metrics.pnl)}
-                  </td>
-                  <td className={`px-2 py-2 ${metrics.pnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {formatPercent(metrics.pnlPct)}
-                  </td>
-                  <td className="px-2 py-2">{formatNumber(metrics.rr)}</td>
-                  <td className="px-2 py-2">{metrics.timeDays ?? '-'}</td>
-                  <td className="px-2 py-2">
-                    <div className="flex gap-1">
-                      <button onClick={() => onEditTrade(trade)} className="px-2 py-1 bg-black/50 hover:bg-green-900/20 border border-green-900/20 rounded text-xs">
-                        ✏️
-                      </button>
-                      {trade.state === 'Open' && (
-                        <button
-                          onClick={() => setCloseModal({ trade, price: '' })}
-                          className="px-2 py-1 bg-yellow-600 hover:bg-yellow-500 rounded text-xs"
-                        >
-                          🔒
+      <div className="bg-black/40 rounded-xl border border-white/[0.06] overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-gray-400 bg-white/[0.02] border-b border-white/[0.08] text-left">
+                <th className="px-3 py-3 font-medium">#</th>
+                <th className="px-3 py-3 font-medium">Symbol</th>
+                <th className="px-3 py-3 font-medium">Side</th>
+                <th className="px-3 py-3 font-medium">Date</th>
+                <th className="px-3 py-3 font-medium text-right">Entry</th>
+                <th className="px-3 py-3 font-medium text-right">Qty</th>
+                <th className="px-3 py-3 font-medium text-right">Value</th>
+                <th className="px-3 py-3 font-medium text-right">SL</th>
+                <th className="px-3 py-3 font-medium text-right">PT1</th>
+                <th className="px-3 py-3 font-medium">Setup</th>
+                <th className="px-3 py-3 font-medium">State</th>
+                <th className="px-3 py-3 font-medium text-right">Exit</th>
+                <th className="px-3 py-3 font-medium text-right">P&L</th>
+                <th className="px-3 py-3 font-medium text-right">P&L %</th>
+                <th className="px-3 py-3 font-medium text-right">R:R</th>
+                <th className="px-3 py-3 font-medium text-right">Days</th>
+                <th className="px-3 py-3 font-medium text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trades.map((trade, idx) => {
+                const metrics = calculateMetrics(trade);
+                return (
+                  <tr key={trade.id} className="border-b border-white/[0.04] hover:bg-emerald-500/[0.06] transition-colors">
+                    <td className="px-3 py-2.5 text-gray-600">{idx + 1}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="font-semibold text-emerald-300">{trade.symbol}</div>
+                      {trade.name && <div className="text-[11px] text-gray-500 truncate max-w-[140px]" title={trade.name}>{trade.name}</div>}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${trade.side === 'Long' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
+                        {trade.side}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">{trade.date}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-200">{formatCurrency(metrics.entryPrice)}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-300">{trade.qty}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-300">{formatCurrency(trade.value)}</td>
+                    <td className="px-3 py-2.5 text-right text-rose-400/90">{formatCurrency(trade.sl)}</td>
+                    <td className="px-3 py-2.5 text-right text-emerald-400/90">{trade.pt1Price ? formatCurrency(trade.pt1Price) : '-'}</td>
+                    <td className="px-3 py-2.5">
+                      <span className="text-[11px] text-emerald-300/90 bg-emerald-500/[0.08] px-2 py-0.5 rounded whitespace-nowrap">{trade.setup}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${trade.state === 'Open' ? 'bg-amber-500/15 text-amber-300' : 'bg-gray-500/15 text-gray-400'}`}>
+                        {trade.state}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-gray-200">{trade.exitPrice ? formatCurrency(trade.exitPrice) : '-'}</td>
+                    <td className={`px-3 py-2.5 text-right font-semibold ${metrics.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {formatCurrency(metrics.pnl)}
+                    </td>
+                    <td className={`px-3 py-2.5 text-right ${metrics.pnlPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {formatPercent(metrics.pnlPct)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-gray-300">{formatNumber(metrics.rr)}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-400">{metrics.timeDays ?? '-'}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex gap-1 justify-center">
+                        <button onClick={() => setChartTrade(trade)} title="Ver gráfico (diario / 5M / 1M)" className="px-2 py-1 bg-emerald-600/80 hover:bg-emerald-500 rounded text-xs transition-colors">
+                          📈
                         </button>
-                      )}
-                      <button onClick={() => onDeleteTrade(trade.id)} className="px-2 py-1 bg-red-600 hover:bg-red-500 rounded text-xs">
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                        <button onClick={() => onEditTrade(trade)} title="Editar" className="px-2 py-1 bg-black/50 hover:bg-white/10 border border-white/[0.08] rounded text-xs transition-colors">
+                          ✏️
+                        </button>
+                        {trade.state === 'Open' && (
+                          <button
+                            onClick={() => setCloseModal({ trade, price: '' })}
+                            title="Cerrar trade"
+                            className="px-2 py-1 bg-amber-600 hover:bg-amber-500 rounded text-xs transition-colors"
+                          >
+                            🔒
+                          </button>
+                        )}
+                        <button onClick={() => onDeleteTrade(trade.id)} title="Eliminar" className="px-2 py-1 bg-rose-600/80 hover:bg-rose-500 rounded text-xs transition-colors">
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         {trades.length === 0 && (
-          <div className="text-center py-8 text-gray-500">No hay trades registrados</div>
+          <div className="text-center py-12 text-gray-500">
+            <div className="text-4xl mb-2">📭</div>
+            No hay trades registrados — empezá con <span className="text-emerald-400">➕ Nuevo Trade</span>
+          </div>
         )}
       </div>
 
@@ -1455,6 +1596,24 @@ function SwingTab({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Trade Chart Modal (diario / 5M / 1M con entrada y salida) */}
+      {chartTrade && (
+        <TradeChartModal
+          trade={{
+            symbol: chartTrade.symbol,
+            name: chartTrade.name,
+            side: chartTrade.side,
+            entryPrice: calculateMetrics(chartTrade).entryPrice,
+            entryDate: chartTrade.date,
+            exitPrice: chartTrade.exitPrice,
+            exitDate: chartTrade.exitDate,
+            sl: chartTrade.sl,
+            pt1: chartTrade.pt1Price,
+          } as TradeChartInfo}
+          onClose={() => setChartTrade(null)}
+        />
       )}
     </div>
   );
@@ -1549,12 +1708,40 @@ function PLTab({
   const totalYTD = weeklyData.reduce((sum, w) => sum + w.pnl, 0);
   const ytdPct = accountBalance > 0 ? totalYTD / accountBalance : 0;
 
+  // ── Métricas P&L avanzadas ──
+  const plExtras = useMemo(() => {
+    if (weeklyData.length === 0) {
+      return { maxDrawdown: 0, bestWeek: 0, worstWeek: 0, winWeeksPct: 0, avgWeekly: 0, greenWeeks: 0, redWeeks: 0 };
+    }
+    // Max drawdown $ sobre la curva acumulada
+    let peak = -Infinity, maxDrawdown = 0;
+    weeklyData.forEach(w => {
+      peak = Math.max(peak, w.cumulative);
+      maxDrawdown = Math.max(maxDrawdown, peak - w.cumulative);
+    });
+    const bestWeek = Math.max(...weeklyData.map(w => w.pnl));
+    const worstWeek = Math.min(...weeklyData.map(w => w.pnl));
+    const greenWeeks = weeklyData.filter(w => w.pnl > 0).length;
+    const redWeeks = weeklyData.filter(w => w.pnl < 0).length;
+    const winWeeksPct = greenWeeks / weeklyData.length;
+    const avgWeekly = totalYTD / weeklyData.length;
+    return { maxDrawdown, bestWeek, worstWeek, winWeeksPct, avgWeekly, greenWeeks, redWeeks };
+  }, [weeklyData, totalYTD]);
+
   return (
     <div className="space-y-6">
+      {/* Hero summary */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <HeroCard label="YTD P&L" value={formatCurrency(totalYTD)} sub={`${formatPercent(ytdPct)} sobre balance`} positive={totalYTD >= 0} accent />
+        <HeroCard label="Max Drawdown" value={formatCurrency(-plExtras.maxDrawdown)} sub="Peor caída acumulada" positive={false} />
+        <HeroCard label="Win Weeks" value={formatPercent(plExtras.winWeeksPct)} sub={`${plExtras.greenWeeks}🟢 · ${plExtras.redWeeks}🔴`} positive={plExtras.winWeeksPct >= 0.5} />
+        <HeroCard label="Avg / Semana" value={formatCurrency(plExtras.avgWeekly)} sub={`${weeklyData.length} semanas operadas`} positive={plExtras.avgWeekly >= 0} />
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="YTD P&L" value={formatCurrency(totalYTD)} color={totalYTD >= 0 ? 'green' : 'red'} />
-        <StatCard label="YTD %" value={formatPercent(ytdPct)} color={ytdPct >= 0 ? 'green' : 'red'} />
+        <StatCard label="Best Week" value={formatCurrency(plExtras.bestWeek)} color="green" />
+        <StatCard label="Worst Week" value={formatCurrency(plExtras.worstWeek)} color="red" />
         <StatCard label="Weeks Traded" value={weeklyData.length} />
         <StatCard label="Trades Closed" value={trades.length} />
       </div>
@@ -2103,17 +2290,48 @@ function StatCard({
 }) {
   const colorClasses = {
     gray: 'text-gray-100',
-    green: 'text-green-400',
-    red: 'text-red-400',
-    blue: 'text-green-400',
-    yellow: 'text-yellow-400',
+    green: 'text-emerald-400',
+    red: 'text-rose-400',
+    blue: 'text-sky-400',
+    yellow: 'text-amber-400',
     purple: 'text-emerald-400',
   };
 
   return (
-    <div className="bg-black/50 rounded-lg p-3">
-      <div className="text-xs text-gray-400 mb-1">{label}</div>
+    <div className="bg-white/[0.03] rounded-lg p-3 border border-white/[0.05] hover:border-white/[0.1] transition-colors">
+      <div className="text-[11px] text-gray-500 mb-1">{label}</div>
       <div className={`text-lg font-bold ${colorClasses[color]}`}>{value}</div>
+    </div>
+  );
+}
+
+// Tarjeta destacada para las métricas clave (hero row)
+function HeroCard({
+  label,
+  value,
+  sub,
+  positive,
+  accent = false,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  positive?: boolean;
+  accent?: boolean;
+}) {
+  const valueColor = positive === undefined
+    ? 'text-gray-100'
+    : positive ? 'text-emerald-400' : 'text-rose-400';
+  const ring = accent
+    ? 'from-emerald-500/15 to-transparent border-emerald-500/30'
+    : positive === false
+      ? 'from-rose-500/10 to-transparent border-rose-500/20'
+      : 'from-white/[0.05] to-transparent border-white/[0.08]';
+  return (
+    <div className={`bg-gradient-to-br ${ring} rounded-xl p-4 border shadow-lg`}>
+      <div className="text-xs text-gray-400 mb-1.5 uppercase tracking-wide">{label}</div>
+      <div className={`text-2xl font-black ${valueColor}`}>{value}</div>
+      {sub && <div className="text-[11px] text-gray-500 mt-1">{sub}</div>}
     </div>
   );
 }
@@ -2422,16 +2640,13 @@ function TradeFormModal({
               onChange={(e) => updateField('setup', e.target.value as TradeSetup)}
               className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
             >
-              <option value="WB">WB</option>
-              <option value="WBPB">WBPB</option>
-              <option value="BORS">BORS</option>
-              <option value="BORL">BORL</option>
-              <option value="BO10PB">BO10PB</option>
-              <option value="BO21PB">BO21PB</option>
-              <option value="BO50PB">BO50PB</option>
-              <option value="Breakout">Breakout</option>
-              <option value="Power Play">Power Play</option>
-              <option value="Other">Other</option>
+              {ACTIVE_SETUPS.map(s => <option key={s} value={s}>{s}</option>)}
+              {/* Si el trade tiene un setup legacy, lo mostramos para no perderlo al editar */}
+              {!ACTIVE_SETUPS.includes(form.setup) && (
+                <optgroup label="Legacy">
+                  {LEGACY_SETUPS.map(s => <option key={s} value={s}>{s}</option>)}
+                </optgroup>
+              )}
             </select>
           </div>
 
