@@ -161,6 +161,13 @@ except ImportError:
     get_compression_scanner = None
 
 try:
+    from scanner_cache_engine import get_scanner_cache_engine
+    SCANNER_CACHE_AVAILABLE = True
+except ImportError:
+    SCANNER_CACHE_AVAILABLE = False
+    get_scanner_cache_engine = None
+
+try:
     from mcp_integration_engine import get_mcp_engine
     MCP_AVAILABLE = True
 except ImportError:
@@ -2376,6 +2383,101 @@ async def compression_detect(req: CompressionRequest):
         print(f"[Compression] Error: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Scanner Cache (daily-precomputed universe) ──────────────────
+
+@app.get("/scanner-cache/status")
+async def scanner_cache_status():
+    if not SCANNER_CACHE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Scanner cache not available")
+    return get_scanner_cache_engine().status()
+
+
+@app.post("/scanner-cache/refresh")
+async def scanner_cache_refresh():
+    """Manually trigger a cache rebuild in the background."""
+    if not SCANNER_CACHE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Scanner cache not available")
+    engine = get_scanner_cache_engine()
+    if engine.is_building():
+        return {"ok": False, "status": "already_building"}
+    asyncio.create_task(asyncio.to_thread(engine.refresh))
+    return {"ok": True, "status": "started"}
+
+
+@app.get("/scanner-cache/consecutive-days")
+async def scanner_cache_consecutive(
+    direction: str = 'red',
+    min_streak: int = 5,
+    price_min: Optional[float] = None,
+    price_max: Optional[float] = None,
+    mcap_min: Optional[float] = None,
+    mcap_max: Optional[float] = None,
+    sector: Optional[str] = None,
+    limit: int = 300,
+):
+    if not SCANNER_CACHE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Scanner cache not available")
+    engine = get_scanner_cache_engine()
+    st = engine.status()
+    if not st['ready']:
+        return {"results": [], "status": st, "building": st['building']}
+    direction = 'green' if direction == 'green' else 'red'
+    results = await asyncio.to_thread(
+        engine.query_consecutive, direction, min_streak,
+        price_min, price_max, mcap_min, mcap_max, sector, limit,
+    )
+    return numpy_safe_response({"results": results, "status": st})
+
+
+@app.get("/scanner-cache/compression")
+async def scanner_cache_compression(
+    min_compression_days: int = 5,
+    min_rise_from_low_pct: float = 0.0,
+    price_min: Optional[float] = None,
+    price_max: Optional[float] = None,
+    mcap_min: Optional[float] = None,
+    mcap_max: Optional[float] = None,
+    sector: Optional[str] = None,
+    limit: int = 300,
+):
+    if not SCANNER_CACHE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Scanner cache not available")
+    engine = get_scanner_cache_engine()
+    st = engine.status()
+    if not st['ready']:
+        return {"results": [], "status": st, "building": st['building']}
+    results = await asyncio.to_thread(
+        engine.query_compression, min_compression_days, min_rise_from_low_pct,
+        price_min, price_max, mcap_min, mcap_max, sector, limit,
+    )
+    return numpy_safe_response({"results": results, "status": st})
+
+
+@app.on_event("startup")
+async def _start_scanner_cache():
+    """Refresh the scanner cache on boot if stale, then rebuild once a day."""
+    if not SCANNER_CACHE_AVAILABLE:
+        return
+
+    async def loop():
+        engine = get_scanner_cache_engine()
+        # Build immediately if the cache is empty/stale (don't block startup).
+        try:
+            if engine.status().get('stale', True):
+                await asyncio.to_thread(engine.refresh)
+        except Exception as e:
+            print(f"[ScannerCache] initial refresh error: {e}")
+        # Then rebuild every 24h.
+        while True:
+            await asyncio.sleep(24 * 3600)
+            try:
+                await asyncio.to_thread(engine.refresh)
+            except Exception as e:
+                print(f"[ScannerCache] scheduled refresh error: {e}")
+
+    asyncio.create_task(loop())
 
 
 # ── MCP Integration ─────────────────────────────────────────────

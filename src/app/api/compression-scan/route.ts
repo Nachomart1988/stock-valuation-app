@@ -1,111 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export const maxDuration = 300;
-
-const FMP_BASE = 'https://financialmodelingprep.com';
-const SCAN_CONCURRENCY = 5;
-const MAX_STOCKS = 1000;
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
-  const apiKey = process.env.FMP_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: 'FMP_API_KEY not configured' }, { status: 500 });
-  }
-
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
   const sp = new URL(req.url).searchParams;
-  const priceMin = sp.get('priceMin') || '1';
-  const priceMax = sp.get('priceMax') || '500';
-  const marketCapMin = sp.get('marketCapMin') || '';
-  const marketCapMax = sp.get('marketCapMax') || '';
-  const country = sp.get('country') || '';
-  const sector = sp.get('sector') || '';
-  const minCompressionDays = Math.max(2, parseInt(sp.get('minCompressionDays') || '5', 10) || 5);
-  const minRiseFromLowPct = Math.max(0, parseFloat(sp.get('minRiseFromLowPct') || '0') || 0);
 
-  // 1. Fetch the universe from the FMP screener
-  const screenerParams = new URLSearchParams({
-    priceMoreThan: priceMin,
-    priceLowerThan: priceMax,
-    ...(marketCapMin ? { marketCapMoreThan: marketCapMin } : {}),
-    ...(marketCapMax ? { marketCapLowerThan: marketCapMax } : {}),
-    ...(country ? { country } : {}),
-    ...(sector ? { sector } : {}),
-    isActivelyTrading: 'true',
-    isEtf: 'false',
-    isFund: 'false',
-    limit: String(MAX_STOCKS),
-    apikey: apiKey,
+  const params = new URLSearchParams({
+    min_compression_days: String(Math.max(2, parseInt(sp.get('minCompressionDays') || '5', 10) || 5)),
+    min_rise_from_low_pct: String(Math.max(0, parseFloat(sp.get('minRiseFromLowPct') || '0') || 0)),
   });
+  if (sp.get('priceMin')) params.set('price_min', sp.get('priceMin')!);
+  if (sp.get('priceMax')) params.set('price_max', sp.get('priceMax')!);
+  if (sp.get('marketCapMin')) params.set('mcap_min', sp.get('marketCapMin')!);
+  if (sp.get('marketCapMax')) params.set('mcap_max', sp.get('marketCapMax')!);
+  if (sp.get('sector')) params.set('sector', sp.get('sector')!);
 
-  let stocks: any[] = [];
+  let data: any;
   try {
-    const res = await fetch(`${FMP_BASE}/stable/company-screener?${screenerParams}`, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) stocks = data;
+    const res = await fetch(`${backendUrl}/scanner-cache/compression?${params.toString()}`, { cache: 'no-store' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return NextResponse.json({ error: body.detail || `Backend error (HTTP ${res.status})` }, { status: res.status });
     }
-  } catch { /* skip */ }
+    data = await res.json();
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Backend unreachable' }, { status: 502 });
+  }
 
-  const seen = new Set<string>();
-  const valid = stocks.filter((s: any) => {
-    if (!s.symbol || !s.price || s.price <= 0 || s.isEtf || s.isFund) return false;
-    if (seen.has(s.symbol)) return false;
-    seen.add(s.symbol);
-    return true;
+  const status = data.status || {};
+  if (!status.ready) {
+    return NextResponse.json({
+      results: [], total: 0, scanned: 0,
+      building: !!status.building,
+      message: status.building ? 'cache_building' : 'cache_empty',
+    });
+  }
+
+  const results = (data.results || []).map((r: any) => ({
+    symbol: r.symbol,
+    companyName: r.company_name || r.symbol,
+    sector: r.sector || '',
+    exchange: r.exchange || '',
+    marketCap: r.market_cap || 0,
+    currentPrice: r.price,
+    compressionDays: r.compression_days,
+    latestRangePct: r.latest_range_pct,
+    widestRangePct: r.widest_range_pct,
+    low52w: r.low_52w,
+    riseFromLowPct: r.rise_from_low_pct,
+    atr: r.atr,
+    atrPct: r.atr_pct,
+    zscore: r.zscore,
+    meanPrice: r.mean_price,
+  }));
+
+  return NextResponse.json({
+    results,
+    total: status.row_count || results.length,
+    scanned: status.row_count || results.length,
+    lastRefresh: status.last_refresh || null,
+    ageHours: status.age_hours ?? null,
   });
-
-  if (valid.length === 0) {
-    return NextResponse.json({ results: [], total: 0, scanned: 0 });
-  }
-
-  // 2. Scan each stock via backend
-  const results: any[] = [];
-  let scanned = 0;
-
-  const scanOne = async (stock: any) => {
-    try {
-      const res = await fetch(`${backendUrl}/compression/detect`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticker: stock.symbol,
-          min_compression_days: minCompressionDays,
-          min_rise_from_low_pct: minRiseFromLowPct,
-        }),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      scanned++;
-      if (data.detected) {
-        results.push({
-          symbol: stock.symbol,
-          companyName: stock.companyName || stock.symbol,
-          sector: stock.sector || '',
-          exchange: stock.exchangeShortName || stock.exchange || '',
-          marketCap: stock.marketCap || 0,
-          currentPrice: data.current_price ?? stock.price,
-          compressionDays: data.compression_days,
-          latestRangePct: data.latest_range_pct,
-          widestRangePct: data.widest_range_pct,
-          low52w: data.low_52w,
-          riseFromLowPct: data.rise_from_low_pct,
-          atr: data.atr,
-          atrPct: data.atr_pct,
-          zscore: data.zscore,
-          meanPrice: data.mean_price,
-        });
-      }
-    } catch { /* skip failed tickers */ }
-  };
-
-  for (let i = 0; i < valid.length; i += SCAN_CONCURRENCY) {
-    const wave = valid.slice(i, i + SCAN_CONCURRENCY);
-    await Promise.all(wave.map(scanOne));
-  }
-
-  // Most compressed (longest streak, then tightest latest range) first
-  results.sort((a, b) => b.compressionDays - a.compressionDays || a.latestRangePct - b.latestRangePct);
-
-  return NextResponse.json({ results, total: valid.length, scanned });
 }

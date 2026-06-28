@@ -821,8 +821,12 @@ function ScreenerPageInner() {
       const data = await res.json();
       setCdStats({ total: data.total || 0, scanned: data.scanned || 0 });
 
-      if (!data.results?.length) {
-        setCdError(`No stocks with ${cdFilters.minStreak}+ consecutive ${cdFilters.direction} days in the current filter range.`);
+      if (data.message === 'cache_building') {
+        setCdError('El cache diario se está construyendo, probá de nuevo en unos minutos.');
+      } else if (data.message === 'cache_empty') {
+        setCdError('El cache aún no está listo. Esperá unos minutos a que termine la primera carga.');
+      } else if (!data.results?.length) {
+        setCdError(`Ninguna acción con ${cdFilters.minStreak}+ días ${cdFilters.direction === 'red' ? 'rojos' : 'verdes'} consecutivos en este filtro.`);
       } else {
         setCdResults(data.results);
       }
@@ -861,8 +865,12 @@ function ScreenerPageInner() {
       const data = await res.json();
       setCmpStats({ total: data.total || 0, scanned: data.scanned || 0 });
 
-      if (!data.results?.length) {
-        setCmpError(`No stocks with ${cmpFilters.minCompressionDays}+ compression days in the current filter range.`);
+      if (data.message === 'cache_building') {
+        setCmpError('El cache diario se está construyendo, probá de nuevo en unos minutos.');
+      } else if (data.message === 'cache_empty') {
+        setCmpError('El cache aún no está listo. Esperá unos minutos a que termine la primera carga.');
+      } else if (!data.results?.length) {
+        setCmpError(`Ninguna acción con ${cmpFilters.minCompressionDays}+ días de compresión en este filtro.`);
       } else {
         setCmpResults(data.results);
       }
@@ -2606,7 +2614,7 @@ function ScreenerPageInner() {
 
               {cdStats.total > 0 && !cdLoading && (
                 <div className="mt-3 text-[11px] text-sky-400/50">
-                  Scanned {cdStats.scanned} / {cdStats.total} stocks · {cdResults.length} con racha detectada
+                  {cdResults.length} resultado{cdResults.length !== 1 ? 's' : ''} · universo de {cdStats.total.toLocaleString()} acciones en cache
                 </div>
               )}
 
@@ -2821,7 +2829,7 @@ function ScreenerPageInner() {
 
               {cmpStats.total > 0 && !cmpLoading && (
                 <div className="mt-3 text-[11px] text-violet-400/50">
-                  Scanned {cmpStats.scanned} / {cmpStats.total} stocks · {cmpResults.length} en compresión
+                  {cmpResults.length} resultado{cmpResults.length !== 1 ? 's' : ''} · universo de {cmpStats.total.toLocaleString()} acciones en cache
                 </div>
               )}
 
