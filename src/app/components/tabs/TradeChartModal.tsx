@@ -16,10 +16,13 @@ import {
   TimeScale,
 } from 'chart.js';
 import annotationPlugin from 'chartjs-plugin-annotation';
-import zoomPlugin from 'chartjs-plugin-zoom';
 import 'chartjs-adapter-luxon';
 import { CandlestickController, CandlestickElement, OhlcElement } from 'chartjs-chart-financial';
 import { Chart } from 'react-chartjs-2';
+
+// NOTA: chartjs-plugin-zoom accede a `window` al importarse, así que NO se puede
+// importar en el top-level (rompe el prerender SSR de Next). Se carga e instala
+// dinámicamente en el cliente dentro del componente (ver useEffect más abajo).
 
 ChartJS.register(
   CategoryScale,
@@ -33,7 +36,6 @@ ChartJS.register(
   Legend,
   Filler,
   annotationPlugin,
-  zoomPlugin,
   CandlestickController,
   CandlestickElement,
   OhlcElement
@@ -67,6 +69,16 @@ export default function TradeChartModal({ trade, onClose }: Props) {
   const [bars, setBars] = useState<Bar[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [zoomReady, setZoomReady] = useState(false);
+
+  // chartjs-plugin-zoom usa `window`, así que se importa/registra solo en el cliente.
+  useEffect(() => {
+    let mounted = true;
+    import('chartjs-plugin-zoom')
+      .then((m) => { ChartJS.register(m.default); if (mounted) setZoomReady(true); })
+      .catch((e) => console.error('[TradeChart] no se pudo cargar el plugin de zoom:', e));
+    return () => { mounted = false; };
+  }, []);
 
   const fetchChart = useCallback(async (iv: Interval) => {
     setLoading(true);
@@ -362,7 +374,7 @@ export default function TradeChartModal({ trade, onClose }: Props) {
             </div>
           ) : config ? (
             <div className="h-[72vh]">
-              <Chart ref={chartRef} type="candlestick" data={config.data as any} options={config.options as any} />
+              <Chart key={zoomReady ? 'zoom' : 'nozoom'} ref={chartRef} type="candlestick" data={config.data as any} options={config.options as any} />
             </div>
           ) : (
             <div className="h-[72vh] flex items-center justify-center">
