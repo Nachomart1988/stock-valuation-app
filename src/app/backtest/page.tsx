@@ -46,6 +46,8 @@ const PYRAMID_RULE_DESC: Record<BacktestConfig['pyramid_rule'], string> = {
 
 interface Trade {
   symbol: string; date: string; gap_pct: number;
+  side?: 'long' | 'short';
+  dist_52w_pct?: number | null;
   entry: number; exit: number; stop: number | null; target: number | null;
   shares: number; pnl: number; r_multiple: number; equity: number; reason: string;
   weekday: string | null;
@@ -148,6 +150,111 @@ const DEFAULT_CONFIG: BacktestConfig = {
   max_universe: 6000, max_events: 3000,
   optimize: true,
   pyramid: false, pyramid_rule: 'failed_reclaim_open', pyramid_window_min: 30,
+};
+
+// ── Strategy One (daily setup, long/short) ────────────────────────────────
+type Strategy = 'gap_short' | 'strategy_one';
+
+interface StrategyOneConfig {
+  side: 'long' | 'short';
+  price_min: number;
+  price_max: number;
+  market_cap_bucket: 'nano' | 'micro' | 'small' | 'mid' | 'large' | 'mega' | 'all';
+  prev_day_color: 'any' | 'green' | 'red';
+  consec_green: number;
+  consec_red: number;
+  use_dist_52w: boolean;
+  dist_52w_min_pct: number;
+  atr_min: number;
+  atr_period: number;
+  entry: 'opening_bell' | 'opening_range_break' | 'premarket_break';
+  orb_minutes: 1 | 5 | 15;
+  stop_loss: 'premarket_high' | 'premarket_low' | 'one_min_high' | 'one_min_low'
+    | 'five_min_high' | 'five_min_low' | 'trailing_pct' | 'none';
+  trailing_pct: number;
+  take_profit: 'risk_reward' | 'premarket_high' | 'premarket_low'
+    | 'yesterday_high' | 'yesterday_low' | 'yesterday_close';
+  rr_ratio: number;
+  eod_close: 'close_eod' | 'carry_next_day';
+  carry_max_days: number;
+  portfolio_usd: number;
+  position_sizing: 'fixed_risk_usd' | 'pct_portfolio_risk';
+  fixed_risk_usd: number;
+  pct_portfolio_risk: number;
+  date_from: string;
+  date_to: string;
+  max_universe: number;
+  max_events: number;
+  optimize: boolean;
+  pyramid: boolean;
+  pyramid_rule: 'failed_reclaim_open' | 'ema9_reject' | 'new_extreme_after_window';
+  pyramid_window_min: number;
+}
+
+const DEFAULT_S1_CONFIG: StrategyOneConfig = {
+  side: 'long', price_min: 1, price_max: 50, market_cap_bucket: 'small',
+  prev_day_color: 'any', consec_green: 0, consec_red: 0,
+  use_dist_52w: false, dist_52w_min_pct: 50,
+  atr_min: 0, atr_period: 14,
+  entry: 'opening_bell', orb_minutes: 5,
+  stop_loss: 'premarket_low', trailing_pct: 10,
+  take_profit: 'risk_reward', rr_ratio: 2,
+  eod_close: 'close_eod', carry_max_days: 5,
+  portfolio_usd: 10000, position_sizing: 'fixed_risk_usd',
+  fixed_risk_usd: 100, pct_portfolio_risk: 1,
+  date_from: yearAgo(), date_to: today(),
+  max_universe: 3000, max_events: 3000,
+  optimize: true,
+  pyramid: false, pyramid_rule: 'failed_reclaim_open', pyramid_window_min: 30,
+};
+
+// Side-aware option lists for Estrategia 1's entry / stop / take-profit selects.
+const S1_STOP_OPTIONS: Record<'long' | 'short', { value: StrategyOneConfig['stop_loss']; label: string }[]> = {
+  long: [
+    { value: 'premarket_low', label: 'Pre-market low' },
+    { value: 'one_min_low', label: '1-minute low' },
+    { value: 'five_min_low', label: '5-minute low' },
+    { value: 'trailing_pct', label: 'Trailing stop %' },
+    { value: 'none', label: 'Sin stop loss' },
+  ],
+  short: [
+    { value: 'premarket_high', label: 'Pre-market high' },
+    { value: 'one_min_high', label: '1-minute high' },
+    { value: 'five_min_high', label: '5-minute high' },
+    { value: 'trailing_pct', label: 'Trailing stop %' },
+    { value: 'none', label: 'Sin stop loss' },
+  ],
+};
+const S1_TP_OPTIONS: Record<'long' | 'short', { value: StrategyOneConfig['take_profit']; label: string }[]> = {
+  long: [
+    { value: 'risk_reward', label: 'Risk:Reward fijo' },
+    { value: 'premarket_high', label: 'Pre-market high' },
+    { value: 'yesterday_high', label: 'Yesterday high' },
+    { value: 'yesterday_close', label: 'Yesterday close' },
+  ],
+  short: [
+    { value: 'risk_reward', label: 'Risk:Reward fijo' },
+    { value: 'premarket_low', label: 'Pre-market low' },
+    { value: 'yesterday_low', label: 'Yesterday low' },
+    { value: 'yesterday_close', label: 'Yesterday close' },
+  ],
+};
+const S1_ENTRY_OPTIONS: Record<'long' | 'short', { value: StrategyOneConfig['entry']; label: string }[]> = {
+  long: [
+    { value: 'opening_bell', label: 'Long en opening bell' },
+    { value: 'opening_range_break', label: 'Opening range break (up)' },
+    { value: 'premarket_break', label: 'Break de premarket high' },
+  ],
+  short: [
+    { value: 'opening_bell', label: 'Short en opening bell' },
+    { value: 'opening_range_break', label: 'Opening range break (down)' },
+    { value: 'premarket_break', label: 'Break de premarket low' },
+  ],
+};
+const S1_PYRAMID_RULE_DESC: Record<StrategyOneConfig['pyramid_rule'], string> = {
+  failed_reclaim_open: 'Cuando el precio ya está a favor del trade y el contra-movimiento de los primeros {N} min no recupera el open, se agrega y se mueve el stop al extremo de ese rebote.',
+  ema9_reject: 'Cuando el precio testea la EMA9 (1-min) y la rechaza a favor del trade, se agrega en la vela siguiente con stop en ese extremo.',
+  new_extreme_after_window: 'Pasados los primeros {N} min, cada nuevo extremo del día a favor del trade tras un retroceso agrega y mueve el stop al extremo del retroceso.',
 };
 
 // ── Small UI primitives ──────────────────────────────────────────────────
@@ -284,7 +391,9 @@ export default function BacktestPage() {
   const { user, isLoaded } = useUser();
   const isGodMode = (user?.publicMetadata?.plan as string) === 'godmode';
 
+  const [strategy, setStrategy] = useState<Strategy>('gap_short');
   const [cfg, setCfg] = useState<BacktestConfig>(DEFAULT_CONFIG);
+  const [s1cfg, setS1Cfg] = useState<StrategyOneConfig>(DEFAULT_S1_CONFIG);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState('');
@@ -323,19 +432,28 @@ export default function BacktestPage() {
 
   const set = <K extends keyof BacktestConfig>(k: K, v: BacktestConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }));
+  const setS1 = <K extends keyof StrategyOneConfig>(k: K, v: StrategyOneConfig[K]) =>
+    setS1Cfg((c) => ({ ...c, [k]: v }));
+
+  const activePortfolio = strategy === 'strategy_one' ? s1cfg.portfolio_usd : cfg.portfolio_usd;
+  const activePyramid = strategy === 'strategy_one' ? s1cfg.pyramid : cfg.pyramid;
 
   const applyOptConfig = useCallback((o: OptConfig) => {
-    setCfg((c) => ({
-      ...c,
-      entry: o.entry,
-      orb_minutes: (o.orb_minutes as 1 | 5 | 15) ?? c.orb_minutes,
-      stop_loss: o.stop_loss,
+    const patch = {
+      entry: o.entry as any,
+      orb_minutes: (o.orb_minutes as 1 | 5 | 15),
+      stop_loss: o.stop_loss as any,
       trailing_pct: o.trailing_pct,
-      take_profit: o.take_profit,
+      take_profit: o.take_profit as any,
       rr_ratio: o.rr_ratio,
-    }));
+    };
+    if (strategy === 'strategy_one') {
+      setS1Cfg((c) => ({ ...c, ...patch, orb_minutes: patch.orb_minutes ?? c.orb_minutes }));
+    } else {
+      setCfg((c) => ({ ...c, ...patch, orb_minutes: patch.orb_minutes ?? c.orb_minutes }));
+    }
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  }, [strategy]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -346,11 +464,13 @@ export default function BacktestPage() {
   const run = useCallback(async () => {
     setError(''); setResult(null); setJob(null); setRunning(true);
     stopPolling();
+    const base = strategy === 'strategy_one' ? 'strategy-one' : 'gap-short';
+    const body = strategy === 'strategy_one' ? s1cfg : cfg;
     try {
-      const { job_id } = await postBackend<{ job_id: string }>('/backtest/gap-short/start', cfg);
+      const { job_id } = await postBackend<{ job_id: string }>(`/backtest/${base}/start`, body);
       pollRef.current = setInterval(async () => {
         try {
-          const snap = await getBackend<JobStatus>(`/backtest/gap-short/status/${job_id}`);
+          const snap = await getBackend<JobStatus>(`/backtest/${base}/status/${job_id}`);
           setJob(snap);
           if (snap.status === 'done') {
             stopPolling(); setRunning(false);
@@ -368,7 +488,7 @@ export default function BacktestPage() {
       setRunning(false);
       setError(e?.message || 'No se pudo iniciar el backtest');
     }
-  }, [cfg, stopPolling]);
+  }, [cfg, s1cfg, strategy, stopPolling]);
 
   // R-multiple histogram bins
   const histdata = useMemo(() => {
@@ -425,16 +545,29 @@ export default function BacktestPage() {
           <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 uppercase tracking-wider">God Mode</span>
         </div>
         <p className="text-gray-400 text-sm mb-6 max-w-3xl">
-          Short selling de small caps en <span className="text-rose-300">gap ups</span> intradiarios, simulado con barras de 1 minuto (incluyendo premarket).
+          {strategy === 'gap_short' ? (
+            <>Short selling de small caps en <span className="text-rose-300">gap ups</span> intradiarios, simulado con barras de 1 minuto (incluyendo premarket).</>
+          ) : (
+            <>Setups diarios <span className="text-rose-300">long o short</span>: el filtro se evalúa al cierre del día previo y la operación se ejecuta al día siguiente, simulada con barras de 1 minuto (incluyendo premarket).</>
+          )}
         </p>
 
-        {/* Strategy selector (only one for now) */}
+        {/* Strategy selector */}
         <div className="mb-6 inline-flex rounded-xl border border-rose-500/20 bg-gray-900/50 p-1">
-          <span className="px-4 py-2 rounded-lg bg-rose-500/20 text-rose-200 text-sm font-semibold">Short Gap-Ups · Small Caps</span>
+          {([
+            { id: 'gap_short' as Strategy, label: 'Short Gap-Ups · Small Caps' },
+            { id: 'strategy_one' as Strategy, label: 'Estrategia 1' },
+          ]).map((s) => (
+            <button key={s.id} onClick={() => { setStrategy(s.id); setResult(null); setJob(null); setError(''); }}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${strategy === s.id ? 'bg-rose-500/20 text-rose-200' : 'text-gray-400 hover:text-gray-200'}`}>
+              {s.label}
+            </button>
+          ))}
         </div>
 
         {/* Filters */}
         <div className="rounded-2xl border border-rose-500/15 bg-gray-900/40 p-5 sm:p-6 mb-6">
+          {strategy === 'gap_short' && (<>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             <Field label="Gap % mínimo" hint="≥ 1% — filtra gaps de ese % o superior">
               <NumberInput value={cfg.gap_pct_min} min={1} step={1} onChange={(v) => set('gap_pct_min', v)} />
@@ -568,6 +701,171 @@ export default function BacktestPage() {
               </div>
             )}
           </div>
+          </>)}
+
+          {strategy === 'strategy_one' && (<>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <Field label="Side">
+              <Select value={s1cfg.side} onChange={(v) => {
+                // reset entry/stop/tp to valid defaults for the new side
+                setS1Cfg((c) => ({
+                  ...c, side: v,
+                  stop_loss: v === 'long' ? 'premarket_low' : 'premarket_high',
+                  take_profit: 'risk_reward',
+                  entry: c.entry,
+                }));
+              }} options={[
+                { value: 'long', label: 'Long' },
+                { value: 'short', label: 'Short' },
+              ]} />
+            </Field>
+            <Field label="Market cap">
+              <Select value={s1cfg.market_cap_bucket} onChange={(v) => setS1('market_cap_bucket', v)} options={[
+                { value: 'nano', label: 'Nano (< $50M)' },
+                { value: 'micro', label: 'Micro ($50M–$300M)' },
+                { value: 'small', label: 'Small ($300M–$2B)' },
+                { value: 'mid', label: 'Mid ($2B–$10B)' },
+                { value: 'large', label: 'Large ($10B–$200B)' },
+                { value: 'mega', label: 'Mega (> $200B)' },
+                { value: 'all', label: 'Todos' },
+              ]} />
+            </Field>
+            <Field label="Precio mín ($)">
+              <NumberInput value={s1cfg.price_min} min={0} step={0.5} onChange={(v) => setS1('price_min', v)} />
+            </Field>
+            <Field label="Precio máx ($)">
+              <NumberInput value={s1cfg.price_max} min={0.01} step={0.5} onChange={(v) => setS1('price_max', v)} />
+            </Field>
+
+            {/* Setup filters */}
+            <Field label="Color día previo">
+              <Select value={s1cfg.prev_day_color} onChange={(v) => setS1('prev_day_color', v)} options={[
+                { value: 'any', label: 'Cualquiera' },
+                { value: 'green', label: 'Verde' },
+                { value: 'red', label: 'Rojo' },
+              ]} />
+            </Field>
+            <Field label="Días verdes consec." hint="0 = sin filtro">
+              <NumberInput value={s1cfg.consec_green} min={0} step={1} onChange={(v) => setS1('consec_green', v)} />
+            </Field>
+            <Field label="Días rojos consec." hint="0 = sin filtro">
+              <NumberInput value={s1cfg.consec_red} min={0} step={1} onChange={(v) => setS1('consec_red', v)} />
+            </Field>
+            <Field label="ATR mín ($)" hint="0 = todo el universo">
+              <NumberInput value={s1cfg.atr_min} min={0} step={0.1} onChange={(v) => setS1('atr_min', v)} />
+            </Field>
+
+            {/* 52-week distance with enable toggle */}
+            <div className="flex flex-col gap-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={s1cfg.use_dist_52w} onChange={(e) => setS1('use_dist_52w', e.target.checked)}
+                  className="accent-rose-500 w-3.5 h-3.5" />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-rose-300/80">Distancia desde mín 52sem (%)</span>
+              </label>
+              <NumberInput value={s1cfg.dist_52w_min_pct} min={0} step={5} onChange={(v) => setS1('dist_52w_min_pct', v)} />
+              <span className="text-[10px] text-gray-500">{s1cfg.use_dist_52w ? `≥ ${s1cfg.dist_52w_min_pct}% por encima del mínimo de 52 semanas` : 'desactivado'}</span>
+            </div>
+
+            {/* Entry */}
+            <Field label="Entrada">
+              <Select value={s1cfg.entry} onChange={(v) => setS1('entry', v)} options={S1_ENTRY_OPTIONS[s1cfg.side]} />
+            </Field>
+            {s1cfg.entry === 'opening_range_break' && (
+              <Field label="ORB timeframe">
+                <Select value={String(s1cfg.orb_minutes) as any} onChange={(v) => setS1('orb_minutes', Number(v) as 1 | 5 | 15)} options={[
+                  { value: '1', label: '1 minuto' }, { value: '5', label: '5 minutos' }, { value: '15', label: '15 minutos' },
+                ]} />
+              </Field>
+            )}
+
+            {/* Stop loss */}
+            <Field label="Stop loss">
+              <Select value={s1cfg.stop_loss} onChange={(v) => setS1('stop_loss', v)} options={S1_STOP_OPTIONS[s1cfg.side]} />
+            </Field>
+            {s1cfg.stop_loss === 'trailing_pct' && (
+              <Field label="Trailing %">
+                <NumberInput value={s1cfg.trailing_pct} min={0.1} step={0.5} onChange={(v) => setS1('trailing_pct', v)} />
+              </Field>
+            )}
+
+            {/* Take profit */}
+            <Field label="Take profit">
+              <Select value={s1cfg.take_profit} onChange={(v) => setS1('take_profit', v)} options={S1_TP_OPTIONS[s1cfg.side]} />
+            </Field>
+            {s1cfg.take_profit === 'risk_reward' && (
+              <Field label="Ratio (R:1)" hint={s1cfg.stop_loss === 'none' ? '⚠ requiere stop loss' : 'ej. 2 = 2× el riesgo'}>
+                <NumberInput value={s1cfg.rr_ratio} min={0.1} step={0.5} onChange={(v) => setS1('rr_ratio', v)} />
+              </Field>
+            )}
+
+            {/* Close */}
+            <Field label="Cierre">
+              <Select value={s1cfg.eod_close} onChange={(v) => setS1('eod_close', v)} options={[
+                { value: 'close_eod', label: 'Cerrar al fin del día' },
+                { value: 'carry_next_day', label: 'Continuar al día siguiente' },
+              ]} />
+            </Field>
+            {s1cfg.eod_close === 'carry_next_day' && (
+              <Field label="Máx. días carry">
+                <NumberInput value={s1cfg.carry_max_days} min={1} step={1} onChange={(v) => setS1('carry_max_days', v)} />
+              </Field>
+            )}
+
+            {/* Position */}
+            <Field label="Cartera (USD)">
+              <NumberInput value={s1cfg.portfolio_usd} min={1} step={500} onChange={(v) => setS1('portfolio_usd', v)} />
+            </Field>
+            <Field label="Sizing">
+              <Select value={s1cfg.position_sizing} onChange={(v) => setS1('position_sizing', v)} options={[
+                { value: 'fixed_risk_usd', label: 'Riesgo fijo (USD)' },
+                { value: 'pct_portfolio_risk', label: '% de la cartera' },
+              ]} />
+            </Field>
+            {s1cfg.position_sizing === 'fixed_risk_usd' ? (
+              <Field label="Riesgo por trade ($)">
+                <NumberInput value={s1cfg.fixed_risk_usd} min={0.01} step={10} onChange={(v) => setS1('fixed_risk_usd', v)} />
+              </Field>
+            ) : (
+              <Field label="Riesgo por trade (%)">
+                <NumberInput value={s1cfg.pct_portfolio_risk} min={0.01} step={0.25} onChange={(v) => setS1('pct_portfolio_risk', v)} />
+              </Field>
+            )}
+
+            {/* Dates */}
+            <Field label="Desde">
+              <input type="date" className={inputCls} value={s1cfg.date_from} onChange={(e) => setS1('date_from', e.target.value)} />
+            </Field>
+            <Field label="Hasta">
+              <input type="date" className={inputCls} value={s1cfg.date_to} onChange={(e) => setS1('date_to', e.target.value)} />
+            </Field>
+          </div>
+
+          {/* Pyramiding */}
+          <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={s1cfg.pyramid} onChange={(e) => setS1('pyramid', e.target.checked)}
+                className="accent-amber-500 w-4 h-4" />
+              <span className="text-sm font-bold text-amber-300">Piramidar (agregar manteniendo 1R)</span>
+            </label>
+            {s1cfg.pyramid && (
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Field label="Regla de agregado">
+                  <Select value={s1cfg.pyramid_rule} onChange={(v) => setS1('pyramid_rule', v)} options={[
+                    { value: 'failed_reclaim_open', label: 'Falla en reclamar el open' },
+                    { value: 'ema9_reject', label: 'Rechazo en EMA9 (1-min)' },
+                    { value: 'new_extreme_after_window', label: 'Nuevo extremo del día (trend)' },
+                  ]} />
+                </Field>
+                <Field label="Ventana (min)" hint="referencia temporal de la regla">
+                  <NumberInput value={s1cfg.pyramid_window_min} min={1} step={5} onChange={(v) => setS1('pyramid_window_min', v)} />
+                </Field>
+                <p className="text-[11px] text-gray-400 md:col-span-1 self-center">
+                  {S1_PYRAMID_RULE_DESC[s1cfg.pyramid_rule].replace('{N}', String(s1cfg.pyramid_window_min))} Si te frena perdés 1R; si funciona, ganás sobre una posición mayor.
+                </p>
+              </div>
+            )}
+          </div>
+          </>)}
 
           <div className="flex flex-wrap items-center gap-4 mt-6">
             <button onClick={run} disabled={running}
@@ -581,7 +879,9 @@ export default function BacktestPage() {
               {running ? 'Corriendo…' : 'Run Backtest'}
             </button>
             <label className="flex items-center gap-2 text-[11px] text-gray-400 cursor-pointer select-none">
-              <input type="checkbox" checked={cfg.optimize} onChange={(e) => set('optimize', e.target.checked)}
+              <input type="checkbox"
+                checked={strategy === 'strategy_one' ? s1cfg.optimize : cfg.optimize}
+                onChange={(e) => (strategy === 'strategy_one' ? setS1('optimize', e.target.checked) : set('optimize', e.target.checked))}
                 className="accent-violet-500 w-3.5 h-3.5" />
               Sugerir optimización (entries/exits, 1R)
             </label>
@@ -640,7 +940,7 @@ export default function BacktestPage() {
                       <YAxis stroke="#6b7280" fontSize={11} domain={['auto', 'auto']} tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`} />
                       <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #f43f5e33', borderRadius: 8 }}
                         formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Equity']} labelFormatter={(l) => `Trade #${l}`} />
-                      <ReferenceLine y={cfg.portfolio_usd} stroke="#6b7280" strokeDasharray="4 4" />
+                      <ReferenceLine y={activePortfolio} stroke="#6b7280" strokeDasharray="4 4" />
                       <Line type="monotone" dataKey="equity" stroke="#f43f5e" strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -811,13 +1111,13 @@ export default function BacktestPage() {
                 <div className="rounded-2xl border border-rose-500/15 bg-gray-900/40 p-5">
                   <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
                     <h3 className="text-sm font-bold text-rose-300">Trades ({result.trades.length}{result.total_trades > result.trades.length ? ` de ${result.total_trades}` : ''})</h3>
-                    <span className="text-[10px] text-gray-500">SPY = apertura / cierre vs día anterior (▲ por encima · ▼ por debajo){cfg.pyramid ? ' · ▲+ = piramidó' : ''}</span>
+                    <span className="text-[10px] text-gray-500">SPY = apertura / cierre vs día anterior (▲ por encima · ▼ por debajo){activePyramid ? ' · ▲+ = piramidó' : ''}</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="text-gray-400 text-left border-b border-gray-800">
-                          <th className="py-2 pr-3">Fecha</th><th className="pr-3">Día</th><th className="pr-3">Símbolo</th><th className="pr-3 text-right">Gap%</th>
+                          <th className="py-2 pr-3">Fecha</th><th className="pr-3">Día</th><th className="pr-3">Símbolo</th><th className="pr-3 text-right">{strategy === 'strategy_one' ? 'Δ52w%' : 'Gap%'}</th>
                           <th className="pr-3 text-center">SPY</th>
                           <th className="pr-3 text-right">Entry</th><th className="pr-3 text-right">Exit</th><th className="pr-3 text-right">Stop</th>
                           <th className="pr-3 text-right">Target</th><th className="pr-3 text-right">Shares</th>
@@ -835,7 +1135,7 @@ export default function BacktestPage() {
                                 <span className="ml-1 text-amber-400" title={`Piramidó: agregó en ${t.add_price} (×${t.add_size_mult} del tamaño inicial), stop bajado a ${t.add_stop}`}>▲+</span>
                               )}
                             </td>
-                            <td className="pr-3 text-right text-gray-300">{t.gap_pct}%</td>
+                            <td className="pr-3 text-right text-gray-300">{strategy === 'strategy_one' ? (t.dist_52w_pct != null ? `${t.dist_52w_pct}%` : '–') : `${t.gap_pct}%`}</td>
                             <td className="pr-3 text-center whitespace-nowrap">
                               {t.spy_open_above == null ? (
                                 <span className="text-gray-600">–</span>
@@ -893,7 +1193,7 @@ export default function BacktestPage() {
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
               <div>
-                <h3 className="text-xl font-black text-cyan-300">{chartTrade.symbol} <span className="text-gray-500 text-sm font-normal">· {chartTrade.date} ({chartTrade.weekday}) · gap {chartTrade.gap_pct}%</span></h3>
+                <h3 className="text-xl font-black text-cyan-300">{chartTrade.symbol} <span className="text-gray-500 text-sm font-normal">· {chartTrade.date} ({chartTrade.weekday}){chartTrade.side ? ` · ${chartTrade.side.toUpperCase()}` : ''} · {strategy === 'strategy_one' ? (chartTrade.dist_52w_pct != null ? `Δ52w ${chartTrade.dist_52w_pct}%` : '') : `gap ${chartTrade.gap_pct}%`}</span></h3>
                 <p className="text-[12px] text-gray-400 mt-0.5">
                   Entry {chartTrade.entry} ({chartTrade.entry_time}) · Exit {chartTrade.exit} ({chartTrade.exit_time}, {chartTrade.reason}) ·{' '}
                   <span className={chartTrade.r_multiple >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{chartTrade.r_multiple >= 0 ? '+' : ''}{chartTrade.r_multiple}R</span>
@@ -940,16 +1240,18 @@ export default function BacktestPage() {
                       {chartTrade.target != null && <ReferenceLine y={chartTrade.target} stroke="#10b981" strokeDasharray="4 4" label={{ value: `target ${chartTrade.target}`, fill: '#10b981', fontSize: 9, position: 'right' }} />}
                       {chartTrade.pyramided && chartTrade.add_stop != null && <ReferenceLine y={chartTrade.add_stop} stroke="#f59e0b" strokeDasharray="2 3" label={{ value: `add-stop ${chartTrade.add_stop}`, fill: '#f59e0b', fontSize: 9, position: 'right' }} />}
                       <Bar dataKey="range" shape={<Candle />} isAnimationActive={false} />
-                      {/* entry / add / exit → flechas */}
-                      <ReferenceDot x={snapT(chartTrade.entry_min)} y={chartTrade.entry} r={0} ifOverflow="extendDomain" shape={<ArrowMarker color="#f43f5e" dir="down" label="SHORT" />} />
+                      {/* entry / add / exit → flechas (side-aware) */}
+                      <ReferenceDot x={snapT(chartTrade.entry_min)} y={chartTrade.entry} r={0} ifOverflow="extendDomain"
+                        shape={<ArrowMarker color={chartTrade.side === 'long' ? '#10b981' : '#f43f5e'} dir={chartTrade.side === 'long' ? 'up' : 'down'} label={chartTrade.side === 'long' ? 'BUY' : 'SHORT'} />} />
                       {chartTrade.pyramided && chartTrade.add_price != null &&
-                        <ReferenceDot x={snapT(chartTrade.add_min)} y={chartTrade.add_price} r={0} ifOverflow="extendDomain" shape={<ArrowMarker color="#f59e0b" dir="down" label="ADD" />} />}
-                      <ReferenceDot x={snapT(chartTrade.exit_min)} y={chartTrade.exit} r={0} ifOverflow="extendDomain" shape={<ArrowMarker color="#06b6d4" dir="up" label="COVER" />} />
+                        <ReferenceDot x={snapT(chartTrade.add_min)} y={chartTrade.add_price} r={0} ifOverflow="extendDomain" shape={<ArrowMarker color="#f59e0b" dir={chartTrade.side === 'long' ? 'up' : 'down'} label="ADD" />} />}
+                      <ReferenceDot x={snapT(chartTrade.exit_min)} y={chartTrade.exit} r={0} ifOverflow="extendDomain"
+                        shape={<ArrowMarker color="#06b6d4" dir={chartTrade.side === 'long' ? 'down' : 'up'} label={chartTrade.side === 'long' ? 'SELL' : 'COVER'} />} />
                     </ComposedChart>
                   </ResponsiveContainer>
                   <p className="text-[10px] text-gray-600 mt-2">
                     Velas de {chartInterval === '1min' ? '1' : '5'} min · sesión completa (premarket + regular + after-hours, hora ET).
-                    Flechas: ▼ SHORT (entrada){chartTrade.pyramided ? ' · ▼ ADD (piramidó)' : ''} · ▲ COVER (salida). Líneas: stop/target{chartTrade.pyramided ? '/add-stop' : ''}.
+                    Flechas: {chartTrade.side === 'long' ? '▲ BUY (entrada)' : '▼ SHORT (entrada)'}{chartTrade.pyramided ? ' · ADD (piramidó)' : ''} · {chartTrade.side === 'long' ? '▼ SELL' : '▲ COVER'} (salida). Líneas: stop/target{chartTrade.pyramided ? '/add-stop' : ''}.
                   </p>
                 </>
               );

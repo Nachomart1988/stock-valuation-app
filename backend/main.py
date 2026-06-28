@@ -169,6 +169,14 @@ except ImportError:
     gap_short_get_job = None
 
 try:
+    from strategy_one_backtest_engine import start_job as strategy_one_start_job, get_job as strategy_one_get_job
+    STRATEGY_ONE_BACKTEST_AVAILABLE = True
+except ImportError:
+    STRATEGY_ONE_BACKTEST_AVAILABLE = False
+    strategy_one_start_job = None
+    strategy_one_get_job = None
+
+try:
     from advanced_monte_carlo_dcf_engine import get_advanced_monte_carlo_engine
     ADV_MC_AVAILABLE = True
 except ImportError:
@@ -2417,6 +2425,67 @@ async def gap_short_backtest_chart(req: GapShortChartRequest):
     except Exception as e:
         print(f"[GapShortBT] chart error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Strategy One Backtest (GOD MODE) — daily setup, long/short, async job ──────
+
+class StrategyOneBacktestRequest(BaseModel):
+    side: str = "long"                    # long | short
+    price_min: float = 0.0
+    price_max: float = 50.0
+    market_cap_bucket: str = "small"      # nano | micro | small | mid | large | mega | all
+    prev_day_color: str = "any"           # any | green | red
+    consec_green: int = 0                 # consecutive green days ending at D (0 = off)
+    consec_red: int = 0                   # consecutive red days ending at D (0 = off)
+    use_dist_52w: bool = False            # enable the 52-week-low distance filter
+    dist_52w_min_pct: float = 50.0        # min % above the 52-week low (close[D])
+    atr_min: float = 0.0                  # min ATR ($) as of D (0 = off)
+    atr_period: int = 14
+    entry: str = "opening_bell"           # opening_bell | opening_range_break | premarket_break
+    orb_minutes: int = 5                  # 1 | 5 | 15
+    stop_loss: str = "premarket_low"      # premarket_high/low | one_min_high/low | five_min_high/low | trailing_pct | none
+    trailing_pct: float = 10.0
+    take_profit: str = "risk_reward"      # risk_reward | premarket_high/low | yesterday_high/low/close
+    rr_ratio: float = 2.0
+    eod_close: str = "close_eod"          # close_eod | carry_next_day
+    carry_max_days: int = 5
+    portfolio_usd: float = 10000.0
+    position_sizing: str = "fixed_risk_usd"  # fixed_risk_usd | pct_portfolio_risk
+    fixed_risk_usd: float = 100.0
+    pct_portfolio_risk: float = 1.0
+    date_from: Optional[str] = None       # YYYY-MM-DD
+    date_to: Optional[str] = None
+    max_universe: int = 3000
+    max_events: int = 3000
+    optimize: bool = True
+    pyramid: bool = False
+    pyramid_rule: str = "failed_reclaim_open"  # failed_reclaim_open | ema9_reject | new_extreme_after_window
+    pyramid_window_min: int = 30
+
+
+@app.post("/backtest/strategy-one/start")
+async def strategy_one_backtest_start(req: StrategyOneBacktestRequest):
+    """Start an async Strategy-One (daily setup, long/short) backtest. Returns a job_id."""
+    if not STRATEGY_ONE_BACKTEST_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Strategy one backtest engine not available")
+    try:
+        job_id = strategy_one_start_job(req.dict())
+        return {"job_id": job_id}
+    except Exception as e:
+        print(f"[StrategyOneBT] start error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/backtest/strategy-one/status/{job_id}")
+async def strategy_one_backtest_status(job_id: str):
+    """Poll a Strategy-One backtest job; includes the full result when status=done."""
+    if not STRATEGY_ONE_BACKTEST_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Strategy one backtest engine not available")
+    snap = strategy_one_get_job(job_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="job_id no encontrado o expirado")
+    return numpy_safe_response(snap)
 
 
 # ── Advanced Monte Carlo DCF + Regime Switching + LSM ─────────
