@@ -4,6 +4,7 @@ export const maxDuration = 300;
 
 const FMP_BASE = 'https://financialmodelingprep.com';
 const SCAN_CONCURRENCY = 5;
+const MAX_STOCKS = 1000;
 
 export async function GET(req: NextRequest) {
   const apiKey = process.env.FMP_API_KEY;
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     isActivelyTrading: 'true',
     isEtf: 'false',
     isFund: 'false',
-    limit: '10000',
+    limit: String(MAX_STOCKS),
     apikey: apiKey,
   });
 
