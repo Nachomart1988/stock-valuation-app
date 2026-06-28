@@ -175,6 +175,39 @@ interface CheapBreakoutScanResult {
   narrative: string;
 }
 
+interface ConsecutiveDaysScanResult {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  exchange: string;
+  marketCap: number;
+  currentPrice: number;
+  direction: 'red' | 'green';
+  streak: number;
+  atr: number;
+  atrPct: number;
+  zscore: number;
+  meanPrice: number;
+}
+
+interface CompressionScanResult {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  exchange: string;
+  marketCap: number;
+  currentPrice: number;
+  compressionDays: number;
+  latestRangePct: number;
+  widestRangePct: number;
+  low52w: number;
+  riseFromLowPct: number;
+  atr: number;
+  atrPct: number;
+  zscore: number;
+  meanPrice: number;
+}
+
 interface ScreenerFilters {
   marketCapMoreThan: string;
   marketCapLowerThan: string;
@@ -196,6 +229,18 @@ const SECTORS = ['', 'Technology', 'Healthcare', 'Financial Services', 'Consumer
 const EXCHANGES = ['', 'NYSE', 'NASDAQ', 'AMEX', 'TSX', 'LSE'];
 const COUNTRIES = ['', 'US', 'CA', 'GB', 'DE', 'JP', 'CN', 'AU', 'FR', 'IN'];
 const SCREENER_LIMIT = 20;
+
+// Market-cap buckets (same style as the backtest universe filter).
+// Each maps to a { min, max } pair for the FMP screener (empty = unbounded).
+const MKTCAP_BUCKETS: { value: string; label: string; min: string; max: string }[] = [
+  { value: 'any', label: 'Cualquiera', min: '', max: '' },
+  { value: 'nano', label: 'Nano (< $50M)', min: '', max: '50000000' },
+  { value: 'micro', label: 'Micro ($50M–$300M)', min: '50000000', max: '300000000' },
+  { value: 'small', label: 'Small ($300M–$2B)', min: '300000000', max: '2000000000' },
+  { value: 'mid', label: 'Mid ($2B–$10B)', min: '2000000000', max: '10000000000' },
+  { value: 'large', label: 'Large (> $10B)', min: '10000000000', max: '' },
+];
+const mktCapBucket = (value: string) => MKTCAP_BUCKETS.find(b => b.value === value) || MKTCAP_BUCKETS[0];
 
 const fmtMktCap = (v: number) => {
   if (!v) return '–';
@@ -353,6 +398,36 @@ function ScreenerPageInner() {
     minPrevDayVolume: '0',        // Liquidity floor on yesterday's volume (0 = disabled)
   });
 
+  // Consecutive Red/Green Days Scanner state (GODMODE only)
+  const [cdResults, setCdResults] = useState<ConsecutiveDaysScanResult[]>([]);
+  const [cdLoading, setCdLoading] = useState(false);
+  const [cdError, setCdError] = useState<string | null>(null);
+  const [cdStats, setCdStats] = useState({ total: 0, scanned: 0 });
+  const [cdFilters, setCdFilters] = useState({
+    priceMin: '1',
+    priceMax: '500',
+    marketCapBucket: 'any',
+    country: 'US',
+    sector: '',
+    direction: 'red' as 'red' | 'green',
+    minStreak: '5',
+  });
+
+  // Compression Scanner state (GODMODE only)
+  const [cmpResults, setCmpResults] = useState<CompressionScanResult[]>([]);
+  const [cmpLoading, setCmpLoading] = useState(false);
+  const [cmpError, setCmpError] = useState<string | null>(null);
+  const [cmpStats, setCmpStats] = useState({ total: 0, scanned: 0 });
+  const [cmpFilters, setCmpFilters] = useState({
+    priceMin: '1',
+    priceMax: '500',
+    marketCapBucket: 'any',
+    country: 'US',
+    sector: '',
+    minRiseFromLowPct: '0',
+    minCompressionDays: '5',
+  });
+
   // ── Persist scanner results in sessionStorage so they survive tab switches ──
   const SS_KEY = 'screener_cache';
 
@@ -370,6 +445,8 @@ function ScreenerPageInner() {
       if (c.sqzResults?.length) { setSqzResults(c.sqzResults); setSqzStats(c.sqzStats ?? { total: 0, scanned: 0 }); }
       if (c.frlResults?.length) { setFrlResults(c.frlResults); setFrlStats(c.frlStats ?? { total: 0, scanned: 0 }); }
       if (c.cbkResults?.length) { setCbkResults(c.cbkResults); setCbkStats(c.cbkStats ?? { total: 0, scanned: 0 }); }
+      if (c.cdResults?.length) { setCdResults(c.cdResults); setCdStats(c.cdStats ?? { total: 0, scanned: 0 }); }
+      if (c.cmpResults?.length) { setCmpResults(c.cmpResults); setCmpStats(c.cmpStats ?? { total: 0, scanned: 0 }); }
     } catch { /* ignore corrupt cache */ }
   }, []);
 
@@ -384,9 +461,11 @@ function ScreenerPageInner() {
       sqzResults, sqzStats,
       frlResults, frlStats,
       cbkResults, cbkStats,
+      cdResults, cdStats,
+      cmpResults, cmpStats,
     };
     try { sessionStorage.setItem(SS_KEY, JSON.stringify(cache)); } catch { /* quota */ }
-  }, [screenerResults, screenerPage, topOpportunities, prismoStats, htfResults, htfStats, epResults, epStats, mabResults, mabStats, sqzResults, sqzStats, frlResults, frlStats, cbkResults, cbkStats]);
+  }, [screenerResults, screenerPage, topOpportunities, prismoStats, htfResults, htfStats, epResults, epStats, mabResults, mabStats, sqzResults, sqzStats, frlResults, frlStats, cbkResults, cbkStats, cdResults, cdStats, cmpResults, cmpStats]);
 
   // ── Watchlist add helper (accumulates array in localStorage) ──
   const [watchlistAdded, setWatchlistAdded] = useState<Set<string>>(new Set());
@@ -713,6 +792,86 @@ function ScreenerPageInner() {
       setCbkLoading(false);
     }
   }, [cbkFilters]);
+
+  const scanConsecutiveDays = useCallback(async () => {
+    setCdLoading(true);
+    setCdError(null);
+    setCdResults([]);
+    setCdStats({ total: 0, scanned: 0 });
+
+    try {
+      const bucket = mktCapBucket(cdFilters.marketCapBucket);
+      const params = new URLSearchParams({
+        priceMin: cdFilters.priceMin || '1',
+        priceMax: cdFilters.priceMax || '500',
+        ...(bucket.min ? { marketCapMin: bucket.min } : {}),
+        ...(bucket.max ? { marketCapMax: bucket.max } : {}),
+        ...(cdFilters.country ? { country: cdFilters.country } : {}),
+        ...(cdFilters.sector ? { sector: cdFilters.sector } : {}),
+        direction: cdFilters.direction,
+        minStreak: cdFilters.minStreak || '5',
+      });
+
+      const res = await fetch(`/api/consecutive-days-scan?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      setCdStats({ total: data.total || 0, scanned: data.scanned || 0 });
+
+      if (!data.results?.length) {
+        setCdError(`No stocks with ${cdFilters.minStreak}+ consecutive ${cdFilters.direction} days in the current filter range.`);
+      } else {
+        setCdResults(data.results);
+      }
+    } catch (err: any) {
+      setCdError(err.message || 'Error scanning consecutive days');
+    } finally {
+      setCdLoading(false);
+    }
+  }, [cdFilters]);
+
+  const scanCompression = useCallback(async () => {
+    setCmpLoading(true);
+    setCmpError(null);
+    setCmpResults([]);
+    setCmpStats({ total: 0, scanned: 0 });
+
+    try {
+      const bucket = mktCapBucket(cmpFilters.marketCapBucket);
+      const params = new URLSearchParams({
+        priceMin: cmpFilters.priceMin || '1',
+        priceMax: cmpFilters.priceMax || '500',
+        ...(bucket.min ? { marketCapMin: bucket.min } : {}),
+        ...(bucket.max ? { marketCapMax: bucket.max } : {}),
+        ...(cmpFilters.country ? { country: cmpFilters.country } : {}),
+        ...(cmpFilters.sector ? { sector: cmpFilters.sector } : {}),
+        minRiseFromLowPct: cmpFilters.minRiseFromLowPct || '0',
+        minCompressionDays: cmpFilters.minCompressionDays || '5',
+      });
+
+      const res = await fetch(`/api/compression-scan?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      setCmpStats({ total: data.total || 0, scanned: data.scanned || 0 });
+
+      if (!data.results?.length) {
+        setCmpError(`No stocks with ${cmpFilters.minCompressionDays}+ compression days in the current filter range.`);
+      } else {
+        setCmpResults(data.results);
+      }
+    } catch (err: any) {
+      setCmpError(err.message || 'Error scanning for compression');
+    } finally {
+      setCmpLoading(false);
+    }
+  }, [cmpFilters]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -2296,6 +2455,443 @@ function ScreenerPageInner() {
                               <button
                                 onClick={(e) => {
                                   addToWatchlist(r.symbol, r.companyName, 'Former Runner');
+                                  const btn = e.currentTarget;
+                                  btn.classList.remove('animate-foam-press');
+                                  void btn.offsetWidth;
+                                  btn.classList.add('animate-foam-press');
+                                  if (foamTimers.current[r.symbol]) clearTimeout(foamTimers.current[r.symbol]);
+                                  foamTimers.current[r.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
+                                }}
+                                className={`px-2 py-1 border rounded-lg text-[10px] font-semibold transition-colors ${
+                                  watchlistAdded.has(r.symbol)
+                                    ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                                }`}
+                                title="Add to Watchlist"
+                              >
+                                {watchlistAdded.has(r.symbol) ? 'Added' : '+ Watch'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ Consecutive Red/Green Days Scanner (GODMODE ONLY) ═══════ */}
+        {isGodMode && (
+          <div className="relative mb-8 rounded-xl border border-sky-500/20 bg-gray-900/60 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-sky-500/[0.04] via-blue-500/[0.02] to-transparent" />
+            <div className="relative p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-sky-300 flex items-center gap-2">
+                    <svg className="w-6 h-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Días {cdFilters.direction === 'red' ? 'Rojos' : 'Verdes'} Consecutivos
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400 border border-sky-500/30 uppercase tracking-wider">
+                      God Mode
+                    </span>
+                  </h2>
+                  <p className="text-gray-400 text-sm mt-1 max-w-xl">
+                    Acciones que cerraron N sesiones seguidas en rojo (close &lt; open) o en verde (close &gt; open). Devuelve ATR y desvíos (σ) desde la media de precio.
+                  </p>
+                </div>
+                <button
+                  onClick={scanConsecutiveDays}
+                  disabled={cdLoading}
+                  className="shrink-0 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-bold rounded-xl shadow-lg shadow-sky-500/20 disabled:opacity-50 transition-all text-sm"
+                >
+                  {cdLoading ? (
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                    </svg>
+                  )}
+                  {cdLoading ? 'Scanning...' : 'Buscar Racha'}
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-sky-900/15">
+                <div>
+                  <label className="block text-[10px] text-sky-400/60 uppercase tracking-wider mb-1">Precio Mín</label>
+                  <input type="number" min="0" step="0.5" placeholder="1"
+                    value={cdFilters.priceMin}
+                    onChange={e => setCdFilters(f => ({ ...f, priceMin: e.target.value }))}
+                    disabled={cdLoading}
+                    className="w-full bg-gray-900/60 border border-sky-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-sky-400/60 uppercase tracking-wider mb-1">Precio Máx</label>
+                  <input type="number" min="0" step="0.5" placeholder="500"
+                    value={cdFilters.priceMax}
+                    onChange={e => setCdFilters(f => ({ ...f, priceMax: e.target.value }))}
+                    disabled={cdLoading}
+                    className="w-full bg-gray-900/60 border border-sky-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-sky-400/60 uppercase tracking-wider mb-1">Market Cap</label>
+                  <select
+                    value={cdFilters.marketCapBucket}
+                    onChange={e => setCdFilters(f => ({ ...f, marketCapBucket: e.target.value }))}
+                    disabled={cdLoading}
+                    className="w-full bg-gray-900/60 border border-sky-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                  >
+                    {MKTCAP_BUCKETS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-sky-400/60 uppercase tracking-wider mb-1">Color</label>
+                  <select
+                    value={cdFilters.direction}
+                    onChange={e => setCdFilters(f => ({ ...f, direction: e.target.value as 'red' | 'green' }))}
+                    disabled={cdLoading}
+                    className="w-full bg-gray-900/60 border border-sky-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                  >
+                    <option value="red">🔴 Rojos</option>
+                    <option value="green">🟢 Verdes</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-sky-400/60 uppercase tracking-wider mb-1" title="Mínimo de sesiones consecutivas">Días Consec.</label>
+                  <input type="number" min="1" max="30" step="1" placeholder="5"
+                    value={cdFilters.minStreak}
+                    onChange={e => setCdFilters(f => ({ ...f, minStreak: e.target.value }))}
+                    disabled={cdLoading}
+                    className="w-full bg-gray-900/60 border border-sky-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-sky-400/60 uppercase tracking-wider mb-1">País</label>
+                  <select
+                    value={cdFilters.country}
+                    onChange={e => setCdFilters(f => ({ ...f, country: e.target.value }))}
+                    disabled={cdLoading}
+                    className="w-full bg-gray-900/60 border border-sky-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                  >
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-sky-400/60 uppercase tracking-wider mb-1">Sector</label>
+                  <select
+                    value={cdFilters.sector}
+                    onChange={e => setCdFilters(f => ({ ...f, sector: e.target.value }))}
+                    disabled={cdLoading}
+                    className="w-full bg-gray-900/60 border border-sky-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-sky-500 disabled:opacity-50"
+                  >
+                    {SECTORS.map(s => <option key={s} value={s}>{s || 'All'}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {cdError && (
+                <div className="mt-4 bg-red-900/20 border border-red-700/40 rounded-xl px-4 py-3 text-red-400 text-sm">
+                  {cdError}
+                </div>
+              )}
+
+              {cdStats.total > 0 && !cdLoading && (
+                <div className="mt-3 text-[11px] text-sky-400/50">
+                  Scanned {cdStats.scanned} / {cdStats.total} stocks · {cdResults.length} con racha detectada
+                </div>
+              )}
+
+              {cdResults.length > 0 && (
+                <div className="mt-4 overflow-x-auto rounded-xl border border-sky-900/20">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-sky-900/20 text-sky-400/80 text-xs uppercase tracking-wider">
+                        <th className="text-left px-4 py-2.5">Ticker</th>
+                        <th className="text-left px-4 py-2.5">Company</th>
+                        <th className="text-left px-4 py-2.5">Exch</th>
+                        <th className="text-right px-4 py-2.5">Mkt Cap</th>
+                        <th className="text-right px-4 py-2.5">Price</th>
+                        <th className="text-right px-4 py-2.5" title="Días consecutivos del color elegido">Racha</th>
+                        <th className="text-right px-4 py-2.5" title="Average True Range (14)">ATR</th>
+                        <th className="text-right px-4 py-2.5" title="ATR como % del precio">ATR %</th>
+                        <th className="text-right px-4 py-2.5" title="Desvíos estándar desde la media de 20 días">σ media</th>
+                        <th className="px-4 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cdResults.map((r, i) => (
+                        <tr key={r.symbol} className={`border-t border-sky-900/10 ${i % 2 === 0 ? 'bg-gray-900/30' : ''} hover:bg-sky-900/10 transition`}>
+                          <td className="px-4 py-2.5 font-bold text-sky-400">{r.symbol}</td>
+                          <td className="px-4 py-2.5 text-gray-300 max-w-[180px] truncate">{r.companyName}</td>
+                          <td className="px-4 py-2.5 text-gray-500 text-xs">{r.exchange}</td>
+                          <td className="px-4 py-2.5 text-right text-gray-400">{fmtMktCap(r.marketCap)}</td>
+                          <td className="px-4 py-2.5 text-right text-white font-mono">${r.currentPrice.toFixed(2)}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${r.direction === 'red' ? 'bg-red-900/40 text-red-400' : 'bg-emerald-900/40 text-emerald-400'}`}>
+                              {r.streak}d {r.direction === 'red' ? '🔴' : '🟢'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-gray-300 font-mono">${r.atr.toFixed(2)}</td>
+                          <td className="px-4 py-2.5 text-right text-sky-400 font-mono">{r.atrPct.toFixed(1)}%</td>
+                          <td className="px-4 py-2.5 text-right font-mono">
+                            <span className={Math.abs(r.zscore) >= 2 ? 'text-amber-400' : 'text-gray-300'}>
+                              {r.zscore >= 0 ? '+' : ''}{r.zscore.toFixed(2)}σ
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                className="text-[11px] px-3 py-1 rounded-lg bg-sky-900/30 text-sky-400 border border-sky-500/20 hover:bg-sky-900/50 transition"
+                              >
+                                Analyze
+                              </button>
+                              <button
+                                onClick={() => setChartTarget({
+                                  symbol: r.symbol,
+                                  companyName: r.companyName,
+                                  currentPrice: r.currentPrice,
+                                  subtitle: `${r.streak} días ${r.direction === 'red' ? 'rojos' : 'verdes'} · ATR $${r.atr.toFixed(2)} (${r.atrPct.toFixed(1)}%) · ${r.zscore >= 0 ? '+' : ''}${r.zscore.toFixed(2)}σ de la media`,
+                                })}
+                                className="px-2 py-1 bg-sky-500/10 hover:bg-sky-500/25 border border-sky-500/25 rounded-lg text-sky-300 text-[10px] font-semibold transition flex items-center gap-1"
+                                title="View chart"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                                </svg>
+                                Chart
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  addToWatchlist(r.symbol, r.companyName, 'Others');
+                                  const btn = e.currentTarget;
+                                  btn.classList.remove('animate-foam-press');
+                                  void btn.offsetWidth;
+                                  btn.classList.add('animate-foam-press');
+                                  if (foamTimers.current[r.symbol]) clearTimeout(foamTimers.current[r.symbol]);
+                                  foamTimers.current[r.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
+                                }}
+                                className={`px-2 py-1 border rounded-lg text-[10px] font-semibold transition-colors ${
+                                  watchlistAdded.has(r.symbol)
+                                    ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                                }`}
+                                title="Add to Watchlist"
+                              >
+                                {watchlistAdded.has(r.symbol) ? 'Added' : '+ Watch'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ Compression Scanner (GODMODE ONLY) ═══════ */}
+        {isGodMode && (
+          <div className="relative mb-8 rounded-xl border border-violet-500/20 bg-gray-900/60 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-violet-500/[0.04] via-purple-500/[0.02] to-transparent" />
+            <div className="relative p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-violet-300 flex items-center gap-2">
+                    <svg className="w-6 h-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-5v4m0-4h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+                    </svg>
+                    Compresión
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30 uppercase tracking-wider">
+                      God Mode
+                    </span>
+                  </h2>
+                  <p className="text-gray-400 text-sm mt-1 max-w-xl">
+                    Acciones cuyo rango diario (high-low %) se achica N sesiones seguidas — coil de volatilidad. Devuelve ATR y desvíos (σ) desde la media de precio.
+                  </p>
+                </div>
+                <button
+                  onClick={scanCompression}
+                  disabled={cmpLoading}
+                  className="shrink-0 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg shadow-violet-500/20 disabled:opacity-50 transition-all text-sm"
+                >
+                  {cmpLoading ? (
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                    </svg>
+                  )}
+                  {cmpLoading ? 'Scanning...' : 'Buscar Compresión'}
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-violet-900/15">
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Precio Mín</label>
+                  <input type="number" min="0" step="0.5" placeholder="1"
+                    value={cmpFilters.priceMin}
+                    onChange={e => setCmpFilters(f => ({ ...f, priceMin: e.target.value }))}
+                    disabled={cmpLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Precio Máx</label>
+                  <input type="number" min="0" step="0.5" placeholder="500"
+                    value={cmpFilters.priceMax}
+                    onChange={e => setCmpFilters(f => ({ ...f, priceMax: e.target.value }))}
+                    disabled={cmpLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Market Cap</label>
+                  <select
+                    value={cmpFilters.marketCapBucket}
+                    onChange={e => setCmpFilters(f => ({ ...f, marketCapBucket: e.target.value }))}
+                    disabled={cmpLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  >
+                    {MKTCAP_BUCKETS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1" title="% mínimo de suba desde el mínimo de 52 semanas">% desde mín 52w</label>
+                  <input type="number" min="0" step="5" placeholder="0"
+                    value={cmpFilters.minRiseFromLowPct}
+                    onChange={e => setCmpFilters(f => ({ ...f, minRiseFromLowPct: e.target.value }))}
+                    disabled={cmpLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1" title="Días consecutivos con rango decreciente">Días Compres.</label>
+                  <input type="number" min="2" max="30" step="1" placeholder="5"
+                    value={cmpFilters.minCompressionDays}
+                    onChange={e => setCmpFilters(f => ({ ...f, minCompressionDays: e.target.value }))}
+                    disabled={cmpLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">País</label>
+                  <select
+                    value={cmpFilters.country}
+                    onChange={e => setCmpFilters(f => ({ ...f, country: e.target.value }))}
+                    disabled={cmpLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  >
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c || 'All'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-violet-400/60 uppercase tracking-wider mb-1">Sector</label>
+                  <select
+                    value={cmpFilters.sector}
+                    onChange={e => setCmpFilters(f => ({ ...f, sector: e.target.value }))}
+                    disabled={cmpLoading}
+                    className="w-full bg-gray-900/60 border border-violet-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                  >
+                    {SECTORS.map(s => <option key={s} value={s}>{s || 'All'}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {cmpError && (
+                <div className="mt-4 bg-red-900/20 border border-red-700/40 rounded-xl px-4 py-3 text-red-400 text-sm">
+                  {cmpError}
+                </div>
+              )}
+
+              {cmpStats.total > 0 && !cmpLoading && (
+                <div className="mt-3 text-[11px] text-violet-400/50">
+                  Scanned {cmpStats.scanned} / {cmpStats.total} stocks · {cmpResults.length} en compresión
+                </div>
+              )}
+
+              {cmpResults.length > 0 && (
+                <div className="mt-4 overflow-x-auto rounded-xl border border-violet-900/20">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-violet-900/20 text-violet-400/80 text-xs uppercase tracking-wider">
+                        <th className="text-left px-4 py-2.5">Ticker</th>
+                        <th className="text-left px-4 py-2.5">Company</th>
+                        <th className="text-left px-4 py-2.5">Exch</th>
+                        <th className="text-right px-4 py-2.5">Mkt Cap</th>
+                        <th className="text-right px-4 py-2.5">Price</th>
+                        <th className="text-right px-4 py-2.5" title="Días consecutivos de rango decreciente">Días</th>
+                        <th className="text-right px-4 py-2.5" title="Rango del día más reciente (high-low %)">Rango hoy</th>
+                        <th className="text-right px-4 py-2.5" title="% de suba desde el mínimo de 52 semanas">% desde mín</th>
+                        <th className="text-right px-4 py-2.5" title="Average True Range (14)">ATR</th>
+                        <th className="text-right px-4 py-2.5" title="ATR como % del precio">ATR %</th>
+                        <th className="text-right px-4 py-2.5" title="Desvíos estándar desde la media de 20 días">σ media</th>
+                        <th className="px-4 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cmpResults.map((r, i) => (
+                        <tr key={r.symbol} className={`border-t border-violet-900/10 ${i % 2 === 0 ? 'bg-gray-900/30' : ''} hover:bg-violet-900/10 transition`}>
+                          <td className="px-4 py-2.5 font-bold text-violet-400">{r.symbol}</td>
+                          <td className="px-4 py-2.5 text-gray-300 max-w-[180px] truncate">{r.companyName}</td>
+                          <td className="px-4 py-2.5 text-gray-500 text-xs">{r.exchange}</td>
+                          <td className="px-4 py-2.5 text-right text-gray-400">{fmtMktCap(r.marketCap)}</td>
+                          <td className="px-4 py-2.5 text-right text-white font-mono">${r.currentPrice.toFixed(2)}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-violet-900/40 text-violet-300">
+                              {r.compressionDays}d
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-violet-400 font-mono">{r.latestRangePct.toFixed(1)}%</td>
+                          <td className="px-4 py-2.5 text-right text-emerald-400 font-mono">+{r.riseFromLowPct.toFixed(0)}%</td>
+                          <td className="px-4 py-2.5 text-right text-gray-300 font-mono">${r.atr.toFixed(2)}</td>
+                          <td className="px-4 py-2.5 text-right text-violet-400 font-mono">{r.atrPct.toFixed(1)}%</td>
+                          <td className="px-4 py-2.5 text-right font-mono">
+                            <span className={Math.abs(r.zscore) >= 2 ? 'text-amber-400' : 'text-gray-300'}>
+                              {r.zscore >= 0 ? '+' : ''}{r.zscore.toFixed(2)}σ
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                className="text-[11px] px-3 py-1 rounded-lg bg-violet-900/30 text-violet-400 border border-violet-500/20 hover:bg-violet-900/50 transition"
+                              >
+                                Analyze
+                              </button>
+                              <button
+                                onClick={() => setChartTarget({
+                                  symbol: r.symbol,
+                                  companyName: r.companyName,
+                                  currentPrice: r.currentPrice,
+                                  subtitle: `Compresión ${r.compressionDays}d · rango ${r.widestRangePct.toFixed(1)}%→${r.latestRangePct.toFixed(1)}% · +${r.riseFromLowPct.toFixed(0)}% desde mín 52w · ATR $${r.atr.toFixed(2)} · ${r.zscore >= 0 ? '+' : ''}${r.zscore.toFixed(2)}σ`,
+                                })}
+                                className="px-2 py-1 bg-violet-500/10 hover:bg-violet-500/25 border border-violet-500/25 rounded-lg text-violet-300 text-[10px] font-semibold transition flex items-center gap-1"
+                                title="View chart"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                                </svg>
+                                Chart
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  addToWatchlist(r.symbol, r.companyName, 'Others');
                                   const btn = e.currentTarget;
                                   btn.classList.remove('animate-foam-press');
                                   void btn.offsetWidth;

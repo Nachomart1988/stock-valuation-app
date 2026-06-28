@@ -147,6 +147,20 @@ except ImportError:
     get_cheap_breakout_scanner = None
 
 try:
+    from consecutive_days_scanner import get_consecutive_days_scanner
+    CONSECUTIVE_DAYS_AVAILABLE = True
+except ImportError:
+    CONSECUTIVE_DAYS_AVAILABLE = False
+    get_consecutive_days_scanner = None
+
+try:
+    from compression_scanner import get_compression_scanner
+    COMPRESSION_AVAILABLE = True
+except ImportError:
+    COMPRESSION_AVAILABLE = False
+    get_compression_scanner = None
+
+try:
     from mcp_integration_engine import get_mcp_engine
     MCP_AVAILABLE = True
 except ImportError:
@@ -2298,6 +2312,68 @@ async def cheap_breakout_detect(req: CheapBreakoutRequest):
         raise
     except Exception as e:
         print(f"[Cheap Breakout] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Consecutive Red / Green Days Scanner ────────────────────────
+
+class ConsecutiveDaysRequest(BaseModel):
+    ticker: str
+    direction: str = 'red'          # 'red' | 'green'
+    min_streak: int = 5
+
+
+@app.post("/consecutive-days/detect")
+async def consecutive_days_detect(req: ConsecutiveDaysRequest):
+    """Consecutive Red/Green Days Scanner — streak + ATR + price z-score."""
+    if not CONSECUTIVE_DAYS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Consecutive Days scanner not available")
+    try:
+        from consecutive_days_scanner import ConsecutiveDaysScanner
+        engine = ConsecutiveDaysScanner(
+            direction=req.direction,
+            min_streak=req.min_streak,
+        )
+        result = await asyncio.to_thread(engine.analyze, req.ticker)
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return numpy_safe_response(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Consecutive Days] Error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Compression Scanner ─────────────────────────────────────────
+
+class CompressionRequest(BaseModel):
+    ticker: str
+    min_compression_days: int = 5
+    min_rise_from_low_pct: float = 0.0
+
+
+@app.post("/compression/detect")
+async def compression_detect(req: CompressionRequest):
+    """Compression Scanner — shrinking daily range streak + ATR + price z-score."""
+    if not COMPRESSION_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Compression scanner not available")
+    try:
+        from compression_scanner import CompressionScanner
+        engine = CompressionScanner(
+            min_compression_days=req.min_compression_days,
+            min_rise_from_low_pct=req.min_rise_from_low_pct,
+        )
+        result = await asyncio.to_thread(engine.analyze, req.ticker)
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+        return numpy_safe_response(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Compression] Error: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
