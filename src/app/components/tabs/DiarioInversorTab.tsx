@@ -8,6 +8,10 @@ import { useUser } from '@clerk/nextjs';
 import { fetchFmp } from '@/lib/fmpClient';
 import WatchlistTab from './WatchlistSubTab';
 import TradeChartModal, { type TradeChartInfo } from './TradeChartModal';
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip as RTooltip, ReferenceDot,
+} from 'recharts';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES - Estructura principal según especificaciones
@@ -117,6 +121,14 @@ interface PTAEntry {
   linkedTradeIds: string[];
 }
 
+// Cash Flow Interface — depósitos / retiros del balance
+interface CashFlow {
+  id: string;
+  date: string;          // YYYY-MM-DD
+  amount: number;        // positivo = depósito, negativo = retiro
+  note: string;
+}
+
 // Watchlist Types
 type WatchlistStrategy = 'Episodic Pivot' | 'HTF' | 'Overextension' | 'Others';
 
@@ -189,6 +201,7 @@ export default function DiarioInversorTab() {
   const [weeklyPL, setWeeklyPL] = useState<WeeklyPL[]>([]);
   const [ptaEntries, setPtaEntries] = useState<PTAEntry[]>([]);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [cashFlows, setCashFlows] = useState<CashFlow[]>([]);
 
   // UI States
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
@@ -208,21 +221,41 @@ export default function DiarioInversorTab() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [importToast, setImportToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
-  // ── Save to DB (debounced 1.5s, con reintentos) ──────────────────
-  // Reintenta fallos transitorios (red / rate-limit) antes de mostrar error.
-  // localStorage siempre tiene una copia, así que nunca se pierde nada aunque falle.
+  // Edición de balance con confirmación (depósito/retiro vs corrección)
+  const [balanceDraft, setBalanceDraft] = useState<string>('');
+  const [balanceChange, setBalanceChange] = useState<{ from: number; to: number } | null>(null);
+  useEffect(() => { setBalanceDraft(String(accountBalance)); }, [accountBalance]);
+
+  const commitBalanceDraft = () => {
+    const to = Number(balanceDraft);
+    if (isNaN(to) || to === accountBalance) { setBalanceDraft(String(accountBalance)); return; }
+    setBalanceChange({ from: accountBalance, to });
+  };
+
+  // ── Save to DB (debounced 1.5s, con reintentos + auto-recuperación) ──
+  // "TypeError: fetch failed" es un fallo transitorio de red entre el server y
+  // Supabase. Reintentamos con backoff exponencial y, si todo falla, reintentamos
+  // solo más tarde leyendo SIEMPRE el último payload (ref) para no pisar datos nuevos.
+  // localStorage siempre tiene una copia, así que nunca se pierde nada.
+  const lastPayloadRef = useRef<{ trades: Trade[]; weekly_pl: WeeklyPL[]; pta: PTAEntry[]; balance: number; watchlist: WatchlistItem[]; cash_flows: CashFlow[] } | null>(null);
+  const selfHealRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const saveToDB = useCallback(async (
-    t: Trade[], wpl: WeeklyPL[], pta: PTAEntry[], bal: number, wl?: WatchlistItem[]
+    t: Trade[], wpl: WeeklyPL[], pta: PTAEntry[], bal: number, wl?: WatchlistItem[], cf?: CashFlow[]
   ) => {
     if (!user) return;
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    if (selfHealRef.current) { clearTimeout(selfHealRef.current); selfHealRef.current = null; }
+
+    // Guardamos el último payload "intencional" para los reintentos diferidos
+    lastPayloadRef.current = { trades: t, weekly_pl: wpl, pta, balance: bal, watchlist: wl ?? [], cash_flows: cf ?? [] };
 
     const attemptSave = async (): Promise<{ ok: true } | { ok: false; msg: string }> => {
       try {
         const res = await fetch('/api/diary', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trades: t, weekly_pl: wpl, pta, balance: bal, watchlist: wl ?? [] }),
+          body: JSON.stringify(lastPayloadRef.current),
         });
         if (res.ok) return { ok: true };
         const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -236,9 +269,10 @@ export default function DiarioInversorTab() {
       setSyncStatus('saving');
       setSyncError(null);
 
-      const MAX_ATTEMPTS = 3;
+      // Backoff exponencial: 5 intentos en ~15s (1s, 2s, 4s, 8s entre cada uno)
+      const DELAYS = [1000, 2000, 4000, 8000];
       let lastMsg = '';
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      for (let attempt = 0; attempt <= DELAYS.length; attempt++) {
         const result = await attemptSave();
         if (result.ok) {
           setSyncStatus('saved');
@@ -247,16 +281,20 @@ export default function DiarioInversorTab() {
           return;
         }
         lastMsg = result.msg;
-        // Backoff antes de reintentar (0.8s, 1.6s)
-        if (attempt < MAX_ATTEMPTS) {
-          await new Promise(r => setTimeout(r, attempt * 800));
+        if (attempt < DELAYS.length) {
+          await new Promise(r => setTimeout(r, DELAYS[attempt]));
         }
       }
 
-      // Todos los intentos fallaron — los datos siguen seguros en localStorage
+      // Todos los intentos fallaron — datos a salvo en localStorage.
+      // Programamos UNA auto-recuperación en 25s con el último payload (siempre el más reciente).
       console.error('[DiarioInversor] Sync error tras reintentos:', lastMsg);
       setSyncError(lastMsg);
       setSyncStatus('error');
+      selfHealRef.current = setTimeout(async () => {
+        const r = await attemptSave();
+        if (r.ok) { setSyncStatus('saved'); setSyncError(null); setTimeout(() => setSyncStatus(prev => (prev === 'saved' ? 'idle' : prev)), 3000); }
+      }, 25000);
     }, 1500);
   }, [user]);
 
@@ -271,6 +309,7 @@ export default function DiarioInversorTab() {
         const savedPTA = localStorage.getItem('diario_pta_v2');
         const savedBalance = localStorage.getItem('diario_balance');
         const savedWatchlist = localStorage.getItem('diario_watchlist_v2');
+        const savedCashFlows = localStorage.getItem('diario_cashflows_v1');
         if (savedTrades) {
           const p = JSON.parse(savedTrades);
           setTrades(p);
@@ -280,6 +319,7 @@ export default function DiarioInversorTab() {
         if (savedPTA) setPtaEntries(JSON.parse(savedPTA));
         if (savedBalance) setAccountBalance(JSON.parse(savedBalance));
         if (savedWatchlist) setWatchlist(JSON.parse(savedWatchlist));
+        if (savedCashFlows) setCashFlows(JSON.parse(savedCashFlows));
       } catch (e) {
         console.error('[DiarioInversor] localStorage load error:', e);
       }
@@ -297,6 +337,7 @@ export default function DiarioInversorTab() {
           const dbPTA: PTAEntry[] = data.pta ?? [];
           const dbBalance: number = data.balance ?? 10000;
           const dbWatchlist: WatchlistItem[] = data.watchlist ?? [];
+          const dbCashFlows: CashFlow[] = data.cash_flows ?? [];
 
           // Always compare DB vs localStorage — use whichever has MORE trades.
           // This recovers data if a previous sync failed and localStorage has unsaved trades.
@@ -305,6 +346,7 @@ export default function DiarioInversorTab() {
           const localPTA = JSON.parse(localStorage.getItem('diario_pta_v2') || '[]');
           const localBal = JSON.parse(localStorage.getItem('diario_balance') || '10000');
           const localWatchlist = JSON.parse(localStorage.getItem('diario_watchlist_v2') || '[]');
+          const localCashFlows: CashFlow[] = JSON.parse(localStorage.getItem('diario_cashflows_v1') || '[]');
 
           if (localTrades.length > dbTrades.length) {
             // localStorage has more trades — use it and re-sync to DB
@@ -315,7 +357,8 @@ export default function DiarioInversorTab() {
             setPtaEntries(localPTA);
             setAccountBalance(localBal);
             setWatchlist(localWatchlist);
-            saveToDB(localTrades, localWPL, localPTA, localBal, localWatchlist);
+            setCashFlows(localCashFlows.length >= dbCashFlows.length ? localCashFlows : dbCashFlows);
+            saveToDB(localTrades, localWPL, localPTA, localBal, localWatchlist, localCashFlows.length >= dbCashFlows.length ? localCashFlows : dbCashFlows);
           } else {
             setTrades(dbTrades);
             tradesRef.current = dbTrades;
@@ -323,6 +366,8 @@ export default function DiarioInversorTab() {
             setPtaEntries(dbPTA);
             setAccountBalance(dbBalance);
             setWatchlist(dbWatchlist);
+            // cash_flows puede no existir aún en la DB; tomamos el que tenga más registros
+            setCashFlows(dbCashFlows.length >= localCashFlows.length ? dbCashFlows : localCashFlows);
             console.log('[DiarioInversor] Loaded from DB:', dbTrades.length, 'trades');
           }
           setDataLoaded(true);
@@ -362,6 +407,11 @@ export default function DiarioInversorTab() {
     localStorage.setItem('diario_watchlist_v2', JSON.stringify(watchlist));
   }, [watchlist, dataLoaded]);
 
+  useEffect(() => {
+    if (!dataLoaded) return;
+    localStorage.setItem('diario_cashflows_v1', JSON.stringify(cashFlows));
+  }, [cashFlows, dataLoaded]);
+
   // ── Save to DB whenever data changes (debounced) ─────────────────
   // `currentPrice` se actualiza cada 10s (precio en vivo) y NO debe disparar
   // escrituras a la DB: es efímero. Filtrándolo evitamos el spam de writes que
@@ -372,13 +422,13 @@ export default function DiarioInversorTab() {
     // El replacer omite los campos en vivo (precio/volumen) para que sólo cuenten los cambios reales.
     const EPHEMERAL = new Set(['currentPrice', 'volume', 'change', 'changePct']);
     const sig = JSON.stringify(
-      { trades, weeklyPL, ptaEntries, accountBalance, watchlist },
+      { trades, weeklyPL, ptaEntries, accountBalance, watchlist, cashFlows },
       (key, value) => (EPHEMERAL.has(key) ? undefined : value)
     );
     if (sig === lastSavedSigRef.current) return; // sólo cambió el precio en vivo → no persistir
     lastSavedSigRef.current = sig;
-    saveToDB(trades, weeklyPL, ptaEntries, accountBalance, watchlist);
-  }, [trades, weeklyPL, ptaEntries, accountBalance, watchlist, dataLoaded, user, saveToDB]);
+    saveToDB(trades, weeklyPL, ptaEntries, accountBalance, watchlist, cashFlows);
+  }, [trades, weeklyPL, ptaEntries, accountBalance, watchlist, cashFlows, dataLoaded, user, saveToDB]);
 
   // ═══════════════════════════════════════════════════════════════
   // CALCULATED VALUES - Desde tabla maestra
@@ -1143,9 +1193,12 @@ export default function DiarioInversorTab() {
             <label className="text-gray-400">{t('diarioTab.balance')}:</label>
             <input
               type="number"
-              value={accountBalance}
-              onChange={(e) => setAccountBalance(Number(e.target.value))}
+              value={balanceDraft}
+              onChange={(e) => setBalanceDraft(e.target.value)}
+              onBlur={commitBalanceDraft}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
               className="w-32 px-2 py-1 bg-black/50 border border-white/[0.08] rounded text-white"
+              title="Editá y presioná Enter — te preguntará si es un depósito/retiro o una corrección"
             />
           </div>
 
@@ -1172,6 +1225,7 @@ export default function DiarioInversorTab() {
                 setTrades([]);
                 setWeeklyPL([]);
                 setPtaEntries([]);
+                setCashFlows([]);
                 setAccountBalance(10000);
               }
             }}
@@ -1250,6 +1304,7 @@ export default function DiarioInversorTab() {
               selectedYear={selectedYear}
               accountBalance={accountBalance}
               calculateMetrics={calculateTradeMetrics}
+              cashFlows={cashFlows}
             />
           </Tab.Panel>
 
@@ -1299,6 +1354,30 @@ export default function DiarioInversorTab() {
           trade={editingTrade}
           onSave={saveTrade}
           onCancel={() => { setShowTradeForm(false); setEditingTrade(null); }}
+        />
+      )}
+
+      {/* Balance Change Modal (warning: depósito/retiro vs corrección) */}
+      {balanceChange && (
+        <BalanceChangeModal
+          from={balanceChange.from}
+          to={balanceChange.to}
+          onCancel={() => { setBalanceChange(null); setBalanceDraft(String(accountBalance)); }}
+          onDeposit={(note) => {
+            const delta = balanceChange.to - balanceChange.from;
+            setCashFlows(prev => [...prev, {
+              id: generateId(),
+              date: new Date().toISOString().split('T')[0],
+              amount: delta,
+              note: note || (delta >= 0 ? 'Depósito' : 'Retiro'),
+            }]);
+            setAccountBalance(balanceChange.to);
+            setBalanceChange(null);
+          }}
+          onCorrection={() => {
+            setAccountBalance(balanceChange.to);
+            setBalanceChange(null);
+          }}
         />
       )}
     </div>
@@ -1630,6 +1709,7 @@ function PLTab({
   selectedYear,
   accountBalance,
   calculateMetrics,
+  cashFlows,
 }: {
   trades: Trade[];
   weeklyPL: WeeklyPL[];
@@ -1637,6 +1717,7 @@ function PLTab({
   selectedYear: number;
   accountBalance: number;
   calculateMetrics: (t: Trade) => any;
+  cashFlows: CashFlow[];
 }) {
   const { t } = useLanguage();
   // Calculate weekly P&L from closed trades
@@ -1728,6 +1809,49 @@ function PLTab({
     return { maxDrawdown, bestWeek, worstWeek, winWeeksPct, avgWeekly, greenWeeks, redWeeks };
   }, [weeklyData, totalYTD]);
 
+  // ── Curva de Balance desde el inicio (P&L realizado + depósitos/retiros) ──
+  const balanceCurve = useMemo(() => {
+    // Flujos de caja del año en scope
+    const cfScope = cashFlows.filter(cf => new Date(cf.date).getFullYear() === selectedYear);
+    const netCashFlows = cfScope.reduce((s, cf) => s + cf.amount, 0);
+    const totalPnl = trades.reduce((s, tr) => s + calculateMetrics(tr).pnl, 0);
+    // Balance al inicio del periodo (sacando aportes/retiros; el balance actual ya los incluye)
+    const initialBalance = accountBalance - netCashFlows;
+
+    // Eventos por fecha: P&L de trades cerrados (exitDate) + flujos de caja
+    type Ev = { date: string; pnl: number; cash: number; note?: string };
+    const evMap: Record<string, Ev> = {};
+    trades.forEach(tr => {
+      if (!tr.exitDate) return;
+      const d = tr.exitDate;
+      if (!evMap[d]) evMap[d] = { date: d, pnl: 0, cash: 0 };
+      evMap[d].pnl += calculateMetrics(tr).pnl;
+    });
+    cfScope.forEach(cf => {
+      if (!evMap[cf.date]) evMap[cf.date] = { date: cf.date, pnl: 0, cash: 0 };
+      evMap[cf.date].cash += cf.amount;
+      evMap[cf.date].note = cf.note;
+    });
+
+    const events = Object.values(evMap).sort((a, b) => a.date.localeCompare(b.date));
+    if (events.length === 0) return { points: [], initialBalance, finalBalance: initialBalance, netCashFlows, totalPnl };
+
+    let running = initialBalance;
+    const points: Array<{ date: string; balance: number; deposit: number; note?: string }> = [
+      { date: 'Inicio', balance: Math.round(initialBalance * 100) / 100, deposit: 0 },
+    ];
+    events.forEach(ev => {
+      running += ev.pnl + ev.cash;
+      points.push({
+        date: ev.date,
+        balance: Math.round(running * 100) / 100,
+        deposit: ev.cash,
+        note: ev.note,
+      });
+    });
+    return { points, initialBalance, finalBalance: running, netCashFlows, totalPnl };
+  }, [trades, cashFlows, selectedYear, accountBalance, calculateMetrics]);
+
   return (
     <div className="space-y-6">
       {/* Hero summary */}
@@ -1736,6 +1860,81 @@ function PLTab({
         <HeroCard label="Max Drawdown" value={formatCurrency(-plExtras.maxDrawdown)} sub="Peor caída acumulada" positive={false} />
         <HeroCard label="Win Weeks" value={formatPercent(plExtras.winWeeksPct)} sub={`${plExtras.greenWeeks}🟢 · ${plExtras.redWeeks}🔴`} positive={plExtras.winWeeksPct >= 0.5} />
         <HeroCard label="Avg / Semana" value={formatCurrency(plExtras.avgWeekly)} sub={`${weeklyData.length} semanas operadas`} positive={plExtras.avgWeekly >= 0} />
+      </div>
+
+      {/* Balance Evolution Line Chart */}
+      <div className="bg-black/50 rounded-xl p-5 border border-white/[0.06]">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">📈 Evolución del Balance</h3>
+          <div className="flex items-center gap-4 text-xs">
+            <span className="text-gray-500">Inicial: <span className="text-gray-300 font-semibold">{formatCurrency(balanceCurve.initialBalance)}</span></span>
+            {balanceCurve.netCashFlows !== 0 && (
+              <span className={balanceCurve.netCashFlows >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                Aportes netos: {balanceCurve.netCashFlows >= 0 ? '+' : ''}{formatCurrency(balanceCurve.netCashFlows)}
+              </span>
+            )}
+            <span className="text-gray-500">Actual: <span className={`font-bold ${balanceCurve.finalBalance >= balanceCurve.initialBalance ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(balanceCurve.finalBalance)}</span></span>
+          </div>
+        </div>
+        {balanceCurve.points.length > 1 ? (
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={balanceCurve.points} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
+                <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} stroke="rgba(255,255,255,0.1)" minTickGap={24} />
+                <YAxis
+                  tick={{ fill: '#9ca3af', fontSize: 11 }}
+                  stroke="rgba(255,255,255,0.1)"
+                  domain={['auto', 'auto']}
+                  tickFormatter={(v) => `$${Number(v).toLocaleString()}`}
+                  width={70}
+                />
+                <RTooltip
+                  contentStyle={{ background: '#0a0a0a', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, fontSize: 12 }}
+                  labelStyle={{ color: '#d1d5db' }}
+                  formatter={(value: any, _name: any, props: any) => {
+                    const dep = props?.payload?.deposit;
+                    const lines: any = [formatCurrency(Number(value))];
+                    if (dep) lines[0] = `${formatCurrency(Number(value))}  (${dep > 0 ? '📥 +' : '📤 '}${formatCurrency(dep)})`;
+                    return [lines[0], 'Balance'];
+                  }}
+                />
+                <Line type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={2} dot={{ r: 2, fill: '#10b981' }} activeDot={{ r: 5 }} />
+                {/* Marcas de depósitos (verde) y retiros (rojo) */}
+                {balanceCurve.points.map((p, i) => p.deposit !== 0 ? (
+                  <ReferenceDot key={i} x={p.date} y={p.balance} r={5}
+                    fill={p.deposit > 0 ? '#34d399' : '#f43f5e'} stroke="#000" strokeWidth={1} />
+                ) : null)}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="h-40 flex items-center justify-center text-gray-600 text-sm">
+            Cerrá trades o registrá un depósito para ver la evolución del balance
+          </div>
+        )}
+
+        {/* Lista de movimientos de caja */}
+        {(() => {
+          const cfScope = cashFlows
+            .filter(cf => new Date(cf.date).getFullYear() === selectedYear)
+            .sort((a, b) => b.date.localeCompare(a.date));
+          if (cfScope.length === 0) return null;
+          return (
+            <div className="mt-4 pt-4 border-t border-white/[0.06]">
+              <div className="text-xs font-semibold text-gray-400 mb-2">💵 Movimientos de caja</div>
+              <div className="flex flex-wrap gap-2">
+                {cfScope.map(cf => (
+                  <div key={cf.id} className={`text-xs px-3 py-1.5 rounded-lg border ${cf.amount >= 0 ? 'bg-emerald-500/[0.08] border-emerald-500/20 text-emerald-300' : 'bg-rose-500/[0.08] border-rose-500/20 text-rose-300'}`}>
+                    <span className="font-semibold">{cf.amount >= 0 ? '📥 +' : '📤 '}{formatCurrency(cf.amount)}</span>
+                    <span className="text-gray-500 ml-1.5">{cf.date}</span>
+                    {cf.note && <span className="text-gray-400 ml-1.5">· {cf.note}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Summary Cards */}
@@ -2954,5 +3153,81 @@ function CheckboxField({
       />
       <span className="text-sm text-gray-300">{label}</span>
     </label>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BALANCE CHANGE MODAL — depósito/retiro vs corrección
+// ═══════════════════════════════════════════════════════════════
+
+function BalanceChangeModal({
+  from,
+  to,
+  onCancel,
+  onDeposit,
+  onCorrection,
+}: {
+  from: number;
+  to: number;
+  onCancel: () => void;
+  onDeposit: (note: string) => void;
+  onCorrection: () => void;
+}) {
+  const delta = to - from;
+  const isDeposit = delta >= 0;
+  const [note, setNote] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onCancel}>
+      <div className="bg-gray-950 border border-amber-500/30 rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-2xl">⚠️</span>
+          <h3 className="text-lg font-bold text-amber-300">Estás cambiando el Balance</h3>
+        </div>
+        <p className="text-sm text-gray-400 mb-4">
+          De <span className="text-gray-200 font-semibold">{formatCurrency(from)}</span> a{' '}
+          <span className="text-gray-200 font-semibold">{formatCurrency(to)}</span>{' '}
+          <span className={isDeposit ? 'text-emerald-400' : 'text-rose-400'}>
+            ({isDeposit ? '+' : ''}{formatCurrency(delta)})
+          </span>
+        </p>
+
+        <div className="bg-amber-500/[0.06] border border-amber-500/20 rounded-lg p-3 mb-4 text-xs text-gray-300 leading-relaxed">
+          ¿Este cambio es <strong className="text-amber-300">dinero que agregaste o retiraste</strong> de la cuenta,
+          o solo una <strong className="text-gray-200">corrección</strong> del balance inicial?
+          {' '}Si es depósito/retiro quedará registrado con fecha de hoy y se reflejará en el P&L.
+        </div>
+
+        <label className="block text-xs text-gray-400 mb-1">Nota (opcional)</label>
+        <input
+          type="text"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={isDeposit ? 'Ej: aporte mensual' : 'Ej: retiro de ganancias'}
+          className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded mb-4 text-sm"
+        />
+
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => onDeposit(note)}
+            className={`w-full px-4 py-2.5 rounded-lg font-semibold text-white ${isDeposit ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'}`}
+          >
+            {isDeposit ? `📥 Registrar depósito de ${formatCurrency(delta)}` : `📤 Registrar retiro de ${formatCurrency(Math.abs(delta))}`}
+          </button>
+          <button
+            onClick={onCorrection}
+            className="w-full px-4 py-2.5 bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] rounded-lg font-medium text-gray-200"
+          >
+            ✏️ Solo corregir el balance inicial (sin registrar movimiento)
+          </button>
+          <button
+            onClick={onCancel}
+            className="w-full px-4 py-2 text-gray-400 hover:text-white text-sm"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

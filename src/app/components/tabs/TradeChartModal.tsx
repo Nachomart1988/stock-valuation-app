@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { fetchFmp } from '@/lib/fmpClient';
 import {
   Chart as ChartJS,
@@ -16,6 +16,7 @@ import {
   TimeScale,
 } from 'chart.js';
 import annotationPlugin from 'chartjs-plugin-annotation';
+import zoomPlugin from 'chartjs-plugin-zoom';
 import 'chartjs-adapter-luxon';
 import { CandlestickController, CandlestickElement, OhlcElement } from 'chartjs-chart-financial';
 import { Chart } from 'react-chartjs-2';
@@ -32,6 +33,7 @@ ChartJS.register(
   Legend,
   Filler,
   annotationPlugin,
+  zoomPlugin,
   CandlestickController,
   CandlestickElement,
   OhlcElement
@@ -195,6 +197,29 @@ export default function TradeChartModal({ trade, onClose }: Props) {
       };
     }
 
+    // ── Flechas de operación estilo backtest (▲ compra / ▼ venta) ──
+    // Long: entra comprando (▲) y sale vendiendo (▼). Short: al revés.
+    const entryArrow = trade.side === 'Long' ? '▲' : '▼';
+    const exitArrow = trade.side === 'Long' ? '▼' : '▲';
+    annotations['entryArrowMark'] = {
+      type: 'label', xValue: entryTs, yValue: trade.entryPrice,
+      content: entryArrow,
+      color: trade.side === 'Long' ? '#34d399' : '#f43f5e',
+      font: { size: 18, weight: 'bold' },
+      yAdjust: trade.side === 'Long' ? 18 : -18,  // por debajo si compra, por encima si vende
+      backgroundColor: 'transparent',
+    };
+    if (closed) {
+      annotations['exitArrowMark'] = {
+        type: 'label', xValue: exitTs, yValue: trade.exitPrice as number,
+        content: exitArrow,
+        color: win ? '#34d399' : '#f43f5e',
+        font: { size: 18, weight: 'bold' },
+        yAdjust: trade.side === 'Long' ? -18 : 18,
+        backgroundColor: 'transparent',
+      };
+    }
+
     const isDaily = interval === 'daily';
 
     return {
@@ -220,6 +245,16 @@ export default function TradeChartModal({ trade, onClose }: Props) {
             },
           },
           annotation: { annotations },
+          zoom: {
+            pan: { enabled: true, mode: 'xy', modifierKey: null },
+            zoom: {
+              wheel: { enabled: true },
+              pinch: { enabled: true },
+              drag: { enabled: false },
+              mode: 'xy',
+            },
+            limits: { y: { min: 'original', max: 'original' } },
+          },
         },
         scales: {
           x: {
@@ -246,10 +281,13 @@ export default function TradeChartModal({ trade, onClose }: Props) {
         : (trade.entryPrice - trade.exitPrice) / trade.entryPrice)
     : null;
 
+  const chartRef = useRef<any>(null);
+  const resetZoom = () => { chartRef.current?.resetZoom?.(); };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4" onClick={onClose}>
       <div
-        className="relative w-full max-w-6xl bg-gray-950 border border-emerald-500/25 rounded-2xl shadow-2xl shadow-emerald-500/10 overflow-hidden"
+        className="relative w-full max-w-7xl bg-gray-950 border border-emerald-500/25 rounded-2xl shadow-2xl shadow-emerald-500/10 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -289,6 +327,13 @@ export default function TradeChartModal({ trade, onClose }: Props) {
               ))}
             </div>
             <button
+              onClick={resetZoom}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-black/50 text-gray-300 hover:bg-white/10 border border-white/[0.06] transition"
+              title="Restablecer zoom"
+            >
+              🔍 Reset
+            </button>
+            <button
               onClick={onClose}
               className="text-gray-500 hover:text-white transition w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10"
               aria-label="Cerrar"
@@ -301,13 +346,13 @@ export default function TradeChartModal({ trade, onClose }: Props) {
         </div>
 
         {/* Chart body */}
-        <div className="p-5">
+        <div className="p-3 sm:p-5">
           {loading ? (
-            <div className="h-[520px] flex items-center justify-center">
+            <div className="h-[72vh] flex items-center justify-center">
               <div className="text-gray-500 text-sm animate-pulse">Cargando gráfico {interval === 'daily' ? 'diario' : interval}…</div>
             </div>
           ) : error ? (
-            <div className="h-[520px] flex flex-col items-center justify-center gap-2">
+            <div className="h-[72vh] flex flex-col items-center justify-center gap-2">
               <div className="text-rose-400 text-sm">{error}</div>
               {interval !== 'daily' && (
                 <button onClick={() => setInterval('daily')} className="text-xs text-emerald-400 hover:underline">
@@ -316,20 +361,22 @@ export default function TradeChartModal({ trade, onClose }: Props) {
               )}
             </div>
           ) : config ? (
-            <div className="h-[520px]">
-              <Chart type="candlestick" data={config.data as any} options={config.options as any} />
+            <div className="h-[72vh]">
+              <Chart ref={chartRef} type="candlestick" data={config.data as any} options={config.options as any} />
             </div>
           ) : (
-            <div className="h-[520px] flex items-center justify-center">
+            <div className="h-[72vh] flex items-center justify-center">
               <div className="text-gray-600 text-sm">Sin datos para mostrar</div>
             </div>
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-400">
+            <span className="flex items-center gap-1.5"><span className="text-emerald-400">▲▼</span> Flechas de entrada/salida</span>
             <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-emerald-400" /> Entrada</span>
             {trade.exitDate && <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-rose-400" /> Salida</span>}
             {trade.sl ? <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 border-t border-dashed border-rose-400/60" /> Stop</span> : null}
             {trade.pt1 ? <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 border-t border-dashed border-emerald-400/60" /> PT1</span> : null}
+            <span className="text-gray-500 ml-auto">🖱️ Rueda = zoom · arrastrar = mover · botón Reset</span>
           </div>
         </div>
       </div>

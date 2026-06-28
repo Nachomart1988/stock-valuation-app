@@ -17,9 +17,10 @@ export async function GET() {
       return NextResponse.json({ error: `Database not configured (${detail})` }, { status: 503 });
     }
 
+    // select('*') es seguro aunque falten columnas nuevas (p. ej. cash_flows aún sin migrar)
     const { data, error } = await db
       .from('diary_data')
-      .select('trades, weekly_pl, pta, balance, watchlist')
+      .select('*')
       .eq('user_id', userId)
       .single();
 
@@ -35,6 +36,7 @@ export async function GET() {
       pta: data?.pta ?? [],
       balance: data?.balance ?? 10000,
       watchlist: data?.watchlist ?? [],
+      cash_flows: data?.cash_flows ?? [],
     });
   } catch (e: any) {
     console.error('[Diary API] GET exception:', e.message);
@@ -58,22 +60,30 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { trades, weekly_pl, pta, balance, watchlist } = body;
+    const { trades, weekly_pl, pta, balance, watchlist, cash_flows } = body;
 
-    const { error } = await db
+    const baseRow = {
+      user_id: userId,
+      trades: trades ?? [],
+      weekly_pl: weekly_pl ?? [],
+      pta: pta ?? [],
+      balance: balance ?? 10000,
+      watchlist: watchlist ?? [],
+      updated_at: new Date().toISOString(),
+    };
+
+    // Intento incluyendo cash_flows. Si la columna no existe todavía (sin migrar),
+    // reintentamos sin ese campo para que el guardado NO falle nunca por eso.
+    let { error } = await db
       .from('diary_data')
-      .upsert(
-        {
-          user_id: userId,
-          trades: trades ?? [],
-          weekly_pl: weekly_pl ?? [],
-          pta: pta ?? [],
-          balance: balance ?? 10000,
-          watchlist: watchlist ?? [],
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' }
-      );
+      .upsert({ ...baseRow, cash_flows: cash_flows ?? [] }, { onConflict: 'user_id' });
+
+    if (error && /cash_flows/i.test(error.message || '')) {
+      console.warn('[Diary API] columna cash_flows ausente — guardando sin ella (agregá la columna para sync cross-device)');
+      ({ error } = await db
+        .from('diary_data')
+        .upsert(baseRow, { onConflict: 'user_id' }));
+    }
 
     if (error) {
       console.error('[Diary API] PUT error:', error);
