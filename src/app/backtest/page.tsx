@@ -347,7 +347,11 @@ function OptStats({ c }: { c: OptConfig }) {
 interface ChartBar {
   t: string; min: number; open: number; high: number; low: number; close: number;
   premarket: boolean; range: [number, number];
+  day?: string; trade?: boolean;  // present on the daily timeframe
 }
+
+type ChartInterval = 'daily' | '5min' | '1min';
+const IV_LABEL: Record<ChartInterval, string> = { daily: 'Diario', '5min': '5M', '1min': '1M' };
 
 // Custom candlestick shape: the Bar is fed range=[low,high], so y/height map the
 // high-low span to pixels; we draw the wick + open/close body from the payload.
@@ -405,13 +409,14 @@ export default function BacktestPage() {
   const [chartBars, setChartBars] = useState<ChartBar[] | null>(null);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState('');
-  const [chartInterval, setChartInterval] = useState<'5min' | '1min'>('5min');
+  const [chartInterval, setChartInterval] = useState<ChartInterval>('5min');
 
-  const loadChart = useCallback(async (t: Trade, interval: '5min' | '1min') => {
+  const loadChart = useCallback(async (t: Trade, interval: ChartInterval) => {
     setChartBars(null); setChartError(''); setChartLoading(true);
     try {
       const data = await postBackend<{ bars: Omit<ChartBar, 'range'>[] }>(
-        '/backtest/gap-short/chart', { symbol: t.symbol, date: t.date, interval }, 20000,
+        '/backtest/gap-short/chart', { symbol: t.symbol, date: t.date, interval },
+        interval === 'daily' ? 25000 : 20000,
       );
       setChartBars((data.bars || []).map((b) => ({ ...b, range: [b.low, b.high] as [number, number] })));
     } catch (e: any) {
@@ -425,7 +430,7 @@ export default function BacktestPage() {
     setChartTrade(t); setChartInterval('5min'); loadChart(t, '5min');
   }, [loadChart]);
 
-  const changeInterval = useCallback((interval: '5min' | '1min') => {
+  const changeInterval = useCallback((interval: ChartInterval) => {
     setChartInterval(interval);
     if (chartTrade) loadChart(chartTrade, interval);
   }, [chartTrade, loadChart]);
@@ -510,6 +515,49 @@ export default function BacktestPage() {
     () => (result?.equity_curve ?? []).map((v, i) => ({ i, equity: v })),
     [result],
   );
+
+  // ── Descarga de resultados (JSON completo o CSV de trades) ──────────────
+  const downloadBlob = useCallback((content: string, filename: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const downloadJSON = useCallback(() => {
+    if (!result) return;
+    const payload = {
+      strategy,
+      config: strategy === 'strategy_one' ? s1cfg : cfg,
+      exported_at: new Date().toISOString(),
+      result,
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadBlob(JSON.stringify(payload, null, 2), `backtest-${strategy}-${stamp}.json`, 'application/json');
+  }, [result, strategy, cfg, s1cfg, downloadBlob]);
+
+  const downloadCSV = useCallback(() => {
+    if (!result?.trades?.length) return;
+    const cols: (keyof Trade)[] = [
+      'symbol', 'date', 'side', 'gap_pct', 'dist_52w_pct', 'entry', 'entry_time', 'exit', 'exit_time',
+      'stop', 'target', 'shares', 'pnl', 'r_multiple', 'equity', 'reason', 'weekday',
+      'pyramided', 'add_price', 'add_time', 'spy_open_pct', 'spy_close_pct',
+    ];
+    const esc = (v: any) => {
+      if (v == null) return '';
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [
+      cols.join(','),
+      ...result.trades.map((t) => cols.map((c) => esc((t as any)[c])).join(',')),
+    ];
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadBlob(lines.join('\n'), `backtest-${strategy}-trades-${stamp}.csv`, 'text/csv;charset=utf-8');
+  }, [result, strategy, downloadBlob]);
 
   // ── Gating ──────────────────────────────────────────────────────────────
   if (!isLoaded) {
@@ -916,6 +964,23 @@ export default function BacktestPage() {
               </div>
             ) : (
               <>
+                {/* Header de resultados + descarga */}
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <h2 className="text-lg font-black text-rose-200">Resultados</h2>
+                  <div className="flex gap-2">
+                    <button onClick={downloadCSV}
+                      title="Descargar la lista de trades en CSV (Excel / Sheets)"
+                      className="px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 text-xs font-semibold hover:bg-rose-500/20 transition">
+                      ⬇ Trades CSV
+                    </button>
+                    <button onClick={downloadJSON}
+                      title="Descargar el backtest completo (config + métricas + trades) en JSON"
+                      className="px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 text-xs font-semibold hover:bg-rose-500/20 transition">
+                      ⬇ Backtest JSON
+                    </button>
+                  </div>
+                </div>
+
                 {/* Stat cards */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                   <StatCard label="Win rate" value={`${result.win_rate_pct}%`} tone={result.win_rate_pct >= 50 ? 'pos' : 'neg'} />
@@ -1202,10 +1267,10 @@ export default function BacktestPage() {
               </div>
               <div className="flex items-center gap-3">
                 <div className="inline-flex rounded-lg border border-gray-700 bg-gray-900 p-0.5">
-                  {(['1min', '5min'] as const).map((iv) => (
+                  {(['1min', '5min', 'daily'] as const).map((iv) => (
                     <button key={iv} onClick={() => changeInterval(iv)}
                       className={`px-3 py-1 rounded-md text-xs font-semibold transition ${chartInterval === iv ? 'bg-cyan-500/25 text-cyan-200' : 'text-gray-400 hover:text-gray-200'}`}>
-                      {iv === '1min' ? '1M' : '5M'}
+                      {IV_LABEL[iv]}
                     </button>
                   ))}
                 </div>
@@ -1213,10 +1278,19 @@ export default function BacktestPage() {
               </div>
             </div>
 
-            {chartLoading && <div className="flex items-center justify-center text-gray-400 text-sm" style={{ height: '70vh' }}>Cargando gráfico {chartInterval === '1min' ? '1M' : '5M'}…</div>}
+            {chartLoading && <div className="flex items-center justify-center text-gray-400 text-sm" style={{ height: '70vh' }}>Cargando gráfico {IV_LABEL[chartInterval]}…</div>}
             {chartError && <div className="flex items-center justify-center text-rose-400 text-sm" style={{ height: '70vh' }}>⚠ {chartError}</div>}
             {chartBars && chartBars.length > 0 && (() => {
+              const isDaily = chartInterval === 'daily';
+              // On the daily timeframe every intraday marker collapses onto the entry-day bar.
+              const tradeBar = isDaily
+                ? chartBars.find((b) => b.trade) ?? chartBars.find((b) => b.day === chartTrade.date)
+                : undefined;
+              const tradeT = tradeBar?.t;
+              const tradeIdx = tradeBar ? chartBars.indexOf(tradeBar) : -1;
+              const setupT = tradeIdx > 0 ? chartBars[tradeIdx - 1].t : undefined;
               const snapT = (mn: number | null | undefined): string | undefined => {
+                if (isDaily) return tradeT;
                 if (mn == null) return undefined;
                 let best: ChartBar | undefined;
                 for (const b of chartBars) { if (b.min <= mn) best = b; else break; }
@@ -1232,9 +1306,14 @@ export default function BacktestPage() {
                       <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #06b6d433', borderRadius: 8, fontSize: 11 }}
                         formatter={(_v: any, _n: any, p: any) => {
                           const b = p?.payload as ChartBar;
-                          return [`O ${b.open} H ${b.high} L ${b.low} C ${b.close}`, b.t];
+                          return [`O ${b.open} H ${b.high} L ${b.low} C ${b.close}`, b.day ?? b.t];
                         }} />
-                      <ReferenceLine x="09:30" stroke="#64748b" strokeDasharray="4 4" label={{ value: 'open', fill: '#94a3b8', fontSize: 9, position: 'top' }} />
+                      {isDaily
+                        ? (<>
+                            {setupT && <ReferenceLine x={setupT} stroke="#64748b" strokeDasharray="4 4" label={{ value: 'setup', fill: '#94a3b8', fontSize: 9, position: 'top' }} />}
+                            {tradeT && <ReferenceLine x={tradeT} stroke="#06b6d4" strokeDasharray="4 4" label={{ value: 'entrada', fill: '#67e8f9', fontSize: 9, position: 'top' }} />}
+                          </>)
+                        : <ReferenceLine x="09:30" stroke="#64748b" strokeDasharray="4 4" label={{ value: 'open', fill: '#94a3b8', fontSize: 9, position: 'top' }} />}
                       {/* stop / target / add-stop → líneas */}
                       {chartTrade.stop != null && <ReferenceLine y={chartTrade.stop} stroke="#f43f5e" strokeDasharray="4 4" label={{ value: `stop ${chartTrade.stop}`, fill: '#f43f5e', fontSize: 9, position: 'right' }} />}
                       {chartTrade.target != null && <ReferenceLine y={chartTrade.target} stroke="#10b981" strokeDasharray="4 4" label={{ value: `target ${chartTrade.target}`, fill: '#10b981', fontSize: 9, position: 'right' }} />}
@@ -1250,14 +1329,16 @@ export default function BacktestPage() {
                     </ComposedChart>
                   </ResponsiveContainer>
                   <p className="text-[10px] text-gray-600 mt-2">
-                    Velas de {chartInterval === '1min' ? '1' : '5'} min · sesión completa (premarket + regular + after-hours, hora ET).
-                    Flechas: {chartTrade.side === 'long' ? '▲ BUY (entrada)' : '▼ SHORT (entrada)'}{chartTrade.pyramided ? ' · ADD (piramidó)' : ''} · {chartTrade.side === 'long' ? '▼ SELL' : '▲ COVER'} (salida). Líneas: stop/target{chartTrade.pyramided ? '/add-stop' : ''}.
+                    {isDaily
+                      ? <>Velas diarias · contexto de ~110 ruedas previas para ver el setup. Líneas verticales: <span className="text-gray-400">setup</span> (día previo evaluado) y <span className="text-cyan-300">entrada</span> (día de la operación). Líneas horizontales: stop/target{chartTrade.pyramided ? '/add-stop' : ''}.</>
+                      : <>Velas de {chartInterval === '1min' ? '1' : '5'} min · sesión completa (premarket + regular + after-hours, hora ET).
+                        Flechas: {chartTrade.side === 'long' ? '▲ BUY (entrada)' : '▼ SHORT (entrada)'}{chartTrade.pyramided ? ' · ADD (piramidó)' : ''} · {chartTrade.side === 'long' ? '▼ SELL' : '▲ COVER'} (salida). Líneas: stop/target{chartTrade.pyramided ? '/add-stop' : ''}.</>}
                   </p>
                 </>
               );
             })()}
             {chartBars && chartBars.length === 0 && !chartLoading && (
-              <div className="flex items-center justify-center text-gray-500 text-sm" style={{ height: '70vh' }}>Sin datos intradía de {chartInterval === '1min' ? '1M' : '5M'} para este día.</div>
+              <div className="flex items-center justify-center text-gray-500 text-sm" style={{ height: '70vh' }}>Sin datos {chartInterval === 'daily' ? 'diarios' : `intradía de ${IV_LABEL[chartInterval]}`} para este trade.</div>
             )}
           </div>
         </div>

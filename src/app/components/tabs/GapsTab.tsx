@@ -121,78 +121,118 @@ export default function GapsTab({ ticker }: GapsTabProps) {
     return v >= 0 ? 'text-green-400' : 'text-red-400';
   };
 
-  // SVG OHLC-style bar for average gap day
-  function OHLCBar({ stats, type }: { stats: GapStats; type: 'up' | 'down' | 'all' }) {
-    const gapAvg = stats.gapPct.mean;
-    const highAvg = stats.highVsOpen.mean;
-    const lowAvg = stats.lowVsOpen.mean;
-    const closeAvg = stats.closeVsOpen.mean;
+  // ── Día de gap promedio ─────────────────────────────────────────────
+  // Muestra 1-3 velas promedio (Todos / Alcista / Bajista) sobre la misma
+  // escala, relativas al open (0%). Los números van en una fila debajo de
+  // cada vela — nada de etiquetas flotantes que se superponen.
+  function AvgGapDayChart({ all, up, down }: { all: GapStats; up: GapStats | null; down: GapStats | null }) {
+    const series = [
+      { key: 'all', label: t('All gaps', 'Todos'), stats: all },
+      ...(up && up.count > 0 ? [{ key: 'up', label: t('Gap Up ↑', 'Alcista ↑'), stats: up }] : []),
+      ...(down && down.count > 0 ? [{ key: 'down', label: t('Gap Down ↓', 'Bajista ↓'), stats: down }] : []),
+    ];
 
-    // Normalize to SVG coords: center = 150, scale
-    const values = [gapAvg, highAvg, lowAvg, closeAvg];
-    const absMax = Math.max(Math.abs(Math.min(...values)), Math.abs(Math.max(...values)), 1);
-    const scale = 90 / absMax; // pixels per %
+    // Nivel del cierre previo relativo al open: si el gap fue g%, prevClose = open/(1+g/100)
+    const prevCloseRel = (g: number) => (1 / (1 + g / 100) - 1) * 100;
 
-    const cx = 150;
-    const cy = 120;
+    const W = 480, H = 250;
+    const PAD = { l: 46, r: 14, t: 14, b: 26 };
+    const plotW = W - PAD.l - PAD.r;
+    const plotH = H - PAD.t - PAD.b;
 
-    const toY = (pct: number) => cy - pct * scale;
+    const allVals = series.flatMap(s => [
+      s.stats.highVsOpen.mean, s.stats.lowVsOpen.mean, s.stats.closeVsOpen.mean,
+      prevCloseRel(s.stats.gapPct.mean), 0,
+    ]);
+    const rawMin = Math.min(...allVals), rawMax = Math.max(...allVals);
+    const span = Math.max(rawMax - rawMin, 1);
+    const yMin = rawMin - span * 0.12, yMax = rawMax + span * 0.12;
+    const toY = (pct: number) => PAD.t + (1 - (pct - yMin) / (yMax - yMin)) * plotH;
 
-    const openY = cy; // open = 0 baseline
-    const highY = toY(highAvg);
-    const lowY = toY(lowAvg);
-    const closeY = toY(closeAvg);
-    const gapLineY = toY(gapAvg); // prev close level
+    // Gridlines con paso "lindo"
+    const step = span > 24 ? 10 : span > 12 ? 5 : span > 6 ? 2 : 1;
+    const gridVals: number[] = [];
+    for (let v = Math.ceil(yMin / step) * step; v <= yMax; v += step) gridVals.push(v);
 
-    const candleColor = closeAvg >= 0 ? '#22c55e' : '#ef4444';
+    const slotW = plotW / series.length;
+    const zeroY = toY(0);
 
     return (
-      <svg width="300" height="240" viewBox="0 0 300 240" className="mx-auto">
-        {/* Background */}
-        <rect width="300" height="240" fill="transparent" />
+      <div>
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" style={{ maxWidth: 560 }} shapeRendering="geometricPrecision">
+          {/* Gridlines + eje % */}
+          {gridVals.map(v => (
+            <g key={v}>
+              <line x1={PAD.l} y1={toY(v)} x2={W - PAD.r} y2={toY(v)} stroke="#ffffff" strokeOpacity="0.05" strokeWidth="1" />
+              <text x={PAD.l - 6} y={toY(v) + 3.5} fill="#6b7280" fontSize="9.5" textAnchor="end">{v > 0 ? `+${v}` : v}%</text>
+            </g>
+          ))}
 
-        {/* Zero line (Open) */}
-        <line x1="50" y1={openY} x2="250" y2={openY} stroke="#6b7280" strokeWidth="1" strokeDasharray="4,4" />
-        <text x="255" y={openY + 4} fill="#9ca3af" fontSize="10">Open (0%)</text>
+          {/* Línea del open (0%) */}
+          <line x1={PAD.l} y1={zeroY} x2={W - PAD.r} y2={zeroY} stroke="#9ca3af" strokeWidth="1.2" strokeDasharray="5,4" />
+          <text x={W - PAD.r} y={zeroY - 5} fill="#9ca3af" fontSize="9.5" textAnchor="end">Open · 0%</text>
 
-        {/* Prev close line (gap reference) */}
-        <line x1="50" y1={gapLineY} x2="250" y2={gapLineY} stroke="#f59e0b" strokeWidth="1" strokeDasharray="3,3" />
-        <text x="255" y={gapLineY + 4} fill="#f59e0b" fontSize="10">PrevClose ({fmtPct(gapAvg)})</text>
+          {series.map((s, i) => {
+            const cx = PAD.l + slotW * i + slotW / 2;
+            const high = s.stats.highVsOpen.mean;
+            const low = s.stats.lowVsOpen.mean;
+            const close = s.stats.closeVsOpen.mean;
+            const pc = prevCloseRel(s.stats.gapPct.mean);
+            const color = close >= 0 ? '#22c55e' : '#ef4444';
+            const bodyW = Math.min(44, slotW * 0.34);
 
-        {/* Wick high to low */}
-        <line x1={cx} y1={highY} x2={cx} y2={lowY} stroke={candleColor} strokeWidth="2" />
+            return (
+              <g key={s.key}>
+                {/* Zona del gap: entre el cierre previo y el open */}
+                <rect
+                  x={cx - bodyW * 1.15}
+                  y={Math.min(toY(pc), zeroY)}
+                  width={bodyW * 2.3}
+                  height={Math.max(Math.abs(toY(pc) - zeroY), 1)}
+                  fill="#f59e0b"
+                  opacity="0.10"
+                />
+                {/* Cierre previo */}
+                <line x1={cx - bodyW * 1.15} y1={toY(pc)} x2={cx + bodyW * 1.15} y2={toY(pc)}
+                      stroke="#f59e0b" strokeWidth="1.4" strokeDasharray="3,3" />
+                <text x={cx + bodyW * 1.15 + 4} y={toY(pc) + 3.5} fill="#f59e0b" fontSize="8.5">PC</text>
 
-        {/* Candle body (open to close) */}
-        <rect
-          x={cx - 20}
-          y={Math.min(openY, closeY)}
-          width={40}
-          height={Math.max(Math.abs(closeY - openY), 2)}
-          fill={candleColor}
-          opacity={0.85}
-          rx={2}
-        />
+                {/* Mecha high-low */}
+                <line x1={cx} y1={toY(high)} x2={cx} y2={toY(low)} stroke={color} strokeWidth="2" strokeLinecap="round" />
 
-        {/* Labels */}
-        <text x={cx - 25} y={highY - 5} fill="#22c55e" fontSize="9" textAnchor="middle">
-          H {fmtPct(highAvg)}
-        </text>
-        <text x={cx + 30} y={closeY} fill={candleColor} fontSize="9" textAnchor="start">
-          C {fmtPct(closeAvg)}
-        </text>
-        <text x={cx - 25} y={lowY + 12} fill="#ef4444" fontSize="9" textAnchor="middle">
-          L {fmtPct(lowAvg)}
-        </text>
+                {/* Cuerpo open→close */}
+                <rect
+                  x={cx - bodyW / 2}
+                  y={Math.min(zeroY, toY(close))}
+                  width={bodyW}
+                  height={Math.max(Math.abs(toY(close) - zeroY), 2)}
+                  fill={color}
+                  opacity="0.9"
+                  rx="2.5"
+                />
 
-        {/* Title */}
-        <text x={cx} y="20" fill="#e5e7eb" fontSize="12" textAnchor="middle" fontWeight="bold">
-          {t('Avg Gap Day Behavior', 'Comportamiento Promedio del Gap')}
-          {type === 'up' ? ' ↑' : type === 'down' ? ' ↓' : ''}
-        </text>
-        <text x={cx} y="36" fill="#9ca3af" fontSize="10" textAnchor="middle">
-          {t('(relative to open)', '(relativo al open)')}
-        </text>
-      </svg>
+                {/* Nombre de la serie */}
+                <text x={cx} y={H - 8} fill="#d1d5db" fontSize="10.5" fontWeight="600" textAnchor="middle">
+                  {s.label} <tspan fill="#6b7280" fontWeight="400">({s.stats.count})</tspan>
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* Valores por serie — en tabla, no flotando sobre el gráfico */}
+        <div className={`grid gap-2 mt-3 ${series.length === 3 ? 'grid-cols-3' : series.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {series.map(s => (
+            <div key={s.key} className="bg-black/50 rounded-lg border border-white/[0.06] px-3 py-2 text-[11px] space-y-0.5">
+              <div className="text-gray-300 font-semibold mb-1">{s.label}</div>
+              <div className="flex justify-between"><span className="text-amber-400/90">Gap</span><span className="text-amber-400">{fmtPct(s.stats.gapPct.mean, 1)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">{t('High', 'Máx')}</span><span className="text-green-400">{fmtPct(s.stats.highVsOpen.mean, 1)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">{t('Close', 'Cierre')}</span><span className={pctColor(s.stats.closeVsOpen.mean)}>{fmtPct(s.stats.closeVsOpen.mean, 1)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">{t('Low', 'Mín')}</span><span className="text-red-400">{fmtPct(s.stats.lowVsOpen.mean, 1)}</span></div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
   }
 
@@ -425,14 +465,17 @@ export default function GapsTab({ ticker }: GapsTabProps) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Left: OHLC visualization */}
             <div className="bg-black/40 rounded-xl p-5 border border-white/[0.07]">
-              <h4 className="text-base font-semibold text-gray-200 mb-4 text-center">
-                {t('Average Gap Day (All)', 'Día de Gap Promedio (Todos)')}
+              <h4 className="text-base font-semibold text-gray-200 mb-1 text-center">
+                {t('Average Gap Day', 'Día de Gap Promedio')}
               </h4>
-              <OHLCBar stats={result.stats} type="all" />
+              <p className="text-[11px] text-gray-500 mb-4 text-center">
+                {t('Everything measured from the open (0%)', 'Todo medido desde el open (0%)')}
+              </p>
+              <AvgGapDayChart all={result.stats} up={result.upStats} down={result.downStats} />
               <p className="text-xs text-gray-500 mt-3 text-center">
                 {t(
-                  'Candle shows avg high, low, close relative to gap open. Yellow line = avg gap from prev close.',
-                  'La vela muestra el máx, mín y cierre promedio relativo al open del gap. Línea amarilla = gap promedio desde el cierre anterior.'
+                  'Each candle is the average day: body = open→close, wick = high/low range. The amber dashed line (PC) is the previous close — the shaded zone is the gap being crossed at the open.',
+                  'Cada vela es el día promedio: cuerpo = open→cierre, mecha = rango máx/mín. La línea punteada ámbar (PC) es el cierre del día anterior — la zona sombreada es el gap que se saltó en la apertura.'
                 )}
               </p>
             </div>

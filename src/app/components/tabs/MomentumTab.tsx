@@ -235,10 +235,34 @@ function ScoreGauge({ score, label, color }: { score: number; label: string; col
   );
 }
 
+// ── Helpers de dibujo: suavizado Catmull-Rom → Bézier ─────────────────────────
+// Las series de 1 minuto dibujadas punto a punto quedan dentadas ("shaky") al
+// escalar el viewBox. Suavizamos la curva y redondeamos los joins.
+
+type Pt = { x: number; y: number };
+
+function smoothPath(pts: Pt[]): string {
+  if (pts.length === 0) return '';
+  if (pts.length < 3) return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
 // ── Mini SVG Price+VWAP chart ─────────────────────────────────────────────────
 
 function PriceChart({ chart }: { chart: ChartData }) {
-  const W = 600, H = 160;
+  const W = 600, H = 170;
   const PAD = { l: 50, r: 10, t: 10, b: 30 };
   const prices = chart.prices;
   const vwap   = chart.vwap;
@@ -252,9 +276,12 @@ function PriceChart({ chart }: { chart: ChartData }) {
   const scaleX = (i: number) => PAD.l + (i / (prices.length - 1)) * (W - PAD.l - PAD.r);
   const scaleY = (v: number) => PAD.t + (1 - (v - minY) / (maxY - minY)) * (H - PAD.t - PAD.b);
 
-  const pricePath = prices.map((p, i) => `${i === 0 ? 'M' : 'L'}${scaleX(i).toFixed(1)},${scaleY(p).toFixed(1)}`).join(' ');
-  const vwapPath  = vwap.map((v, i) => `${i === 0 ? 'M' : 'L'}${scaleX(i).toFixed(1)},${scaleY(v).toFixed(1)}`).join(' ');
-  const fillPath  = prices.map((p, i) => `${i === 0 ? 'M' : 'L'}${scaleX(i).toFixed(1)},${scaleY(p).toFixed(1)}`).join(' ')
+  const pricePts: Pt[] = prices.map((p, i) => ({ x: scaleX(i), y: scaleY(p) }));
+  const vwapPts:  Pt[] = vwap.map((v, i) => ({ x: scaleX(i), y: scaleY(v) }));
+
+  const pricePath = smoothPath(pricePts);
+  const vwapPath  = smoothPath(vwapPts);
+  const fillPath  = pricePath
     + ` L${scaleX(prices.length - 1).toFixed(1)},${(H - PAD.b).toFixed(1)} L${PAD.l},${(H - PAD.b).toFixed(1)} Z`;
 
   const tickEvery = Math.max(1, Math.floor(labels.length / 6));
@@ -264,21 +291,29 @@ function PriceChart({ chart }: { chart: ChartData }) {
   const sHighY = scaleY(chart.session_high);
   const sLowY  = scaleY(chart.session_low);
 
+  // Gridlines horizontales suaves (4 divisiones)
+  const gridYs = [0.25, 0.5, 0.75].map(f => PAD.t + f * (H - PAD.t - PAD.b));
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" style={{ minHeight: 120 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" style={{ minHeight: 120 }} shapeRendering="geometricPrecision">
       <defs>
         <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+          <stop offset="0%" stopColor="#10b981" stopOpacity="0.22" />
           <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
         </linearGradient>
       </defs>
+      {gridYs.map((y, i) => (
+        <line key={i} x1={PAD.l} y1={y} x2={W - PAD.r} y2={y} stroke="#ffffff" strokeOpacity="0.05" strokeWidth="1" />
+      ))}
       <line x1={PAD.l} y1={sHighY} x2={W - PAD.r} y2={sHighY}
-            stroke="#22c55e" strokeWidth="0.8" strokeDasharray="3,3" opacity="0.5" />
+            stroke="#22c55e" strokeWidth="1" strokeDasharray="4,4" opacity="0.45" />
       <line x1={PAD.l} y1={sLowY}  x2={W - PAD.r} y2={sLowY}
-            stroke="#ef4444" strokeWidth="0.8" strokeDasharray="3,3" opacity="0.5" />
+            stroke="#ef4444" strokeWidth="1" strokeDasharray="4,4" opacity="0.45" />
       <path d={fillPath} fill="url(#priceGrad)" />
-      <path d={vwapPath} fill="none" stroke="#f59e0b" strokeWidth="1.5" opacity="0.8" />
-      <path d={pricePath} fill="none" stroke="#10b981" strokeWidth="2" />
+      <path d={vwapPath} fill="none" stroke="#f59e0b" strokeWidth="1.6" opacity="0.85"
+            strokeLinejoin="round" strokeLinecap="round" />
+      <path d={pricePath} fill="none" stroke="#10b981" strokeWidth="2"
+            strokeLinejoin="round" strokeLinecap="round" />
       {ticks.map((label, i) => (
         <text key={i} x={tickXs[i]} y={H - PAD.b + 14}
               fill="#6b7280" fontSize="9" textAnchor="middle">{label}</text>
@@ -305,10 +340,11 @@ function MomentumChart({ chart }: { chart: ChartData }) {
   const scaleX = (i: number) => PAD.l + (i / (mom.length - 1)) * (W - PAD.l - PAD.r);
   const scaleY = (v: number) => PAD.t + (1 - (v + maxAbs) / (2 * maxAbs)) * (H - PAD.t - PAD.b);
   const zeroY  = scaleY(0);
-  const linePath = mom.map((v, i) => `${i === 0 ? 'M' : 'L'}${scaleX(i).toFixed(1)},${scaleY(v).toFixed(1)}`).join(' ');
+  const barW   = Math.max(1.5, Math.min(3, (W - PAD.l - PAD.r) / mom.length - 0.5));
+  const linePath = smoothPath(mom.map((v, i) => ({ x: scaleX(i), y: scaleY(v) })));
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" style={{ minHeight: 80 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" style={{ minHeight: 80 }} shapeRendering="geometricPrecision">
       <line x1={PAD.l} y1={zeroY} x2={W - PAD.r} y2={zeroY} stroke="#4b5563" strokeWidth="0.8" />
       {mom.map((v, i) => {
         const x  = scaleX(i);
@@ -316,12 +352,13 @@ function MomentumChart({ chart }: { chart: ChartData }) {
         const y2 = scaleY(v);
         const bh = Math.abs(y2 - y1);
         return (
-          <rect key={i} x={x - 1.5} y={Math.min(y1, y2)}
-                width={3} height={Math.max(bh, 1)}
-                fill={v >= 0 ? '#10b981' : '#ef4444'} opacity="0.7" />
+          <rect key={i} x={x - barW / 2} y={Math.min(y1, y2)}
+                width={barW} height={Math.max(bh, 1)} rx={barW / 3}
+                fill={v >= 0 ? '#10b981' : '#ef4444'} opacity="0.65" />
         );
       })}
-      <path d={linePath} fill="none" stroke="#a78bfa" strokeWidth="1.2" opacity="0.6" />
+      <path d={linePath} fill="none" stroke="#a78bfa" strokeWidth="1.4" opacity="0.7"
+            strokeLinejoin="round" strokeLinecap="round" />
       <text x={PAD.l - 4} y={PAD.t + 8} fill="#6b7280" fontSize="8" textAnchor="end">+{maxAbs.toFixed(1)}%</text>
       <text x={PAD.l - 4} y={H - PAD.b - 2} fill="#6b7280" fontSize="8" textAnchor="end">-{maxAbs.toFixed(1)}%</text>
       <text x={PAD.l + 4} y={H - PAD.b + 14} fill="#6b7280" fontSize="9">ROC 5-bar rolling</text>

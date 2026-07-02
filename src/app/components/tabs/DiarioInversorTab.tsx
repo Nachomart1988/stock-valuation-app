@@ -30,6 +30,18 @@ type TradeSide = 'Long' | 'Short';
 type TradeState = 'Open' | 'Closed';
 type SellReason = 'Stopped' | 'EOD' | 'Sold into Strength' | 'Target Hit' | 'Time Stop' | 'Other';
 
+// Característica del setup (por ahora solo para breakouts)
+type TradeCharacteristic = 'Breakout recto' | 'Breakout descendente';
+const TRADE_CHARACTERISTICS: TradeCharacteristic[] = ['Breakout recto', 'Breakout descendente'];
+
+// Cierre parcial de posición: se venden (o recompran, en shorts) `qty` acciones a `price`
+interface TradePartial {
+  id: string;
+  date: string;   // YYYY-MM-DD
+  qty: number;
+  price: number;
+}
+
 // Main Trade Interface - Tabla maestra de SWING
 interface Trade {
   id: string;
@@ -55,12 +67,21 @@ interface Trade {
   initialSL: number;        // Stop Loss original
   initialRisk: number;      // Riesgo inicial en $
   setup: TradeSetup;
+  characteristic?: TradeCharacteristic | null;  // ej: breakout recto / descendente
   sellReason: SellReason | null;
   postAnalysis: string;
   chartLink: string;
   industry: string;
 
-  // Ventas parciales
+  // Cierres parciales (nuevo sistema: fecha + qty + precio por cada cierre)
+  partials?: TradePartial[];
+
+  // Evaluación profunda del trade (IA) — se genera una vez al cerrar y se guarda para siempre
+  deepAnalysis?: string | null;
+  deepAnalysisAt?: string | null;
+  deepAnalysisSource?: 'ai' | 'rules' | null;
+
+  // Ventas parciales (legacy — solo qty/%; se mantienen para trades viejos)
   partial1Qty: number | null;
   partial1Pct: number | null;
   partial2Qty: number | null;
@@ -449,25 +470,25 @@ export default function DiarioInversorTab() {
   const calculateTradeMetrics = useCallback((trade: Trade) => {
     // Usar entryPrice directo si existe, sino calcular de value/qty
     const entryPrice = trade.entryPrice || (trade.qty > 0 ? trade.value / trade.qty : 0);
-    const sharesRemaining = trade.qty - (trade.partial1Qty || 0) - (trade.partial2Qty || 0) - (trade.partial3Qty || 0);
+    const sideMult = trade.side === 'Long' ? 1 : -1;
+
+    // Cierres parciales nuevos (con precio) + legacy (solo qty, sin precio → solo restan acciones)
+    const partials = trade.partials ?? [];
+    const partialsQty = partials.reduce((s, p) => s + (p.qty || 0), 0);
+    const legacyPartialQty = (trade.partial1Qty || 0) + (trade.partial2Qty || 0) + (trade.partial3Qty || 0);
+    const realizedPartialsPnl = partials.reduce((s, p) => s + sideMult * (p.price - entryPrice) * (p.qty || 0), 0);
+
+    const sharesRemaining = Math.max(0, trade.qty - partialsQty - legacyPartialQty);
     const currentValue = trade.currentPrice ? sharesRemaining * trade.currentPrice : sharesRemaining * entryPrice;
     const timeDays = trade.exitDate ? Math.ceil((new Date(trade.exitDate).getTime() - new Date(trade.date).getTime()) / (1000 * 60 * 60 * 24)) : null;
 
-    // P&L
-    let pnl = 0;
+    // P&L = realizado en parciales + (cerrado: resto al exit | abierto: no-realizado al precio actual)
+    let pnl = realizedPartialsPnl;
     const positionValue = entryPrice * trade.qty;
     if (trade.state === 'Closed' && trade.exitPrice) {
-      if (trade.side === 'Long') {
-        pnl = (trade.exitPrice - entryPrice) * trade.qty - trade.commission;
-      } else {
-        pnl = (entryPrice - trade.exitPrice) * trade.qty - trade.commission;
-      }
+      pnl += sideMult * (trade.exitPrice - entryPrice) * sharesRemaining - trade.commission;
     } else if (trade.currentPrice) {
-      if (trade.side === 'Long') {
-        pnl = (trade.currentPrice - entryPrice) * sharesRemaining;
-      } else {
-        pnl = (entryPrice - trade.currentPrice) * sharesRemaining;
-      }
+      pnl += sideMult * (trade.currentPrice - entryPrice) * sharesRemaining;
     }
 
     const pnlPct = positionValue > 0 ? pnl / positionValue : 0;
@@ -500,6 +521,8 @@ export default function DiarioInversorTab() {
       exposure,
       distanceToSL,
       distanceToPT1,
+      partialsQty: partialsQty + legacyPartialQty,
+      realizedPartialsPnl,
     };
   }, [accountBalance]);
 
@@ -804,10 +827,15 @@ export default function DiarioInversorTab() {
     initialSL: 0,
     initialRisk: 0,
     setup: 'Momentum Breakout',
+    characteristic: null,
     sellReason: null,
     postAnalysis: '',
     chartLink: '',
     industry: '',
+    partials: [],
+    deepAnalysis: null,
+    deepAnalysisAt: null,
+    deepAnalysisSource: null,
     partial1Qty: null,
     partial1Pct: null,
     partial2Qty: null,
@@ -840,15 +868,35 @@ export default function DiarioInversorTab() {
     }
   };
 
-  const closeTrade = (trade: Trade, exitPrice: number) => {
+  const closeTrade = (trade: Trade, exitPrice: number, exitDate?: string) => {
     const updated: Trade = {
       ...trade,
       exitPrice,
-      exitDate: new Date().toISOString().split('T')[0],
+      exitDate: exitDate || new Date().toISOString().split('T')[0],
       state: 'Closed',
     };
     saveTrade(updated);
   };
+
+  // Cierre parcial: registra qty acciones a `price`. Si con esto se vende todo, el trade queda cerrado.
+  const addPartialClose = (trade: Trade, qty: number, price: number, date?: string) => {
+    const d = date || new Date().toISOString().split('T')[0];
+    const partials = [...(trade.partials ?? []), { id: generateId(), date: d, qty, price }];
+    const metrics = calculateTradeMetrics({ ...trade, partials });
+    const updated: Trade = {
+      ...trade,
+      partials,
+      ...(metrics.sharesRemaining <= 0
+        ? { state: 'Closed' as TradeState, exitPrice: trade.exitPrice ?? price, exitDate: trade.exitDate ?? d }
+        : {}),
+    };
+    saveTrade(updated);
+  };
+
+  // Actualización puntual (ej: guardar la evaluación IA) sin cerrar el modal de edición
+  const updateTrade = useCallback((id: string, patch: Partial<Trade>) => {
+    setTrades(prev => prev.map(t => (t.id === id ? { ...t, ...patch } : t)));
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════
   // PTA CRUD
@@ -1025,6 +1073,12 @@ export default function DiarioInversorTab() {
             partial3Pct:  /^(partial.?3.?pct)$/i,
             currentPrice: /^(current.?price|last.?price|market.?price|precio.?actual)$/i,
             id:           /^(id|trade.?id)$/i,
+            characteristic: /^(characteristic|caracteristica)$/i,
+            // Campos nuevos sin equivalente en archivos externos (solo import JSON propio)
+            partials:           /^(partials)$/i,
+            deepAnalysis:       /^(deep.?analysis)$/i,
+            deepAnalysisAt:     /^(deep.?analysis.?at)$/i,
+            deepAnalysisSource: /^(deep.?analysis.?source)$/i,
           };
 
           // Get actual keys from first record
@@ -1289,6 +1343,7 @@ export default function DiarioInversorTab() {
               onEditTrade={(t) => { setEditingTrade(t); setShowTradeForm(true); }}
               onDeleteTrade={deleteTrade}
               onCloseTrade={closeTrade}
+              onPartialClose={addPartialClose}
               calculateMetrics={calculateTradeMetrics}
             />
           </Tab.Panel>
@@ -1333,6 +1388,9 @@ export default function DiarioInversorTab() {
               setEntries={setPtaEntries}
               trades={yearTrades}
               createEmpty={createEmptyPTA}
+              updateTrade={updateTrade}
+              calculateMetrics={calculateTradeMetrics}
+              accountBalance={accountBalance}
             />
           </Tab.Panel>
 
@@ -1395,6 +1453,7 @@ function SwingTab({
   onEditTrade,
   onDeleteTrade,
   onCloseTrade,
+  onPartialClose,
   calculateMetrics,
 }: {
   trades: Trade[];
@@ -1402,11 +1461,14 @@ function SwingTab({
   onAddTrade: () => void;
   onEditTrade: (t: Trade) => void;
   onDeleteTrade: (id: string) => void;
-  onCloseTrade: (t: Trade, price: number) => void;
+  onCloseTrade: (t: Trade, price: number, date?: string) => void;
+  onPartialClose: (t: Trade, qty: number, price: number, date?: string) => void;
   calculateMetrics: (t: Trade) => any;
 }) {
   const { t } = useLanguage();
-  const [closeModal, setCloseModal] = useState<{ trade: Trade; price: string } | null>(null);
+  const [closeModal, setCloseModal] = useState<{
+    trade: Trade; mode: 'total' | 'partial'; price: string; qty: string; date: string;
+  } | null>(null);
   const [chartTrade, setChartTrade] = useState<Trade | null>(null);
 
   return (
@@ -1587,12 +1649,25 @@ function SwingTab({
                     </td>
                     <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap">{trade.date}</td>
                     <td className="px-3 py-2.5 text-right text-gray-200">{formatCurrency(metrics.entryPrice)}</td>
-                    <td className="px-3 py-2.5 text-right text-gray-300">{trade.qty}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-300">
+                      {trade.qty}
+                      {metrics.partialsQty > 0 && trade.state === 'Open' && (
+                        <div className="text-[10px] text-amber-400/90 whitespace-nowrap" title="Acciones restantes tras cierres parciales">
+                          ✂️ {metrics.sharesRemaining} rest.
+                        </div>
+                      )}
+                      {metrics.partialsQty > 0 && trade.state === 'Closed' && (
+                        <div className="text-[10px] text-gray-500 whitespace-nowrap">✂️ {(trade.partials?.length ?? 0)} parcial(es)</div>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-right text-gray-300">{formatCurrency(trade.value)}</td>
                     <td className="px-3 py-2.5 text-right text-rose-400/90">{formatCurrency(trade.sl)}</td>
                     <td className="px-3 py-2.5 text-right text-emerald-400/90">{trade.pt1Price ? formatCurrency(trade.pt1Price) : '-'}</td>
                     <td className="px-3 py-2.5">
                       <span className="text-[11px] text-emerald-300/90 bg-emerald-500/[0.08] px-2 py-0.5 rounded whitespace-nowrap">{trade.setup}</span>
+                      {trade.characteristic && (
+                        <div className="text-[10px] text-sky-300/80 mt-0.5 whitespace-nowrap">{trade.characteristic}</div>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${trade.state === 'Open' ? 'bg-amber-500/15 text-amber-300' : 'bg-gray-500/15 text-gray-400'}`}>
@@ -1618,8 +1693,8 @@ function SwingTab({
                         </button>
                         {trade.state === 'Open' && (
                           <button
-                            onClick={() => setCloseModal({ trade, price: '' })}
-                            title="Cerrar trade"
+                            onClick={() => setCloseModal({ trade, mode: 'total', price: '', qty: '', date: new Date().toISOString().split('T')[0] })}
+                            title="Cerrar trade (total o parcial)"
                             className="px-2 py-1 bg-amber-600 hover:bg-amber-500 rounded text-xs transition-colors"
                           >
                             🔒
@@ -1644,30 +1719,98 @@ function SwingTab({
         )}
       </div>
 
-      {/* Close Trade Modal */}
-      {closeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-black/60 rounded-lg p-6 w-96">
-            <h3 className="text-lg font-bold mb-4">Cerrar Trade: {closeModal.trade.symbol}</h3>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Precio de salida"
-              value={closeModal.price}
-              onChange={(e) => setCloseModal({ ...closeModal, price: e.target.value })}
-              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded mb-4"
-            />
+      {/* Close Trade Modal (total o parcial) */}
+      {closeModal && (() => {
+        const remaining = calculateMetrics(closeModal.trade).sharesRemaining as number;
+        const qtyNum = Number(closeModal.qty);
+        const priceNum = Number(closeModal.price);
+        const partialValid = closeModal.mode === 'partial'
+          ? qtyNum > 0 && qtyNum <= remaining && priceNum > 0
+          : priceNum > 0;
+        return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setCloseModal(null)}>
+          <div className="bg-gray-950 border border-white/[0.1] rounded-xl p-6 w-[26rem]" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-1">Cerrar Trade: {closeModal.trade.symbol}</h3>
+            <p className="text-xs text-gray-400 mb-4">
+              {remaining} acciones abiertas
+              {(closeModal.trade.partials?.length ?? 0) > 0 && ` · ${closeModal.trade.partials!.length} cierre(s) parcial(es) previo(s)`}
+            </p>
+
+            {/* Selector total / parcial */}
+            <div className="flex rounded-lg bg-black/50 border border-white/[0.08] p-1 mb-4">
+              {([['total', '🔒 Cierre total'], ['partial', '✂️ Cierre parcial']] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setCloseModal({ ...closeModal, mode })}
+                  className={`flex-1 py-1.5 rounded-md text-sm font-semibold transition ${
+                    closeModal.mode === mode ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {closeModal.mode === 'partial' && (
+              <div className="mb-3">
+                <label className="block text-xs text-gray-400 mb-1">Cantidad a cerrar (máx {remaining})</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={remaining}
+                  placeholder={`ej: ${Math.max(1, Math.floor(remaining / 2))}`}
+                  value={closeModal.qty}
+                  onChange={(e) => setCloseModal({ ...closeModal, qty: e.target.value })}
+                  className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
+                />
+              </div>
+            )}
+
+            <div className="mb-3">
+              <label className="block text-xs text-gray-400 mb-1">
+                {closeModal.mode === 'partial' ? 'Precio del cierre parcial' : 'Precio de salida'}
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Precio"
+                value={closeModal.price}
+                onChange={(e) => setCloseModal({ ...closeModal, price: e.target.value })}
+                className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs text-gray-400 mb-1">Fecha</label>
+              <input
+                type="date"
+                value={closeModal.date}
+                onChange={(e) => setCloseModal({ ...closeModal, date: e.target.value })}
+                className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
+              />
+            </div>
+
+            {closeModal.mode === 'partial' && qtyNum >= remaining && qtyNum > 0 && (
+              <p className="text-[11px] text-amber-400 mb-3">
+                ⚠ Estás cerrando todas las acciones restantes — el trade quedará cerrado.
+              </p>
+            )}
+
             <div className="flex gap-2">
               <button
+                disabled={!partialValid}
                 onClick={() => {
-                  if (closeModal.price) {
-                    onCloseTrade(closeModal.trade, Number(closeModal.price));
-                    setCloseModal(null);
+                  if (!partialValid) return;
+                  if (closeModal.mode === 'partial') {
+                    onPartialClose(closeModal.trade, qtyNum, priceNum, closeModal.date);
+                  } else {
+                    onCloseTrade(closeModal.trade, priceNum, closeModal.date);
                   }
+                  setCloseModal(null);
                 }}
-                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
+                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed rounded font-semibold"
               >
-                Cerrar
+                {closeModal.mode === 'partial' ? 'Registrar parcial' : 'Cerrar trade'}
               </button>
               <button onClick={() => setCloseModal(null)} className="flex-1 px-4 py-2 bg-black/50 hover:bg-green-900/20 border border-green-900/20 rounded">
                 Cancelar
@@ -1675,7 +1818,8 @@ function SwingTab({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Trade Chart Modal (diario / 5M / 1M con entrada y salida) */}
       {chartTrade && (
@@ -2360,15 +2504,69 @@ function PTATab({
   setEntries,
   trades,
   createEmpty,
+  updateTrade,
+  calculateMetrics,
+  accountBalance,
 }: {
   entries: PTAEntry[];
   setEntries: React.Dispatch<React.SetStateAction<PTAEntry[]>>;
   trades: Trade[];
   createEmpty: () => PTAEntry;
+  updateTrade: (id: string, patch: Partial<Trade>) => void;
+  calculateMetrics: (t: Trade) => any;
+  accountBalance: number;
 }) {
   const { t } = useLanguage();
   const [editingEntry, setEditingEntry] = useState<PTAEntry | null>(null);
   const [showForm, setShowForm] = useState(false);
+
+  // ── Evaluación IA por trade cerrado ─────────────────────────────
+  // Se genera UNA vez por trade (deep understanding de qué pasó) y queda
+  // guardada en el trade para siempre (persiste vía DB/localStorage).
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [evalErrors, setEvalErrors] = useState<Record<string, string>>({});
+  const generationLockRef = useRef(false);
+
+  const closedTrades = useMemo(
+    () => trades
+      .filter(tr => tr.state === 'Closed' && tr.exitPrice != null)
+      .sort((a, b) => (b.exitDate || b.date).localeCompare(a.exitDate || a.date)),
+    [trades],
+  );
+
+  const generateEvaluation = useCallback(async (trade: Trade) => {
+    if (generationLockRef.current) return;
+    generationLockRef.current = true;
+    setGeneratingId(trade.id);
+    setEvalErrors(prev => { const { [trade.id]: _omit, ...rest } = prev; return rest; });
+    try {
+      const metrics = calculateMetrics(trade);
+      const res = await fetch('/api/trade-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trade, metrics, accountBalance }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      updateTrade(trade.id, {
+        deepAnalysis: data.analysis,
+        deepAnalysisAt: new Date().toISOString(),
+        deepAnalysisSource: data.source ?? 'rules',
+      });
+    } catch (e: any) {
+      setEvalErrors(prev => ({ ...prev, [trade.id]: e?.message || 'Error generando la evaluación' }));
+    } finally {
+      generationLockRef.current = false;
+      setGeneratingId(null);
+    }
+  }, [calculateMetrics, accountBalance, updateTrade]);
+
+  // Auto-generar (de a uno) la evaluación de trades cerrados que no la tengan todavía
+  useEffect(() => {
+    if (generationLockRef.current) return;
+    const pending = closedTrades.find(tr => !tr.deepAnalysis && !evalErrors[tr.id]);
+    if (pending) generateEvaluation(pending);
+  }, [closedTrades, evalErrors, generateEvaluation]);
 
   const saveEntry = (entry: PTAEntry) => {
     setEntries(prev => {
@@ -2459,6 +2657,81 @@ function PTATab({
         {entries.length === 0 && (
           <div className="text-center py-8 text-gray-500">{t('diarioTab.noPTAEntries')}</div>
         )}
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* Evaluación IA de trades cerrados (deep understanding, 1 vez) */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-lg font-bold text-emerald-300">🧠 Evaluación de Trades Cerrados</h3>
+          <p className="text-xs text-gray-400 mt-1">
+            Al cerrar un trade se genera automáticamente (una sola vez) un análisis en español de la estrategia,
+            la entrada y la salida — con datos de la compañía, el setup y el contexto de mercado. Queda guardado para siempre.
+          </p>
+        </div>
+
+        {closedTrades.length === 0 && (
+          <div className="text-center py-8 text-gray-500 bg-black/40 rounded-lg border border-white/[0.05]">
+            Todavía no hay trades cerrados para evaluar.
+          </div>
+        )}
+
+        {closedTrades.map(tr => {
+          const m = calculateMetrics(tr);
+          const isGenerating = generatingId === tr.id;
+          const err = evalErrors[tr.id];
+          return (
+            <div key={tr.id} className="bg-black/60 rounded-lg border border-white/[0.06] overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-white/[0.03]">
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-emerald-300">{tr.symbol}</span>
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${tr.side === 'Long' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
+                    {tr.side}
+                  </span>
+                  <span className="text-[11px] text-gray-400">{tr.date} → {tr.exitDate}</span>
+                  <span className="text-[11px] text-emerald-300/80 bg-emerald-500/[0.08] px-2 py-0.5 rounded">{tr.setup}</span>
+                  {tr.characteristic && <span className="text-[11px] text-sky-300/80">{tr.characteristic}</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`font-mono text-sm font-bold ${m.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {formatCurrency(m.pnl)} ({formatPercent(m.pnlPct)})
+                  </span>
+                  {tr.deepAnalysis && (
+                    <span
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-gray-400"
+                      title={tr.deepAnalysisAt ? `Generado: ${tr.deepAnalysisAt.slice(0, 10)}` : undefined}
+                    >
+                      {tr.deepAnalysisSource === 'ai' ? '🤖 IA' : '📐 Cuantitativo'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="px-4 py-3">
+                {tr.deepAnalysis ? (
+                  <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{tr.deepAnalysis}</div>
+                ) : isGenerating ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                    <span className="animate-spin">⏳</span> Analizando el trade (estrategia, entrada, salida y contexto de mercado)…
+                  </div>
+                ) : err ? (
+                  <div className="flex items-center justify-between gap-2 py-1">
+                    <span className="text-sm text-rose-400">⚠ {err}</span>
+                    <button
+                      onClick={() => generateEvaluation(tr)}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-xs font-semibold whitespace-nowrap"
+                    >
+                      🔄 Reintentar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500 py-1">En cola para analizar…</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* PTA Form Modal */}
@@ -2849,6 +3122,19 @@ function TradeFormModal({
             </select>
           </div>
 
+          {/* Característica del setup */}
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Característica</label>
+            <select
+              value={form.characteristic ?? ''}
+              onChange={(e) => updateField('characteristic', (e.target.value || null) as TradeCharacteristic | null)}
+              className="w-full px-3 py-2 bg-black/50 border border-white/[0.08] rounded"
+            >
+              <option value="">-</option>
+              {TRADE_CHARACTERISTICS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
           {/* Price Targets - Green themed */}
           <div className="bg-green-900/30 p-3 rounded border border-green-600">
             <label className="block text-sm text-green-300 mb-1 font-semibold">PT1 Price 🎯</label>
@@ -2946,6 +3232,86 @@ function TradeFormModal({
               <option value="Closed">Closed</option>
             </select>
           </div>
+        </div>
+
+        {/* Cierres parciales */}
+        <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-semibold text-amber-300">✂️ Cierres parciales</label>
+            <span className="text-[11px] text-gray-400">
+              {(() => {
+                const sold = (form.partials ?? []).reduce((s, p) => s + (p.qty || 0), 0);
+                return `${sold} de ${form.qty || 0} acciones cerradas · ${Math.max(0, (form.qty || 0) - sold)} restantes`;
+              })()}
+            </span>
+          </div>
+
+          {(form.partials ?? []).length === 0 && (
+            <p className="text-xs text-gray-500 mb-2">
+              Sin cierres parciales. Agregá uno si vendiste (o recompraste, en shorts) parte de la posición a otro precio.
+            </p>
+          )}
+
+          {(form.partials ?? []).map((p, idx) => {
+            const sideMult = form.side === 'Long' ? 1 : -1;
+            const pnl = form.entryPrice ? sideMult * (p.price - form.entryPrice) * p.qty : 0;
+            return (
+              <div key={p.id} className="grid grid-cols-[1fr_1fr_1fr_auto_auto] gap-2 items-center mb-2">
+                <input
+                  type="date"
+                  value={p.date}
+                  onChange={(e) => updateField('partials', (form.partials ?? []).map((x, i) => i === idx ? { ...x, date: e.target.value } : x))}
+                  className="px-2 py-1.5 bg-black/50 border border-white/[0.08] rounded text-sm"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="Qty"
+                  value={p.qty || ''}
+                  onChange={(e) => updateField('partials', (form.partials ?? []).map((x, i) => i === idx ? { ...x, qty: Number(e.target.value) } : x))}
+                  className="px-2 py-1.5 bg-black/50 border border-white/[0.08] rounded text-sm"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Precio"
+                  value={p.price || ''}
+                  onChange={(e) => updateField('partials', (form.partials ?? []).map((x, i) => i === idx ? { ...x, price: Number(e.target.value) } : x))}
+                  className="px-2 py-1.5 bg-black/50 border border-white/[0.08] rounded text-sm"
+                />
+                <span className={`text-xs font-mono whitespace-nowrap ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {formatCurrency(pnl)}
+                </span>
+                <button
+                  onClick={() => updateField('partials', (form.partials ?? []).filter((_, i) => i !== idx))}
+                  title="Eliminar cierre parcial"
+                  className="px-2 py-1 bg-rose-600/70 hover:bg-rose-500 rounded text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+
+          <button
+            onClick={() => updateField('partials', [
+              ...(form.partials ?? []),
+              { id: generateId(), date: new Date().toISOString().split('T')[0], qty: 0, price: 0 },
+            ])}
+            className="mt-1 px-3 py-1.5 bg-amber-600/80 hover:bg-amber-500 rounded text-xs font-semibold"
+          >
+            ➕ Agregar cierre parcial
+          </button>
+          {(() => {
+            const sold = (form.partials ?? []).reduce((s, p) => s + (p.qty || 0), 0);
+            if (form.qty > 0 && sold > form.qty) {
+              return <p className="text-[11px] text-rose-400 mt-2">⚠ Los cierres parciales suman más acciones ({sold}) que la posición ({form.qty}).</p>;
+            }
+            if (form.qty > 0 && sold === form.qty && form.state === 'Open') {
+              return <p className="text-[11px] text-amber-400 mt-2">💡 Cerraste todas las acciones en parciales — al guardar podés marcar el trade como Closed.</p>;
+            }
+            return null;
+          })()}
         </div>
 
         {/* Notes */}
