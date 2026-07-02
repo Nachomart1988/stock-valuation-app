@@ -371,7 +371,7 @@ export default function DiarioInversorTab() {
           const dbWatchlist: WatchlistItem[] = data.watchlist ?? [];
           const dbCashFlows: CashFlow[] = data.cash_flows ?? [];
 
-          // Always compare DB vs localStorage — use whichever has MORE trades.
+          // Always compare DB vs localStorage — use whichever has MORE data.
           // This recovers data if a previous sync failed and localStorage has unsaved trades.
           const localTrades: Trade[] = JSON.parse(localStorage.getItem('diario_trades_v2') || '[]');
           const localWPL = JSON.parse(localStorage.getItem('diario_weeklypl_v2') || '[]');
@@ -380,7 +380,17 @@ export default function DiarioInversorTab() {
           const localWatchlist = JSON.parse(localStorage.getItem('diario_watchlist_v2') || '[]');
           const localCashFlows: CashFlow[] = JSON.parse(localStorage.getItem('diario_cashflows_v1') || '[]');
 
-          if (localTrades.length > dbTrades.length) {
+          // Un cierre parcial (o cerrar un trade) NO cambia la cantidad de trades, así que
+          // con solo comparar length la DB vieja podía pisar cambios locales aún no subidos
+          // (debounce de 1.5s + reintentos). Con igual cantidad de trades, desempatamos por
+          // "riqueza": cierres parciales + trades cerrados + evaluaciones IA guardadas.
+          const richness = (ts: Trade[]) => ts.reduce((s, tr) =>
+            s + (tr.partials?.length ?? 0) + (tr.state === 'Closed' ? 1 : 0) + (tr.deepAnalysis ? 1 : 0), 0);
+          const preferLocal =
+            localTrades.length > dbTrades.length ||
+            (localTrades.length === dbTrades.length && richness(localTrades) > richness(dbTrades));
+
+          if (preferLocal) {
             // localStorage has more trades — use it and re-sync to DB
             console.warn(`[DiarioInversor] localStorage has ${localTrades.length} trades vs DB ${dbTrades.length} — using localStorage and re-syncing`);
             setTrades(localTrades);
