@@ -42,6 +42,17 @@ interface TradePartial {
   price: number;
 }
 
+// Evento de P&L realizado: un cierre parcial o la salida final de un trade.
+// Es la unidad que consume el tab P&L (así los parciales de trades ABIERTOS
+// también cuentan como ganancia/pérdida realizada en su fecha).
+interface RealizedEvent {
+  date: string;           // YYYY-MM-DD en que se realizó
+  pnl: number;
+  tradeId: string;
+  symbol: string;
+  kind: 'partial' | 'exit';
+}
+
 // Main Trade Interface - Tabla maestra de SWING
 interface Trade {
   id: string;
@@ -466,6 +477,41 @@ export default function DiarioInversorTab() {
   // Trades abiertos (para Portfolio)
   const openTrades = useMemo(() => yearTrades.filter(t => t.state === 'Open'), [yearTrades]);
 
+  // Eventos de P&L realizado: cada cierre parcial (aunque el trade siga abierto)
+  // en su propia fecha + la salida final de los trades cerrados. La suma de los
+  // eventos de un trade cerrado coincide con su P&L total (comisión en el exit).
+  const realizedEvents = useMemo<RealizedEvent[]>(() => {
+    const evs: RealizedEvent[] = [];
+    yearTrades.forEach(tr => {
+      const entry = tr.entryPrice || (tr.qty > 0 ? tr.value / tr.qty : 0);
+      const sideMult = tr.side === 'Long' ? 1 : -1;
+      (tr.partials ?? []).forEach(p => {
+        if ((p.qty || 0) > 0 && (p.price || 0) > 0 && p.date) {
+          evs.push({
+            date: p.date,
+            pnl: sideMult * (p.price - entry) * p.qty,
+            tradeId: tr.id,
+            symbol: tr.symbol,
+            kind: 'partial',
+          });
+        }
+      });
+      if (tr.state === 'Closed' && tr.exitPrice != null && tr.exitDate) {
+        const partialsQty = (tr.partials ?? []).reduce((s, p) => s + (p.qty || 0), 0);
+        const legacyQty = (tr.partial1Qty || 0) + (tr.partial2Qty || 0) + (tr.partial3Qty || 0);
+        const remaining = Math.max(0, tr.qty - partialsQty - legacyQty);
+        evs.push({
+          date: tr.exitDate,
+          pnl: sideMult * (tr.exitPrice - entry) * remaining - (tr.commission || 0),
+          tradeId: tr.id,
+          symbol: tr.symbol,
+          kind: 'exit',
+        });
+      }
+    });
+    return evs.sort((a, b) => a.date.localeCompare(b.date));
+  }, [yearTrades]);
+
   // Cálculos de Trade
   const calculateTradeMetrics = useCallback((trade: Trade) => {
     // Usar entryPrice directo si existe, sino calcular de value/qty
@@ -657,7 +703,10 @@ export default function DiarioInversorTab() {
 
     const withMetrics = openTrades.map(t => ({ trade: t, metrics: calculateTradeMetrics(t) }));
 
+    // TOP incluye lo ya realizado en cierres parciales + lo no realizado del resto
     const totalOpenProfit = withMetrics.reduce((sum, w) => sum + w.metrics.pnl, 0); // TOP
+    const realizedPartials = withMetrics.reduce((sum, w) => sum + (w.metrics.realizedPartialsPnl || 0), 0);
+    const unrealizedProfit = totalOpenProfit - realizedPartials;
     const totalOpenRisk = withMetrics.reduce((sum, w) => sum + w.metrics.openRisk, 0); // TOR
     const totalExposure = withMetrics.reduce((sum, w) => sum + w.metrics.exposure, 0);
 
@@ -678,6 +727,8 @@ export default function DiarioInversorTab() {
     return {
       positions: withMetrics,
       totalOpenProfit,
+      realizedPartials,
+      unrealizedProfit,
       totalOpenRisk,
       totalOpenHeat,
       newOpenRisk,
@@ -1354,6 +1405,7 @@ export default function DiarioInversorTab() {
           <Tab.Panel>
             <PLTab
               trades={closedTrades}
+              realizations={realizedEvents}
               weeklyPL={weeklyPL}
               setWeeklyPL={setWeeklyPL}
               selectedYear={selectedYear}
@@ -1848,6 +1900,7 @@ function SwingTab({
 
 function PLTab({
   trades,
+  realizations,
   weeklyPL,
   setWeeklyPL,
   selectedYear,
@@ -1856,6 +1909,7 @@ function PLTab({
   cashFlows,
 }: {
   trades: Trade[];
+  realizations: RealizedEvent[];
   weeklyPL: WeeklyPL[];
   setWeeklyPL: React.Dispatch<React.SetStateAction<WeeklyPL[]>>;
   selectedYear: number;
@@ -1864,18 +1918,16 @@ function PLTab({
   cashFlows: CashFlow[];
 }) {
   const { t } = useLanguage();
-  // Calculate weekly P&L from closed trades
+  // P&L semanal desde los eventos de realización (parciales + salidas finales),
+  // así los cierres parciales de trades todavía abiertos también cuentan.
   const weeklyData = useMemo(() => {
-    const weeks: Record<string, { trades: Trade[]; pnl: number }> = {};
+    const weeks: Record<string, { tradeIds: Set<string>; pnl: number }> = {};
 
-    trades.forEach(trade => {
-      if (trade.exitDate) {
-        const weekStart = getWeekStart(new Date(trade.exitDate)).toISOString().split('T')[0];
-        if (!weeks[weekStart]) weeks[weekStart] = { trades: [], pnl: 0 };
-        const metrics = calculateMetrics(trade);
-        weeks[weekStart].trades.push(trade);
-        weeks[weekStart].pnl += metrics.pnl;
-      }
+    realizations.forEach(ev => {
+      const weekStart = getWeekStart(new Date(ev.date)).toISOString().split('T')[0];
+      if (!weeks[weekStart]) weeks[weekStart] = { tradeIds: new Set(), pnl: 0 };
+      weeks[weekStart].tradeIds.add(ev.tradeId);
+      weeks[weekStart].pnl += ev.pnl;
     });
 
     // Sort by week
@@ -1897,38 +1949,32 @@ function PLTab({
         pctWeek: accountBalance > 0 ? data.pnl / accountBalance : 0,
         pctCumul: accountBalance > 0 ? cumulative / accountBalance : 0,
         drawdown,
-        trades: data.trades.length,
+        trades: data.tradeIds.size,
       };
     });
-  }, [trades, calculateMetrics, accountBalance]);
+  }, [realizations, accountBalance]);
 
   // Monthly summary
   const monthlyData = useMemo(() => {
     const months: Record<string, number> = {};
-    trades.forEach(trade => {
-      if (trade.exitDate) {
-        const month = trade.exitDate.substring(0, 7); // YYYY-MM
-        const metrics = calculateMetrics(trade);
-        months[month] = (months[month] || 0) + metrics.pnl;
-      }
+    realizations.forEach(ev => {
+      const month = ev.date.substring(0, 7); // YYYY-MM
+      months[month] = (months[month] || 0) + ev.pnl;
     });
     return Object.entries(months).sort(([a], [b]) => a.localeCompare(b));
-  }, [trades, calculateMetrics]);
+  }, [realizations]);
 
   // Quarterly summary
   const quarterlyData = useMemo(() => {
     const quarters: Record<string, number> = {};
-    trades.forEach(trade => {
-      if (trade.exitDate) {
-        const date = new Date(trade.exitDate);
-        const q = Math.ceil((date.getMonth() + 1) / 3);
-        const key = `Q${q}`;
-        const metrics = calculateMetrics(trade);
-        quarters[key] = (quarters[key] || 0) + metrics.pnl;
-      }
+    realizations.forEach(ev => {
+      const date = new Date(ev.date);
+      const q = Math.ceil((date.getMonth() + 1) / 3);
+      const key = `Q${q}`;
+      quarters[key] = (quarters[key] || 0) + ev.pnl;
     });
     return Object.entries(quarters);
-  }, [trades, calculateMetrics]);
+  }, [realizations]);
 
   const totalYTD = weeklyData.reduce((sum, w) => sum + w.pnl, 0);
   const ytdPct = accountBalance > 0 ? totalYTD / accountBalance : 0;
@@ -1958,18 +2004,16 @@ function PLTab({
     // Flujos de caja del año en scope
     const cfScope = cashFlows.filter(cf => new Date(cf.date).getFullYear() === selectedYear);
     const netCashFlows = cfScope.reduce((s, cf) => s + cf.amount, 0);
-    const totalPnl = trades.reduce((s, tr) => s + calculateMetrics(tr).pnl, 0);
+    const totalPnl = realizations.reduce((s, ev) => s + ev.pnl, 0);
     // Balance al inicio del periodo (sacando aportes/retiros; el balance actual ya los incluye)
     const initialBalance = accountBalance - netCashFlows;
 
-    // Eventos por fecha: P&L de trades cerrados (exitDate) + flujos de caja
+    // Eventos por fecha: P&L realizado (parciales + salidas finales) + flujos de caja
     type Ev = { date: string; pnl: number; cash: number; note?: string };
     const evMap: Record<string, Ev> = {};
-    trades.forEach(tr => {
-      if (!tr.exitDate) return;
-      const d = tr.exitDate;
-      if (!evMap[d]) evMap[d] = { date: d, pnl: 0, cash: 0 };
-      evMap[d].pnl += calculateMetrics(tr).pnl;
+    realizations.forEach(ev => {
+      if (!evMap[ev.date]) evMap[ev.date] = { date: ev.date, pnl: 0, cash: 0 };
+      evMap[ev.date].pnl += ev.pnl;
     });
     cfScope.forEach(cf => {
       if (!evMap[cf.date]) evMap[cf.date] = { date: cf.date, pnl: 0, cash: 0 };
@@ -1994,7 +2038,7 @@ function PLTab({
       });
     });
     return { points, initialBalance, finalBalance: running, netCashFlows, totalPnl };
-  }, [trades, cashFlows, selectedYear, accountBalance, calculateMetrics]);
+  }, [realizations, cashFlows, selectedYear, accountBalance]);
 
   return (
     <div className="space-y-6">
@@ -2319,6 +2363,22 @@ function PortfolioTab({
                 <div className={`text-3xl font-bold ${portfolioStats.totalOpenProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {formatCurrency(portfolioStats.totalOpenProfit)}
                 </div>
+                {portfolioStats.realizedPartials !== 0 && (
+                  <div className="text-xs text-gray-300 mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                    <span>
+                      ✂️ Realizado en parciales:{' '}
+                      <span className={`font-semibold ${portfolioStats.realizedPartials >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                        {formatCurrency(portfolioStats.realizedPartials)}
+                      </span>
+                    </span>
+                    <span>
+                      📊 No realizado:{' '}
+                      <span className={`font-semibold ${portfolioStats.unrealizedProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                        {formatCurrency(portfolioStats.unrealizedProfit)}
+                      </span>
+                    </span>
+                  </div>
+                )}
               </div>
 
               <StatCard
@@ -2478,6 +2538,11 @@ function PortfolioTab({
                   <td className="px-2 py-2">{formatNumber(metrics.rr)}</td>
                   <td className={`px-2 py-2 font-semibold ${metrics.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     {formatCurrency(metrics.pnl)}
+                    {metrics.realizedPartialsPnl !== 0 && (
+                      <div className="text-[10px] font-normal text-gray-400 whitespace-nowrap" title="P&L ya realizado en cierres parciales (incluido en el total)">
+                        ✂️ {formatCurrency(metrics.realizedPartialsPnl)} realizado
+                      </div>
+                    )}
                   </td>
                   <td className={`px-2 py-2 ${metrics.pnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     {formatPercent(metrics.pnlPct)}
