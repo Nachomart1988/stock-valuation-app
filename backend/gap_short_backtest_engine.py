@@ -293,9 +293,48 @@ class GapShortBacktestEngine:
         bars.sort(key=lambda x: x["date"])
         return bars
 
+    def _daily_chart(self, symbol: str, day: str) -> List[Dict]:
+        """Daily OHLC around a trade day (~110 trading days before → a couple weeks after)
+        so the user can inspect the multi-day setup (streaks, 52w distance, ATR context)
+        that led to the trade. The trade day itself is flagged with ``trade=True``."""
+        try:
+            d = datetime.strptime(day, "%Y-%m-%d")
+        except ValueError:
+            return []
+        date_from = (d - timedelta(days=160)).strftime("%Y-%m-%d")
+        date_to = (d + timedelta(days=14)).strftime("%Y-%m-%d")
+        data = self._fetch_json(
+            "historical-price-eod/full",
+            {"symbol": symbol, "from": date_from, "to": date_to},
+        )
+        hist = data.get("historical", []) if isinstance(data, dict) else data
+        if not isinstance(hist, list):
+            return []
+        hist = sorted(hist, key=lambda b: b.get("date", ""))
+        out: List[Dict] = []
+        for i, b in enumerate(hist):
+            ds = (b.get("date", "") or "")[:10]
+            if not ds:
+                continue
+            try:
+                out.append({
+                    "t": ds[5:],                 # MM-DD label
+                    "day": ds,                   # full YYYY-MM-DD
+                    "min": i,                    # sequential index (keeps ordering helpers happy)
+                    "open": float(b["open"]), "high": float(b["high"]),
+                    "low": float(b["low"]), "close": float(b["close"]),
+                    "premarket": False,
+                    "trade": ds == day,          # the entry day
+                })
+            except (KeyError, TypeError, ValueError):
+                continue
+        return out
+
     def trade_chart(self, symbol: str, day: str, interval: str = "5min") -> List[Dict]:
-        """1- or 5-minute OHLC for one session (premarket + regular + after-hours), for
-        the per-trade chart. Lazy-loaded by the frontend so the backtest payload stays small."""
+        """1-/5-minute or daily OHLC for the per-trade chart. Lazy-loaded by the frontend so
+        the backtest payload stays small. ``interval='daily'`` returns the multi-day context."""
+        if interval == "daily":
+            return self._daily_chart(symbol, day)
         interval = "1min" if interval == "1min" else "5min"
         data = self._fetch_json(
             f"historical-chart/{interval}",
