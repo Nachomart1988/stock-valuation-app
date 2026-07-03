@@ -1894,8 +1894,6 @@ function SwingTab({
             entryDate: chartTrade.date,
             exitPrice: chartTrade.exitPrice,
             exitDate: chartTrade.exitDate,
-            sl: chartTrade.sl,
-            pt1: chartTrade.pt1Price,
           } as TradeChartInfo}
           onClose={() => setChartTrade(null)}
         />

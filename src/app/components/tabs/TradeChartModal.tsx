@@ -51,8 +51,6 @@ export interface TradeChartInfo {
   entryDate: string;            // YYYY-MM-DD
   exitPrice?: number | null;
   exitDate?: string | null;     // YYYY-MM-DD
-  sl?: number | null;
-  pt1?: number | null;
 }
 
 interface Props {
@@ -170,23 +168,6 @@ export default function TradeChartModal({ trade, onClose }: Props) {
         },
       };
     }
-    if (trade.sl) {
-      annotations['sl'] = {
-        type: 'line', yMin: trade.sl, yMax: trade.sl,
-        borderColor: 'rgba(239, 68, 68, 0.5)', borderWidth: 1, borderDash: [3, 3],
-        label: { display: true, content: `SL $${trade.sl.toFixed(2)}`, position: 'start',
-          backgroundColor: 'rgba(239, 68, 68, 0.6)', color: '#fff', font: { size: 9 } },
-      };
-    }
-    if (trade.pt1) {
-      annotations['pt1'] = {
-        type: 'line', yMin: trade.pt1, yMax: trade.pt1,
-        borderColor: 'rgba(16, 185, 129, 0.4)', borderWidth: 1, borderDash: [3, 3],
-        label: { display: true, content: `PT1 $${trade.pt1.toFixed(2)}`, position: 'end',
-          backgroundColor: 'rgba(16, 185, 129, 0.55)', color: '#000', font: { size: 9 } },
-      };
-    }
-
     // ── Líneas verticales de fecha (entrada / salida) ──
     annotations['entryDate'] = {
       type: 'line', xMin: entryTs, xMax: entryTs,
@@ -287,12 +268,6 @@ export default function TradeChartModal({ trade, onClose }: Props) {
     };
   }, [bars, trade, interval]);
 
-  const pnlPct = trade.exitPrice != null
-    ? (trade.side === 'Long'
-        ? (trade.exitPrice - trade.entryPrice) / trade.entryPrice
-        : (trade.entryPrice - trade.exitPrice) / trade.entryPrice)
-    : null;
-
   const chartRef = useRef<any>(null);
   const resetZoom = () => { chartRef.current?.resetZoom?.(); };
 
@@ -315,11 +290,6 @@ export default function TradeChartModal({ trade, onClose }: Props) {
             <p className="text-[11px] text-gray-400 mt-0.5">
               Entrada {trade.entryDate} @ ${trade.entryPrice.toFixed(2)}
               {trade.exitDate ? ` → Salida ${trade.exitDate} @ $${(trade.exitPrice as number).toFixed(2)}` : ' · posición abierta'}
-              {pnlPct != null && (
-                <span className={pnlPct >= 0 ? ' text-emerald-400' : ' text-rose-400'}>
-                  {`  (${pnlPct >= 0 ? '+' : ''}${(pnlPct * 100).toFixed(2)}%)`}
-                </span>
-              )}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -386,8 +356,6 @@ export default function TradeChartModal({ trade, onClose }: Props) {
             <span className="flex items-center gap-1.5"><span className="text-emerald-400">▲▼</span> Flechas de entrada/salida</span>
             <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-emerald-400" /> Entrada</span>
             {trade.exitDate && <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-rose-400" /> Salida</span>}
-            {trade.sl ? <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 border-t border-dashed border-rose-400/60" /> Stop</span> : null}
-            {trade.pt1 ? <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 border-t border-dashed border-emerald-400/60" /> PT1</span> : null}
             <span className="text-gray-500 ml-auto">🖱️ Rueda = zoom · arrastrar = mover · botón Reset</span>
           </div>
         </div>
