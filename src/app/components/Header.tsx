@@ -91,6 +91,7 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
                 <Link href="/screener" className={navLinkClass()}>Screener</Link>
                 <Link href="/diario" className={navLinkClass()}>Diario</Link>
                 {isGodMode && <Link href="/backtest" className={navLinkClass()}>Backtest</Link>}
+                {isGodMode && <Link href="/informe" className={navLinkClass()}>Informe</Link>}
               </>
             ) : (
               <>
@@ -103,6 +104,7 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
                 <Link href="/screener" className={navLinkClass(pathname === '/screener')}>Screener</Link>
                 <Link href="/diario" className={navLinkClass(pathname === '/diario')}>Diario</Link>
                 {isGodMode && <Link href="/backtest" className={navLinkClass(pathname === '/backtest')}>Backtest</Link>}
+                {isGodMode && <Link href="/informe" className={navLinkClass(pathname === '/informe')}>Informe</Link>}
                 <Link href="/pricing" className={navLinkClass(pathname === '/pricing')}>{t('nav.pricing')}</Link>
               </>
             )}
@@ -277,6 +279,7 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
                   <Link href="/screener" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>Screener</Link>
                   <Link href="/diario" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>Diario</Link>
                   {isGodMode && <Link href="/backtest" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>Backtest</Link>}
+                  {isGodMode && <Link href="/informe" className={navLinkClass()} onClick={() => setMobileMenuOpen(false)}>Informe</Link>}
                 </>
               ) : (
                 <>
@@ -287,6 +290,7 @@ export default function Header({ activeTicker, onTickerChange }: HeaderProps = {
                   <Link href="/screener" className={navLinkClass(pathname === '/screener')} onClick={() => setMobileMenuOpen(false)}>Screener</Link>
                   <Link href="/diario" className={navLinkClass(pathname === '/diario')} onClick={() => setMobileMenuOpen(false)}>Diario</Link>
                   {isGodMode && <Link href="/backtest" className={navLinkClass(pathname === '/backtest')} onClick={() => setMobileMenuOpen(false)}>Backtest</Link>}
+                  {isGodMode && <Link href="/informe" className={navLinkClass(pathname === '/informe')} onClick={() => setMobileMenuOpen(false)}>Informe</Link>}
                   <Link href="/pricing" className={navLinkClass(pathname === '/pricing')} onClick={() => setMobileMenuOpen(false)}>{t('nav.pricing')}</Link>
                 </>
               )}

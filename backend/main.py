@@ -198,6 +198,14 @@ except ImportError:
     strategy_one_get_job = None
 
 try:
+    from weekly_report_engine import start_job as weekly_report_start_job, get_job as weekly_report_get_job
+    WEEKLY_REPORT_AVAILABLE = True
+except ImportError:
+    WEEKLY_REPORT_AVAILABLE = False
+    weekly_report_start_job = None
+    weekly_report_get_job = None
+
+try:
     from advanced_monte_carlo_dcf_engine import get_advanced_monte_carlo_engine
     ADV_MC_AVAILABLE = True
 except ImportError:
@@ -2661,6 +2669,40 @@ async def strategy_one_backtest_status(job_id: str):
     if not STRATEGY_ONE_BACKTEST_AVAILABLE:
         raise HTTPException(status_code=503, detail="Strategy one backtest engine not available")
     snap = strategy_one_get_job(job_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="job_id no encontrado o expirado")
+    return numpy_safe_response(snap)
+
+
+# ── Weekly Market Report — "Informe" (GOD MODE) — async job ───────────────
+
+class WeeklyReportRequest(BaseModel):
+    week_start: str        # YYYY-MM-DD — must be a Monday of a fully past week
+    language: str = "es"   # es | en
+
+
+@app.post("/report/weekly/start")
+async def weekly_report_start(req: WeeklyReportRequest):
+    """Start an async weekly market report job. Returns a job_id to poll."""
+    if not WEEKLY_REPORT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Weekly report engine not available")
+    try:
+        job_id = weekly_report_start_job(req.dict())
+        return {"job_id": job_id}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        print(f"[WeeklyReport] start error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/report/weekly/status/{job_id}")
+async def weekly_report_status(job_id: str):
+    """Poll a weekly report job; includes the full report when status=done."""
+    if not WEEKLY_REPORT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Weekly report engine not available")
+    snap = weekly_report_get_job(job_id)
     if snap is None:
         raise HTTPException(status_code=404, detail="job_id no encontrado o expirado")
     return numpy_safe_response(snap)
