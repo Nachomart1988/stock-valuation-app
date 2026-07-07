@@ -644,6 +644,21 @@ export default function InformePage() {
     URL.revokeObjectURL(url);
   }, [report]);
 
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const downloadPDF = useCallback(async () => {
+    if (!report || pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      // jsPDF is heavy — load it only when the user actually asks for the PDF
+      const { generateWeeklyReportPDF } = await import('./generateWeeklyReportPDF');
+      generateWeeklyReportPDF(report);
+    } catch (e: any) {
+      setError(e?.message || (es ? 'No se pudo generar el PDF' : 'Could not generate the PDF'));
+    } finally {
+      setPdfBusy(false);
+    }
+  }, [report, pdfBusy, es]);
+
   /* ---- Gating (same pattern as /backtest) ---- */
   if (!isLoaded) {
     return (
@@ -767,12 +782,21 @@ export default function InformePage() {
                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">
                   {es ? 'Informe semanal de mercado' : 'Weekly market report'}
                 </span>
-                <button
-                  onClick={downloadJSON}
-                  className="text-[11px] px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-gray-400 hover:text-gray-200 transition"
-                >
-                  JSON ↓
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={downloadPDF}
+                    disabled={pdfBusy}
+                    className="text-[11px] px-3 py-1.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 transition font-semibold disabled:opacity-50"
+                  >
+                    {pdfBusy ? (es ? 'Generando…' : 'Generating…') : 'PDF ↓'}
+                  </button>
+                  <button
+                    onClick={downloadJSON}
+                    className="text-[11px] px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-gray-400 hover:text-gray-200 transition"
+                  >
+                    JSON ↓
+                  </button>
+                </div>
               </div>
               <div className="text-xs text-gray-500 mb-2">{report.meta.label}</div>
               <h2 className="text-2xl sm:text-4xl font-black text-white leading-tight tracking-tight mb-3">
