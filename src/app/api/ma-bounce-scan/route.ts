@@ -21,14 +21,15 @@ export async function GET(req: NextRequest) {
   const sector = sp.get('sector') || '';
   const minSurge = parseFloat(sp.get('minSurge') || '0.50');
   const surgeLookbackMonths = parseInt(sp.get('surgeLookbackMonths') || '6');
-  const maPeriod = parseInt(sp.get('maPeriod') || '20');
+  const rawMaPeriod = parseInt(sp.get('maPeriod') || '20');
+  const maPeriod = [10, 20, 50, 100, 200].includes(rawMaPeriod) ? rawMaPeriod : 20;
 
-  // 1. Fetch stocks from FMP screener
+  // 1. Fetch stocks from FMP screener (marketCapMin=0 → no cap filter)
   const screenerParams = new URLSearchParams({
     priceMoreThan: priceMin,
     priceLowerThan: priceMax,
-    marketCapMoreThan: marketCapMin,
-    country,
+    ...(parseFloat(marketCapMin) > 0 ? { marketCapMoreThan: marketCapMin } : {}),
+    ...(country ? { country } : {}),
     ...(sector ? { sector } : {}),
     exchange: 'NYSE,NASDAQ,AMEX',
     isActivelyTrading: 'true',
@@ -98,7 +99,8 @@ export async function GET(req: NextRequest) {
           avgQuality: data.avg_quality || 0,
           avgRecoveryPct: data.avg_recovery_pct || 0,
           narrative: (data.narrative || '').slice(0, 250),
-          bestBounce: data.bounces?.[0] || null,
+          maRising: data.ma_rising ?? null,
+          bestBounce: data.bounces?.length ? data.bounces[data.bounces.length - 1] : null,
         });
       }
     } catch { /* skip failed tickers */ }

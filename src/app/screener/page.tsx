@@ -1755,6 +1755,7 @@ function ScreenerPageInner() {
                     disabled={mabLoading}
                     className="w-full bg-gray-900/60 border border-teal-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500 disabled:opacity-50"
                   >
+                    <option value="0">$0+ (All)</option>
                     <option value="100000000">$100M+</option>
                     <option value="500000000">$500M+</option>
                     <option value="1000000000">$1B+</option>
@@ -1816,6 +1817,7 @@ function ScreenerPageInner() {
                     disabled={mabLoading}
                     className="w-full bg-gray-900/60 border border-teal-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500 disabled:opacity-50"
                   >
+                    <option value="10">MA 10</option>
                     <option value="20">MA 20</option>
                     <option value="50">MA 50</option>
                   </select>
