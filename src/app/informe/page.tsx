@@ -32,6 +32,9 @@ interface BreadthStats {
   pct_up?: number; avg_ret?: number; median_ret?: number; index_ret?: number;
   concentration_gap?: number; pct_beat_index?: number;
   buckets?: { label: string; count: number }[];
+  avg_daily_breadth?: number | null;
+  ema50_above?: number; ema50_below?: number; ema50_pct_above?: number | null;
+  ema200_above?: number; ema200_below?: number; ema200_pct_above?: number | null;
 }
 
 interface ReportSection {
@@ -245,8 +248,22 @@ function BreadthSection({ s, es }: { s: ReportSection; es: boolean }) {
             {[
               { l: es ? 'Suben' : 'Advancers', v: String(st.advancers ?? '—'), c: 'text-emerald-400' },
               { l: es ? 'Bajan' : 'Decliners', v: String(st.decliners ?? '—'), c: 'text-red-400' },
-              { l: es ? 'Prom. componente' : 'Avg member', v: `${(st.avg_ret ?? 0) > 0 ? '+' : ''}${st.avg_ret?.toFixed(2)}%`, c: 'text-gray-200' },
+              { l: es ? 'Prom. compañía' : 'Avg company', v: `${(st.avg_ret ?? 0) > 0 ? '+' : ''}${st.avg_ret?.toFixed(2)}%`, c: 'text-gray-200' },
               { l: es ? 'Índice' : 'Index', v: `${(st.index_ret ?? 0) > 0 ? '+' : ''}${st.index_ret?.toFixed(2)}%`, c: 'text-gray-200' },
+              ...(st.avg_daily_breadth != null ? [{
+                l: es ? 'Amplitud media diaria' : 'Avg daily breadth',
+                v: `${st.avg_daily_breadth.toFixed(0)}%`, c: 'text-gray-200',
+              }] : []),
+              ...(st.ema50_pct_above != null ? [{
+                l: `> EMA 50 (${st.ema50_above}/${(st.ema50_above ?? 0) + (st.ema50_below ?? 0)})`,
+                v: `${st.ema50_pct_above.toFixed(0)}%`,
+                c: st.ema50_pct_above >= 50 ? 'text-emerald-400' : 'text-red-400',
+              }] : []),
+              ...(st.ema200_pct_above != null ? [{
+                l: `> EMA 200 (${st.ema200_above}/${(st.ema200_above ?? 0) + (st.ema200_below ?? 0)})`,
+                v: `${st.ema200_pct_above.toFixed(0)}%`,
+                c: st.ema200_pct_above >= 50 ? 'text-emerald-400' : 'text-red-400',
+              }] : []),
             ].map((k) => (
               <div key={k.l} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-center">
                 <div className={`text-xl font-black font-mono ${k.c}`}>{k.v}</div>
@@ -513,12 +530,12 @@ function SynthesisSection({ s, es }: { s: ReportSection; es: boolean }) {
       <div className="grid md:grid-cols-2 gap-6">
         <div>
           <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">
-            {es ? 'Consejo de analistas neuronales' : 'Neural analyst council'}
+            {es ? 'Dimensiones del análisis' : 'Analysis dimensions'}
           </div>
           <div className="space-y-2.5">
             {analysts.map((a) => (
               <div key={a.id} className="grid grid-cols-[minmax(130px,190px)_1fr_50px] items-center gap-3">
-                <span className="text-[13px] text-gray-300 truncate" title={`${es ? 'confianza' : 'confidence'} ${(a.confidence * 100).toFixed(0)}%`}>
+                <span className="text-[13px] text-gray-300 truncate" title={`${es ? 'cobertura de datos' : 'data coverage'} ${(a.confidence * 100).toFixed(0)}%`}>
                   {a.name}
                 </span>
                 <SignedBar value={a.score} max={100} />
@@ -530,7 +547,7 @@ function SynthesisSection({ s, es }: { s: ReportSection; es: boolean }) {
           </div>
           {s.consensus != null && (
             <div className="mt-4 text-sm text-gray-400">
-              {es ? 'Consenso' : 'Consensus'}:{' '}
+              {es ? 'Balance agregado' : 'Aggregate balance'}:{' '}
               <span className={`font-mono font-bold ${s.consensus > 10 ? 'text-emerald-400' : s.consensus < -10 ? 'text-red-400' : 'text-gray-200'}`}>
                 {s.consensus > 0 ? '+' : ''}{s.consensus.toFixed(0)}
               </span>
@@ -717,8 +734,8 @@ export default function InformePage() {
         </div>
         <p className="text-gray-400 text-sm mb-8 max-w-3xl">
           {es
-            ? 'Informe institucional de una semana pasada del mercado: índices, rotación sectorial, amplitud real del S&P 500, earnings, divisas, flujos y una síntesis cruzada de analistas neuronales.'
-            : 'Institutional review of a past market week: indices, sector rotation, true S&P 500 breadth, earnings, currencies, flows and a cross-signal synthesis by neural analysts.'}
+            ? 'Informe institucional de una semana pasada del mercado: índices, rotación sectorial, amplitud real del S&P 500, earnings, divisas, flujos y una síntesis cruzada de señales.'
+            : 'Institutional review of a past market week: indices, sector rotation, true S&P 500 breadth, earnings, currencies, flows and a cross-signal synthesis.'}
         </p>
 
         {/* Week selector + run */}
@@ -864,13 +881,9 @@ export default function InformePage() {
                 {es ? 'Cobertura' : 'Coverage'}: {report.meta.coverage.sp500_members_with_data} S&P 500 ·{' '}
                 {report.meta.coverage.earnings_reports_sp500} earnings ·{' '}
                 {report.meta.coverage.news_headlines} {es ? 'titulares' : 'headlines'} ·{' '}
-                {report.meta.coverage.fx_pairs} FX · NLP: {report.meta.coverage.nlp_engine}
+                {report.meta.coverage.fx_pairs} FX
               </p>
               <p>{report.meta.sources}</p>
-              <p>
-                {es ? 'Generado' : 'Generated'}: {new Date(report.meta.generated_at).toLocaleString(es ? 'es-ES' : 'en-US')} ·
-                Engine v{report.meta.engine_version}
-              </p>
             </div>
           </article>
         )}

@@ -149,13 +149,6 @@ function masthead(c: Ctx, report: any, es: boolean) {
   doc.setFontSize(7.5);
   doc.setTextColor(...NAVY);
   doc.text(es ? 'INFORME SEMANAL DE MERCADO' : 'WEEKLY MARKET REPORT', ML, c.y);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...FAINT);
-  const gen = new Date(report.meta.generated_at);
-  doc.text(
-    `${es ? 'Generado' : 'Generated'}: ${gen.toLocaleDateString(es ? 'es-ES' : 'en-US')}`,
-    PW - MR, c.y, { align: 'right' },
-  );
   c.y += 6;
 
   doc.setFontSize(8.6);
@@ -319,7 +312,7 @@ function breadthSection(c: Ctx, s: any, es: boolean) {
     startY: c.y,
     head: [[
       es ? 'Suben' : 'Advancers', es ? 'Bajan' : 'Decliners', es ? 'Planos' : 'Flat',
-      es ? 'Amplitud' : 'Breadth', es ? 'Prom. componente' : 'Avg member',
+      es ? 'Amplitud' : 'Breadth', es ? 'Prom. compañía' : 'Avg company',
       es ? 'Mediana' : 'Median', es ? 'Índice' : 'Index',
     ]],
     body: [[
@@ -335,6 +328,35 @@ function breadthSection(c: Ctx, s: any, es: boolean) {
     },
   });
   tableDone(c);
+
+  // Trend participation: average daily breadth + companies above/below EMAs
+  if (st.avg_daily_breadth != null || st.ema50_pct_above != null || st.ema200_pct_above != null) {
+    autoTable(c.doc, {
+      ...BASE_TABLE,
+      startY: c.y,
+      head: [[
+        es ? 'Amplitud media diaria' : 'Avg daily breadth',
+        es ? 'Sobre EMA 50' : 'Above 50-day EMA',
+        es ? 'Bajo EMA 50' : 'Below 50-day EMA',
+        es ? 'Sobre EMA 200' : 'Above 200-day EMA',
+        es ? 'Bajo EMA 200' : 'Below 200-day EMA',
+      ]],
+      body: [[
+        st.avg_daily_breadth != null ? `${st.avg_daily_breadth.toFixed(0)}%` : '—',
+        st.ema50_pct_above != null ? `${st.ema50_above} (${st.ema50_pct_above.toFixed(0)}%)` : '—',
+        st.ema50_pct_above != null ? `${st.ema50_below} (${(100 - st.ema50_pct_above).toFixed(0)}%)` : '—',
+        st.ema200_pct_above != null ? `${st.ema200_above} (${st.ema200_pct_above.toFixed(0)}%)` : '—',
+        st.ema200_pct_above != null ? `${st.ema200_below} (${(100 - st.ema200_pct_above).toFixed(0)}%)` : '—',
+      ]],
+      styles: { ...BASE_TABLE.styles, halign: 'center' },
+      didParseCell: (d) => {
+        if (d.section !== 'body') return;
+        if (d.column.index === 1 || d.column.index === 3) d.cell.styles.textColor = GREEN as any;
+        if (d.column.index === 2 || d.column.index === 4) d.cell.styles.textColor = RED as any;
+      },
+    });
+    tableDone(c);
+  }
 
   // Distribution histogram
   const buckets: any[] = st.buckets ?? [];
@@ -604,8 +626,8 @@ function synthesisSection(c: Ctx, s: any, es: boolean) {
       ...BASE_TABLE,
       startY: c.y,
       head: [[
-        es ? 'Analista neuronal' : 'Neural analyst', '',
-        'Score', es ? 'Confianza' : 'Confidence',
+        es ? 'Dimensión' : 'Dimension', '',
+        es ? 'Lectura' : 'Reading', es ? 'Cobertura' : 'Coverage',
       ]],
       body: analysts.map((a) => [
         tx(a.name), '',
@@ -636,7 +658,7 @@ function synthesisSection(c: Ctx, s: any, es: boolean) {
       c.doc.setFontSize(8.4);
       c.doc.setTextColor(...GRAY);
       c.doc.text(
-        `${es ? 'Consenso' : 'Consensus'}: ${s.consensus > 0 ? '+' : ''}${(+s.consensus).toFixed(0)} / ±100  ·  ${es ? 'dispersión' : 'dispersion'}: ${(+(s.dispersion ?? 0)).toFixed(0)}`,
+        `${es ? 'Balance agregado' : 'Aggregate balance'}: ${s.consensus > 0 ? '+' : ''}${(+s.consensus).toFixed(0)} / ±100  ·  ${es ? 'dispersión' : 'dispersion'}: ${(+(s.dispersion ?? 0)).toFixed(0)}`,
         ML, c.y,
       );
       c.y += 7;
@@ -683,7 +705,7 @@ function footerAndDisclaimer(c: Ctx, report: any, es: boolean) {
   const cov = report.meta.coverage ?? {};
   const covLine = `${es ? 'Cobertura' : 'Coverage'}: ${cov.sp500_members_with_data ?? 0} S&P 500 · ` +
     `${cov.earnings_reports_sp500 ?? 0} earnings · ${cov.news_headlines ?? 0} ${es ? 'titulares' : 'headlines'} · ` +
-    `${cov.fx_pairs ?? 0} FX · NLP: ${cov.nlp_engine ?? '—'}`;
+    `${cov.fx_pairs ?? 0} FX`;
   doc.text(covLine, ML, c.y);
   c.y += 4;
   for (const w of report.meta.warnings ?? []) {

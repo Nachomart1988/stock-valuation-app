@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import statistics
 import threading
 import time
@@ -333,6 +334,34 @@ class WeeklyReportEngine:
         return sorted(hist, key=lambda b: b.get("date", ""))
 
     @staticmethod
+    def _dedupe_share_classes(constituents: List[Dict]) -> List[Dict]:
+        """The S&P 500 index lists ~503 tickers because a few companies have two
+        share classes (GOOGL/GOOG, FOXA/FOX, NWSA/NWS...). Counting both would
+        overstate company-level stats, so keep one ticker per company."""
+        seen: set = set()
+        out: List[Dict] = []
+        for c in constituents:
+            name = (c.get("name") or "").lower()
+            name = re.sub(r"\(class [a-z]\)", "", name)
+            key = re.sub(r"[^a-z0-9]", "", name) or c.get("symbol", "")
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(c)
+        return out
+
+    @staticmethod
+    def _ema_last(closes: List[float], period: int) -> Optional[float]:
+        """Last EMA value, seeded with the SMA of the first `period` closes."""
+        if len(closes) < period + 5:
+            return None
+        k = 2.0 / (period + 1)
+        ema = sum(closes[:period]) / period
+        for c in closes[period:]:
+            ema = c * k + (1 - k) * ema
+        return ema
+
+    @staticmethod
     def _corporate_action_gap(bars: List[Dict], ws: str, we: str) -> bool:
         """True if an in-week overnight gap looks like an unadjusted corporate
         action (spin-off / split): the next OPEN lands far from the prior close
@@ -426,6 +455,8 @@ class WeeklyReportEngine:
              "sector": c.get("sector") or "—"}
             for c in cons if isinstance(c, dict) and c.get("symbol")
         ]
+        # one ticker per company (drop duplicate share classes) → ~500 companies
+        constituents = self._dedupe_share_classes(constituents)
         raw["constituents"] = constituents
         if not constituents:
             raw["warnings"].append(
@@ -439,8 +470,11 @@ class WeeklyReportEngine:
         done = 0
         done_lock = threading.Lock()
 
+        # members need ~200 trading days of history for the EMA-200 breadth stats
+        d_from_members = (_d(ws) - timedelta(days=320)).isoformat()
+
         def _fetch_member(sym: str) -> Tuple[str, List[Dict]]:
-            return sym, self._daily_bars(sym, d_from, d_to)
+            return sym, self._daily_bars(sym, d_from_members, d_to)
 
         if constituents:
             with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as pool:
@@ -600,6 +634,41 @@ class WeeklyReportEngine:
                 ("> +5%",     sum(1 for r in rets if r >= 5)),
             ]
             pct_up = 100 * adv / len(rets)
+
+            # Session-by-session breadth: % of companies up each day, averaged
+            day_stats: Dict[str, List[int]] = {}
+            for p in mp.values():
+                for d in p.get("daily", []):
+                    rec = day_stats.setdefault(d["date"], [0, 0])
+                    rec[1] += 1
+                    if d["chg_pct"] > 0:
+                        rec[0] += 1
+            daily_pcts = [100 * up / tot for up, tot in day_stats.values() if tot > 0]
+            # integer percentage so prose, KPI, web and PDF all show the same number
+            avg_daily = int(statistics.mean(daily_pcts) + 0.5) if daily_pcts else None
+
+            # Trend participation: companies above/below their 50- and 200-day EMAs
+            member_bars = raw["member_bars"]
+            e50_above = e50_below = e200_above = e200_below = 0
+            for sym in mp:
+                closes = [b["close"] for b in member_bars.get(sym, [])
+                          if b.get("date", "") <= we and b.get("close")]
+                if not closes:
+                    continue
+                last = closes[-1]
+                e50 = self._ema_last(closes, 50)
+                e200 = self._ema_last(closes, 200)
+                if e50 is not None:
+                    if last >= e50:
+                        e50_above += 1
+                    else:
+                        e50_below += 1
+                if e200 is not None:
+                    if last >= e200:
+                        e200_above += 1
+                    else:
+                        e200_below += 1
+
             breadth.update({
                 "advancers": adv, "decliners": dec, "flat": flat,
                 "pct_up": round(pct_up, 1), "avg_ret": round(avg, 2),
@@ -608,6 +677,13 @@ class WeeklyReportEngine:
                 "buckets": [{"label": b, "count": c} for b, c in buckets],
                 "pct_beat_index": round(100 * sum(1 for r in rets if r > spx_ret)
                                         / len(rets), 1),
+                "avg_daily_breadth": avg_daily,
+                "ema50_above": e50_above, "ema50_below": e50_below,
+                "ema50_pct_above": (round(100 * e50_above / (e50_above + e50_below), 1)
+                                    if e50_above + e50_below else None),
+                "ema200_above": e200_above, "ema200_below": e200_below,
+                "ema200_pct_above": (round(100 * e200_above / (e200_above + e200_below), 1)
+                                     if e200_above + e200_below else None),
             })
             breadth["score"] = round(_clamp((pct_up - 50) * 2.4), 1)
             breadth["confidence"] = min(0.95, len(rets) / 450)
@@ -974,7 +1050,7 @@ class WeeklyReportEngine:
         regime_txt = {
             "risk_on_broad": {
                 "es": ("Apetito por riesgo amplio",
-                       "Avance generalizado: la mayoría de sectores y componentes participaron de la suba."),
+                       "Avance generalizado: la mayoría de los sectores y de las compañías participaron de la suba."),
                 "en": ("Broad risk-on",
                        "A broad-based advance: most sectors and index members participated in the move higher."),
             },
@@ -1014,7 +1090,7 @@ class WeeklyReportEngine:
             if best_sec:
                 dek_bits.append(f"{best_sec['labels']['es']} lideró ({_pct(best_sec['ret_pct'])})")
             if B.get("pct_up") is not None:
-                dek_bits.append(f"el {_pctu(B['pct_up'], 0)} de los componentes cerró en positivo")
+                dek_bits.append(f"el {_pctu(B['pct_up'], 0)} de las compañías del índice cerró en positivo")
             if M["vix"]:
                 dek_bits.append(f"el VIX terminó en {M['vix']['level']:.1f} ({_pct(M['vix']['chg_pct'])})")
             dek = ("; ".join(dek_bits) + ".") if dek_bits else regime_txt[1]
@@ -1025,7 +1101,7 @@ class WeeklyReportEngine:
             if best_sec:
                 dek_bits.append(f"{best_sec['labels']['en']} led ({_pct(best_sec['ret_pct'])})")
             if B.get("pct_up") is not None:
-                dek_bits.append(f"{_pctu(B['pct_up'], 0)} of index members closed higher")
+                dek_bits.append(f"{_pctu(B['pct_up'], 0)} of the index's companies closed higher")
             if M["vix"]:
                 dek_bits.append(f"the VIX ended at {M['vix']['level']:.1f} ({_pct(M['vix']['chg_pct'])})")
             dek = ("; ".join(dek_bits) + ".") if dek_bits else regime_txt[1]
@@ -1145,9 +1221,10 @@ class WeeklyReportEngine:
             gap = B.get("concentration_gap") or 0
             if es:
                 paras.append(
-                    f"Sobre {B['total']} componentes del S&P 500 con datos, {B['advancers']} avanzaron, "
-                    f"{B['decliners']} retrocedieron y {B['flat']} cerraron prácticamente planos: "
-                    f"una amplitud del {_pctu(B['pct_up'], 0)}. El retorno promedio del componente fue "
+                    f"Sobre las {B['total']} compañías del S&P 500 con datos disponibles, "
+                    f"{B['advancers']} avanzaron, "
+                    f"{B['decliners']} retrocedieron y {B['flat']} cerraron prácticamente planas: "
+                    f"una amplitud del {_pctu(B['pct_up'], 0)}. El retorno promedio por compañía fue "
                     f"{_pct(B['avg_ret'])} (mediana {_pct(B['median_ret'])}) frente a {_pct(B['index_ret'])} "
                     f"del índice ponderado por capitalización.")
                 paras.append(
@@ -1157,12 +1234,33 @@ class WeeklyReportEngine:
                     (f"La acción promedio superó al índice por {_pctu(abs(gap))}: la fortaleza estuvo "
                      f"repartida más allá de las grandes capitalizaciones, una señal de participación "
                      f"saludable.") if gap < -0.8 else
-                    "Índice y componente promedio se movieron en línea: no hubo distorsión relevante por concentración.")
+                    "Índice y acción promedio se movieron en línea: no hubo distorsión relevante por concentración.")
+                extra_bits = []
+                if B.get("avg_daily_breadth") is not None:
+                    extra_bits.append(
+                        f"sesión a sesión, la amplitud promedió un {_pctu(B['avg_daily_breadth'], 0)} "
+                        f"de valores al alza por rueda")
+                if B.get("ema50_pct_above") is not None and B.get("ema200_pct_above") is not None:
+                    extra_bits.append(
+                        f"al cierre del viernes, {B['ema50_above']} compañías "
+                        f"({_pctu(B['ema50_pct_above'], 0)}) cotizaban por encima de su media móvil de "
+                        f"50 ruedas y {B['ema200_above']} ({_pctu(B['ema200_pct_above'], 0)}) por encima "
+                        f"de la de 200")
+                if extra_bits:
+                    tendencia = B.get("ema200_pct_above")
+                    cierre = ("La participación de fondo sigue siendo sólida."
+                              if tendencia is not None and tendencia >= 60 else
+                              "La participación de fondo muestra un deterioro que conviene vigilar."
+                              if tendencia is not None and tendencia < 45 else
+                              "La participación de fondo se mantiene equilibrada.")
+                    paras.append("En cuanto a la salud de la tendencia: "
+                                 + "; ".join(extra_bits) + ". " + cierre)
             else:
                 paras.append(
-                    f"Across {B['total']} S&P 500 members with data, {B['advancers']} advanced, "
+                    f"Across the {B['total']} S&P 500 companies with available data, "
+                    f"{B['advancers']} advanced, "
                     f"{B['decliners']} declined and {B['flat']} closed roughly flat — breadth of "
-                    f"{_pctu(B['pct_up'], 0)}. The average member returned {_pct(B['avg_ret'])} "
+                    f"{_pctu(B['pct_up'], 0)}. The average company returned {_pct(B['avg_ret'])} "
                     f"(median {_pct(B['median_ret'])}) versus {_pct(B['index_ret'])} for the "
                     f"cap-weighted index.")
                 paras.append(
@@ -1172,7 +1270,25 @@ class WeeklyReportEngine:
                     (f"The average stock beat the index by {_pctu(abs(gap))}: strength was distributed "
                      f"beyond the largest capitalizations — a sign of healthy participation.")
                     if gap < -0.8 else
-                    "Index and average member moved in line: concentration did not distort the picture.")
+                    "Index and average stock moved in line: concentration did not distort the picture.")
+                extra_bits = []
+                if B.get("avg_daily_breadth") is not None:
+                    extra_bits.append(
+                        f"session by session, breadth averaged {_pctu(B['avg_daily_breadth'], 0)} "
+                        f"of names higher per day")
+                if B.get("ema50_pct_above") is not None and B.get("ema200_pct_above") is not None:
+                    extra_bits.append(
+                        f"as of Friday's close, {B['ema50_above']} companies "
+                        f"({_pctu(B['ema50_pct_above'], 0)}) traded above their 50-day moving average "
+                        f"and {B['ema200_above']} ({_pctu(B['ema200_pct_above'], 0)}) above their 200-day")
+                if extra_bits:
+                    tendencia = B.get("ema200_pct_above")
+                    cierre = ("Underlying participation remains solid."
+                              if tendencia is not None and tendencia >= 60 else
+                              "Underlying participation shows deterioration worth monitoring."
+                              if tendencia is not None and tendencia < 45 else
+                              "Underlying participation remains balanced.")
+                    paras.append("On trend health: " + "; ".join(extra_bits) + ". " + cierre)
         sections.append({"id": "breadth",
                          "title": "Amplitud del mercado" if es else "Market breadth",
                          "paragraphs": paras, "stats": B})
@@ -1406,10 +1522,10 @@ class WeeklyReportEngine:
         if N["count"]:
             t0 = N["themes"][0] if N["themes"] else None
             if es:
-                p = (f"Se procesaron {N['count']} titulares de la semana con el motor de sentimiento "
-                     f"del análisis de mercado. El tono agregado fue "
+                p = (f"A lo largo de la semana relevamos {N['count']} titulares de la prensa "
+                     f"financiera. El tono general de la cobertura fue "
                      f"{'negativo' if N['avg_sentiment'] < -0.1 else 'positivo' if N['avg_sentiment'] > 0.1 else 'neutro'} "
-                     f"({N['avg_sentiment']:+.2f} en escala -1/+1).")
+                     f"({N['avg_sentiment']:+.2f} en una escala de -1 a +1).")
                 if t0:
                     p += (f" El tema dominante fue «{t0['labels']['es']}» "
                           f"({t0['count']} menciones), seguido de "
@@ -1427,10 +1543,10 @@ class WeeklyReportEngine:
                 }[N["digestion"]]
                 paras.append(dig)
             else:
-                p = (f"{N['count']} weekly headlines were processed with the market-analysis sentiment "
-                     f"engine. Aggregate tone was "
+                p = (f"Over the week we reviewed {N['count']} financial-press headlines. "
+                     f"The overall tone of the coverage was "
                      f"{'negative' if N['avg_sentiment'] < -0.1 else 'positive' if N['avg_sentiment'] > 0.1 else 'neutral'} "
-                     f"({N['avg_sentiment']:+.2f} on a -1/+1 scale).")
+                     f"({N['avg_sentiment']:+.2f} on a -1 to +1 scale).")
                 if t0:
                     p += (f" The dominant theme was “{t0['labels']['en']}” ({t0['count']} mentions), "
                           f"followed by "
@@ -1461,13 +1577,13 @@ class WeeklyReportEngine:
 
         # ---- 9. Council synthesis ----------------------------------------------
         member_names = {
-            "market":   {"es": "Analista de mercado",   "en": "Market analyst"},
-            "sectors":  {"es": "Analista de rotación",  "en": "Rotation analyst"},
-            "breadth":  {"es": "Analista de amplitud",  "en": "Breadth analyst"},
-            "earnings": {"es": "Analista de resultados", "en": "Earnings analyst"},
-            "macrofx":  {"es": "Analista macro/divisas", "en": "Macro/FX analyst"},
-            "flows":    {"es": "Analista de flujos",    "en": "Flows analyst"},
-            "news":     {"es": "Analista de noticias",  "en": "News analyst"},
+            "market":   {"es": "Acción del precio",        "en": "Price action"},
+            "sectors":  {"es": "Rotación sectorial",       "en": "Sector rotation"},
+            "breadth":  {"es": "Amplitud de mercado",      "en": "Market breadth"},
+            "earnings": {"es": "Resultados corporativos",  "en": "Corporate earnings"},
+            "macrofx":  {"es": "Macro y divisas",          "en": "Macro & FX"},
+            "flows":    {"es": "Flujos y posicionamiento", "en": "Flows & positioning"},
+            "news":     {"es": "Noticias y narrativa",     "en": "News & narrative"},
         }
         div_txt = {
             "narrow_leadership": {
@@ -1533,27 +1649,37 @@ class WeeklyReportEngine:
         paras = []
         if es:
             paras.append(
-                f"Los siete analistas del consejo neuronal arrojaron un consenso de {C['consensus']:+.0f} "
-                f"(escala -100/+100) con una dispersión de {C['dispersion']:.0f} puntos: "
-                + ("una lectura homogénea, con la mayoría de los modelos apuntando en la misma dirección."
+                "Cada semana contrastamos entre sí siete frentes del mercado — la acción del precio, "
+                "la rotación sectorial, la amplitud, los resultados corporativos, el plano macro y de "
+                "divisas, los flujos de posicionamiento y el tono de las noticias — para separar lo que "
+                f"el índice dice de lo que el mercado realmente hace. Esta semana el balance agregado "
+                f"se ubicó en {C['consensus']:+.0f} dentro de una escala de -100 a +100, con una "
+                f"dispersión de {C['dispersion']:.0f} puntos entre lecturas: "
+                + ("los distintos frentes cuentan una historia consistente."
                    if C["dispersion"] < 25 else
-                   "una lectura fragmentada — los modelos discrepan y conviene ponderar las divergencias tanto como el consenso."))
+                   "los distintos frentes no cuentan exactamente la misma historia, por lo que las "
+                   "divergencias merecen tanta atención como el balance general."))
             if driver_txts:
                 paras.append("Ordenados por impacto estimado, los motores de la semana fueron: "
                              + " ".join(f"({i+1}) {t}" for i, t in enumerate(driver_txts)))
         else:
             paras.append(
-                f"The seven analysts of the neural council produced a consensus of {C['consensus']:+.0f} "
-                f"(-100/+100 scale) with a dispersion of {C['dispersion']:.0f} points: "
-                + ("a homogeneous read, with most models pointing the same way."
+                "Each week we weigh seven fronts of the market against one another — price action, "
+                "sector rotation, breadth, corporate earnings, the macro and currency backdrop, "
+                "positioning flows and the tone of the news — to separate what the index says from "
+                f"what the market is actually doing. This week the aggregate balance came in at "
+                f"{C['consensus']:+.0f} on a -100 to +100 scale, with a dispersion of "
+                f"{C['dispersion']:.0f} points across readings: "
+                + ("the different fronts tell a consistent story."
                    if C["dispersion"] < 25 else
-                   "a fragmented read — the models disagree, and the divergences deserve as much weight as the consensus."))
+                   "the different fronts do not tell quite the same story, so the divergences deserve "
+                   "as much attention as the overall balance."))
             if driver_txts:
                 paras.append("Ranked by estimated impact, the week's drivers were: "
                              + " ".join(f"({i+1}) {t}" for i, t in enumerate(driver_txts)))
         sections.append({
             "id": "synthesis",
-            "title": ("Síntesis del consejo neuronal" if es else "Neural council synthesis"),
+            "title": ("Síntesis de la semana" if es else "Weekly synthesis"),
             "paragraphs": paras,
             "analysts": [{"id": m["id"], "name": member_names[m["id"]][lang],
                           "score": m["score"], "confidence": m["confidence"]}
@@ -1590,9 +1716,14 @@ class WeeklyReportEngine:
                 e3_bits.append(f"la tasa a 10 años se movió {X['tnx_bps']:+.0f} pb")
             if N["themes"]:
                 e3_bits.append(f"el flujo informativo giró en torno a {N['themes'][0]['labels']['es'].lower()}")
+            ndiv = len(C["divergences"])
             e3 = ("En el plano global, " + "; ".join(e3_bits) + ". " if e3_bits else "")
-            e3 += (f"El consejo neuronal cierra la semana con un consenso de {C['consensus']:+.0f}/100 "
-                   f"y {len(C['divergences'])} divergencia(s) señalada(s).")
+            e3 += (f"El balance agregado de la semana se ubica en {C['consensus']:+.0f} "
+                   f"(escala -100/+100), "
+                   + ("sin divergencias relevantes entre los distintos frentes del análisis."
+                      if ndiv == 0 else
+                      "con una divergencia que conviene monitorear." if ndiv == 1 else
+                      f"con {ndiv} divergencias que conviene monitorear."))
             exec_paras.append(e3)
         else:
             e1 = (f"{_week_label(ws, we, lang)}. The S&P 500 {dir_word} {_pct(spx_ret)} in a "
@@ -1616,9 +1747,14 @@ class WeeklyReportEngine:
                 e3_bits.append(f"the 10-year yield moved {X['tnx_bps']:+.0f} bps")
             if N["themes"]:
                 e3_bits.append(f"news flow revolved around {N['themes'][0]['labels']['en'].lower()}")
+            ndiv = len(C["divergences"])
             e3 = ("Globally, " + "; ".join(e3_bits) + ". " if e3_bits else "")
-            e3 += (f"The neural council closes the week with a consensus of {C['consensus']:+.0f}/100 "
-                   f"and {len(C['divergences'])} flagged divergence(s).")
+            e3 += (f"The week's aggregate balance stands at {C['consensus']:+.0f} "
+                   f"(-100/+100 scale), "
+                   + ("with no relevant divergence across the different fronts of the analysis."
+                      if ndiv == 0 else
+                      "with one divergence worth monitoring." if ndiv == 1 else
+                      f"with {ndiv} divergences worth monitoring."))
             exec_paras.append(e3)
 
         takeaways = []
@@ -1644,8 +1780,8 @@ class WeeklyReportEngine:
             (f"Dólar {_pct(usd)} vs. majors" + (f" · 10 años {X['tnx_bps']:+.0f} pb" if X["tnx_bps"] is not None else "")) if es else
             (f"Dollar {_pct(usd)} vs. majors" + (f" · 10-yr {X['tnx_bps']:+.0f} bps" if X["tnx_bps"] is not None else "")))
         takeaways.append(
-            (f"Régimen: {regime_txt[0]} · consenso del consejo {C['consensus']:+.0f}/100") if es else
-            (f"Regime: {regime_txt[0]} · council consensus {C['consensus']:+.0f}/100"))
+            (f"Régimen: {regime_txt[0]} · balance agregado {C['consensus']:+.0f}/100") if es else
+            (f"Regime: {regime_txt[0]} · aggregate balance {C['consensus']:+.0f}/100"))
 
         # ---- KPI strip ----------------------------------------------------------
         kpis = []
@@ -1654,9 +1790,13 @@ class WeeklyReportEngine:
                          "value": _pct(spx_ret),
                          "tone": "up" if spx_ret > 0 else "down" if spx_ret < 0 else "flat"})
         if B.get("pct_up") is not None:
-            kpis.append({"id": "breadth", "label": "Amplitud" if es else "Breadth",
-                         "value": _pctu(B["pct_up"], 0),
-                         "tone": "up" if B["pct_up"] >= 55 else "down" if B["pct_up"] <= 45 else "flat"})
+            kpi_breadth = {"id": "breadth", "label": "Amplitud" if es else "Breadth",
+                           "value": _pctu(B["pct_up"], 0),
+                           "tone": "up" if B["pct_up"] >= 55 else "down" if B["pct_up"] <= 45 else "flat"}
+            if B.get("avg_daily_breadth") is not None:
+                kpi_breadth["delta"] = ((f"media diaria {_pctu(B['avg_daily_breadth'], 0)}") if es
+                                        else (f"daily avg {_pctu(B['avg_daily_breadth'], 0)}"))
+            kpis.append(kpi_breadth)
         if M["vix"]:
             kpis.append({"id": "vix", "label": "VIX",
                          "value": f"{M['vix']['level']:.1f}",
@@ -1680,7 +1820,6 @@ class WeeklyReportEngine:
             "earnings_reports_sp500": E["sp_count"],
             "news_headlines": N["count"],
             "fx_pairs": len(X["fx"]),
-            "nlp_engine": N["nlp_engine"],
         }
         return {
             "meta": {
@@ -1693,11 +1832,11 @@ class WeeklyReportEngine:
                 "coverage": coverage,
                 "warnings": raw["warnings"],
                 "sources": ("Datos: Financial Modeling Prep. Sectores: SPDR Select Sector ETFs "
-                            "(proxies). Este informe es generado por modelos cuantitativos y no "
-                            "constituye una recomendación de inversión." if es else
+                            "(proxies). Análisis y elaboración propios. Este informe tiene fines "
+                            "informativos y no constituye una recomendación de inversión." if es else
                             "Data: Financial Modeling Prep. Sectors: SPDR Select Sector ETFs "
-                            "(proxies). This report is generated by quantitative models and does "
-                            "not constitute investment advice."),
+                            "(proxies). Analysis and preparation are proprietary. This report is for "
+                            "informational purposes and does not constitute investment advice."),
             },
             "headline": headline,
             "dek": dek,
@@ -1734,8 +1873,8 @@ class WeeklyReportEngine:
                 if es else
                 "Could not fetch market data for that week (check the FMP API key)")
 
-        progress(74, "El consejo neuronal está analizando la semana" if es
-                 else "The neural council is analyzing the week")
+        progress(74, "Cruzando señales y contrastando lecturas" if es
+                 else "Cross-checking signals and readings")
         facts = self.analyze(raw, ws, we)
 
         progress(88, "Redactando el informe" if es else "Composing the report")
