@@ -1084,8 +1084,12 @@ class WeeklyReportEngine:
         dir_word = _direction_word(spx_ret, lang)
         best_sec = S["table"][0] if S["table"] else None
         worst_sec = S["table"][-1] if S["table"] else None
+        # "Semana mixta"/"Mixed week" can't be embedded in "una semana de …" /
+        # "a … week" without duplicating the word "week" — use a fragment.
+        regime_frag = (("señales mixtas" if es else "mixed")
+                       if C["regime"] == "mixed" else regime_txt[0].lower())
         if es:
-            headline = f"El S&P 500 {dir_word} ({_pct(spx_ret)}) en una semana de {regime_txt[0].lower()}"
+            headline = f"El S&P 500 {dir_word} ({_pct(spx_ret)}) en una semana de {regime_frag}"
             dek_bits = []
             if best_sec:
                 dek_bits.append(f"{best_sec['labels']['es']} lideró ({_pct(best_sec['ret_pct'])})")
@@ -1096,7 +1100,7 @@ class WeeklyReportEngine:
             dek = ("; ".join(dek_bits) + ".") if dek_bits else regime_txt[1]
             dek = dek[0].upper() + dek[1:]
         else:
-            headline = f"S&P 500 {dir_word} ({_pct(spx_ret)}) in a {regime_txt[0].lower()} week"
+            headline = f"S&P 500 {dir_word} ({_pct(spx_ret)}) in a {regime_frag} week"
             dek_bits = []
             if best_sec:
                 dek_bits.append(f"{best_sec['labels']['en']} led ({_pct(best_sec['ret_pct'])})")
@@ -1696,7 +1700,7 @@ class WeeklyReportEngine:
         exec_paras = []
         if es:
             e1 = (f"{_week_label(ws, we, lang)}. El S&P 500 {dir_word} {_pct(spx_ret)} en un contexto "
-                  f"de {regime_txt[0].lower()}. {regime_txt[1]}")
+                  f"de {regime_frag}. {regime_txt[1]}")
             exec_paras.append(e1)
             e2_bits = []
             if S["table"]:
@@ -1727,7 +1731,7 @@ class WeeklyReportEngine:
             exec_paras.append(e3)
         else:
             e1 = (f"{_week_label(ws, we, lang)}. The S&P 500 {dir_word} {_pct(spx_ret)} in a "
-                  f"{regime_txt[0].lower()} environment. {regime_txt[1]}")
+                  f"{regime_frag} environment. {regime_txt[1]}")
             exec_paras.append(e1)
             e2_bits = []
             if S["table"]:

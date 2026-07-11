@@ -84,7 +84,9 @@ function pastWeeks(count = 56): { monday: string; friday: string }[] {
   const thisMonday = new Date(today);
   thisMonday.setDate(today.getDate() + (dow === 0 ? -6 : 1 - dow));
   const out: { monday: string; friday: string }[] = [];
-  for (let i = 1; i <= count + 1 && out.length < count; i++) {
+  // i=0 is the current calendar week: on Saturday/Sunday its Friday is already
+  // past, so the just-finished week becomes selectable right away.
+  for (let i = 0; i <= count + 1 && out.length < count; i++) {
     const m = new Date(thisMonday);
     m.setDate(thisMonday.getDate() - 7 * i);
     const f = new Date(m);
