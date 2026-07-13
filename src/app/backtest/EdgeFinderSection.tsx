@@ -42,7 +42,8 @@ interface EdgeEvent {
   gap_pct: number;
   vol_prev: number; vol_avg20: number | null; vol_ratio: number | null; vol_d0_ratio: number | null;
   dist_52w_low_pct: number | null; dist_52w_high_pct: number | null;
-  pattern: string; consec_red: number; consec_green: number;
+  pattern: string; breakout: string; breakout_day: number | null; pre_high_10d: number;
+  consec_red: number; consec_green: number;
   pre_ret10_pct: number; compression: number; pre_tr_pct: number;
   ret_3d: number | null; ret_5d: number | null; ret_10d: number | null;
   sector_etf: string | null; sector_ret20_pct: number | null; spy_ret20_pct: number | null;
@@ -66,6 +67,11 @@ interface EdgeFinderResult {
   by_pattern: Array<{
     pattern: string; count: number; pct: number; avg_surge: number; med_surge: number | null;
     avg_days_to_peak: number; med_vol_ratio: number | null; med_dist_52w: number | null;
+    med_ret_10d: number | null;
+  }>;
+  by_breakout: Array<{
+    breakout: string; count: number; pct: number; avg_surge: number; med_surge: number | null;
+    avg_days_to_peak: number; med_breakout_day: number | null; med_vol_ratio: number | null;
     med_ret_10d: number | null;
   }>;
   by_sector: Array<{ sector: string; count: number; pct: number; hot_pct: number | null; avg_surge: number; med_ret_10d: number | null }>;
@@ -311,7 +317,8 @@ export default function EdgeFinderSection() {
     const cols: (keyof EdgeEvent)[] = [
       'symbol', 'date', 'weekday', 'sector', 'industry', 'market_cap', 'base_price', 'peak_price',
       'surge_pct', 'days_to_peak', 'gap_pct', 'vol_prev', 'vol_avg20', 'vol_ratio', 'vol_d0_ratio',
-      'dist_52w_low_pct', 'dist_52w_high_pct', 'pattern', 'consec_red', 'consec_green',
+      'dist_52w_low_pct', 'dist_52w_high_pct', 'pattern', 'breakout', 'breakout_day',
+      'pre_high_10d', 'consec_red', 'consec_green',
       'pre_ret10_pct', 'compression', 'sector_etf', 'sector_ret20_pct', 'spy_ret20_pct',
       'sector_hot', 'spy_up_d0', 'ret_3d', 'ret_5d', 'ret_10d',
     ];
@@ -504,6 +511,45 @@ export default function EdgeFinderSection() {
                 </div>
               </div>
 
+              {/* Patrón previo 2 — tipo de breakout */}
+              <div className="rounded-2xl border border-violet-500/25 bg-violet-500/[0.04] p-5">
+                <h3 className="text-sm font-bold text-violet-300 mb-1">Tipo de breakout <span className="text-[10px] font-normal text-violet-400/70 uppercase tracking-wider">· patrón previo 2</span></h3>
+                <p className="text-[11px] text-gray-500 mb-3">
+                  Qué clase de breakout lanzó el surge — flag, base, 52 semanas, gap, continuación o reversión (vs el high de los 10 días previos).
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-gray-400 text-left border-b border-gray-800">
+                        <th className="py-1.5 pr-2">Breakout</th>
+                        <th className="pr-2 text-right">Eventos</th>
+                        <th className="pr-2 text-right">% del total</th>
+                        <th className="pr-2 text-right">Surge medio</th>
+                        <th className="pr-2 text-right">Días al pico</th>
+                        <th className="pr-2 text-right">Día del break</th>
+                        <th className="pr-2 text-right">Vol D-1 (med)</th>
+                        <th className="pr-2 text-right">Ret +10d (med)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-mono">
+                      {result.by_breakout.map((b) => (
+                        <tr key={b.breakout} className="border-b border-gray-800/50">
+                          <td className="py-1.5 pr-2 font-sans text-gray-200">{b.breakout}</td>
+                          <td className="pr-2 text-right text-gray-300">{b.count}</td>
+                          <td className="pr-2 text-right text-violet-300 font-bold">{b.pct}%</td>
+                          <td className="pr-2 text-right text-emerald-400">+{b.avg_surge}%</td>
+                          <td className="pr-2 text-right text-gray-400">{b.avg_days_to_peak}</td>
+                          <td className="pr-2 text-right text-gray-400">{fmt(b.med_breakout_day)}</td>
+                          <td className="pr-2 text-right text-gray-400">{fmt(b.med_vol_ratio, '×')}</td>
+                          <td className={`pr-2 text-right ${(b.med_ret_10d ?? 0) >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{fmt(b.med_ret_10d, '%')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[10px] text-gray-600 mt-2">Día del break = primer día del surge que cierra sobre el high de los 10 días previos (mediana).</p>
+              </div>
+
               {/* Distribuciones */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <DistributionCard title="Distancia al mínimo 52 sem" data={result.dist_52w_buckets}
@@ -590,6 +636,7 @@ export default function EdgeFinderSection() {
                         <th className="pr-3 text-right">Ratio</th>
                         <th className="pr-3 text-right">Δ52w low</th>
                         <th className="pr-3">Patrón previo</th>
+                        <th className="pr-3">Breakout</th>
                         <th className="pr-3 text-right">Ret +10d</th>
                         <th className="pr-3 text-center">📈</th>
                       </tr>
@@ -614,6 +661,10 @@ export default function EdgeFinderSection() {
                           <td className={`pr-3 text-right ${(e.vol_ratio ?? 0) > 1.5 ? 'text-amber-300' : (e.vol_ratio ?? 1) < 0.6 ? 'text-cyan-300' : 'text-gray-400'}`}>{fmt(e.vol_ratio, '×')}</td>
                           <td className="pr-3 text-right text-gray-300">{fmt(e.dist_52w_low_pct, '%')}</td>
                           <td className="pr-3 font-sans text-gray-300 whitespace-nowrap">{e.pattern}</td>
+                          <td className="pr-3 font-sans text-violet-300 whitespace-nowrap"
+                            title={e.breakout_day != null ? `Cerró sobre el high 10d previo (${e.pre_high_10d}) el día ${e.breakout_day} del surge` : `No cerró sobre el high 10d previo (${e.pre_high_10d}) dentro de la ventana`}>
+                            {e.breakout}{e.breakout_day != null ? <span className="text-gray-500"> d{e.breakout_day}</span> : null}
+                          </td>
                           <td className={`pr-3 text-right ${(e.ret_10d ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{fmt(e.ret_10d, '%')}</td>
                           <td className="pr-3 text-center">
                             <button onClick={() => openChart(e)} title="Ver gráfico diario (−10 / +10)"
@@ -660,7 +711,7 @@ export default function EdgeFinderSection() {
                 </h3>
                 <p className="text-[12px] text-gray-400 mt-0.5">
                   Base ${chartEvent.base_price} → pico ${chartEvent.peak_price} · gap {chartEvent.gap_pct}% · vol D-1 {fmtVol(chartEvent.vol_prev)} ({fmt(chartEvent.vol_ratio, '×')}) ·
-                  Δ52w low {fmt(chartEvent.dist_52w_low_pct, '%')} · patrón: <span className="text-gray-200">{chartEvent.pattern}</span>
+                  Δ52w low {fmt(chartEvent.dist_52w_low_pct, '%')} · patrón: <span className="text-gray-200">{chartEvent.pattern}</span> · breakout: <span className="text-violet-300">{chartEvent.breakout}{chartEvent.breakout_day != null ? ` (día ${chartEvent.breakout_day})` : ''}</span>
                   {chartEvent.sector_hot != null && (
                     <span className={chartEvent.sector_hot ? ' text-amber-300' : ' text-cyan-300'}>
                       {' '}· sector {chartEvent.sector_hot ? 'HOT 🔥' : 'COLD'} ({chartEvent.sector_etf} {fmt(chartEvent.sector_ret20_pct, '%')} vs SPY {fmt(chartEvent.spy_ret20_pct, '%')})
@@ -691,6 +742,7 @@ export default function EdgeFinderSection() {
                       {startBar && <ReferenceLine x={startBar.t} stroke="#06b6d4" strokeDasharray="4 4" label={{ value: 'inicio surge', fill: '#67e8f9', fontSize: 9, position: 'top' }} />}
                       <ReferenceLine y={chartEvent.base_price} stroke="#9ca3af" strokeDasharray="4 4" label={{ value: `base ${chartEvent.base_price}`, fill: '#9ca3af', fontSize: 9, position: 'right' }} />
                       <ReferenceLine y={chartEvent.peak_price} stroke="#10b981" strokeDasharray="4 4" label={{ value: `pico ${chartEvent.peak_price}`, fill: '#10b981', fontSize: 9, position: 'right' }} />
+                      {chartEvent.pre_high_10d != null && <ReferenceLine y={chartEvent.pre_high_10d} stroke="#a78bfa" strokeDasharray="2 3" label={{ value: `high 10d ${chartEvent.pre_high_10d}`, fill: '#a78bfa', fontSize: 9, position: 'right' }} />}
                       <Bar dataKey="range" shape={<Candle />} isAnimationActive={false} />
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -706,7 +758,7 @@ export default function EdgeFinderSection() {
                     </BarChart>
                   </ResponsiveContainer>
                   <p className="text-[10px] text-gray-600 mt-2">
-                    Velas diarias: 10 días antes → 10 después del inicio del surge. Línea gris = precio base (cierre previo) · verde = pico de la ventana · panel inferior = volumen diario.
+                    Velas diarias: 10 días antes → 10 después del inicio del surge. Línea gris = precio base (cierre previo) · verde = pico de la ventana · violeta = high 10d previos (nivel de breakout) · panel inferior = volumen diario.
                   </p>
                 </>
               );

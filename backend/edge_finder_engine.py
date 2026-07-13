@@ -94,6 +94,19 @@ PAT_COIL = "Compresión de rango (coil)"
 PAT_FLAT = "Base plana"
 PAT_CHOPPY = "Lateral / choppy"
 
+# Breakout types — "patrón previo 2": what kind of breakout launched the surge.
+# Classified against the prior 10-day high / 52-week high / flag structure.
+BK_FLAG = "Flag breakout"
+BK_52W = "Breakout 52 semanas"
+BK_GAP = "Gap breakout"
+BK_BASE = "Breakout de base"
+BK_CONTINUATION = "Breakout de continuación"
+BK_REVERSAL_RECLAIM = "Reversión con reclaim"
+BK_BOUNCE = "Rebote sin breakout"
+BK_RANGE = "Dentro del rango"
+BREAKOUT_ORDER = [BK_FLAG, BK_52W, BK_GAP, BK_BASE, BK_CONTINUATION,
+                  BK_REVERSAL_RECLAIM, BK_BOUNCE, BK_RANGE]
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Job registry (in-process; own registry, separate from the other engines)
@@ -277,6 +290,56 @@ class EdgeFinderEngine:
             label = PAT_CHOPPY
         return label, round(float(ret10), 2), round(float(compression), 3), round(avg_tr, 2)
 
+    # ── Breakout type — "patrón previo 2" ─────────────────────────────────────
+    @staticmethod
+    def _classify_breakout(o: np.ndarray, h: np.ndarray, c: np.ndarray,
+                           i: int, w_end: int, high52: Optional[float],
+                           pattern: str, pre_ret10: float
+                           ) -> Tuple[str, Optional[int], float]:
+        """Classify what kind of breakout (if any) launched the surge.
+
+        Returns (label, breakout_day, pre_high_10d):
+          - breakout_day: 1-based day within the surge window when price first
+            CLOSED above the prior 10-day high (None if it never did),
+          - pre_high_10d: the prior 10-day high level (for the event chart).
+        """
+        pre10_high = float(np.max(h[i - PRE_BARS:i]))
+        breakout_day: Optional[int] = None
+        for k in range(i, w_end):
+            if c[k] > pre10_high:
+                breakout_day = k - i + 1
+                break
+        broke = breakout_day is not None
+
+        # flag: pole up (≥15% into the flag top), shallow drifting pullback
+        # (−25%..−1% from that top into D-1), then break of the prior highs
+        is_flag = False
+        peak_zone = c[i - PRE_BARS:i - 2]
+        if peak_zone.size and broke:
+            j = i - PRE_BARS + int(np.argmax(peak_zone))
+            peak_close = float(c[j])
+            pole_base = float(np.min(c[max(0, j - 10):j + 1]))
+            if pole_base > 0 and peak_close > 0:
+                pole_ret = (peak_close - pole_base) / pole_base * 100
+                pullback = (float(c[i - 1]) - peak_close) / peak_close * 100
+                is_flag = pole_ret >= 15 and -25 <= pullback <= -1
+
+        if is_flag:
+            label = BK_FLAG
+        elif broke and high52 is not None and float(np.max(c[i:w_end])) > high52:
+            label = BK_52W
+        elif float(o[i]) > pre10_high:
+            label = BK_GAP
+        elif broke and pattern in (PAT_COIL, PAT_FLAT):
+            label = BK_BASE
+        elif pre_ret10 <= -5:
+            label = BK_REVERSAL_RECLAIM if broke else BK_BOUNCE
+        elif broke:
+            label = BK_CONTINUATION
+        else:
+            label = BK_RANGE
+        return label, breakout_day, round(pre10_high, 2)
+
     @staticmethod
     def _consecutive(closes: np.ndarray) -> Tuple[int, int]:
         """(consecutive red days, consecutive green days) ending at the last close."""
@@ -361,10 +424,17 @@ class EdgeFinderEngine:
             low52 = float(np.min(lb_l)); high52 = float(np.max(lb_h))
             dist_low = round((base - low52) / low52 * 100, 1)
             dist_high = round((base - high52) / high52 * 100, 1) if high52 > 0 else None
+            high52_val: Optional[float] = high52
         else:
             dist_low = dist_high = None
+            high52_val = None
 
         gap_pct = round((float(o[i]) - base) / base * 100, 2)
+
+        # patrón previo 2: tipo de breakout que lanzó el surge
+        w_end = min(i + int(cfg["surge_days"]), n)
+        breakout, breakout_day, pre_high_10d = self._classify_breakout(
+            o, h, c, i, w_end, high52_val, pattern, pre_ret10)
 
         # post-surge continuation from the base close (offset +k = k days after D0)
         def ret_at(k: int) -> Optional[float]:
@@ -404,6 +474,9 @@ class EdgeFinderEngine:
             "dist_52w_low_pct": dist_low,
             "dist_52w_high_pct": dist_high,
             "pattern": pattern,
+            "breakout": breakout,
+            "breakout_day": breakout_day,
+            "pre_high_10d": pre_high_10d,
             "consec_red": consec_red,
             "consec_green": consec_green,
             "pre_ret10_pct": pre_ret10,
@@ -504,7 +577,7 @@ class EdgeFinderEngine:
 
     def _aggregate(self, events: List[Dict], cfg: Dict, meta: Dict) -> Dict[str, Any]:
         if not events:
-            return {"kpis": None, "composite": [], "by_pattern": [], "by_sector": [],
+            return {"kpis": None, "composite": [], "by_pattern": [], "by_breakout": [], "by_sector": [],
                     "dist_52w_buckets": [], "vol_ratio_buckets": [], "gap_buckets": [],
                     "weekday": [], "events": [], "meta": meta}
 
@@ -543,6 +616,26 @@ class EdgeFinderEngine:
                 "med_ret_10d": self._median([e["ret_10d"] for e in sub]),
             })
         by_pattern.sort(key=lambda r: r["count"], reverse=True)
+
+        # breakout-type mix — "patrón previo 2"
+        by_breakout: List[Dict] = []
+        for label in BREAKOUT_ORDER:
+            sub = [e for e in events if e["breakout"] == label]
+            if not sub:
+                continue
+            by_breakout.append({
+                "breakout": label,
+                "count": len(sub),
+                "pct": round(100.0 * len(sub) / n, 1),
+                "avg_surge": round(float(np.mean([e["surge_pct"] for e in sub])), 1),
+                "med_surge": self._median([e["surge_pct"] for e in sub]),
+                "avg_days_to_peak": round(float(np.mean([e["days_to_peak"] for e in sub])), 1),
+                "med_breakout_day": self._median([float(e["breakout_day"]) for e in sub
+                                                  if e["breakout_day"] is not None]),
+                "med_vol_ratio": self._median([e["vol_ratio"] for e in sub]),
+                "med_ret_10d": self._median([e["ret_10d"] for e in sub]),
+            })
+        by_breakout.sort(key=lambda r: r["count"], reverse=True)
 
         # sector mix + hot share
         sectors = sorted({e["sector"] for e in events})
@@ -610,6 +703,7 @@ class EdgeFinderEngine:
             "kpis": kpis,
             "composite": composite,
             "by_pattern": by_pattern,
+            "by_breakout": by_breakout,
             "by_sector": by_sector,
             "dist_52w_buckets": dist_buckets,
             "vol_ratio_buckets": vol_buckets,
