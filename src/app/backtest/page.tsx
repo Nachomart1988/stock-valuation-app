@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import Header from '@/app/components/Header';
 import { postBackend, getBackend } from '@/lib/backendClient';
+import EdgeFinderSection from './EdgeFinderSection';
 
 // ── Config & result types ────────────────────────────────────────────────
 interface BacktestConfig {
@@ -153,7 +154,7 @@ const DEFAULT_CONFIG: BacktestConfig = {
 };
 
 // ── Strategy One (daily setup, long/short) ────────────────────────────────
-type Strategy = 'gap_short' | 'strategy_one';
+type Strategy = 'gap_short' | 'strategy_one' | 'edge_finder';
 
 interface StrategyOneConfig {
   side: 'long' | 'short';
@@ -593,10 +594,14 @@ export default function BacktestPage() {
           <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 uppercase tracking-wider">God Mode</span>
         </div>
         <p className="text-gray-400 text-sm mb-6 max-w-3xl">
-          {strategy === 'gap_short' ? (
+          {strategy === 'gap_short' && (
             <>Short selling de small caps en <span className="text-rose-300">gap ups</span> intradiarios, simulado con barras de 1 minuto (incluyendo premarket).</>
-          ) : (
+          )}
+          {strategy === 'strategy_one' && (
             <>Setups diarios <span className="text-rose-300">long o short</span>: el filtro se evalúa al cierre del día previo y la operación se ejecuta al día siguiente, simulada con barras de 1 minuto (incluyendo premarket).</>
+          )}
+          {strategy === 'edge_finder' && (
+            <>Búsqueda de <span className="text-rose-300">edge</span>: encuentra todos los surges históricos (X% en N días) y analiza el patrón previo — 10 días antes/después, volumen del día previo, sector hot/cold y distancia al mínimo de 52 semanas.</>
           )}
         </p>
 
@@ -605,6 +610,7 @@ export default function BacktestPage() {
           {([
             { id: 'gap_short' as Strategy, label: 'Short Gap-Ups · Small Caps' },
             { id: 'strategy_one' as Strategy, label: 'Estrategia 1' },
+            { id: 'edge_finder' as Strategy, label: 'Edge Finder · Surges' },
           ]).map((s) => (
             <button key={s.id} onClick={() => { setStrategy(s.id); setResult(null); setJob(null); setError(''); }}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${strategy === s.id ? 'bg-rose-500/20 text-rose-200' : 'text-gray-400 hover:text-gray-200'}`}>
@@ -613,7 +619,11 @@ export default function BacktestPage() {
           ))}
         </div>
 
+        {/* Edge Finder (sección autocontenida: filtros + resultados propios) */}
+        {strategy === 'edge_finder' && <EdgeFinderSection />}
+
         {/* Filters */}
+        {strategy !== 'edge_finder' && (
         <div className="rounded-2xl border border-rose-500/15 bg-gray-900/40 p-5 sm:p-6 mb-6">
           {strategy === 'gap_short' && (<>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -951,6 +961,7 @@ export default function BacktestPage() {
           )}
           {error && <p className="mt-4 text-sm text-rose-400">⚠ {error}</p>}
         </div>
+        )}
 
         {/* Results */}
         {result && (

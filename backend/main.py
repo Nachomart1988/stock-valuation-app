@@ -198,6 +198,14 @@ except ImportError:
     strategy_one_get_job = None
 
 try:
+    from edge_finder_engine import start_job as edge_finder_start_job, get_job as edge_finder_get_job
+    EDGE_FINDER_AVAILABLE = True
+except ImportError:
+    EDGE_FINDER_AVAILABLE = False
+    edge_finder_start_job = None
+    edge_finder_get_job = None
+
+try:
     from weekly_report_engine import start_job as weekly_report_start_job, get_job as weekly_report_get_job
     WEEKLY_REPORT_AVAILABLE = True
 except ImportError:
@@ -2672,6 +2680,68 @@ async def strategy_one_backtest_status(job_id: str):
     if snap is None:
         raise HTTPException(status_code=404, detail="job_id no encontrado o expirado")
     return numpy_safe_response(snap)
+
+
+# ── Edge Finder — surge scanner (GOD MODE) — async job ────────────────────
+
+class EdgeFinderRequest(BaseModel):
+    price_min: float = 1.0
+    price_max: float = 100.0
+    market_cap_min: str = "small"        # nano | micro | small | mid | large | mega
+    market_cap_max: str = "large"        # range between the two buckets (inclusive)
+    surge_pct_min: float = 50.0          # % move (base close -> max high in window)
+    surge_days: int = 3                  # window length, 1..100 trading days
+    use_earnings: bool = False           # reserved — placeholder, ignored for now
+    date_from: Optional[str] = None      # YYYY-MM-DD
+    date_to: Optional[str] = None
+    max_universe: int = 5000
+    max_events: int = 3000
+    max_table_events: int = 600
+
+
+@app.post("/backtest/edge-finder/start")
+async def edge_finder_start(req: EdgeFinderRequest):
+    """Start an async Edge-Finder surge scan job. Returns a job_id to poll."""
+    if not EDGE_FINDER_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Edge finder engine not available")
+    try:
+        job_id = edge_finder_start_job(req.dict())
+        return {"job_id": job_id}
+    except Exception as e:
+        print(f"[EdgeFinder] start error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/backtest/edge-finder/status/{job_id}")
+async def edge_finder_status(job_id: str):
+    """Poll an Edge-Finder job; includes the full result when status=done."""
+    if not EDGE_FINDER_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Edge finder engine not available")
+    snap = edge_finder_get_job(job_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="job_id no encontrado o expirado")
+    return numpy_safe_response(snap)
+
+
+class EdgeFinderChartRequest(BaseModel):
+    symbol: str
+    date: str  # YYYY-MM-DD (surge start day)
+
+
+@app.post("/backtest/edge-finder/chart")
+async def edge_finder_chart(req: EdgeFinderChartRequest):
+    """Daily OHLCV window (−10..+10 around the surge start) for one event."""
+    if not EDGE_FINDER_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Edge finder engine not available")
+    try:
+        from edge_finder_engine import get_edge_finder_engine
+        engine = get_edge_finder_engine()
+        bars = await asyncio.to_thread(engine.event_chart, req.symbol, req.date)
+        return numpy_safe_response({"bars": bars})
+    except Exception as e:
+        print(f"[EdgeFinder] chart error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Weekly Market Report — "Informe" (GOD MODE) — async job ───────────────
