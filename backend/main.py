@@ -206,6 +206,14 @@ except ImportError:
     edge_finder_get_job = None
 
 try:
+    from edge_predictor_engine import start_job as edge_predictor_start_job, get_job as edge_predictor_get_job
+    EDGE_PREDICTOR_AVAILABLE = True
+except ImportError:
+    EDGE_PREDICTOR_AVAILABLE = False
+    edge_predictor_start_job = None
+    edge_predictor_get_job = None
+
+try:
     from weekly_report_engine import start_job as weekly_report_start_job, get_job as weekly_report_get_job
     WEEKLY_REPORT_AVAILABLE = True
 except ImportError:
@@ -2741,6 +2749,69 @@ async def edge_finder_chart(req: EdgeFinderChartRequest):
         return numpy_safe_response({"bars": bars})
     except Exception as e:
         print(f"[EdgeFinder] chart error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Edge Predictor — breakout candidates (GOD MODE) — async job ────────────
+# Forward-looking companion of the Edge Finder: re-scans the SAME universe as
+# of the last close and ranks tickers whose current setup matches the
+# historical pre-surge profile produced by an Edge Finder run.
+
+class EdgePredictorRequest(BaseModel):
+    price_min: float = 1.0
+    price_max: float = 100.0
+    market_cap_min: str = "small"          # nano | micro | small | mid | large | mega
+    market_cap_max: str = "large"          # range between the two buckets (inclusive)
+    surge_pct_min: float = 50.0            # target move (echo of the Edge Finder config)
+    surge_days: int = 3
+    max_universe: int = 5000
+    top_n: int = 40                        # candidates returned (ranked by score)
+    near_trigger_pct: float = 10.0         # max distance below the 10d-high trigger
+    profile: Optional[Dict[str, Any]] = None  # Edge Finder result (kpis + aggregations)
+
+
+@app.post("/backtest/edge-predictor/start")
+async def edge_predictor_start(req: EdgePredictorRequest):
+    """Start an async Edge-Predictor scan job. Returns a job_id to poll."""
+    if not EDGE_PREDICTOR_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Edge predictor engine not available")
+    try:
+        job_id = edge_predictor_start_job(req.dict())
+        return {"job_id": job_id}
+    except Exception as e:
+        print(f"[EdgePredictor] start error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/backtest/edge-predictor/status/{job_id}")
+async def edge_predictor_status(job_id: str):
+    """Poll an Edge-Predictor job; includes the full result when status=done."""
+    if not EDGE_PREDICTOR_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Edge predictor engine not available")
+    snap = edge_predictor_get_job(job_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="job_id no encontrado o expirado")
+    return numpy_safe_response(snap)
+
+
+class EdgePredictorChartRequest(BaseModel):
+    symbol: str
+    bars: int = 60  # daily bars to return (ending at the last close)
+
+
+@app.post("/backtest/edge-predictor/chart")
+async def edge_predictor_chart(req: EdgePredictorChartRequest):
+    """Recent daily OHLCV bars for one breakout candidate."""
+    if not EDGE_PREDICTOR_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Edge predictor engine not available")
+    try:
+        from edge_predictor_engine import get_edge_predictor_engine
+        engine = get_edge_predictor_engine()
+        bars = await asyncio.to_thread(engine.candidate_chart, req.symbol, req.bars)
+        return numpy_safe_response({"bars": bars})
+    except Exception as e:
+        print(f"[EdgePredictor] chart error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

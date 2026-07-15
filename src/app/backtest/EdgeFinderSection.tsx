@@ -332,6 +332,39 @@ export default function EdgeFinderSection() {
     downloadBlob(lines.join('\n'), `edge-finder-eventos-${stamp}.csv`, 'text/csv;charset=utf-8');
   }, [result, downloadBlob]);
 
+  // ── Prediction: abre /backtest/prediction con el perfil de este análisis ──
+  // El perfil (KPIs + distribuciones) viaja por localStorage; la página nueva
+  // lanza el Edge Predictor sobre el MISMO universo y busca los tickers cuyo
+  // setup actual más se parece al patrón previo de estos surges.
+  const openPrediction = useCallback(() => {
+    if (!result?.kpis) return;
+    const handoff = {
+      v: 1,
+      created_at: new Date().toISOString(),
+      config: cfg,
+      profile: {
+        kpis: result.kpis,
+        by_pattern: result.by_pattern,
+        by_breakout: result.by_breakout,
+        dist_52w_buckets: result.dist_52w_buckets,
+        vol_ratio_buckets: result.vol_ratio_buckets,
+        gap_buckets: result.gap_buckets,
+      },
+      summary: {
+        events: result.kpis.events,
+        symbols: result.kpis.symbols,
+        date_from: result.meta.date_from,
+        date_to: result.meta.date_to,
+      },
+    };
+    try {
+      localStorage.setItem('edge-predictor-handoff:v1', JSON.stringify(handoff));
+    } catch {
+      /* storage lleno o bloqueado — la página nueva mostrará el aviso */
+    }
+    window.open('/backtest/prediction', '_blank', 'noopener');
+  }, [result, cfg]);
+
   const k = result?.kpis;
 
   return (
@@ -430,6 +463,11 @@ export default function EdgeFinderSection() {
                     title="Descargar el análisis completo (config + agregados + eventos) en JSON"
                     className="px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 text-xs font-semibold hover:bg-rose-500/20 transition">
                     ⬇ Análisis JSON
+                  </button>
+                  <button onClick={openPrediction}
+                    title="Abrir el Edge Predictor: re-escanea el mismo universo hoy y rankea los tickers cuyo setup actual más se parece al patrón previo de estos surges"
+                    className="px-3 py-1.5 rounded-lg border border-violet-500/40 bg-violet-500/15 text-violet-200 text-xs font-semibold hover:bg-violet-500/25 transition">
+                    🔮 Prediction
                   </button>
                 </div>
               </div>
