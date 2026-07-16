@@ -10,6 +10,7 @@ import {
 import Header from '@/app/components/Header';
 import { postBackend, getBackend } from '@/lib/backendClient';
 import EdgeFinderSection from './EdgeFinderSection';
+import UltimatePredictionSection from './UltimatePredictionSection';
 
 // ── Config & result types ────────────────────────────────────────────────
 interface BacktestConfig {
@@ -154,7 +155,7 @@ const DEFAULT_CONFIG: BacktestConfig = {
 };
 
 // ── Strategy One (daily setup, long/short) ────────────────────────────────
-type Strategy = 'gap_short' | 'strategy_one' | 'edge_finder';
+type Strategy = 'gap_short' | 'strategy_one' | 'edge_finder' | 'ultimate';
 
 interface StrategyOneConfig {
   side: 'long' | 'short';
@@ -603,6 +604,9 @@ export default function BacktestPage() {
           {strategy === 'edge_finder' && (
             <>Búsqueda de <span className="text-rose-300">edge</span>: encuentra todos los surges históricos (X% en N días) y analiza el patrón previo — 10 días antes/después, volumen del día previo, sector hot/cold y distancia al mínimo de 52 semanas.</>
           )}
+          {strategy === 'ultimate' && (
+            <>El motor que orquesta a todos: elige solo precio y market cap, y devuelve el <span className="text-amber-300">Top 5 de trades para la próxima sesión</span> (long o short) — cada pick validado por un backtest propio sobre su historia, con veto de dilución (SEC EDGAR), contexto de mercado y track record auto-calificado.</>
+          )}
         </p>
 
         {/* Strategy selector */}
@@ -611,6 +615,7 @@ export default function BacktestPage() {
             { id: 'gap_short' as Strategy, label: 'Short Gap-Ups · Small Caps' },
             { id: 'strategy_one' as Strategy, label: 'Estrategia 1' },
             { id: 'edge_finder' as Strategy, label: 'Edge Finder · Surges' },
+            { id: 'ultimate' as Strategy, label: '🏆 Ultimate Prediction' },
           ]).map((s) => (
             <button key={s.id} onClick={() => { setStrategy(s.id); setResult(null); setJob(null); setError(''); }}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${strategy === s.id ? 'bg-rose-500/20 text-rose-200' : 'text-gray-400 hover:text-gray-200'}`}>
@@ -622,8 +627,11 @@ export default function BacktestPage() {
         {/* Edge Finder (sección autocontenida: filtros + resultados propios) */}
         {strategy === 'edge_finder' && <EdgeFinderSection />}
 
+        {/* Ultimate Prediction (sección autocontenida) */}
+        {strategy === 'ultimate' && <UltimatePredictionSection />}
+
         {/* Filters */}
-        {strategy !== 'edge_finder' && (
+        {strategy !== 'edge_finder' && strategy !== 'ultimate' && (
         <div className="rounded-2xl border border-rose-500/15 bg-gray-900/40 p-5 sm:p-6 mb-6">
           {strategy === 'gap_short' && (<>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

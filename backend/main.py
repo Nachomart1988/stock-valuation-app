@@ -214,6 +214,19 @@ except ImportError:
     edge_predictor_get_job = None
 
 try:
+    from ultimate_predictor_engine import (
+        start_job as ultimate_start_job,
+        get_job as ultimate_get_job,
+        get_history as ultimate_get_history,
+    )
+    ULTIMATE_PREDICTOR_AVAILABLE = True
+except ImportError:
+    ULTIMATE_PREDICTOR_AVAILABLE = False
+    ultimate_start_job = None
+    ultimate_get_job = None
+    ultimate_get_history = None
+
+try:
     from weekly_report_engine import start_job as weekly_report_start_job, get_job as weekly_report_get_job
     WEEKLY_REPORT_AVAILABLE = True
 except ImportError:
@@ -2812,6 +2825,59 @@ async def edge_predictor_chart(req: EdgePredictorChartRequest):
         return numpy_safe_response({"bars": bars})
     except Exception as e:
         print(f"[EdgePredictor] chart error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Ultimate Predictor — Top 5 para la próxima sesión (GOD MODE) — async ───
+# El usuario elige solo precio + market cap; el motor escanea el universo,
+# valida cada candidato con un backtest propio sobre su historia, veta longs
+# con riesgo de dilución (EDGAR) y publica 5 trades (long/short) con entrada,
+# stop y target para el próximo día hábil. Persiste cada predicción en SQLite
+# local y se auto-califica en corridas siguientes (track record).
+
+class UltimatePredictorRequest(BaseModel):
+    price_min: float = 1.0
+    price_max: float = 100.0
+    market_cap_min: str = "small"   # nano | micro | small | mid | large | mega
+    market_cap_max: str = "large"   # rango entre los dos buckets (inclusive)
+    max_universe: int = 3000
+
+
+@app.post("/backtest/ultimate/start")
+async def ultimate_predictor_start(req: UltimatePredictorRequest):
+    """Start an async Ultimate-Predictor job. Returns a job_id to poll."""
+    if not ULTIMATE_PREDICTOR_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Ultimate predictor engine not available")
+    try:
+        job_id = ultimate_start_job(req.dict())
+        return {"job_id": job_id}
+    except Exception as e:
+        print(f"[Ultimate] start error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/backtest/ultimate/status/{job_id}")
+async def ultimate_predictor_status(job_id: str):
+    """Poll an Ultimate-Predictor job; includes the full result when status=done."""
+    if not ULTIMATE_PREDICTOR_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Ultimate predictor engine not available")
+    snap = ultimate_get_job(job_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="job_id no encontrado o expirado")
+    return numpy_safe_response(snap)
+
+
+@app.get("/backtest/ultimate/history")
+async def ultimate_predictor_history():
+    """Track record (predicciones calificadas contra precios reales) + corridas."""
+    if not ULTIMATE_PREDICTOR_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Ultimate predictor engine not available")
+    try:
+        data = await asyncio.to_thread(ultimate_get_history)
+        return numpy_safe_response(data)
+    except Exception as e:
+        print(f"[Ultimate] history error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
