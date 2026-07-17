@@ -87,11 +87,18 @@ interface SideStats {
 
 interface TrackRecord {
   overall: SideStats; long: SideStats; short: SideStats;
+  by_pattern?: Array<SideStats & { pattern: string }>;
   recent: Array<{
     for_date: string; symbol: string; side: string; entry: number; stop: number;
     target: number; score: number; status: string; outcome: string | null;
     outcome_r: number | null; exit_price: number | null; days_held: number | null;
+    pattern?: string | null; surge_prob_pct?: number | null;
   }>;
+}
+
+interface GradeResponse {
+  as_of: string; graded_now: number; feedback_rows: number;
+  pending_future: number; track_record: TrackRecord;
 }
 
 interface UltimateResult {
@@ -369,12 +376,29 @@ export default function UltimatePredictionSection() {
   }, []);
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  // track record histórico al montar (no bloquea nada si el backend está caído)
-  useEffect(() => {
-    getBackend<{ track_record: TrackRecord }>('/backtest/ultimate/history', 12000)
-      .then((d) => setTrack(d.track_record))
-      .catch(() => { /* backend caído o sin historial — silencioso */ });
+  // Al montar: califica lo vencido contra precios reales y trae el track
+  // record actualizado (si falla, cae al history de solo lectura).
+  const [gradeInfo, setGradeInfo] = useState<GradeResponse | null>(null);
+  const [grading, setGrading] = useState(false);
+
+  const gradeNow = useCallback(async (silent = false) => {
+    if (!silent) setGrading(true);
+    try {
+      const d = await postBackend<GradeResponse>('/backtest/ultimate/grade', {}, 60000);
+      setGradeInfo(d);
+      setTrack(d.track_record);
+    } catch {
+      if (silent) {
+        getBackend<{ track_record: TrackRecord }>('/backtest/ultimate/history', 12000)
+          .then((d) => setTrack(d.track_record))
+          .catch(() => { /* backend caído o sin historial — silencioso */ });
+      }
+    } finally {
+      setGrading(false);
+    }
   }, []);
+
+  useEffect(() => { gradeNow(true); }, [gradeNow]);
 
   const run = useCallback(async () => {
     setError(''); setResult(null); setJob(null); setRunning(true);
@@ -587,13 +611,30 @@ export default function UltimatePredictionSection() {
       {/* Track record (histórico persistente, auto-calificado) */}
       {track && (track.recent?.length ?? 0) > 0 && (
         <div className="mt-6 rounded-2xl border border-cyan-500/20 bg-gray-900/40 p-5">
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex flex-wrap items-center gap-3 mb-3">
             <h3 className="text-sm font-bold text-cyan-300">📒 Track record del motor</h3>
-            <p className="text-[11px] text-gray-500">cada predicción se califica sola contra los precios reales en corridas posteriores</p>
-            <button onClick={() => setShowTrack(!showTrack)} className="ml-auto text-xs text-cyan-300/80 hover:text-cyan-200 font-semibold">
-              {showTrack ? 'Ocultar detalle ▾' : 'Ver detalle ▸'}
-            </button>
+            <p className="text-[11px] text-gray-500">se califica contra los precios reales al abrir esta pestaña, al calificar manualmente o en cada corrida</p>
+            <div className="ml-auto flex items-center gap-3">
+              <button onClick={() => gradeNow(false)} disabled={grading}
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 transition disabled:opacity-50">
+                {grading ? 'Calificando…' : '🔄 Calificar ahora'}
+              </button>
+              <button onClick={() => setShowTrack(!showTrack)} className="text-xs text-cyan-300/80 hover:text-cyan-200 font-semibold">
+                {showTrack ? 'Ocultar detalle ▾' : 'Ver detalle ▸'}
+              </button>
+            </div>
           </div>
+          {gradeInfo && (
+            <p className="text-[11px] text-gray-500 mb-3">
+              Último cierre disponible: <b className="text-gray-300">{gradeInfo.as_of}</b>
+              {' · '}{gradeInfo.graded_now > 0
+                ? <>se calificaron <b className="text-emerald-300">{gradeInfo.graded_now}</b> predicciones ahora (+{gradeInfo.feedback_rows} ejemplos a la red)</>
+                : 'nada nuevo para calificar'}
+              {gradeInfo.pending_future > 0 && (
+                <> · <b className="text-yellow-300/90">{gradeInfo.pending_future} pendientes</b> son para una sesión futura — se califican cuando esa sesión ocurra</>
+              )}
+            </p>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard label="Predicciones calificadas" value={String(track.overall.n)} hint={`${fmt(track.overall.fill_rate_pct, '%')} ejecutaron`} />
             <StatCard label="Win rate real" value={fmt(track.overall.win_rate_pct, '%')}
@@ -602,11 +643,24 @@ export default function UltimatePredictionSection() {
               tone={(track.overall.avg_r ?? 0) > 0 ? 'pos' : (track.overall.avg_r ?? 0) < 0 ? 'neg' : 'neutral'} />
             <StatCard label="Long vs Short (R medio)" value={`${fmt(track.long.avg_r)} / ${fmt(track.short.avg_r)}`} hint="el motor ajusta sus pesos con esto" />
           </div>
+          {showTrack && (track.by_pattern?.length ?? 0) > 0 && (
+            <div className="mt-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-300/70 mb-1.5">Qué setups están funcionando (calificados)</p>
+              <div className="flex flex-wrap gap-2">
+                {track.by_pattern!.map((p) => (
+                  <span key={p.pattern} className={`text-[11px] px-2.5 py-1 rounded-lg border ${(p.avg_r ?? 0) > 0 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : (p.avg_r ?? 0) < 0 ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-gray-700 bg-gray-800/50 text-gray-400'}`}>
+                    {p.pattern} · {p.n} picks · WR {fmt(p.win_rate_pct, '%')} · {fmt(p.avg_r, 'R')} medio
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           {showTrack && (
             <div className="overflow-x-auto mt-4">
               <table className="w-full text-xs">
                 <thead><tr className="text-left text-gray-500 border-b border-gray-800">
                   <th className="py-1.5 pr-3">Sesión</th><th className="pr-3">Símbolo</th><th className="pr-3">Lado</th>
+                  <th className="pr-3">Patrón</th><th className="pr-3 text-right">P(expl.)</th>
                   <th className="pr-3 text-right">Entrada</th><th className="pr-3 text-right">Stop</th>
                   <th className="pr-3 text-right">Target</th><th className="pr-3">Resultado</th>
                   <th className="pr-3 text-right">R</th><th className="text-right">Días</th>
@@ -617,6 +671,8 @@ export default function UltimatePredictionSection() {
                       <td className="py-1.5 pr-3">{r.for_date}</td>
                       <td className="pr-3 font-mono text-gray-300">{r.symbol}</td>
                       <td className={`pr-3 font-semibold ${r.side === 'long' ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{r.side.toUpperCase()}</td>
+                      <td className="pr-3 text-gray-500">{r.pattern ? r.pattern.split(' ')[0] : '–'}</td>
+                      <td className="pr-3 text-right font-mono">{r.surge_prob_pct != null ? `${r.surge_prob_pct}%` : '–'}</td>
                       <td className="pr-3 text-right font-mono">${r.entry}</td>
                       <td className="pr-3 text-right font-mono">${r.stop}</td>
                       <td className="pr-3 text-right font-mono">${r.target}</td>

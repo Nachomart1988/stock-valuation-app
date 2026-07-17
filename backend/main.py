@@ -218,6 +218,7 @@ try:
         start_job as ultimate_start_job,
         get_job as ultimate_get_job,
         get_history as ultimate_get_history,
+        grade_now as ultimate_grade_now,
     )
     ULTIMATE_PREDICTOR_AVAILABLE = True
 except ImportError:
@@ -225,6 +226,7 @@ except ImportError:
     ultimate_start_job = None
     ultimate_get_job = None
     ultimate_get_history = None
+    ultimate_grade_now = None
 
 try:
     from weekly_report_engine import start_job as weekly_report_start_job, get_job as weekly_report_get_job
@@ -2866,6 +2868,21 @@ async def ultimate_predictor_status(job_id: str):
     if snap is None:
         raise HTTPException(status_code=404, detail="job_id no encontrado o expirado")
     return numpy_safe_response(snap)
+
+
+@app.post("/backtest/ultimate/grade")
+async def ultimate_predictor_grade():
+    """Califica bajo demanda las predicciones vencidas contra los precios reales
+    (sin correr una predicción completa) y devuelve el track record actualizado.
+    Las predicciones para sesiones futuras siguen pendientes hasta que ocurran."""
+    if not ULTIMATE_PREDICTOR_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Ultimate predictor engine not available")
+    try:
+        data = await asyncio.to_thread(ultimate_grade_now)
+        return numpy_safe_response(data)
+    except Exception as e:
+        print(f"[Ultimate] grade error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/backtest/ultimate/history")

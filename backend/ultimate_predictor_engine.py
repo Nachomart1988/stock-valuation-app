@@ -152,9 +152,13 @@ DILUTION_MAX_CHECKS = 8
 # ── Red neuronal ─────────────────────────────────────────────────────────────
 PATTERN_ORDER = [PAT_CAPITULATION, PAT_PULLBACK, PAT_MOMENTUM, PAT_UPTREND,
                  PAT_COIL, PAT_FLAT, PAT_CHOPPY]
-N_BASE_FEATURES = 20
-N_FEATURES = N_BASE_FEATURES + len(PATTERN_ORDER)   # 27
-FEAT_VERSION = "fv1"
+# fv2: se suma el bloque de "previa de volumen" (los grandes movimientos suelen
+# telegrafiarse en el volumen): secuencia de ratios de los últimos 5 días,
+# dry-up, pocket pivots (días >2× promedio), share de volumen en días verdes
+# (acumulación vs distribución), expansión de rango y log(market cap).
+N_BASE_FEATURES = 29
+N_FEATURES = N_BASE_FEATURES + len(PATTERN_ORDER)   # 36
+FEAT_VERSION = "fv2"
 
 MIN_TRAIN_ROWS = 800       # bajo esto, la red no entrena (modo heurístico)
 MAX_TRAIN_ROWS = 250_000   # techo del dataset cargado en memoria
@@ -298,9 +302,9 @@ def _sim_trade(side: str, fill: float, stop: float, target: float,
 # ═══════════════════════════════════════════════════════════════════════════
 def _feature_vector(dates: List[str], o: np.ndarray, h: np.ndarray,
                     lo: np.ndarray, c: np.ndarray, v: np.ndarray, i: int,
-                    spy_map: Dict[str, float], etf_map: Optional[Dict[str, float]]
-                    ) -> Optional[np.ndarray]:
-    """Vector fv1 de 27 features al cierre del día i (sin look-ahead)."""
+                    spy_map: Dict[str, float], etf_map: Optional[Dict[str, float]],
+                    market_cap: Optional[float] = None) -> Optional[np.ndarray]:
+    """Vector fv2 de 36 features al cierre del día i (sin look-ahead)."""
     if i < 60:
         return None
     px = float(c[i])
@@ -341,13 +345,30 @@ def _feature_vector(dates: List[str], o: np.ndarray, h: np.ndarray,
     sec20 = float(etf_map.get(dates[i], spy20)) if etf_map else spy20
     hot = 1.0 if sec20 > spy20 else 0.0
 
+    # ── Bloque "previa de volumen" (fv2) ─────────────────────────────────────
+    # Secuencia de ratios de los últimos 5 días (forma del patrón de volumen)
+    vol_seq = [float(v[i - k]) / vol_avg20 if vol_avg20 > 0 else 1.0
+               for k in (4, 3, 2, 1)]                       # d-4..d-1 (d0 = vol_ratio)
+    v10 = v[i - 9:i + 1]
+    dryup = float(np.min(v[i - 4:i + 1])) / vol_avg20 if vol_avg20 > 0 else 1.0
+    pocket_pivots = float(np.sum(v10 > 2 * vol_avg20)) / 10.0 if vol_avg20 > 0 else 0.0
+    c10, o10 = c[i - 9:i + 1], o[i - 9:i + 1]
+    green = c10 > o10
+    tot_v10 = float(np.sum(v10))
+    upvol_share = float(np.sum(v10[green])) / tot_v10 if tot_v10 > 0 else 0.5
+    tr10 = (h[i - 9:i + 1] - lo[i - 9:i + 1]) / np.where(c10 > 0, c10, 1.0) * 100
+    tr_first = float(np.mean(tr10[:5])); tr_last = float(np.mean(tr10[5:]))
+    range_trend = tr_last / tr_first if tr_first > 0 else 1.0
+    log_mktcap = float(np.log10(max(float(market_cap or 0), 1.0)))
+
     base = [ret(1), ret(5), float(ret10), ret(20),
             atr_pct, float(compression), vol_ratio, vol_trend, prox,
             dist_low, dist_high, float(consec_red), float(consec_green),
             close_pos, gap,
             float(np.log10(max(px, 0.01))),
             float(np.log10(max(px * vol_avg20, 1.0))),
-            spy20, sec20, hot]
+            spy20, sec20, hot,
+            *vol_seq, dryup, pocket_pivots, upvol_share, range_trend, log_mktcap]
     onehot = [1.0 if pattern == p else 0.0 for p in PATTERN_ORDER]
     vec = np.asarray(base + onehot, dtype=np.float32)
     vec = np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
@@ -473,16 +494,31 @@ class UltimatePredictorEngine:
                     weight REAL DEFAULT 1.0,
                     run_id TEXT,
                     added_at TEXT,
+                    feat_version TEXT,
                     PRIMARY KEY (symbol, date)
                 )""")
-            # migraciones v1 → v2 (columnas nuevas en predictions)
+            # migraciones (columnas nuevas)
             for ddl in ("ALTER TABLE predictions ADD COLUMN features TEXT",
                         "ALTER TABLE predictions ADD COLUMN exp_move_pct REAL",
-                        "ALTER TABLE predictions ADD COLUMN surge_prob_pct REAL"):
+                        "ALTER TABLE predictions ADD COLUMN surge_prob_pct REAL",
+                        "ALTER TABLE predictions ADD COLUMN pattern TEXT",
+                        "ALTER TABLE predictions ADD COLUMN vol_ratio REAL",
+                        "ALTER TABLE predictions ADD COLUMN dilution_score REAL",
+                        "ALTER TABLE training_data ADD COLUMN feat_version TEXT"):
                 try:
                     conn.execute(ddl)
                 except sqlite3.OperationalError:
                     pass  # columna ya existe
+            # al cambiar la versión de features, el dataset viejo se descarta
+            # (se vuelve a cosechar con la versión nueva en la próxima corrida)
+            conn.execute("DELETE FROM training_data WHERE feat_version IS NULL "
+                         "OR feat_version != ?", (FEAT_VERSION,))
+            # dedupe histórico: si una corrida repetida insertó el mismo pick
+            # pendiente varias veces, queda solo el más reciente
+            conn.execute(
+                "DELETE FROM predictions WHERE status='pending' AND id NOT IN ("
+                "SELECT MAX(id) FROM predictions WHERE status='pending' "
+                "GROUP BY for_date, symbol, side)")
 
     # ── Modelo: load / save / predict ────────────────────────────────────────
     def _load_model(self) -> None:
@@ -538,13 +574,19 @@ class UltimatePredictorEngine:
     def _upsert_training(self, rows: List[Tuple], run_id: str) -> int:
         """rows: (symbol, date, features_json, label_up, label_down, surge_pct,
         weight). INSERT OR REPLACE si el peso nuevo es mayor (los ejemplos de
-        picks calificados ×3 pisan a los cosechados ×1, nunca al revés)."""
+        picks calificados ×3 pisan a los cosechados ×1, nunca al revés).
+        Features con dimensión distinta a la versión vigente se descartan."""
         if not rows:
             return 0
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
         added = 0
         with self._db_lock, closing(self._db()) as conn, conn:
             for r in rows:
+                try:
+                    if len(json.loads(r[2])) != N_FEATURES:
+                        continue
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
                 cur = conn.execute(
                     "SELECT weight FROM training_data WHERE symbol=? AND date=?",
                     (r[0], r[1]))
@@ -554,8 +596,8 @@ class UltimatePredictorEngine:
                 conn.execute(
                     "INSERT OR REPLACE INTO training_data "
                     "(symbol, date, features, label_up, label_down, surge_pct, "
-                    "weight, run_id, added_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (*r, run_id, now))
+                    "weight, run_id, added_at, feat_version) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (*r, run_id, now, FEAT_VERSION))
                 added += 1
         return added
 
@@ -712,15 +754,37 @@ class UltimatePredictorEngine:
                         "exit_price=?, days_held=?, evaluated_at=? WHERE id=?", upd)
                 graded += 1
                 # feedback: etiqueta verdadera anclada al día previo a la sesión
+                # (solo si las features guardadas son de la versión vigente)
                 feats = row["features"] if "features" in row.keys() else None
                 lab = _labels_at(c, h, lo, idx - 1)
                 if feats and lab is not None:
                     up, down, s_pct, _c_pct = lab
                     feedback.append((row["symbol"], dates[idx - 1], feats,
                                      up, down, s_pct, GRADED_SAMPLE_WEIGHT))
+                    # _upsert_training descarta las de dimensión vieja
             except Exception as e:  # noqa: BLE001
                 logger.debug("[Ultimate] grading %s failed: %s", row["symbol"], e)
         return graded, feedback
+
+    def grade_now(self) -> Dict[str, Any]:
+        """Calificación bajo demanda (sin correr una predicción completa):
+        usa la última fecha de SPY como corte, califica lo vencido, mete el
+        feedback al dataset y devuelve el track record actualizado. Las
+        predicciones para sesiones FUTURAS siguen (correctamente) pendientes."""
+        today = datetime.utcnow()
+        d_from = (today - timedelta(days=15)).strftime("%Y-%m-%d")
+        d_to = today.strftime("%Y-%m-%d")
+        hist = self.finder._daily_history("SPY", d_from, d_to)
+        dates, _o, _h, _l, _c, _v = self.finder._parse_bars(hist)
+        as_of = dates[-1] if dates else d_to
+        graded, feedback = self._grade_pending(as_of)
+        fed = self._upsert_training(feedback, "grade-now")
+        with self._db_lock, closing(self._db()) as conn, conn:
+            pending_future = conn.execute(
+                "SELECT COUNT(*) AS n FROM predictions WHERE status='pending' "
+                "AND for_date > ?", (as_of,)).fetchone()["n"]
+        return {"as_of": as_of, "graded_now": graded, "feedback_rows": fed,
+                "pending_future": pending_future, "track_record": self.track_record()}
 
     def track_record(self) -> Dict[str, Any]:
         """KPIs del historial calificado + últimas predicciones (para la UI)."""
@@ -730,8 +794,8 @@ class UltimatePredictorEngine:
                 "ORDER BY for_date DESC LIMIT 400").fetchall()
             recent = conn.execute(
                 "SELECT for_date, symbol, side, entry, stop, target, score, status, "
-                "outcome, outcome_r, exit_price, days_held FROM predictions "
-                "ORDER BY id DESC LIMIT 30").fetchall()
+                "outcome, outcome_r, exit_price, days_held, pattern, surge_prob_pct "
+                "FROM predictions ORDER BY id DESC LIMIT 30").fetchall()
 
         def _stats(subset: List[sqlite3.Row]) -> Dict[str, Any]:
             fills = [r for r in subset if r["outcome"] != "no_fill"]
@@ -746,10 +810,21 @@ class UltimatePredictorEngine:
                 "total_r": round(float(np.sum(rs)), 2) if rs else None,
             }
 
+        # rendimiento por patrón de setup: qué "previas" están funcionando
+        by_pattern: List[Dict[str, Any]] = []
+        pats: Dict[str, List[sqlite3.Row]] = {}
+        for r in rows:
+            pat = r["pattern"] if "pattern" in r.keys() else None
+            if pat:
+                pats.setdefault(pat, []).append(r)
+        for pat, subset in sorted(pats.items(), key=lambda kv: -len(kv[1])):
+            by_pattern.append({"pattern": pat, **_stats(subset)})
+
         return {
             "overall": _stats(list(rows)),
             "long": _stats([r for r in rows if r["side"] == "long"]),
             "short": _stats([r for r in rows if r["side"] == "short"]),
+            "by_pattern": by_pattern,
             "recent": [dict(r) for r in recent],
         }
 
@@ -853,15 +928,16 @@ class UltimatePredictorEngine:
         n_neg = min(len(neg_idx), max(5, NEG_PER_POS * max(len(pos_idx), 1)))
         sampled_neg = list(rng.choice(neg_idx, size=n_neg, replace=False)) if neg_idx else []
         train_rows: List[Tuple] = []
+        mcap = meta.get("market_cap")
         for idx, lab in pos_idx[:MAX_ROWS_PER_SYMBOL]:
-            vec = _feature_vector(dates, o, h, lo, c, v, idx, spy_map, etf_map)
+            vec = _feature_vector(dates, o, h, lo, c, v, idx, spy_map, etf_map, mcap)
             if vec is not None:
                 up, down, s_pct, _ = lab
                 train_rows.append((symbol, dates[idx],
                                    json.dumps([round(float(x), 4) for x in vec]),
                                    up, down, s_pct, 1.0))
         for idx in sampled_neg[:MAX_ROWS_PER_SYMBOL]:
-            vec = _feature_vector(dates, o, h, lo, c, v, int(idx), spy_map, etf_map)
+            vec = _feature_vector(dates, o, h, lo, c, v, int(idx), spy_map, etf_map, mcap)
             if vec is not None:
                 train_rows.append((symbol, dates[int(idx)],
                                    json.dumps([round(float(x), 4) for x in vec]),
@@ -1032,7 +1108,8 @@ class UltimatePredictorEngine:
         if best is None:
             return None
 
-        feats = _feature_vector(dates, o, h, lo, c, v, n - 1, spy_map, etf_map)
+        feats = _feature_vector(dates, o, h, lo, c, v, n - 1, spy_map, etf_map,
+                                meta.get("market_cap"))
         best.update({
             "symbol": meta["symbol"],
             "sector": meta["sector"],
@@ -1329,6 +1406,11 @@ class UltimatePredictorEngine:
             cand["dilution"] = dilution
             if cand["side"] == "short" and dilution and (dilution.get("score") or 0) >= 60:
                 cand["dilution_note"] = "dilución alta — viento a favor del short"
+            # penalización blanda: dilución 40-69 en longs baja el ranking
+            if (cand["side"] == "long" and dilution and dilution.get("score") is not None
+                    and dilution["score"] >= 40):
+                cand["_rank"] *= 1.0 - (dilution["score"] - 40) / 100.0
+                cand["dilution_note"] = "dilución moderada — ranking penalizado"
             cand["rationale"] = self._rationale(cand, val)
             cand["exp_hold_days"] = val["med_days_held"] or MAX_HOLD_DAYS
             picks.append(cand)
@@ -1356,14 +1438,23 @@ class UltimatePredictorEngine:
                 for cand in picks:
                     feats_json = (json.dumps([round(float(x), 4) for x in cand["_features"]])
                                   if cand.get("_features") is not None else None)
+                    # dedupe: si otra corrida del mismo día ya publicó este pick
+                    # pendiente, se reemplaza (queda la versión más reciente)
+                    conn.execute(
+                        "DELETE FROM predictions WHERE status='pending' AND "
+                        "for_date=? AND symbol=? AND side=?",
+                        (for_date, cand["symbol"], cand["side"]))
                     conn.execute(
                         "INSERT INTO predictions (run_id, created_at, for_date, symbol, "
                         "side, entry, stop, target, score, expectancy_r, features, "
-                        "exp_move_pct, surge_prob_pct) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "exp_move_pct, surge_prob_pct, pattern, vol_ratio, dilution_score) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (run_id, now_str, for_date, cand["symbol"], cand["side"],
                          cand["entry"], cand["stop"], cand["target"], cand["score"],
                          cand["validation"]["expectancy_r"], feats_json,
-                         cand["exp_move_pct"], cand.get("surge_prob_pct")))
+                         cand["exp_move_pct"], cand.get("surge_prob_pct"),
+                         cand.get("pattern"), cand.get("vol_ratio"),
+                         (cand.get("dilution") or {}).get("score")))
         except Exception as e:  # noqa: BLE001
             warnings.append(f"No se pudo persistir la corrida en la base local: {e}")
 
@@ -1467,6 +1558,11 @@ def get_history() -> Dict[str, Any]:
             "SELECT * FROM runs ORDER BY created_at DESC LIMIT 12").fetchall()
     return {"track_record": track, "runs": [dict(r) for r in runs],
             "model": engine.model_info()}
+
+
+def grade_now() -> Dict[str, Any]:
+    """Califica bajo demanda las predicciones vencidas (POST /backtest/ultimate/grade)."""
+    return get_ultimate_predictor_engine().grade_now()
 
 
 def start_job(raw_config: Dict[str, Any]) -> str:
