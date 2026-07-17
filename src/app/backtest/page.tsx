@@ -605,7 +605,7 @@ export default function BacktestPage() {
             <>Búsqueda de <span className="text-rose-300">edge</span>: encuentra todos los surges históricos (X% en N días) y analiza el patrón previo — 10 días antes/después, volumen del día previo, sector hot/cold y distancia al mínimo de 52 semanas.</>
           )}
           {strategy === 'ultimate' && (
-            <>El motor que orquesta a todos: elige solo precio y market cap, y devuelve el <span className="text-amber-300">Top 5 de trades para la próxima sesión</span> (long o short) — cada pick validado por un backtest propio sobre su historia, con veto de dilución (SEC EDGAR), contexto de mercado y track record auto-calificado.</>
+            <>El motor que orquesta a todos: elige solo precio y market cap, y devuelve el <span className="text-amber-300">Top 5 de movimientos explosivos para la próxima sesión</span> (surge +30% / crash −25% en ≤5 días) — una red neuronal que se re-entrena cada corrida asigna P(explosión), cada pick se valida con backtest propio, veto de dilución (SEC EDGAR) y track record auto-calificado del que la red aprende día a día.</>
           )}
         </p>
 

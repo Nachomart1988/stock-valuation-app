@@ -1,14 +1,15 @@
 'use client';
 
 /**
- * Ultimate Prediction — sección de /backtest (GOD MODE).
+ * Ultimate Prediction v2 — sección de /backtest (GOD MODE).
  *
- * El usuario elige SOLO precio + market cap. El motor escanea el universo al
- * último cierre, arma setups long/short, VALIDA cada candidato con un backtest
- * propio sobre su propia historia (mismas reglas de entrada/stop/target), veta
- * longs con riesgo de dilución (SEC EDGAR) y publica el Top 5 para la próxima
- * sesión. Cada predicción queda guardada localmente y se auto-califica contra
- * los precios reales en la corrida siguiente (track record).
+ * El usuario elige SOLO precio + market cap. El motor busca MOVIMIENTOS
+ * EXPLOSIVOS (surges +30% / desplomes −25% en ≤5 días, definición Edge
+ * Finder): una red neuronal PyTorch —que se re-entrena en cada corrida con el
+ * dataset local acumulado y con el resultado real de sus propias predicciones—
+ * asigna P(explosión) a cada setup; cada candidato se VALIDA con un backtest
+ * propio sobre su historia y los longs chicos pasan el veto de dilución EDGAR.
+ * Top 5 para la próxima sesión + track record auto-calificado.
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -46,6 +47,8 @@ interface Pick {
   dist_52w_low_pct: number | null; dist_52w_high_pct: number | null;
   sector_etf: string | null; sector_ret20_pct: number | null; sector_hot_now: boolean | null;
   entry: number; stop: number; target: number; rr: number; risk_pct: number;
+  exp_move_pct: number; own_surges: number;
+  surge_prob_pct: number | null; p_up_pct: number | null; p_down_pct: number | null;
   score: number; score_breakdown: ScorePart[];
   validation: Validation;
   dilution: { score: number | null; label: string | null; dilution_1y_pct: number | null } | null;
@@ -53,7 +56,29 @@ interface Pick {
   rationale: string; exp_hold_days: number;
 }
 
-interface Rejected { symbol: string; side: string; score: number; stage: string; reason: string }
+interface Rejected {
+  symbol: string; side: string; score: number; stage: string; reason: string;
+  surge_prob_pct?: number | null;
+}
+
+interface ModelInfo {
+  torch_available: boolean;
+  status: 'trained' | 'heuristic';
+  active_this_run?: boolean;
+  trained_at: string | null;
+  rows: number | null;
+  dataset_rows: number;
+  dataset_up: number;
+  dataset_down: number;
+  examples_added_this_run?: number;
+  global_median_surge_pct?: number | null;
+  metrics: {
+    val_loss: number; epochs: number;
+    auc_up: number | null; auc_down: number | null;
+    pos_rate_up_pct: number; pos_rate_down_pct: number;
+  } | null;
+  last_training?: { trained: boolean; reason?: string };
+}
 
 interface SideStats {
   n: number; fills: number; fill_rate_pct: number | null;
@@ -73,7 +98,8 @@ interface UltimateResult {
   kpis: {
     universe: number; setups_long: number; setups_short: number; validated: number;
     rejected_backtest: number; rejected_dilution: number; graded_this_run: number;
-    avg_expectancy_r: number | null; avg_score: number | null;
+    dataset_rows: number; avg_expectancy_r: number | null;
+    avg_surge_prob_pct: number | null;
   };
   market: {
     as_of: string; spy_ret5_pct: number | null; spy_ret20_pct: number | null;
@@ -81,11 +107,13 @@ interface UltimateResult {
     hot_sectors: Array<{ etf: string; ret20_pct: number }>;
     cold_sectors: Array<{ etf: string; ret20_pct: number }>;
   };
+  model: ModelInfo;
   picks: Pick[];
   rejected: Rejected[];
   track_record: TrackRecord;
   meta: {
     run_id: string; as_of: string; for_date: string; universe_full: number;
+    surge_days: number; surge_pct_min: number; crash_pct_min: number;
     runtime_s: number; warnings: string[];
   };
 }
@@ -226,9 +254,18 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
         {pick.status === 'breaking' && (
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300">EN CURSO</span>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-gray-500">Score</span>
-          <span className="text-lg font-black font-mono text-amber-300">{pick.score}</span>
+        <div className="ml-auto flex items-center gap-3">
+          {pick.surge_prob_pct != null ? (
+            <div className="text-right">
+              <p className="text-[9px] uppercase tracking-wider text-gray-500">P(explosión) 🧠</p>
+              <p className="text-xl font-black font-mono text-amber-300 leading-none">{pick.surge_prob_pct}%</p>
+            </div>
+          ) : (
+            <div className="text-right">
+              <p className="text-[9px] uppercase tracking-wider text-gray-500">Score</p>
+              <p className="text-xl font-black font-mono text-amber-300 leading-none">{pick.score}</p>
+            </div>
+          )}
           <button onClick={() => onChart(pick)}
             className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 transition">
             Gráfico
@@ -244,7 +281,7 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
           <p className="font-mono font-bold text-amber-300">${pick.entry}</p></div>
         <div><p className="text-[10px] uppercase tracking-wider text-gray-500">Stop loss</p>
           <p className="font-mono font-bold text-rose-400">${pick.stop} <span className="text-[10px] text-gray-500">(−{pick.risk_pct}%)</span></p></div>
-        <div><p className="text-[10px] uppercase tracking-wider text-gray-500">Target ({pick.rr}R)</p>
+        <div><p className="text-[10px] uppercase tracking-wider text-gray-500">Target ({long ? '+' : '−'}{pick.exp_move_pct}% · {pick.rr}R)</p>
           <p className="font-mono font-bold text-emerald-400">${pick.target}</p></div>
         <div><p className="text-[10px] uppercase tracking-wider text-gray-500">Hold esperado</p>
           <p className="font-mono font-bold text-gray-200">~{pick.exp_hold_days} días</p></div>
@@ -253,7 +290,7 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
       {/* Validación por backtest propio */}
       <div className="mt-4 rounded-xl bg-gray-950/60 border border-emerald-500/15 p-3">
         <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80 mb-1">
-          ✓ Validado por backtest propio (~1 año, mismo setup)
+          ✓ Validado por backtest propio (~1 año, mismo setup, target explosivo)
         </p>
         <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-300">
           <span>{v.fills} trades ejecutados ({v.events} setups)</span>
@@ -298,6 +335,9 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
             <span>Δ52w high: <b className="text-gray-300">{fmt(pick.dist_52w_high_pct, '%')}</b></span>
             <span>Verdes/rojas: <b className="text-gray-300">{pick.consec_green}/{pick.consec_red}</b></span>
             <span>Sector 20d: <b className="text-gray-300">{fmt(pick.sector_ret20_pct, '%')}</b> {pick.sector_hot_now != null && (pick.sector_hot_now ? '🔥' : '❄️')}</span>
+            <span>Explosiones propias 1a: <b className="text-gray-300">{pick.own_surges}</b></span>
+            {pick.p_up_pct != null && <span>P(↑surge)/P(↓crash): <b className="text-gray-300">{pick.p_up_pct}% / {pick.p_down_pct}%</b></span>}
+            <span>Score heurístico: <b className="text-gray-300">{pick.score}</b></span>
           </div>
         </div>
       )}
@@ -407,9 +447,10 @@ export default function UltimatePredictionSection() {
             {running ? 'Buscando el Top 5…' : '🏆 Buscar Top 5 para la próxima sesión'}
           </button>
           <p className="text-xs text-gray-500 max-w-xl">
-            El resto lo decide el motor: setups long/short, validación por backtest propio,
-            veto de dilución y contexto de mercado. Cada corrida queda guardada y se
-            auto-califica contra los precios reales.
+            Objetivo: movimientos explosivos (+30% / −25% en ≤5 días). Una red neuronal
+            re-entrenada en cada corrida asigna P(explosión); cada candidato se valida con
+            backtest propio y veto de dilución. La corrida puede tardar varios minutos —
+            el dataset y la red mejoran con cada día que corras el motor.
           </p>
         </div>
       </div>
@@ -454,6 +495,30 @@ export default function UltimatePredictionSection() {
             </div>
           </div>
 
+          {/* Panel de la red neuronal */}
+          <div className="rounded-2xl border border-violet-500/25 bg-gray-900/40 p-5">
+            <div className="flex flex-wrap items-center gap-3 mb-3">
+              <h3 className="text-sm font-bold text-violet-300">🧠 Red neuronal (surge ≥ +{result.meta.surge_pct_min}% · crash ≥ −{result.meta.crash_pct_min}% en ≤{result.meta.surge_days} días)</h3>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${result.model.active_this_run ? 'bg-violet-500/15 border-violet-500/40 text-violet-300' : 'bg-gray-500/15 border-gray-500/30 text-gray-400'}`}>
+                {result.model.active_this_run ? 'Activa — rankeando por P(explosión)' : 'En espera — ranking heurístico'}
+              </span>
+              {result.model.trained_at && <span className="text-[10px] text-gray-500">entrenada {result.model.trained_at}</span>}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <StatCard label="Dataset acumulado" value={String(result.model.dataset_rows)}
+                hint={`+${result.model.examples_added_this_run ?? 0} en esta corrida · ↑${result.model.dataset_up} ↓${result.model.dataset_down}`} />
+              <StatCard label="AUC validación ↑" value={fmt(result.model.metrics?.auc_up)}
+                tone={(result.model.metrics?.auc_up ?? 0) >= 0.6 ? 'pos' : 'neutral'} hint="0.5 = azar, 1 = perfecto" />
+              <StatCard label="AUC validación ↓" value={fmt(result.model.metrics?.auc_down)}
+                tone={(result.model.metrics?.auc_down ?? 0) >= 0.6 ? 'pos' : 'neutral'} />
+              <StatCard label="Épocas / val loss" value={`${result.model.metrics?.epochs ?? '–'} / ${fmt(result.model.metrics?.val_loss)}`} />
+              <StatCard label="Surge mediano del universo" value={fmt(result.model.global_median_surge_pct, '%')} hint="magnitud de las explosiones cosechadas" />
+            </div>
+            {!result.model.active_this_run && result.model.last_training?.reason && (
+              <p className="mt-2 text-xs text-gray-500">⏳ {result.model.last_training.reason}</p>
+            )}
+          </div>
+
           {/* KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <StatCard label="Universo" value={String(result.kpis.universe)} hint={`de ${result.meta.universe_full} del screener`} />
@@ -461,8 +526,9 @@ export default function UltimatePredictionSection() {
             <StatCard label="Aprobados" value={`${result.kpis.validated}/5`} tone={result.kpis.validated >= 5 ? 'pos' : 'neg'} />
             <StatCard label="Rechazados backtest" value={String(result.kpis.rejected_backtest)} hint="no pasaron su propia historia" />
             <StatCard label="Vetados dilución" value={String(result.kpis.rejected_dilution)} hint="overhang EDGAR" />
-            <StatCard label="Expectancy media" value={fmt(result.kpis.avg_expectancy_r, 'R')}
-              tone={(result.kpis.avg_expectancy_r ?? 0) > 0 ? 'pos' : 'neutral'} hint="por trade validado" />
+            <StatCard label={result.kpis.avg_surge_prob_pct != null ? 'P(explosión) media' : 'Expectancy media'}
+              value={result.kpis.avg_surge_prob_pct != null ? `${result.kpis.avg_surge_prob_pct}%` : fmt(result.kpis.avg_expectancy_r, 'R')}
+              tone="pos" hint="del Top 5" />
           </div>
 
           {/* Picks */}
@@ -486,6 +552,7 @@ export default function UltimatePredictionSection() {
                 <table className="w-full text-xs">
                   <thead><tr className="text-left text-gray-500 border-b border-gray-800">
                     <th className="py-1.5 pr-3">Símbolo</th><th className="pr-3">Lado</th>
+                    <th className="pr-3 text-right">P(explosión)</th>
                     <th className="pr-3 text-right">Score</th><th className="pr-3">Etapa</th><th>Motivo</th>
                   </tr></thead>
                   <tbody>
@@ -493,6 +560,7 @@ export default function UltimatePredictionSection() {
                       <tr key={r.symbol + i} className="border-b border-gray-800/50 text-gray-400">
                         <td className="py-1.5 pr-3 font-mono text-gray-300">{r.symbol}</td>
                         <td className={`pr-3 font-semibold ${r.side === 'long' ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{r.side.toUpperCase()}</td>
+                        <td className="pr-3 text-right font-mono">{r.surge_prob_pct != null ? `${r.surge_prob_pct}%` : '–'}</td>
                         <td className="pr-3 text-right font-mono">{r.score}</td>
                         <td className="pr-3">{r.stage === 'dilution' ? 'Dilución' : 'Backtest'}</td>
                         <td>{r.reason}</td>

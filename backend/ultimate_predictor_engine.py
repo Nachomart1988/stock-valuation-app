@@ -1,58 +1,63 @@
 """
-Ultimate Predictor Engine
-=========================
+Ultimate Predictor Engine v2 — predictor de movimientos explosivos
+==================================================================
 
 La pieza más ambiciosa del /backtest (GOD MODE): el usuario elige SOLO un rango
 de precio y un rango de market cap, y el motor produce el **Top 5 de trades
-para la próxima sesión** (long o short), cada uno con entrada / stop / target y
+para la próxima sesión** apuntando a MOVIMIENTOS EXPLOSIVOS — surges al estilo
+Edge Finder (+30% en ≤5 días) al alza, y desplomes espejo a la baja — cada uno
 validado por un backtest propio antes de ser publicado.
 
-Orquesta (y aprende de) los motores existentes:
+Novedad v2 — **red neuronal con aprendizaje día a día**:
 
-  1. **Edge Finder** — reutiliza su universo (screener FMP), su caché de
-     históricos diarios, el clasificador de patrón previo (coil / base plana /
-     capitulación / momentum...) y la lógica de rachas rojas/verdes.
-  2. **Edge Predictor** — hereda su filosofía de scoring "estado actual vs
-     perfil" (proximidad al disparo, volumen, sector hot/cold, 52w).
-  3. **Estrategia 1 / Gap Short** — hereda su mecánica de trade D→D+1
-     (setup al cierre de D, ejecución en D+1) y su supuesto conservador
-     intrabarra (si una barra toca stop y target, se asume stop primero).
-  4. **Dilution engine (SEC EDGAR)** — veto de dilución para longs de baja
-     capitalización (shelfs/ATMs activos = overhang que mata breakouts).
+  - En cada corrida, el escaneo del universo cosecha ejemplos de entrenamiento:
+    para cada símbolo se localizan los surges históricos (misma definición que
+    el Edge Finder: base = cierre de D-1, el surge arranca con día verde, pico
+    = high máximo de la ventana) y los desplomes espejo; el día previo (D-1) se
+    convierte en ejemplo positivo y días aleatorios sin surge en negativos.
+  - Los ejemplos se ACUMULAN en SQLite local (``ultimate_predictor.db``,
+    tabla ``training_data``): el dataset crece con cada corrida diaria.
+  - Un MLP PyTorch (27 features → 64 → 32 → 2 cabezas: P(surge↑), P(crash↓))
+    se re-entrena en cada corrida sobre el dataset completo, con early stop y
+    AUC de validación reportado en la UI.
+  - Cuando una predicción publicada se califica contra los precios reales, su
+    vector de features entra al dataset con la etiqueta VERDADERA y peso ×3:
+    el motor aprende de sus propios aciertos y errores (feedback loop real).
+  - Si torch no está disponible o el dataset aún es chico, cae al score
+    heurístico v1 (los drivers heurísticos siempre se calculan y se muestran
+    como explicación).
+
+Sigue orquestando los motores existentes: universo + caché + clasificador de
+patrones del Edge Finder, mecánica D→D+1 conservadora de Estrategia 1 / Gap
+Short (stop primero si la barra toca ambos), y veto de dilución EDGAR para
+longs de baja capitalización.
 
 Pipeline por corrida:
-
-  A. Califica las predicciones de corridas ANTERIORES contra los precios
-     reales (SQLite local ``ultimate_predictor.db``) → track record honesto que
-     además sesga levemente los pesos long/short (loop de aprendizaje).
-  B. Contexto de mercado: SPY 5/20d, ETFs sectoriales hot/cold, régimen.
-  C. Escaneo del universo al último cierre: setups LONG (breakout inminente
-     del high de 10 días) y SHORT (sobre-extensión parabólica / fatiga).
-  D. **Validación por backtest propio**: para cada candidato se re-ejecuta el
-     MISMO setup sobre su propia historia (~1 año, barras diarias) con las
-     mismas reglas de entrada/stop/target; si la acción "no se movió así en el
-     pasado" (pocos eventos, expectancy ≤ 0, win rate pobre) se DESCARTA y se
-     pasa al siguiente — hasta juntar 5 aprobados.
-  E. Veto de dilución (EDGAR) para longs < $2B dentro de un presupuesto de
-     tiempo; en shorts la dilución alta se anota como viento a favor.
-  F. Publica el Top 5 para el **próximo día hábil** (si ya cerró el mercado,
-     automáticamente es la sesión siguiente) y persiste cada pick como
-     predicción "pending" para auto-calificarse en la próxima corrida.
+  A. Califica predicciones anteriores → track record + ejemplos peso ×3.
+  B. Contexto de mercado (SPY/ETFs, régimen) con mapas por-fecha para features.
+  C. Escaneo del universo al último cierre: features NN + setups elegibles
+     (long: cerca del disparo 10d; short: sobre-extensión) + cosecha de
+     ejemplos históricos.
+  D. Entrenamiento de la red (dataset acumulado) y scoring P(explosión).
+  E. Validación por backtest propio: replay del mismo setup sobre ~1 año del
+     propio símbolo con target = movimiento explosivo esperado (mediana de SUS
+     surges, o la global); si su historia no paga, se descarta.
+  F. Veto de dilución (EDGAR) para longs < $2B; en shorts se anota a favor.
+  G. Publica el Top 5 para el próximo día hábil y persiste cada pick (con su
+     vector de features) para auto-calificarse y re-alimentar la red.
 
 Limitaciones documentadas (se muestran en la UI):
   - Universo point-in-time del screener → sesgo de supervivencia/look-ahead.
-  - La validación usa barras diarias (no 1-min): asume stop primero si la
-    barra toca stop y target — conservador pero no exacto.
-  - No modela borrow/locate ni costos de financiación de shorts, ni feriados
-    del calendario de mercado (el "próximo día hábil" salta solo fines de
-    semana).
+  - Validación con barras diarias, stop-primero conservador; sin borrow/locate.
+  - «Próximo día hábil» salta fines de semana, no feriados.
+  - La red se entrena con datos del propio universo escaneado — más corridas y
+    más días ⇒ mejor dataset (el motor está diseñado para correr a diario).
 
 Expuesto vía POST /backtest/ultimate/start (job async), GET
-/backtest/ultimate/status/{id} y GET /backtest/ultimate/history (track
-record). El gráfico por pick reutiliza POST /backtest/edge-predictor/chart.
+/backtest/ultimate/status/{id} y GET /backtest/ultimate/history. El gráfico
+por pick reutiliza POST /backtest/edge-predictor/chart.
 
-Screener estadístico + validación histórica — no es un pronóstico ni consejo
-de inversión.
+Screener estadístico + validación histórica — no es consejo de inversión.
 """
 
 from __future__ import annotations
@@ -89,47 +94,78 @@ from edge_finder_engine import (
     PAT_CHOPPY,
 )
 
+try:
+    import torch
+    import torch.nn as nn
+    TORCH_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    TORCH_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ultimate_predictor.db")
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(_BASE_DIR, "ultimate_predictor.db")
+MODEL_PATH = os.path.join(_BASE_DIR, "ultimate_predictor_model.pt")
+
+# ── Objetivo: movimientos explosivos (misma definición que el Edge Finder) ───
+SURGE_DAYS = 5             # ventana del movimiento explosivo (3-5 días)
+SURGE_PCT_MIN = 30.0       # surge alcista: +30% del cierre base al high máximo
+CRASH_PCT_MIN = 25.0       # espejo bajista: −25% del cierre base al low mínimo
 
 # ── Mecánica del trade (D+1, barras diarias, conservador) ────────────────────
-MAX_HOLD_DAYS = 5          # salida forzada al cierre del 5º día si no tocó nada
-RR_TARGET = 2.0            # target fijo = entrada ± 2R
-MAX_CHASE_PCT = 5.0        # si abre más de 5% pasado el nivel de entrada → sin fill
+MAX_HOLD_DAYS = SURGE_DAYS # salida forzada al cierre del 5º día
+MAX_CHASE_PCT = 5.0        # si abre >5% pasado el nivel de entrada → sin fill
 MIN_RISK_PCT = 1.0         # clamp del riesgo (stop) como % de la entrada
 MAX_RISK_PCT = 12.0
 STOP_BARS_LONG = 5         # stop long = low de las últimas 5 sesiones
 STOP_BARS_SHORT = 2        # stop short = high de las últimas 2 sesiones
+MIN_RR = 1.5               # estructura mínima: (target−entry)/riesgo
 
 # ── Elegibilidad de setups al último cierre ──────────────────────────────────
-LONG_NEAR_TRIGGER_PCT = 5.0    # cierre a ≤5% del high de 10 días
-LONG_MIN_RET10 = -5.0          # no comprar cuchillos cayendo
-SHORT_RET10_MIN = 30.0         # sobre-extensión: +30% en 10 días…
-SHORT_CONSEC_GREEN_MIN = 4     # …o 4+ días verdes seguidos
+LONG_NEAR_TRIGGER_PCT = 8.0    # cierre a ≤8% del high de 10 días
+LONG_MIN_RET10 = -10.0         # no comprar cuchillos en caída libre
+SHORT_RET10_MIN = 20.0         # sobre-extensión: +20% en 10 días…
+SHORT_CONSEC_GREEN_MIN = 3     # …o 3+ días verdes seguidos
 MIN_DOLLAR_VOL = 300_000       # liquidez mínima (precio × vol promedio 20d)
-MIN_ATR_PCT = 1.5              # sin rango no hay trade
-MIN_SCORE = 45.0               # piso de score para entrar a validación
+MIN_ATR_PCT = 1.5              # sin rango no hay explosión
+MIN_SCORE = 40.0               # piso heurístico (solo en modo sin red)
 STALE_DAYS = 7                 # ticker "muerto" si su última barra es vieja
 MIN_BARS = 90                  # historia mínima para escanear + validar
 
 # ── Gates de la validación histórica (backtest propio del candidato) ─────────
-VAL_MIN_EVENTS = 6         # setups históricos mínimos encontrados
-VAL_MIN_FILLS = 5          # de esos, cuántos ejecutaron el D+1
+# Con targets explosivos los wins son raros pero enormes: el gate clave es la
+# expectancy; el win rate mínimo baja respecto de v1.
+VAL_MIN_EVENTS = 5
+VAL_MIN_FILLS = 4
 VAL_MIN_EXPECTANCY = 0.05  # R promedio por trade ejecutado
-VAL_MIN_WINRATE = 25.0     # % (con RR 2:1, 34% ya es rentable; 25 da margen)
-VAL_EVENT_CAP = 40         # como mucho, los 40 setups más recientes
+VAL_MIN_WINRATE = 12.0     # % (target ~5R: 20% ya es muy rentable)
 
 PRELIM_POOL = 60           # candidatos que entran a la fase de validación
 TOP_N = 5                  # SIEMPRE se buscan 5 picks
 
 # ── Veto de dilución (SEC EDGAR — lento, con presupuesto) ────────────────────
-DILUTION_CAP_MAX = 2_000_000_000   # solo se chequean tickers < $2B
-DILUTION_REJECT_SCORE = 70         # overallRisk ≥ 70 → veto para longs
+DILUTION_CAP_MAX = 2_000_000_000
+DILUTION_REJECT_SCORE = 70
 DILUTION_TIME_BUDGET_S = 90.0
 DILUTION_MAX_CHECKS = 8
 
-# ── Pesos del score (por lado; suman 100) ────────────────────────────────────
+# ── Red neuronal ─────────────────────────────────────────────────────────────
+PATTERN_ORDER = [PAT_CAPITULATION, PAT_PULLBACK, PAT_MOMENTUM, PAT_UPTREND,
+                 PAT_COIL, PAT_FLAT, PAT_CHOPPY]
+N_BASE_FEATURES = 20
+N_FEATURES = N_BASE_FEATURES + len(PATTERN_ORDER)   # 27
+FEAT_VERSION = "fv1"
+
+MIN_TRAIN_ROWS = 800       # bajo esto, la red no entrena (modo heurístico)
+MAX_TRAIN_ROWS = 250_000   # techo del dataset cargado en memoria
+NEG_PER_POS = 3            # negativos muestreados por cada positivo
+MAX_ROWS_PER_SYMBOL = 60
+GRADED_SAMPLE_WEIGHT = 3.0 # peso de los ejemplos que vienen de picks calificados
+TRAIN_MAX_EPOCHS = 40
+TRAIN_PATIENCE = 6
+TRAIN_BATCH = 512
+
+# ── Pesos del score heurístico (drivers explicativos + fallback) ─────────────
 LONG_W = {"trigger": 25.0, "pattern": 15.0, "volume": 15.0, "sector": 15.0,
           "trend": 15.0, "risk": 15.0}
 SHORT_W = {"overext": 25.0, "fatigue": 20.0, "volume": 15.0, "sector": 10.0,
@@ -184,7 +220,7 @@ def get_job(job_id: str) -> Optional[Dict[str, Any]]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Helpers de calendario y precios
+#  Helpers de calendario, precios y simulación
 # ═══════════════════════════════════════════════════════════════════════════
 def _next_trading_day(date_str: str) -> str:
     """Próximo día hábil (salta sábados/domingos; feriados no modelados)."""
@@ -198,27 +234,28 @@ def _px(x: float) -> float:
     return round(float(x), 4 if x < 1 else 2)
 
 
-def _clamp_levels(side: str, entry: float, raw_stop: float) -> Tuple[float, float, float]:
-    """Devuelve (stop, target, risk) con el riesgo acotado a [1%, 12%] de la
-    entrada y el target fijo a RR_TARGET. El stop siempre queda del lado
-    protector de la entrada."""
+def _plan_levels(side: str, entry: float, raw_stop: float,
+                 exp_move_pct: float) -> Tuple[float, float, float, float]:
+    """(stop, target, risk, rr) — stop clamped a [1%,12%] de la entrada y
+    target = movimiento explosivo esperado (no un múltiplo fijo de R)."""
     if side == "long":
         stop = min(raw_stop, entry * (1 - MIN_RISK_PCT / 100))
         stop = max(stop, entry * (1 - MAX_RISK_PCT / 100))
         risk = entry - stop
-        target = entry + RR_TARGET * risk
+        target = entry * (1 + exp_move_pct / 100)
+        rr = (target - entry) / risk if risk > 0 else 0.0
     else:
         stop = max(raw_stop, entry * (1 + MIN_RISK_PCT / 100))
         stop = min(stop, entry * (1 + MAX_RISK_PCT / 100))
         risk = stop - entry
-        target = entry - RR_TARGET * risk
-    return _px(stop), _px(target), risk
+        target = entry * (1 - exp_move_pct / 100)
+        rr = (entry - target) / risk if risk > 0 else 0.0
+    return _px(stop), _px(target), risk, round(rr, 2)
 
 
 def _try_fill(side: str, level: float, o: float, h: float, lo: float) -> Optional[float]:
-    """Fill del D+1 con orden stop en `level`. Si abre pasado el nivel, el fill
-    es al open (peor precio); si abre demasiado pasado (>MAX_CHASE_PCT) no se
-    persigue y no hay fill."""
+    """Fill del D+1 con orden stop en `level`; si abre demasiado pasado
+    (>MAX_CHASE_PCT) no se persigue."""
     if side == "long":
         if o >= level:
             return o if o <= level * (1 + MAX_CHASE_PCT / 100) else None
@@ -231,10 +268,8 @@ def _try_fill(side: str, level: float, o: float, h: float, lo: float) -> Optiona
 def _sim_trade(side: str, fill: float, stop: float, target: float,
                h: np.ndarray, lo: np.ndarray, c: np.ndarray,
                start: int) -> Tuple[Optional[float], str, int, float]:
-    """Simula el trade desde la barra de fill (inclusive) con barras diarias.
-    Conservador: si una barra toca stop y target, se asume stop primero.
-    Devuelve (r_multiple, motivo, días_en_trade, precio_salida); r es None si
-    todavía no hay barras suficientes para resolver (para el grading en vivo)."""
+    """Simula desde la barra de fill (inclusive), conservador (stop primero).
+    r es None si aún faltan barras para resolver (grading en vivo)."""
     risk = (fill - stop) if side == "long" else (stop - fill)
     if risk <= 0:
         return -1.0, "stop_invalid", 0, stop
@@ -259,17 +294,136 @@ def _sim_trade(side: str, fill: float, stop: float, target: float,
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  Features y etiquetas de la red neuronal
+# ═══════════════════════════════════════════════════════════════════════════
+def _feature_vector(dates: List[str], o: np.ndarray, h: np.ndarray,
+                    lo: np.ndarray, c: np.ndarray, v: np.ndarray, i: int,
+                    spy_map: Dict[str, float], etf_map: Optional[Dict[str, float]]
+                    ) -> Optional[np.ndarray]:
+    """Vector fv1 de 27 features al cierre del día i (sin look-ahead)."""
+    if i < 60:
+        return None
+    px = float(c[i])
+    if px <= 0:
+        return None
+
+    def ret(k: int) -> float:
+        prev = float(c[i - k])
+        return (px / prev - 1.0) * 100 if prev > 0 else 0.0
+
+    tr = (h[i - 13:i + 1] - lo[i - 13:i + 1]) / np.where(c[i - 13:i + 1] > 0,
+                                                         c[i - 13:i + 1], 1.0) * 100
+    atr_pct = float(np.mean(tr))
+    pre_c = c[i - PRE_BARS + 1:i + 1]
+    pre_h = h[i - PRE_BARS + 1:i + 1]
+    pre_l = lo[i - PRE_BARS + 1:i + 1]
+    pattern, ret10, compression, _ = EdgeFinderEngine._classify_pattern(pre_c, pre_h, pre_l)
+
+    va = v[i - VOL_AVG_WINDOW:i]
+    vol_avg20 = float(np.mean(va)) if va.size >= 5 else 0.0
+    vol_ratio = float(v[i]) / vol_avg20 if vol_avg20 > 0 else 1.0
+    vol_trend = float(np.mean(v[i - 4:i + 1])) / vol_avg20 if vol_avg20 > 0 else 1.0
+
+    trig = float(np.max(h[i - PRE_BARS + 1:i + 1]))
+    prox = (px - trig) / trig * 100 if trig > 0 else 0.0
+
+    lb_l, lb_h = lo[max(0, i - 252):i + 1], h[max(0, i - 252):i + 1]
+    low52, high52 = float(np.min(lb_l)), float(np.max(lb_h))
+    dist_low = (px - low52) / low52 * 100 if low52 > 0 else 0.0
+    dist_high = (px - high52) / high52 * 100 if high52 > 0 else 0.0
+
+    consec_red, consec_green = EdgeFinderEngine._consecutive(c[max(0, i - PRE_BARS):i + 1])
+    rng = float(h[i] - lo[i])
+    close_pos = (px - float(lo[i])) / rng if rng > 0 else 0.5
+    gap = (float(o[i]) / float(c[i - 1]) - 1.0) * 100 if float(c[i - 1]) > 0 else 0.0
+
+    spy20 = float(spy_map.get(dates[i], 0.0))
+    sec20 = float(etf_map.get(dates[i], spy20)) if etf_map else spy20
+    hot = 1.0 if sec20 > spy20 else 0.0
+
+    base = [ret(1), ret(5), float(ret10), ret(20),
+            atr_pct, float(compression), vol_ratio, vol_trend, prox,
+            dist_low, dist_high, float(consec_red), float(consec_green),
+            close_pos, gap,
+            float(np.log10(max(px, 0.01))),
+            float(np.log10(max(px * vol_avg20, 1.0))),
+            spy20, sec20, hot]
+    onehot = [1.0 if pattern == p else 0.0 for p in PATTERN_ORDER]
+    vec = np.asarray(base + onehot, dtype=np.float32)
+    vec = np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
+    vec[:N_BASE_FEATURES] = np.clip(vec[:N_BASE_FEATURES], -500.0, 1000.0)
+    return vec
+
+
+def _labels_at(c: np.ndarray, h: np.ndarray, lo: np.ndarray, i: int
+               ) -> Optional[Tuple[int, int, float, float]]:
+    """(label_up, label_down, surge_pct, crash_pct) anclado al cierre del día i.
+
+    Misma definición que el Edge Finder: el movimiento arranca en i+1 con día
+    verde (rojo para el crash) y el pico/valle es el extremo de la ventana de
+    SURGE_DAYS. Ventanas incompletas solo cuentan si YA son positivas."""
+    n = len(c)
+    if i + 1 >= n:
+        return None
+    base = float(c[i])
+    if base <= 0:
+        return None
+    end = min(i + 1 + SURGE_DAYS, n)
+    peak = float(np.max(h[i + 1:end]))
+    valley = float(np.min(lo[i + 1:end]))
+    surge_pct = (peak - base) / base * 100
+    crash_pct = (base - valley) / base * 100
+    up = int(c[i + 1] > c[i] and surge_pct >= SURGE_PCT_MIN)
+    down = int(c[i + 1] < c[i] and crash_pct >= CRASH_PCT_MIN)
+    if end < i + 1 + SURGE_DAYS and not (up or down):
+        return None  # ventana incompleta y sin evento → etiqueta incierta
+    return up, down, round(surge_pct, 1), round(crash_pct, 1)
+
+
+if TORCH_AVAILABLE:
+    class SurgeNet(nn.Module):
+        """MLP 27 → 64 → 32 → 2 (logits: surge↑, crash↓)."""
+
+        def __init__(self, n_in: int = N_FEATURES) -> None:
+            super().__init__()
+            self.net = nn.Sequential(
+                nn.Linear(n_in, 64), nn.ReLU(), nn.Dropout(0.15),
+                nn.Linear(64, 32), nn.ReLU(), nn.Dropout(0.10),
+                nn.Linear(32, 2),
+            )
+
+        def forward(self, x):  # noqa: ANN001
+            return self.net(x)
+
+
+def _auc(y: np.ndarray, p: np.ndarray) -> Optional[float]:
+    """AUC por ranking (Mann-Whitney); None si falta alguna clase."""
+    pos, neg = p[y > 0.5], p[y <= 0.5]
+    if pos.size == 0 or neg.size == 0:
+        return None
+    order = np.argsort(np.concatenate([pos, neg]), kind="mergesort")
+    ranks = np.empty(order.size, dtype=np.float64)
+    ranks[order] = np.arange(1, order.size + 1)
+    r_pos = float(np.sum(ranks[:pos.size]))
+    auc = (r_pos - pos.size * (pos.size + 1) / 2) / (pos.size * neg.size)
+    return round(auc, 3)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  Engine
 # ═══════════════════════════════════════════════════════════════════════════
 class UltimatePredictorEngine:
     def __init__(self) -> None:
-        self.version = "1.0"
+        self.version = "2.0"
         # comparte sesión FMP + caché de históricos con el Edge Finder
         self.finder: EdgeFinderEngine = get_edge_finder_engine()
         self._db_lock = threading.Lock()
         self._init_db()
+        self._model = None
+        self._model_meta: Dict[str, Any] = {}
+        self._load_model()
 
-    # ── SQLite local (memoria persistente del motor) ─────────────────────────
+    # ── SQLite local (memoria persistente + dataset de la red) ───────────────
     def _db(self) -> sqlite3.Connection:
         conn = sqlite3.connect(DB_PATH, timeout=15)
         conn.row_factory = sqlite3.Row
@@ -308,25 +462,235 @@ class UltimatePredictorEngine:
                     days_held INTEGER,
                     evaluated_at TEXT
                 )""")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS training_data (
+                    symbol TEXT,
+                    date TEXT,
+                    features TEXT,
+                    label_up INTEGER,
+                    label_down INTEGER,
+                    surge_pct REAL,
+                    weight REAL DEFAULT 1.0,
+                    run_id TEXT,
+                    added_at TEXT,
+                    PRIMARY KEY (symbol, date)
+                )""")
+            # migraciones v1 → v2 (columnas nuevas en predictions)
+            for ddl in ("ALTER TABLE predictions ADD COLUMN features TEXT",
+                        "ALTER TABLE predictions ADD COLUMN exp_move_pct REAL",
+                        "ALTER TABLE predictions ADD COLUMN surge_prob_pct REAL"):
+                try:
+                    conn.execute(ddl)
+                except sqlite3.OperationalError:
+                    pass  # columna ya existe
 
-    # ── A. Grading de predicciones anteriores (loop de aprendizaje) ──────────
-    def _grade_pending(self, as_of: str) -> int:
-        """Evalúa contra precios reales las predicciones pending cuya sesión
-        objetivo ya pasó. Devuelve cuántas quedaron calificadas."""
+    # ── Modelo: load / save / predict ────────────────────────────────────────
+    def _load_model(self) -> None:
+        if not TORCH_AVAILABLE or not os.path.exists(MODEL_PATH):
+            return
+        try:
+            blob = torch.load(MODEL_PATH, map_location="cpu", weights_only=False)
+            if blob.get("version") != FEAT_VERSION:
+                logger.warning("[Ultimate] modelo con feat_version distinta — se re-entrenará")
+                return
+            model = SurgeNet()
+            model.load_state_dict(blob["state"])
+            model.eval()
+            self._model = model
+            self._model_meta = {k: blob[k] for k in
+                                ("mean", "std", "metrics", "trained_at", "rows")
+                                if k in blob}
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[Ultimate] no se pudo cargar el modelo: %s", e)
+
+    def model_info(self) -> Dict[str, Any]:
+        info = {
+            "torch_available": TORCH_AVAILABLE,
+            "status": "trained" if self._model is not None else "heuristic",
+            "feat_version": FEAT_VERSION,
+            "n_features": N_FEATURES,
+            "trained_at": self._model_meta.get("trained_at"),
+            "rows": self._model_meta.get("rows"),
+            "metrics": self._model_meta.get("metrics"),
+        }
+        with self._db_lock, closing(self._db()) as conn, conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n, SUM(label_up) AS up, SUM(label_down) AS dn "
+                "FROM training_data").fetchone()
+        info["dataset_rows"] = row["n"] or 0
+        info["dataset_up"] = row["up"] or 0
+        info["dataset_down"] = row["dn"] or 0
+        return info
+
+    def _predict_probs(self, X: np.ndarray) -> Optional[np.ndarray]:
+        if self._model is None or not TORCH_AVAILABLE:
+            return None
+        mean = np.asarray(self._model_meta.get("mean"), dtype=np.float32)
+        std = np.asarray(self._model_meta.get("std"), dtype=np.float32)
+        if mean.shape != (N_FEATURES,) or std.shape != (N_FEATURES,):
+            return None
+        Xn = (X - mean) / np.where(std > 1e-6, std, 1.0)
+        with torch.no_grad():
+            t = torch.from_numpy(Xn.astype(np.float32))
+            return torch.sigmoid(self._model(t)).numpy()
+
+    # ── Dataset: upsert + carga + entrenamiento ──────────────────────────────
+    def _upsert_training(self, rows: List[Tuple], run_id: str) -> int:
+        """rows: (symbol, date, features_json, label_up, label_down, surge_pct,
+        weight). INSERT OR REPLACE si el peso nuevo es mayor (los ejemplos de
+        picks calificados ×3 pisan a los cosechados ×1, nunca al revés)."""
+        if not rows:
+            return 0
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+        added = 0
+        with self._db_lock, closing(self._db()) as conn, conn:
+            for r in rows:
+                cur = conn.execute(
+                    "SELECT weight FROM training_data WHERE symbol=? AND date=?",
+                    (r[0], r[1]))
+                old = cur.fetchone()
+                if old is not None and float(old["weight"]) >= float(r[6]):
+                    continue
+                conn.execute(
+                    "INSERT OR REPLACE INTO training_data "
+                    "(symbol, date, features, label_up, label_down, surge_pct, "
+                    "weight, run_id, added_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (*r, run_id, now))
+                added += 1
+        return added
+
+    def _load_training(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        with self._db_lock, closing(self._db()) as conn, conn:
+            rows = conn.execute(
+                "SELECT features, label_up, label_down, weight FROM training_data "
+                "ORDER BY added_at DESC LIMIT ?", (MAX_TRAIN_ROWS,)).fetchall()
+        X, y, w = [], [], []
+        for r in rows:
+            try:
+                f = json.loads(r["features"])
+                if len(f) != N_FEATURES:
+                    continue
+                X.append(f)
+                y.append([float(r["label_up"] or 0), float(r["label_down"] or 0)])
+                w.append(float(r["weight"] or 1.0))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+        if not X:
+            return (np.zeros((0, N_FEATURES), np.float32),
+                    np.zeros((0, 2), np.float32), np.zeros((0,), np.float32))
+        return (np.asarray(X, np.float32), np.asarray(y, np.float32),
+                np.asarray(w, np.float32))
+
+    def _train_model(self, progress) -> Dict[str, Any]:
+        """Re-entrena la red sobre el dataset acumulado. Devuelve info del
+        entrenamiento (o el motivo por el que quedó en modo heurístico)."""
+        if not TORCH_AVAILABLE:
+            return {"trained": False, "reason": "torch no disponible en el backend"}
+        X, y, w = self._load_training()
+        n = X.shape[0]
+        if n < MIN_TRAIN_ROWS:
+            return {"trained": False,
+                    "reason": f"dataset aún chico ({n}/{MIN_TRAIN_ROWS} ejemplos) — "
+                              "corre el motor más días para acumular"}
+
+        mean = X.mean(axis=0)
+        std = X.std(axis=0)
+        std_safe = np.where(std > 1e-6, std, 1.0)
+        Xn = (X - mean) / std_safe
+
+        rng = np.random.default_rng(int(time.time()) % 2**31)
+        perm = rng.permutation(n)
+        n_val = max(64, int(n * 0.15))
+        val_idx, tr_idx = perm[:n_val], perm[n_val:]
+
+        def pos_weight(col: int) -> float:
+            pos = float(np.sum(w[tr_idx] * y[tr_idx, col]))
+            neg = float(np.sum(w[tr_idx] * (1 - y[tr_idx, col])))
+            return float(np.clip(neg / max(pos, 1.0), 1.0, 50.0))
+
+        pw = torch.tensor([pos_weight(0), pos_weight(1)], dtype=torch.float32)
+        model = SurgeNet()
+        opt = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+        crit = nn.BCEWithLogitsLoss(pos_weight=pw, reduction="none")
+
+        Xt = torch.from_numpy(Xn[tr_idx]); yt = torch.from_numpy(y[tr_idx])
+        wt = torch.from_numpy(w[tr_idx]).unsqueeze(1)
+        Xv = torch.from_numpy(Xn[val_idx]); yv = torch.from_numpy(y[val_idx])
+        wv = torch.from_numpy(w[val_idx]).unsqueeze(1)
+
+        best_val = float("inf")
+        best_state = None
+        patience = 0
+        epochs_run = 0
+        n_tr = Xt.shape[0]
+        for epoch in range(1, TRAIN_MAX_EPOCHS + 1):
+            epochs_run = epoch
+            model.train()
+            order = torch.randperm(n_tr)
+            for s in range(0, n_tr, TRAIN_BATCH):
+                idx = order[s:s + TRAIN_BATCH]
+                opt.zero_grad()
+                out = model(Xt[idx])
+                loss = (crit(out, yt[idx]) * wt[idx]).mean()
+                loss.backward()
+                opt.step()
+            model.eval()
+            with torch.no_grad():
+                val_loss = float((crit(model(Xv), yv) * wv).mean())
+            progress(58 + int(12 * epoch / TRAIN_MAX_EPOCHS),
+                     f"Entrenando red neuronal — época {epoch}/{TRAIN_MAX_EPOCHS} "
+                     f"(val loss {round(val_loss, 4)})")
+            if val_loss < best_val - 1e-5:
+                best_val = val_loss
+                best_state = {k: v.clone() for k, v in model.state_dict().items()}
+                patience = 0
+            else:
+                patience += 1
+                if patience >= TRAIN_PATIENCE:
+                    break
+        if best_state is not None:
+            model.load_state_dict(best_state)
+        model.eval()
+        with torch.no_grad():
+            pv = torch.sigmoid(model(Xv)).numpy()
+        metrics = {
+            "val_loss": round(best_val, 4),
+            "epochs": epochs_run,
+            "auc_up": _auc(y[val_idx, 0], pv[:, 0]),
+            "auc_down": _auc(y[val_idx, 1], pv[:, 1]),
+            "pos_rate_up_pct": round(100 * float(y[:, 0].mean()), 2),
+            "pos_rate_down_pct": round(100 * float(y[:, 1].mean()), 2),
+        }
+        trained_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        try:
+            torch.save({"state": model.state_dict(), "mean": mean, "std": std_safe,
+                        "version": FEAT_VERSION, "metrics": metrics,
+                        "trained_at": trained_at, "rows": n}, MODEL_PATH)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[Ultimate] no se pudo guardar el modelo: %s", e)
+        self._model = model
+        self._model_meta = {"mean": mean, "std": std_safe, "metrics": metrics,
+                            "trained_at": trained_at, "rows": n}
+        return {"trained": True, "rows": n, **metrics}
+
+    # ── A. Grading de predicciones anteriores (feedback a la red) ────────────
+    def _grade_pending(self, as_of: str) -> Tuple[int, List[Tuple]]:
+        """Califica pending vencidas. Devuelve (calificadas, ejemplos ×3 con la
+        etiqueta VERDADERA para re-alimentar el dataset)."""
         with self._db_lock, closing(self._db()) as conn, conn:
             rows = conn.execute(
                 "SELECT * FROM predictions WHERE status='pending' AND for_date <= ? "
-                "ORDER BY for_date ASC LIMIT 40", (as_of,),
-            ).fetchall()
+                "ORDER BY for_date ASC LIMIT 40", (as_of,)).fetchall()
         graded = 0
+        feedback: List[Tuple] = []
         for row in rows:
             try:
                 d_from = (datetime.strptime(row["for_date"], "%Y-%m-%d")
-                          - timedelta(days=7)).strftime("%Y-%m-%d")
+                          - timedelta(days=10)).strftime("%Y-%m-%d")
                 hist = self.finder._daily_history(row["symbol"], d_from, as_of)
                 dates, o, h, lo, c, _v = self.finder._parse_bars(hist)
                 idx = next((i for i, dt in enumerate(dates) if dt >= row["for_date"]), None)
-                if idx is None:
+                if idx is None or idx == 0:
                     continue  # la sesión objetivo aún no tiene barra
                 fill = _try_fill(row["side"], float(row["entry"]),
                                  float(o[idx]), float(h[idx]), float(lo[idx]))
@@ -347,9 +711,16 @@ class UltimatePredictorEngine:
                         "UPDATE predictions SET status=?, outcome=?, outcome_r=?, "
                         "exit_price=?, days_held=?, evaluated_at=? WHERE id=?", upd)
                 graded += 1
+                # feedback: etiqueta verdadera anclada al día previo a la sesión
+                feats = row["features"] if "features" in row.keys() else None
+                lab = _labels_at(c, h, lo, idx - 1)
+                if feats and lab is not None:
+                    up, down, s_pct, _c_pct = lab
+                    feedback.append((row["symbol"], dates[idx - 1], feats,
+                                     up, down, s_pct, GRADED_SAMPLE_WEIGHT))
             except Exception as e:  # noqa: BLE001
                 logger.debug("[Ultimate] grading %s failed: %s", row["symbol"], e)
-        return graded
+        return graded, feedback
 
     def track_record(self) -> Dict[str, Any]:
         """KPIs del historial calificado + últimas predicciones (para la UI)."""
@@ -384,8 +755,7 @@ class UltimatePredictorEngine:
 
     @staticmethod
     def _side_bias(track: Dict[str, Any]) -> Dict[str, float]:
-        """Sesgo de aprendizaje: si un lado viene rindiendo mal/bien en el track
-        record real (n≥8 fills), su score se multiplica ×[0.85, 1.15]."""
+        """Sesgo del track record real sobre el ranking (n≥8 fills por lado)."""
         bias = {"long": 1.0, "short": 1.0}
         for side in ("long", "short"):
             st = track.get(side) or {}
@@ -393,29 +763,44 @@ class UltimatePredictorEngine:
                 bias[side] = float(np.clip(1.0 + st["avg_r"] * 0.15, 0.85, 1.15))
         return bias
 
-    # ── B. Contexto de mercado ────────────────────────────────────────────────
-    def _market_context(self, date_from: str, date_to: str) -> Dict[str, Any]:
+    # ── B. Contexto de mercado + mapas por-fecha para features ───────────────
+    def _market_context(self, date_from: str, date_to: str
+                        ) -> Tuple[Dict[str, Any], Dict[str, float], Dict[str, Dict[str, float]]]:
+        """(ctx serializable, spy_map fecha→ret20, {etf: fecha→ret20})."""
+        def ret20_map(closes: np.ndarray, dts: List[str]) -> Dict[str, float]:
+            out: Dict[str, float] = {}
+            for j in range(SECTOR_RET_WINDOW, len(dts)):
+                a = float(closes[j - SECTOR_RET_WINDOW])
+                if a > 0:
+                    out[dts[j]] = round((float(closes[j]) / a - 1.0) * 100, 2)
+            return out
+
         etf_ret: Dict[str, float] = {}
+        etf_maps: Dict[str, Dict[str, float]] = {}
+        spy_map: Dict[str, float] = {}
         spy20 = spy5 = None
         as_of = None
         for etf in sorted(set(SECTOR_ETF.values())) + ["SPY"]:
             hist = self.finder._daily_history(etf, date_from, date_to)
-            dates, _o, _h, _l, c, _v = self.finder._parse_bars(hist)
-            if len(dates) < SECTOR_RET_WINDOW + 1:
+            dts, _o, _h, _l, cc, _v = self.finder._parse_bars(hist)
+            if len(dts) < SECTOR_RET_WINDOW + 1:
                 continue
-            r20 = round((float(c[-1]) / float(c[-1 - SECTOR_RET_WINDOW]) - 1.0) * 100, 2)
+            m = ret20_map(cc, dts)
             if etf == "SPY":
-                spy20 = r20
-                as_of = dates[-1]
-                if len(c) >= 6 and float(c[-6]) > 0:
-                    spy5 = round((float(c[-1]) / float(c[-6]) - 1.0) * 100, 2)
+                spy_map = m
+                spy20 = m.get(dts[-1])
+                as_of = dts[-1]
+                if len(cc) >= 6 and float(cc[-6]) > 0:
+                    spy5 = round((float(cc[-1]) / float(cc[-6]) - 1.0) * 100, 2)
             else:
-                etf_ret[etf] = r20
+                etf_maps[etf] = m
+                if m.get(dts[-1]) is not None:
+                    etf_ret[etf] = m[dts[-1]]
         regime = "neutral"
         if spy20 is not None:
             regime = "risk_on" if spy20 >= 2.0 else ("risk_off" if spy20 <= -2.0 else "neutral")
         ranked = sorted(etf_ret.items(), key=lambda kv: kv[1], reverse=True)
-        return {
+        ctx = {
             "as_of": as_of,
             "spy_ret5_pct": spy5,
             "spy_ret20_pct": spy20,
@@ -424,18 +809,76 @@ class UltimatePredictorEngine:
             "hot_sectors": [{"etf": k, "ret20_pct": v} for k, v in ranked[:3]],
             "cold_sectors": [{"etf": k, "ret20_pct": v} for k, v in ranked[-3:][::-1]],
         }
+        return ctx, spy_map, etf_maps
 
-    # ── C. Escaneo por símbolo (features al último cierre + score por lado) ──
+    # ── C. Escaneo por símbolo: candidato + cosecha de entrenamiento ─────────
     def _scan_symbol(self, meta: Dict, cfg: Dict[str, Any], ctx: Dict[str, Any],
-                     bias: Dict[str, float]) -> Optional[Dict]:
+                     spy_map: Dict[str, float], etf_maps: Dict[str, Dict[str, float]],
+                     rng: np.random.Generator
+                     ) -> Tuple[Optional[Dict], List[Tuple], List[float]]:
+        """Devuelve (candidato|None, filas_entrenamiento, magnitudes_surge)."""
         symbol = meta["symbol"]
         hist = self.finder._daily_history(symbol, cfg["_hist_from"], cfg["_hist_to"])
         if len(hist) < MIN_BARS:
-            return None
+            return None, [], []
         dates, o, h, lo, c, v = self.finder._parse_bars(hist)
         n = len(dates)
         if n < MIN_BARS:
-            return None
+            return None, [], []
+
+        etf = SECTOR_ETF.get(meta["sector"])
+        etf_map = etf_maps.get(etf) if etf else None
+
+        # ── Cosecha de ejemplos históricos para la red ────────────────────────
+        pos_idx: List[Tuple[int, Tuple[int, int, float, float]]] = []
+        neg_idx: List[int] = []
+        surge_mags: List[float] = []
+        crash_mags: List[float] = []
+        i = 60
+        while i < n - 1:
+            lab = _labels_at(c, h, lo, i)
+            if lab is not None:
+                up, down, s_pct, c_pct = lab
+                if up or down:
+                    pos_idx.append((i, lab))
+                    if up:
+                        surge_mags.append(s_pct)
+                    if down:
+                        crash_mags.append(c_pct)
+                    i += SURGE_DAYS  # dedupe como el Edge Finder
+                    continue
+                neg_idx.append(i)
+            i += 1
+
+        n_neg = min(len(neg_idx), max(5, NEG_PER_POS * max(len(pos_idx), 1)))
+        sampled_neg = list(rng.choice(neg_idx, size=n_neg, replace=False)) if neg_idx else []
+        train_rows: List[Tuple] = []
+        for idx, lab in pos_idx[:MAX_ROWS_PER_SYMBOL]:
+            vec = _feature_vector(dates, o, h, lo, c, v, idx, spy_map, etf_map)
+            if vec is not None:
+                up, down, s_pct, _ = lab
+                train_rows.append((symbol, dates[idx],
+                                   json.dumps([round(float(x), 4) for x in vec]),
+                                   up, down, s_pct, 1.0))
+        for idx in sampled_neg[:MAX_ROWS_PER_SYMBOL]:
+            vec = _feature_vector(dates, o, h, lo, c, v, int(idx), spy_map, etf_map)
+            if vec is not None:
+                train_rows.append((symbol, dates[int(idx)],
+                                   json.dumps([round(float(x), 4) for x in vec]),
+                                   0, 0, 0.0, 1.0))
+
+        # ── Candidato al último cierre ────────────────────────────────────────
+        cand = self._build_candidate(meta, cfg, ctx, dates, o, h, lo, c, v,
+                                     spy_map, etf_map, surge_mags, crash_mags)
+        return cand, train_rows, surge_mags
+
+    def _build_candidate(self, meta: Dict, cfg: Dict[str, Any], ctx: Dict[str, Any],
+                         dates: List[str], o: np.ndarray, h: np.ndarray,
+                         lo: np.ndarray, c: np.ndarray, v: np.ndarray,
+                         spy_map: Dict[str, float], etf_map: Optional[Dict[str, float]],
+                         surge_mags: List[float], crash_mags: List[float]
+                         ) -> Optional[Dict]:
+        n = len(dates)
         try:
             gap_days = (datetime.strptime(ctx["as_of"], "%Y-%m-%d")
                         - datetime.strptime(dates[-1], "%Y-%m-%d")).days
@@ -448,7 +891,6 @@ class UltimatePredictorEngine:
         if price <= 0 or not (cfg["price_min"] <= price <= cfg["price_max"]):
             return None
 
-        # Features compartidas
         va = v[-1 - VOL_AVG_WINDOW:-1]
         vol_avg20 = float(np.mean(va)) if va.size >= 5 else 0.0
         if price * vol_avg20 < MIN_DOLLAR_VOL:
@@ -480,7 +922,7 @@ class UltimatePredictorEngine:
         spy20 = ctx["spy_ret20_pct"]
         hot_now = bool(sec_ret > spy20) if (sec_ret is not None and spy20 is not None) else None
 
-        trigger = float(np.max(pre_h))                # high de 10 días (incluye hoy)
+        trigger = float(np.max(pre_h))
         prox = (price - trigger) / trigger * 100.0 if trigger > 0 else -99.0
         prior_trigger = float(np.max(h[-(PRE_BARS + 1):-1]))
         breaking = bool(n >= 2 and price > prior_trigger and c[-1] > c[-2])
@@ -488,6 +930,10 @@ class UltimatePredictorEngine:
         last_red = bool(c[-1] < o[-1])
         day_range = float(h[-1] - lo[-1])
         close_pos = (price - float(lo[-1])) / day_range if day_range > 0 else 0.5
+
+        # movimiento explosivo esperado: mediana de SUS propios surges/crashes
+        exp_up = round(float(np.median(surge_mags)), 1) if len(surge_mags) >= 2 else SURGE_PCT_MIN
+        exp_down = round(float(np.median(crash_mags)), 1) if len(crash_mags) >= 2 else CRASH_PCT_MIN
 
         def score_of(weights: Dict[str, float], comps: Dict[str, Tuple[float, str]],
                      side: str) -> Tuple[float, List[Dict]]:
@@ -502,12 +948,11 @@ class UltimatePredictorEngine:
                 tilt = 1.05 if side == "long" else 0.92
             elif ctx["regime"] == "risk_off":
                 tilt = 0.92 if side == "long" else 1.05
-            total = min(100.0, total * tilt * bias[side])
-            return round(total, 1), parts
+            return round(min(100.0, total * tilt), 1), parts
 
         candidates_here: List[Dict] = []
 
-        # LONG: breakout inminente del high de 10 días
+        # LONG: breakout inminente del high de 10 días → surge esperado
         long_ok = (breaking or prox >= -LONG_NEAR_TRIGGER_PCT) and ret10 > LONG_MIN_RET10
         if long_ok and trigger > 0:
             comps = {
@@ -532,19 +977,23 @@ class UltimatePredictorEngine:
             }
             score, parts = score_of(LONG_W, comps, "long")
             entry = _px(trigger)
-            stop, target, risk = _clamp_levels("long", entry, float(np.min(lo[-STOP_BARS_LONG:])))
-            candidates_here.append({
-                "side": "long", "score": score, "score_breakdown": parts,
-                "entry": entry, "stop": stop, "target": target,
-                "rr": RR_TARGET, "risk_pct": round(risk / entry * 100, 1),
-                "status": "breaking" if breaking else "ready",
-            })
+            stop, target, risk, rr = _plan_levels(
+                "long", entry, float(np.min(lo[-STOP_BARS_LONG:])), exp_up)
+            if rr >= MIN_RR:
+                candidates_here.append({
+                    "side": "long", "score": score, "score_breakdown": parts,
+                    "entry": entry, "stop": stop, "target": target,
+                    "rr": rr, "risk_pct": round(risk / entry * 100, 1),
+                    "exp_move_pct": exp_up,
+                    "own_surges": len(surge_mags),
+                    "status": "breaking" if breaking else "ready",
+                })
 
-        # SHORT: sobre-extensión parabólica / fatiga del movimiento
+        # SHORT: sobre-extensión parabólica → desplome esperado
         short_ok = ret10 >= SHORT_RET10_MIN or consec_green >= SHORT_CONSEC_GREEN_MIN
         if short_ok:
             comps = {
-                "overext": (min(1.0, max(0.0, (ret10 - SHORT_RET10_MIN) / 30.0 + 0.5))
+                "overext": (min(1.0, max(0.0, (ret10 - SHORT_RET10_MIN) / 40.0 + 0.5))
                             if ret10 >= SHORT_RET10_MIN else 0.6,
                             f"+{round(ret10, 1)}% en 10 días · {consec_green} verdes seguidos"),
                 "fatigue": ((1.0, "último día rojo — el impulso se agota") if last_red else
@@ -566,21 +1015,26 @@ class UltimatePredictorEngine:
                          (0.6, f"ATR {atr_pct}%")),
             }
             score, parts = score_of(SHORT_W, comps, "short")
-            entry = _px(float(lo[-1]))                 # quiebre del low del último día
-            stop, target, risk = _clamp_levels("short", entry, float(np.max(h[-STOP_BARS_SHORT:])))
-            candidates_here.append({
-                "side": "short", "score": score, "score_breakdown": parts,
-                "entry": entry, "stop": stop, "target": target,
-                "rr": RR_TARGET, "risk_pct": round(risk / entry * 100, 1),
-                "status": "ready",
-            })
+            entry = _px(float(lo[-1]))
+            stop, target, risk, rr = _plan_levels(
+                "short", entry, float(np.max(h[-STOP_BARS_SHORT:])), exp_down)
+            if rr >= MIN_RR:
+                candidates_here.append({
+                    "side": "short", "score": score, "score_breakdown": parts,
+                    "entry": entry, "stop": stop, "target": target,
+                    "rr": rr, "risk_pct": round(risk / entry * 100, 1),
+                    "exp_move_pct": exp_down,
+                    "own_surges": len(crash_mags),
+                    "status": "ready",
+                })
 
         best = max(candidates_here, key=lambda x: x["score"], default=None)
-        if best is None or best["score"] < MIN_SCORE:
+        if best is None:
             return None
 
+        feats = _feature_vector(dates, o, h, lo, c, v, n - 1, spy_map, etf_map)
         best.update({
-            "symbol": symbol,
+            "symbol": meta["symbol"],
             "sector": meta["sector"],
             "industry": meta["industry"],
             "exchange": meta["exchange"],
@@ -599,16 +1053,21 @@ class UltimatePredictorEngine:
             "sector_etf": etf,
             "sector_ret20_pct": sec_ret,
             "sector_hot_now": hot_now,
+            "surge_prob_pct": None,     # lo llena la red tras el entrenamiento
+            "p_up_pct": None,
+            "p_down_pct": None,
+            "_features": feats,
             "_arrays": (o, h, lo, c),
         })
         return best
 
-    # ── D. Validación: backtest del MISMO setup sobre la historia propia ─────
+    # ── E. Validación: backtest del MISMO setup con target explosivo ─────────
     @staticmethod
     def _validate(cand: Dict) -> Dict[str, Any]:
         o, h, lo, c = cand["_arrays"]
         n = len(c)
         side = cand["side"]
+        exp_move = float(cand["exp_move_pct"])
         events = fills = wins = losses = 0
         rs: List[float] = []
         days_list: List[int] = []
@@ -636,21 +1095,20 @@ class UltimatePredictorEngine:
 
             events += 1
             entry = _px(level)
-            stop, target, _risk = _clamp_levels(side, entry, raw_stop)
+            stop, target, _risk, _rr = _plan_levels(side, entry, raw_stop, exp_move)
             fill = _try_fill(side, entry, float(o[i + 1]), float(h[i + 1]), float(lo[i + 1]))
             if fill is not None:
                 r, reason, days, _exit = _sim_trade(side, fill, stop, target, h, lo, c, i + 1)
                 if r is not None:
                     fills += 1
-                    rs.append(min(max(r, -3.0), 6.0))  # winsorize por robustez
+                    rs.append(min(max(r, -3.0), 12.0))  # winsorize (targets ~5R)
                     days_list.append(days)
                     wins += 1 if r > 0 else 0
                     losses += 1 if r <= 0 else 0
-                    i += 1 + days  # no solapar eventos: saltar al día de salida
+                    i += 1 + days  # no solapar eventos
                     continue
-            i += 2  # setup sin fill: saltar un día para no contar el mismo nivel
+            i += 2
 
-        # cap: los VAL_EVENT_CAP más recientes ya están implícitos (1 año de barras)
         expectancy = round(float(np.mean(rs)), 3) if rs else None
         win_rate = round(100.0 * wins / len(rs), 1) if rs else None
         result = {
@@ -669,14 +1127,14 @@ class UltimatePredictorEngine:
             result["reject_reason"] = f"solo {fills} ejecuciones históricas (mín {VAL_MIN_FILLS})"
         elif expectancy is None or expectancy < VAL_MIN_EXPECTANCY:
             result["reject_reason"] = (f"expectancy {expectancy}R < {VAL_MIN_EXPECTANCY}R — "
-                                       "la acción no se movió así en el pasado")
+                                       "la acción no explotó así en el pasado")
         elif win_rate is not None and win_rate < VAL_MIN_WINRATE:
             result["reject_reason"] = f"win rate {win_rate}% < {VAL_MIN_WINRATE}%"
         else:
             result["passed"] = True
         return result
 
-    # ── E. Veto de dilución (EDGAR) ───────────────────────────────────────────
+    # ── F. Veto de dilución (EDGAR) ───────────────────────────────────────────
     @staticmethod
     def _dilution_check(symbol: str) -> Optional[Dict[str, Any]]:
         try:
@@ -695,19 +1153,28 @@ class UltimatePredictorEngine:
             logger.debug("[Ultimate] dilution check %s failed: %s", symbol, e)
             return None
 
-    # ── Rationale en español (resumen humano del porqué) ─────────────────────
+    # ── Rationale en español ─────────────────────────────────────────────────
     @staticmethod
     def _rationale(cand: Dict, val: Dict) -> str:
-        side_txt = "LONG sobre el quiebre del high de 10 días" if cand["side"] == "long" \
-            else "SHORT sobre el quiebre del low del último día (sobre-extensión)"
+        if cand["side"] == "long":
+            side_txt = (f"LONG sobre el quiebre del high de 10 días, buscando un movimiento "
+                        f"explosivo de ~+{cand['exp_move_pct']}% en ≤{SURGE_DAYS} días")
+        else:
+            side_txt = (f"SHORT sobre el quiebre del low del último día, buscando un desplome "
+                        f"de ~−{cand['exp_move_pct']}% en ≤{SURGE_DAYS} días")
+        prob_txt = ""
+        if cand.get("surge_prob_pct") is not None:
+            prob_txt = f" La red neuronal le asigna {cand['surge_prob_pct']}% de probabilidad de explosión."
+        own = cand.get("own_surges") or 0
+        own_txt = f" Este símbolo ya tuvo {own} movimientos así en el último año." if own >= 2 else ""
         top = sorted(cand["score_breakdown"], key=lambda p: p["points"] / max(p["max"], 1e-9),
                      reverse=True)[:2]
         drivers = "; ".join(p["detail"] for p in top)
-        return (f"{side_txt}. {drivers}. Validación histórica: {val['fills']} trades "
-                f"del mismo setup en ~1 año, win rate {val['win_rate_pct']}%, "
+        return (f"{side_txt}.{prob_txt}{own_txt} {drivers}. Validación histórica: "
+                f"{val['fills']} trades del mismo setup, win rate {val['win_rate_pct']}%, "
                 f"expectancy {val['expectancy_r']}R por trade.")
 
-    # ── F. Orquestación ───────────────────────────────────────────────────────
+    # ── G. Orquestación ───────────────────────────────────────────────────────
     def run_predict(self, cfg: Dict[str, Any], progress) -> Dict[str, Any]:
         t0 = time.time()
         warnings: List[str] = [
@@ -715,29 +1182,32 @@ class UltimatePredictorEngine:
             "Validación con barras diarias: si una barra toca stop y target se asume "
             "stop primero (conservador). No modela borrow/locate ni slippage.",
             "El «próximo día hábil» salta fines de semana pero no feriados de mercado.",
+            f"Objetivo: movimientos explosivos (surge ≥ +{SURGE_PCT_MIN:.0f}% / crash ≥ "
+            f"−{CRASH_PCT_MIN:.0f}% en ≤{SURGE_DAYS} días). La red mejora con cada corrida diaria.",
         ]
         today = datetime.utcnow()
         cfg["_hist_from"] = (today - timedelta(days=420)).strftime("%Y-%m-%d")
         cfg["_hist_to"] = today.strftime("%Y-%m-%d")
+        run_id = uuid.uuid4().hex[:12]
 
         progress(2, "Contexto de mercado (SPY + ETFs sectoriales)")
-        ctx = self._market_context(cfg["_hist_from"], cfg["_hist_to"])
+        ctx, spy_map, etf_maps = self._market_context(cfg["_hist_from"], cfg["_hist_to"])
         if ctx["as_of"] is None:
             ctx["as_of"] = today.strftime("%Y-%m-%d")
             warnings.append("No se pudo leer SPY; la fecha de corte es la de hoy (UTC).")
         for_date = _next_trading_day(ctx["as_of"])
 
-        progress(4, "Calificando predicciones de corridas anteriores")
+        progress(4, "Calificando predicciones anteriores (feedback a la red)")
+        graded_now, feedback_rows = 0, []
         try:
-            graded_now = self._grade_pending(ctx["as_of"])
+            graded_now, feedback_rows = self._grade_pending(ctx["as_of"])
         except Exception as e:  # noqa: BLE001
-            graded_now = 0
             warnings.append(f"No se pudo calificar el historial previo: {e}")
         track = self.track_record()
         bias = self._side_bias(track)
         if bias["long"] != 1.0 or bias["short"] != 1.0:
             warnings.append(
-                f"Aprendizaje del track record aplicado: sesgo long ×{round(bias['long'], 2)}, "
+                f"Track record aplicado al ranking: sesgo long ×{round(bias['long'], 2)}, "
                 f"short ×{round(bias['short'], 2)} (según R promedio realizado)."
             )
 
@@ -751,30 +1221,74 @@ class UltimatePredictorEngine:
             warnings.append(f"Universo completo: {full_universe} tickers; limitado a {cap}.")
             universe = universe[:cap]
 
-        progress(10, f"Escaneando {len(universe)} tickers al último cierre ({ctx['as_of']})")
+        progress(10, f"Escaneando {len(universe)} tickers + cosechando surges históricos")
         prelim: List[Dict] = []
+        harvest: List[Tuple] = []
+        all_surge_mags: List[float] = []
         done = 0
         with ThreadPoolExecutor(max_workers=10) as pool:
-            futs = {pool.submit(self._scan_symbol, m, cfg, ctx, bias): m["symbol"]
-                    for m in universe}
+            futs = {pool.submit(self._scan_symbol, m, cfg, ctx, spy_map, etf_maps,
+                                np.random.default_rng(hash(m["symbol"]) % 2**31)):
+                    m["symbol"] for m in universe}
             for fut in as_completed(futs):
                 done += 1
                 try:
-                    cand = fut.result()
+                    cand, rows, mags = fut.result()
                     if cand is not None:
                         prelim.append(cand)
+                    harvest.extend(rows)
+                    all_surge_mags.extend(mags)
                 except Exception as e:  # noqa: BLE001
                     logger.debug("[Ultimate] scan %s: %s", futs[fut], e)
                 if done % 25 == 0 or done == len(universe):
-                    pct = 10 + int(50 * done / max(len(universe), 1))
-                    progress(pct, f"Escaneando {done}/{len(universe)} — {len(prelim)} setups")
+                    pct = 10 + int(44 * done / max(len(universe), 1))
+                    progress(pct, f"Escaneando {done}/{len(universe)} — {len(prelim)} setups, "
+                                  f"{len(harvest)} ejemplos cosechados")
 
-        prelim.sort(key=lambda x: x["score"], reverse=True)
+        progress(55, f"Guardando dataset ({len(harvest)} ejemplos nuevos + "
+                     f"{len(feedback_rows)} de feedback)")
+        added = self._upsert_training(harvest, run_id)
+        added += self._upsert_training(feedback_rows, run_id)
+
+        progress(58, "Entrenando red neuronal sobre el dataset acumulado")
+        train_info = {"trained": False, "reason": "sin intento"}
+        try:
+            train_info = self._train_model(progress)
+        except Exception as e:  # noqa: BLE001
+            train_info = {"trained": False, "reason": f"error de entrenamiento: {e}"}
+            logger.exception("[Ultimate] training failed")
+        if not train_info.get("trained"):
+            warnings.append(f"Red neuronal en espera: {train_info.get('reason')} — "
+                            "ranking por score heurístico.")
+
+        # ── Scoring con la red (o heurístico) y ranking preliminar ───────────
+        progress(71, "Puntuando candidatos con la red neuronal")
+        model_active = False
+        featured = [x for x in prelim if x.get("_features") is not None]
+        if self._model is not None and featured:
+            X = np.stack([x["_features"] for x in featured])
+            probs = self._predict_probs(X)
+            if probs is not None:
+                model_active = True
+                for cand, p in zip(featured, probs):
+                    cand["p_up_pct"] = round(float(p[0]) * 100, 1)
+                    cand["p_down_pct"] = round(float(p[1]) * 100, 1)
+                    p_side = float(p[0] if cand["side"] == "long" else p[1])
+                    cand["surge_prob_pct"] = round(p_side * 100, 1)
+                    cand["_rank"] = p_side * bias[cand["side"]]
+        if not model_active:
+            for cand in prelim:
+                if cand["score"] < MIN_SCORE:
+                    cand["_rank"] = -1.0
+                else:
+                    cand["_rank"] = cand["score"] / 100.0 * bias[cand["side"]]
+        prelim = [x for x in prelim if x.get("_rank", -1) > 0]
+        prelim.sort(key=lambda x: x["_rank"], reverse=True)
         pool_cands = prelim[:PRELIM_POOL]
         n_long = sum(1 for x in prelim if x["side"] == "long")
         n_short = len(prelim) - n_long
 
-        progress(62, f"Validando candidatos con backtest propio ({len(pool_cands)} en cola)")
+        progress(74, f"Validando candidatos con backtest propio ({len(pool_cands)} en cola)")
         picks: List[Dict] = []
         rejected: List[Dict] = []
         dilution_budget = DILUTION_TIME_BUDGET_S
@@ -782,17 +1296,17 @@ class UltimatePredictorEngine:
         for k, cand in enumerate(pool_cands):
             if len(picks) >= TOP_N:
                 break
-            progress(62 + int(28 * k / max(len(pool_cands), 1)),
+            progress(74 + int(18 * k / max(len(pool_cands), 1)),
                      f"Validando {cand['symbol']} ({cand['side'].upper()}) — "
                      f"{len(picks)}/{TOP_N} aprobados")
             val = self._validate(cand)
             if not val["passed"]:
                 rejected.append({"symbol": cand["symbol"], "side": cand["side"],
-                                 "score": cand["score"], "stage": "backtest",
-                                 "reason": val["reject_reason"]})
+                                 "score": cand["score"],
+                                 "surge_prob_pct": cand.get("surge_prob_pct"),
+                                 "stage": "backtest", "reason": val["reject_reason"]})
                 continue
 
-            # Veto de dilución: longs de baja capitalización con presupuesto
             dilution = None
             mc = cand.get("market_cap") or 0
             if (mc and mc < DILUTION_CAP_MAX and dilution_checks < DILUTION_MAX_CHECKS
@@ -804,7 +1318,9 @@ class UltimatePredictorEngine:
                 if (cand["side"] == "long" and dilution and dilution.get("score") is not None
                         and dilution["score"] >= DILUTION_REJECT_SCORE):
                     rejected.append({"symbol": cand["symbol"], "side": cand["side"],
-                                     "score": cand["score"], "stage": "dilution",
+                                     "score": cand["score"],
+                                     "surge_prob_pct": cand.get("surge_prob_pct"),
+                                     "stage": "dilution",
                                      "reason": f"riesgo de dilución {dilution['score']}/100 "
                                                f"({dilution.get('label')}) — overhang EDGAR"})
                     continue
@@ -823,18 +1339,11 @@ class UltimatePredictorEngine:
                 "filtros — amplía el rango de precio/market cap o espera otro contexto."
             )
 
-        # ranking final: expectancy validada × score
-        picks.sort(key=lambda x: (x["validation"]["expectancy_r"] or 0) * x["score"],
+        # ranking final: prob (o score) × expectancy validada
+        picks.sort(key=lambda x: x["_rank"] * max(x["validation"]["expectancy_r"] or 0, 0.01),
                    reverse=True)
-        for cand in picks:
-            cand.pop("_arrays", None)
-        for cand in pool_cands:
-            cand.pop("_arrays", None)
-        for cand in prelim:
-            cand.pop("_arrays", None)
 
-        # ── Persistencia (memoria local + predicciones para auto-calificar) ──
-        run_id = uuid.uuid4().hex[:12]
+        # ── Persistencia (con features para el feedback futuro de la red) ────
         now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
         try:
             with self._db_lock, closing(self._db()) as conn, conn:
@@ -845,15 +1354,31 @@ class UltimatePredictorEngine:
                      json.dumps({k: v for k, v in cfg.items() if not k.startswith("_")}),
                      ctx["regime"], ctx["spy_ret20_pct"], len(universe), len(picks)))
                 for cand in picks:
+                    feats_json = (json.dumps([round(float(x), 4) for x in cand["_features"]])
+                                  if cand.get("_features") is not None else None)
                     conn.execute(
                         "INSERT INTO predictions (run_id, created_at, for_date, symbol, "
-                        "side, entry, stop, target, score, expectancy_r) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        "side, entry, stop, target, score, expectancy_r, features, "
+                        "exp_move_pct, surge_prob_pct) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (run_id, now_str, for_date, cand["symbol"], cand["side"],
                          cand["entry"], cand["stop"], cand["target"], cand["score"],
-                         cand["validation"]["expectancy_r"]))
+                         cand["validation"]["expectancy_r"], feats_json,
+                         cand["exp_move_pct"], cand.get("surge_prob_pct")))
         except Exception as e:  # noqa: BLE001
             warnings.append(f"No se pudo persistir la corrida en la base local: {e}")
+
+        # limpieza de campos internos
+        for cand in prelim:
+            cand.pop("_arrays", None)
+            cand.pop("_features", None)
+            cand.pop("_rank", None)
+
+        model = self.model_info()
+        model["last_training"] = train_info
+        model["examples_added_this_run"] = added
+        model["active_this_run"] = model_active
+        model["global_median_surge_pct"] = (round(float(np.median(all_surge_mags)), 1)
+                                            if all_surge_mags else None)
 
         kpis = {
             "universe": len(universe),
@@ -863,24 +1388,29 @@ class UltimatePredictorEngine:
             "rejected_backtest": sum(1 for r in rejected if r["stage"] == "backtest"),
             "rejected_dilution": sum(1 for r in rejected if r["stage"] == "dilution"),
             "graded_this_run": graded_now,
+            "dataset_rows": model["dataset_rows"],
             "avg_expectancy_r": (round(float(np.mean(
                 [p["validation"]["expectancy_r"] for p in picks
                  if p["validation"]["expectancy_r"] is not None])), 3) if picks else None),
-            "avg_score": (round(float(np.mean([p["score"] for p in picks])), 1)
-                          if picks else None),
+            "avg_surge_prob_pct": (round(float(np.mean(
+                [p["surge_prob_pct"] for p in picks if p["surge_prob_pct"] is not None])), 1)
+                if model_active and picks else None),
         }
         meta = {
             "run_id": run_id,
             "as_of": ctx["as_of"],
             "for_date": for_date,
             "universe_full": full_universe,
+            "surge_days": SURGE_DAYS,
+            "surge_pct_min": SURGE_PCT_MIN,
+            "crash_pct_min": CRASH_PCT_MIN,
             "params": {k: v for k, v in cfg.items() if not k.startswith("_")},
             "runtime_s": round(time.time() - t0, 1),
             "warnings": warnings,
         }
         progress(100, "Listo")
-        return {"kpis": kpis, "market": ctx, "picks": picks, "rejected": rejected[:20],
-                "track_record": track, "meta": meta}
+        return {"kpis": kpis, "market": ctx, "model": model, "picks": picks,
+                "rejected": rejected[:20], "track_record": track, "meta": meta}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -929,13 +1459,14 @@ def get_ultimate_predictor_engine() -> UltimatePredictorEngine:
 
 
 def get_history() -> Dict[str, Any]:
-    """Track record + últimas corridas (para GET /backtest/ultimate/history)."""
+    """Track record + últimas corridas + estado del modelo (para la UI)."""
     engine = get_ultimate_predictor_engine()
     track = engine.track_record()
     with engine._db_lock, closing(engine._db()) as conn, conn:
         runs = conn.execute(
             "SELECT * FROM runs ORDER BY created_at DESC LIMIT 12").fetchall()
-    return {"track_record": track, "runs": [dict(r) for r in runs]}
+    return {"track_record": track, "runs": [dict(r) for r in runs],
+            "model": engine.model_info()}
 
 
 def start_job(raw_config: Dict[str, Any]) -> str:
