@@ -1776,6 +1776,13 @@ class UltimatePredictorEngine:
         except Exception as e:  # noqa: BLE001
             warnings.append(f"No se pudo persistir la corrida en la base local: {e}")
 
+        # el track record del resultado debe incluir los picks recién guardados
+        # (la foto tomada al inicio de la corrida quedaría desactualizada)
+        try:
+            track = self.track_record()
+        except Exception:  # noqa: BLE001
+            pass
+
         # limpieza de campos internos
         for cand in prelim:
             cand.pop("_arrays", None)

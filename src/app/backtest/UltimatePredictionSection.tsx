@@ -444,6 +444,7 @@ export default function UltimatePredictionSection() {
             stopPolling(); setRunning(false);
             setResult(snap.result ?? null);
             if (snap.result?.track_record) setTrack(snap.result.track_record);
+            gradeNow(true); // refresco completo desde el servidor (track + insights + diario)
           } else if (snap.status === 'error') {
             stopPolling(); setRunning(false);
             setError(snap.error || 'Error en la predicción');
@@ -457,7 +458,7 @@ export default function UltimatePredictionSection() {
       setRunning(false);
       setError(e?.message || 'No se pudo iniciar la predicción');
     }
-  }, [cfg, stopPolling]);
+  }, [cfg, stopPolling, gradeNow]);
 
   const openChart = useCallback(async (p: Pick) => {
     setChartPick(p); setChartBars(null); setChartError(''); setChartLoading(true);
