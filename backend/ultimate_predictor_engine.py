@@ -104,8 +104,20 @@ except Exception:  # noqa: BLE001
 logger = logging.getLogger(__name__)
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(_BASE_DIR, "ultimate_predictor.db")
-MODEL_PATH = os.path.join(_BASE_DIR, "ultimate_predictor_model.pt")
+# La memoria del motor (dataset, modelo, track record) DEBE sobrevivir a los
+# deploys. En hosts efímeros (Railway/Render) el filesystem se borra en cada
+# deploy: define ULTIMATE_DATA_DIR apuntando a un volumen persistente
+# (p.ej. /data) o toda la memoria se pierde con cada push.
+_DATA_DIR = os.environ.get("ULTIMATE_DATA_DIR") or _BASE_DIR
+try:
+    os.makedirs(_DATA_DIR, exist_ok=True)
+except OSError:
+    _DATA_DIR = _BASE_DIR
+DB_PATH = os.path.join(_DATA_DIR, "ultimate_predictor.db")
+MODEL_PATH = os.path.join(_DATA_DIR, "ultimate_predictor_model.pt")
+EPHEMERAL_STORAGE = os.environ.get("ULTIMATE_DATA_DIR") is None and (
+    os.environ.get("RAILWAY_ENVIRONMENT") is not None
+    or os.environ.get("RENDER") is not None)
 
 # ── Objetivo: movimientos explosivos (misma definición que el Edge Finder) ───
 SURGE_DAYS = 5             # ventana del movimiento explosivo (3-5 días)
@@ -572,6 +584,8 @@ class UltimatePredictorEngine:
         info = {
             "torch_available": TORCH_AVAILABLE,
             "status": "trained" if self._model is not None else "heuristic",
+            "data_dir": _DATA_DIR,
+            "ephemeral_storage": EPHEMERAL_STORAGE,
             "feat_version": FEAT_VERSION,
             "n_features": N_FEATURES,
             "trained_at": self._model_meta.get("trained_at"),
@@ -1547,6 +1561,12 @@ class UltimatePredictorEngine:
             f"Objetivo: movimientos explosivos (surge ≥ +{SURGE_PCT_MIN:.0f}% / crash ≥ "
             f"−{CRASH_PCT_MIN:.0f}% en ≤{SURGE_DAYS} días). La red mejora con cada corrida diaria.",
         ]
+        if EPHEMERAL_STORAGE:
+            warnings.insert(0, (
+                "⚠️ ALMACENAMIENTO EFÍMERO: este backend corre en un host que BORRA el "
+                "disco en cada deploy — predicciones, dataset y modelo se pierden con "
+                "cada push. Monta un volumen persistente y define ULTIMATE_DATA_DIR "
+                "(p.ej. /data) en las variables de entorno del servicio."))
         today = datetime.utcnow()
         cfg["_hist_from"] = (today - timedelta(days=420)).strftime("%Y-%m-%d")
         cfg["_hist_to"] = today.strftime("%Y-%m-%d")

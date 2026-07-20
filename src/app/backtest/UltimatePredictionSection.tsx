@@ -84,6 +84,7 @@ interface Rejected {
 interface ModelInfo {
   torch_available: boolean;
   status: 'trained' | 'heuristic';
+  ephemeral_storage?: boolean;
   active_this_run?: boolean;
   trained_at: string | null;
   rows: number | null;
@@ -570,6 +571,13 @@ export default function UltimatePredictionSection() {
             </div>
             {!result.model.active_this_run && result.model.last_training?.reason && (
               <p className="mt-2 text-xs text-gray-500">⏳ {result.model.last_training.reason}</p>
+            )}
+            {result.model.ephemeral_storage && (
+              <p className="mt-2 text-xs font-semibold text-rose-300">
+                ⚠️ Almacenamiento efímero: el backend borra su disco en cada deploy — la memoria del motor
+                (dataset, modelo, track record) se pierde con cada push. Monta un volumen persistente en el
+                servicio y define <span className="font-mono">ULTIMATE_DATA_DIR=/data</span>.
+              </p>
             )}
           </div>
 
