@@ -443,6 +443,11 @@ class UltimatePredictorEngine:
         self._model = None
         self._model_meta: Dict[str, Any] = {}
         self._load_model()
+        # loop autónomo: mientras el backend esté levantado, el motor califica,
+        # hace post-mortems y re-entrena solo cada hora (sin abrir la página)
+        self._busy = False
+        threading.Thread(target=self._auto_learn_loop, daemon=True,
+                         name="ultimate-auto-learn").start()
 
     # ── SQLite local (memoria persistente + dataset de la red) ───────────────
     def _db(self) -> sqlite3.Connection:
@@ -509,6 +514,30 @@ class UltimatePredictorEngine:
                     conn.execute(ddl)
                 except sqlite3.OperationalError:
                     pass  # columna ya existe
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS post_mortems (
+                    pred_id INTEGER PRIMARY KEY,
+                    symbol TEXT, for_date TEXT, side TEXT,
+                    filled INTEGER, outcome TEXT, r REAL,
+                    r_open REAL,            -- contrafactual: ¿y si entraba al open?
+                    move_pct REAL,          -- movimiento explosivo realizado (con o sin fill)
+                    missed INTEGER,         -- sin fill pero el movimiento ocurrió
+                    gap_pct REAL,
+                    session_vol_ratio REAL,
+                    verdict TEXT,
+                    created_at TEXT
+                )""")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS learning_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at TEXT,
+                    kind TEXT,
+                    message TEXT
+                )""")
+            try:
+                conn.execute("ALTER TABLE predictions ADD COLUMN entry_type TEXT DEFAULT 'stop'")
+            except sqlite3.OperationalError:
+                pass
             # al cambiar la versión de features, el dataset viejo se descarta
             # (se vuelve a cosechar con la versión nueva en la próxima corrida)
             conn.execute("DELETE FROM training_data WHERE feat_version IS NULL "
@@ -717,54 +746,127 @@ class UltimatePredictorEngine:
 
     # ── A. Grading de predicciones anteriores (feedback a la red) ────────────
     def _grade_pending(self, as_of: str) -> Tuple[int, List[Tuple]]:
-        """Califica pending vencidas. Devuelve (calificadas, ejemplos ×3 con la
-        etiqueta VERDADERA para re-alimentar el dataset)."""
+        """Califica pending/abiertas vencidas, marca 'open' las que ejecutaron y
+        siguen en curso, y escribe el POST-MORTEM de cada calificada (¿ejecutó?
+        ¿el movimiento ocurrió igual? ¿qué hubiera dado la entrada al open?).
+        Devuelve (calificadas, ejemplos ×3 con la etiqueta VERDADERA)."""
         with self._db_lock, closing(self._db()) as conn, conn:
             rows = conn.execute(
-                "SELECT * FROM predictions WHERE status='pending' AND for_date <= ? "
-                "ORDER BY for_date ASC LIMIT 40", (as_of,)).fetchall()
+                "SELECT * FROM predictions WHERE status IN ('pending','open') "
+                "AND for_date <= ? ORDER BY for_date ASC LIMIT 60", (as_of,)).fetchall()
         graded = 0
         feedback: List[Tuple] = []
         for row in rows:
             try:
                 d_from = (datetime.strptime(row["for_date"], "%Y-%m-%d")
-                          - timedelta(days=10)).strftime("%Y-%m-%d")
+                          - timedelta(days=60)).strftime("%Y-%m-%d")
                 hist = self.finder._daily_history(row["symbol"], d_from, as_of)
-                dates, o, h, lo, c, _v = self.finder._parse_bars(hist)
+                dates, o, h, lo, c, v = self.finder._parse_bars(hist)
                 idx = next((i for i, dt in enumerate(dates) if dt >= row["for_date"]), None)
                 if idx is None or idx == 0:
                     continue  # la sesión objetivo aún no tiene barra
-                fill = _try_fill(row["side"], float(row["entry"]),
-                                 float(o[idx]), float(h[idx]), float(lo[idx]))
+                side = row["side"]
+                entry_type = (row["entry_type"] if "entry_type" in row.keys()
+                              and row["entry_type"] else "stop")
+                if entry_type == "open":
+                    fill = float(o[idx])  # orden a mercado en la apertura
+                else:
+                    fill = _try_fill(side, float(row["entry"]),
+                                     float(o[idx]), float(h[idx]), float(lo[idx]))
                 now = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
                 if fill is None:
                     upd = ("graded", "no_fill", None, None, 0, now, row["id"])
+                    graded += 1
                 else:
                     r, reason, days, exit_px = _sim_trade(
-                        row["side"], fill, float(row["stop"]), float(row["target"]),
+                        side, fill, float(row["stop"]), float(row["target"]),
                         h, lo, c, idx)
                     if r is None:
-                        continue  # trade aún abierto — se califica en otra corrida
-                    outcome = "win" if r > 0 else ("loss" if r < 0 else "flat")
-                    upd = ("graded", f"{outcome}:{reason}", round(r, 3),
-                           _px(exit_px), days, now, row["id"])
+                        # ejecutó y sigue en curso — visible como "en curso"
+                        upd = ("open", None, None, _px(exit_px), days, now, row["id"])
+                    else:
+                        outcome = "win" if r > 0 else ("loss" if r < 0 else "flat")
+                        upd = ("graded", f"{outcome}:{reason}", round(r, 3),
+                               _px(exit_px), days, now, row["id"])
+                        graded += 1
                 with self._db_lock, closing(self._db()) as conn, conn:
                     conn.execute(
                         "UPDATE predictions SET status=?, outcome=?, outcome_r=?, "
                         "exit_price=?, days_held=?, evaluated_at=? WHERE id=?", upd)
-                graded += 1
-                # feedback: etiqueta verdadera anclada al día previo a la sesión
-                # (solo si las features guardadas son de la versión vigente)
-                feats = row["features"] if "features" in row.keys() else None
-                lab = _labels_at(c, h, lo, idx - 1)
-                if feats and lab is not None:
-                    up, down, s_pct, _c_pct = lab
-                    feedback.append((row["symbol"], dates[idx - 1], feats,
-                                     up, down, s_pct, GRADED_SAMPLE_WEIGHT))
-                    # _upsert_training descarta las de dimensión vieja
+                if upd[0] == "graded":
+                    self._write_post_mortem(row, dates, o, h, lo, c, v, idx,
+                                            fill, upd[1], upd[2])
+                    # feedback: etiqueta verdadera anclada al día previo
+                    feats = row["features"] if "features" in row.keys() else None
+                    lab = _labels_at(c, h, lo, idx - 1)
+                    if feats and lab is not None:
+                        up, down, s_pct, _c_pct = lab
+                        feedback.append((row["symbol"], dates[idx - 1], feats,
+                                         up, down, s_pct, GRADED_SAMPLE_WEIGHT))
             except Exception as e:  # noqa: BLE001
                 logger.debug("[Ultimate] grading %s failed: %s", row["symbol"], e)
         return graded, feedback
+
+    # ── Post-mortem: el motor se pregunta por qué funcionó o falló ───────────
+    def _write_post_mortem(self, row: sqlite3.Row, dates: List[str], o: np.ndarray,
+                           h: np.ndarray, lo: np.ndarray, c: np.ndarray,
+                           v: np.ndarray, idx: int, fill: Optional[float],
+                           outcome: str, r: Optional[float]) -> None:
+        side = row["side"]
+        prev_close = float(c[idx - 1])
+        end = min(idx + SURGE_DAYS, len(c))
+        if prev_close <= 0 or end <= idx:
+            return
+        # ¿el movimiento explosivo ocurrió, con o sin nosotros?
+        if side == "long":
+            move_pct = (float(np.max(h[idx:end])) - prev_close) / prev_close * 100
+        else:
+            move_pct = (prev_close - float(np.min(lo[idx:end]))) / prev_close * 100
+        exp_move = float(row["exp_move_pct"] or (SURGE_PCT_MIN if side == "long"
+                                                 else CRASH_PCT_MIN))
+        missed = int(outcome == "no_fill" and move_pct >= exp_move * 0.6)
+        gap_pct = round((float(o[idx]) / prev_close - 1.0) * 100, 2)
+        va = v[max(0, idx - 20):idx]
+        session_vol_ratio = (round(float(v[idx]) / float(np.mean(va)), 2)
+                             if va.size >= 5 and float(np.mean(va)) > 0 else None)
+        # contrafactual: entrada a mercado en el open, misma distancia de stop/target
+        entry_ref = float(row["entry"])
+        risk_frac = abs(entry_ref - float(row["stop"])) / entry_ref if entry_ref > 0 else 0.05
+        tgt_frac = abs(float(row["target"]) - entry_ref) / entry_ref if entry_ref > 0 else 0.3
+        eo = float(o[idx])
+        if side == "long":
+            r_open, _, _, _ = _sim_trade("long", eo, eo * (1 - risk_frac),
+                                         eo * (1 + tgt_frac), h, lo, c, idx)
+        else:
+            r_open, _, _, _ = _sim_trade("short", eo, eo * (1 + risk_frac),
+                                         eo * (1 - tgt_frac), h, lo, c, idx)
+        # veredicto en español (esto es lo que "se pregunta" el motor)
+        mv = round(move_pct, 1)
+        if outcome == "no_fill" and missed:
+            verdict = (f"Sin fill pero el movimiento OCURRIÓ ({'+' if side == 'long' else '−'}{mv}%) — "
+                       f"la entrada en el disparo fue demasiado exigente; al open habría dado "
+                       f"{round(r_open, 2) if r_open is not None else 's/d'}R.")
+        elif outcome == "no_fill":
+            verdict = f"Sin fill y el movimiento nunca vino (máx {mv}%) — el filtro de entrada protegió."
+        elif outcome.startswith("win"):
+            verdict = f"Acierto: {round(r or 0, 2)}R (movimiento máx {mv}%, vol sesión {session_vol_ratio}×)."
+        elif "stop" in outcome and abs(gap_pct) >= 3 and ((side == "long") == (gap_pct < 0)):
+            verdict = f"Stop con gap en contra de {gap_pct}% en la apertura — riesgo de gap, no de tesis."
+        elif outcome.startswith("loss"):
+            verdict = (f"Fallo: {round(r or 0, 2)}R. Movimiento máx {mv}% vs esperado {round(exp_move, 1)}% "
+                       f"— {'la explosión no llegó' if move_pct < exp_move * 0.5 else 'llegó tarde o se revirtió'}.")
+        else:
+            verdict = f"Salida por tiempo: {round(r or 0, 2)}R (movimiento máx {mv}%)."
+        with self._db_lock, closing(self._db()) as conn, conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO post_mortems (pred_id, symbol, for_date, side, "
+                "filled, outcome, r, r_open, move_pct, missed, gap_pct, "
+                "session_vol_ratio, verdict, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (row["id"], row["symbol"], row["for_date"], side,
+                 int(fill is not None), outcome, r,
+                 round(r_open, 3) if r_open is not None else None,
+                 round(move_pct, 1), missed, gap_pct, session_vol_ratio, verdict,
+                 datetime.utcnow().strftime("%Y-%m-%d %H:%M")))
 
     def grade_now(self) -> Dict[str, Any]:
         """Calificación bajo demanda (sin correr una predicción completa):
@@ -784,7 +886,139 @@ class UltimatePredictorEngine:
                 "SELECT COUNT(*) AS n FROM predictions WHERE status='pending' "
                 "AND for_date > ?", (as_of,)).fetchone()["n"]
         return {"as_of": as_of, "graded_now": graded, "feedback_rows": fed,
-                "pending_future": pending_future, "track_record": self.track_record()}
+                "pending_future": pending_future, "track_record": self.track_record(),
+                "insights": self.insights(), "learning_log": self.learning_log()}
+
+    # ── Diario de aprendizaje ────────────────────────────────────────────────
+    def _log_learning(self, kind: str, message: str) -> None:
+        """Registra un aprendizaje (dedupe: no repite el mismo mensaje en 24h)."""
+        cutoff = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M")
+        with self._db_lock, closing(self._db()) as conn, conn:
+            dup = conn.execute(
+                "SELECT 1 FROM learning_log WHERE message=? AND created_at >= ?",
+                (message, cutoff)).fetchone()
+            if dup is None:
+                conn.execute("INSERT INTO learning_log (created_at, kind, message) "
+                             "VALUES (?,?,?)",
+                             (datetime.utcnow().strftime("%Y-%m-%d %H:%M"), kind, message))
+
+    def learning_log(self, limit: int = 15) -> List[Dict[str, Any]]:
+        with self._db_lock, closing(self._db()) as conn, conn:
+            rows = conn.execute("SELECT created_at, kind, message FROM learning_log "
+                                "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── Insights: las preguntas que el motor se hace sobre sus resultados ────
+    def insights(self) -> Dict[str, Any]:
+        with self._db_lock, closing(self._db()) as conn, conn:
+            pms = conn.execute(
+                "SELECT pm.*, p.pattern, p.surge_prob_pct, p.entry_type AS pred_entry "
+                "FROM post_mortems pm JOIN predictions p ON p.id = pm.pred_id "
+                "ORDER BY pm.for_date DESC LIMIT 400").fetchall()
+        n = len(pms)
+        out: Dict[str, Any] = {"n": n, "texts": [], "recent_verdicts": [
+            {"symbol": r["symbol"], "for_date": r["for_date"], "side": r["side"],
+             "verdict": r["verdict"]} for r in pms[:10]]}
+        if n == 0:
+            return out
+
+        filled = [r for r in pms if r["filled"]]
+        missed = [r for r in pms if r["missed"]]
+        rs = [r["r"] for r in filled if r["r"] is not None]
+        r_opens = [r["r_open"] for r in pms if r["r_open"] is not None]
+        out["fill_rate_pct"] = round(100.0 * len(filled) / n, 1)
+        out["missed_move_rate_pct"] = round(100.0 * len(missed) / n, 1)
+        out["avg_r_filled"] = round(float(np.mean(rs)), 3) if rs else None
+        out["avg_r_open_counterfactual"] = round(float(np.mean(r_opens)), 3) if r_opens else None
+
+        if n >= 5:
+            if out["missed_move_rate_pct"] >= 40:
+                self._log_learning("insight", (
+                    f"El {out['missed_move_rate_pct']}% de los picks sin fill IGUAL hicieron el "
+                    f"movimiento — la entrada en el disparo pierde explosiones; la validación "
+                    f"dual ya prefiere el open cuando la historia del símbolo lo paga."))
+            if (out["avg_r_open_counterfactual"] is not None and rs
+                    and out["avg_r_open_counterfactual"] > (out["avg_r_filled"] or 0) + 0.1):
+                self._log_learning("insight", (
+                    f"Contrafactual: entrar al open habría dado {out['avg_r_open_counterfactual']}R "
+                    f"medio vs {out['avg_r_filled']}R real — el motor pondera esto por símbolo."))
+
+        # ¿pasa algo above/below un umbral de volumen de sesión?
+        hi = [r["r"] for r in filled if r["r"] is not None
+              and (r["session_vol_ratio"] or 0) >= 1.5]
+        lo_ = [r["r"] for r in filled if r["r"] is not None
+               and (r["session_vol_ratio"] or 0) < 1.5]
+        if len(hi) >= 3 and len(lo_) >= 3:
+            out["vol_threshold"] = {
+                "above_1_5x": {"n": len(hi), "avg_r": round(float(np.mean(hi)), 3)},
+                "below_1_5x": {"n": len(lo_), "avg_r": round(float(np.mean(lo_)), 3)},
+            }
+            if float(np.mean(hi)) > float(np.mean(lo_)) + 0.2:
+                self._log_learning("insight", (
+                    f"Umbral de volumen: con vol de sesión ≥1.5× el R medio es "
+                    f"{round(float(np.mean(hi)), 2)} vs {round(float(np.mean(lo_)), 2)} por debajo "
+                    f"— confirmar volumen antes de entrar suma."))
+
+        # ¿qué patrones respetan más?
+        by_pat: Dict[str, List[float]] = {}
+        for r in filled:
+            if r["pattern"] and r["r"] is not None:
+                by_pat.setdefault(r["pattern"], []).append(r["r"])
+        pat_rows = [{"pattern": p, "n": len(v), "avg_r": round(float(np.mean(v)), 3)}
+                    for p, v in by_pat.items() if len(v) >= 3]
+        pat_rows.sort(key=lambda x: -x["avg_r"])
+        out["by_pattern"] = pat_rows
+        if pat_rows:
+            best, worst = pat_rows[0], pat_rows[-1]
+            if best["avg_r"] > 0 and best is not worst:
+                self._log_learning("insight", (
+                    f"Mejor setup hasta ahora: «{best['pattern']}» ({best['avg_r']}R medio, "
+                    f"n={best['n']}); peor: «{worst['pattern']}» ({worst['avg_r']}R). "
+                    f"La red ya recibe el patrón como feature y el feedback ×3 refuerza esto."))
+
+        # ¿la P(explosión) de la red discrimina en la práctica?
+        hi_p = [r["r"] for r in filled if r["r"] is not None
+                and (r["surge_prob_pct"] or 0) >= 75]
+        lo_p = [r["r"] for r in filled if r["r"] is not None
+                and 0 < (r["surge_prob_pct"] or 0) < 75]
+        if len(hi_p) >= 3 and len(lo_p) >= 3:
+            out["prob_buckets"] = {
+                "p_ge_75": {"n": len(hi_p), "avg_r": round(float(np.mean(hi_p)), 3)},
+                "p_lt_75": {"n": len(lo_p), "avg_r": round(float(np.mean(lo_p)), 3)},
+            }
+
+        return out
+
+    # ── Loop autónomo: aprende solo, cada hora, mientras el backend corre ────
+    def auto_learn(self) -> Dict[str, Any]:
+        """Grade + post-mortems + insights + retrain si hay feedback nuevo.
+        Es lo que corre el hilo de fondo y el endpoint /grade."""
+        res = self.grade_now()
+        if res.get("graded_now", 0) > 0:
+            self._log_learning("grade", (
+                f"Calificadas {res['graded_now']} predicciones contra precios reales "
+                f"(+{res['feedback_rows']} ejemplos ×3 al dataset)."))
+        if res.get("feedback_rows", 0) >= 5 and TORCH_AVAILABLE:
+            try:
+                info = self._train_model(lambda p, s: None)
+                if info.get("trained"):
+                    self._log_learning("retrain", (
+                        f"Red re-entrenada con el feedback nuevo: {info['rows']} ejemplos, "
+                        f"AUC↑ {info.get('auc_up')}, {info.get('epochs')} épocas."))
+            except Exception as e:  # noqa: BLE001
+                logger.debug("[Ultimate] auto retrain failed: %s", e)
+        res["learning_log"] = self.learning_log()
+        return res
+
+    def _auto_learn_loop(self) -> None:
+        time.sleep(120)  # dejar levantar el backend
+        while True:
+            try:
+                if not self._busy:
+                    self.auto_learn()
+            except Exception as e:  # noqa: BLE001
+                logger.debug("[Ultimate] auto-learn loop: %s", e)
+            time.sleep(3600)
 
     def track_record(self) -> Dict[str, Any]:
         """KPIs del historial calificado + últimas predicciones (para la UI)."""
@@ -794,8 +1028,8 @@ class UltimatePredictorEngine:
                 "ORDER BY for_date DESC LIMIT 400").fetchall()
             recent = conn.execute(
                 "SELECT for_date, symbol, side, entry, stop, target, score, status, "
-                "outcome, outcome_r, exit_price, days_held, pattern, surge_prob_pct "
-                "FROM predictions ORDER BY id DESC LIMIT 30").fetchall()
+                "outcome, outcome_r, exit_price, days_held, pattern, surge_prob_pct, "
+                "entry_type FROM predictions ORDER BY id DESC LIMIT 60").fetchall()
 
         def _stats(subset: List[sqlite3.Row]) -> Dict[str, Any]:
             fills = [r for r in subset if r["outcome"] != "no_fill"]
@@ -1139,15 +1373,21 @@ class UltimatePredictorEngine:
         return best
 
     # ── E. Validación: backtest del MISMO setup con target explosivo ─────────
+    # Prueba DOS modos de entrada sobre la historia del propio símbolo —
+    # (a) buy/sell stop en el nivel de disparo, (b) a mercado en el open del
+    # D+1 — y publica el modo que mejor expectancy real generó. Así el motor
+    # aprende por símbolo qué entrada "respeta más" en vez de asumir una.
     @staticmethod
     def _validate(cand: Dict) -> Dict[str, Any]:
         o, h, lo, c = cand["_arrays"]
         n = len(c)
         side = cand["side"]
         exp_move = float(cand["exp_move_pct"])
-        events = fills = wins = losses = 0
-        rs: List[float] = []
-        days_list: List[int] = []
+        events = 0
+        mode: Dict[str, Dict[str, List]] = {
+            "stop": {"rs": [], "days": [], "wins": []},
+            "open": {"rs": [], "days": [], "wins": []},
+        }
         i = 60
         while i < n - 1:
             setup = False
@@ -1171,42 +1411,73 @@ class UltimatePredictorEngine:
                 continue
 
             events += 1
+            step_days = None
+            # (a) entrada con orden stop en el disparo
             entry = _px(level)
             stop, target, _risk, _rr = _plan_levels(side, entry, raw_stop, exp_move)
             fill = _try_fill(side, entry, float(o[i + 1]), float(h[i + 1]), float(lo[i + 1]))
             if fill is not None:
-                r, reason, days, _exit = _sim_trade(side, fill, stop, target, h, lo, c, i + 1)
+                r, _reason, days, _exit = _sim_trade(side, fill, stop, target, h, lo, c, i + 1)
                 if r is not None:
-                    fills += 1
-                    rs.append(min(max(r, -3.0), 12.0))  # winsorize (targets ~5R)
-                    days_list.append(days)
-                    wins += 1 if r > 0 else 0
-                    losses += 1 if r <= 0 else 0
-                    i += 1 + days  # no solapar eventos
-                    continue
-            i += 2
+                    mode["stop"]["rs"].append(min(max(r, -3.0), 12.0))
+                    mode["stop"]["days"].append(days)
+                    mode["stop"]["wins"].append(1 if r > 0 else 0)
+                    step_days = days
+            # (b) entrada a mercado en el open del D+1
+            eo = float(o[i + 1])
+            if eo > 0:
+                stop_o, target_o, _r2, _rr2 = _plan_levels(side, eo, raw_stop, exp_move)
+                r_o, _reason_o, days_o, _exit_o = _sim_trade(side, eo, stop_o, target_o,
+                                                             h, lo, c, i + 1)
+                if r_o is not None:
+                    mode["open"]["rs"].append(min(max(r_o, -3.0), 12.0))
+                    mode["open"]["days"].append(days_o)
+                    mode["open"]["wins"].append(1 if r_o > 0 else 0)
+                    if step_days is None:
+                        step_days = days_o
+            i += (1 + step_days) if step_days is not None else 2
 
-        expectancy = round(float(np.mean(rs)), 3) if rs else None
-        win_rate = round(100.0 * wins / len(rs), 1) if rs else None
+        def stats(m: str) -> Dict[str, Any]:
+            rs, days, wins = mode[m]["rs"], mode[m]["days"], mode[m]["wins"]
+            return {
+                "fills": len(rs),
+                "win_rate_pct": round(100.0 * sum(wins) / len(rs), 1) if rs else None,
+                "expectancy_r": round(float(np.mean(rs)), 3) if rs else None,
+                "total_r": round(float(np.sum(rs)), 2) if rs else None,
+                "med_days_held": int(np.median(days)) if days else None,
+            }
+
+        s_stop, s_open = stats("stop"), stats("open")
+        # el motor elige el modo de entrada que SU historia pagó mejor
+        chosen = "stop"
+        if (s_open["fills"] >= VAL_MIN_FILLS
+                and (s_open["expectancy_r"] or -9) > (s_stop["expectancy_r"] or -9)
+                and (s_stop["fills"] < VAL_MIN_FILLS
+                     or (s_open["expectancy_r"] or 0) > (s_stop["expectancy_r"] or 0) + 0.05)):
+            chosen = "open"
+        cs = s_open if chosen == "open" else s_stop
+
         result = {
             "events": events,
-            "fills": fills,
-            "win_rate_pct": win_rate,
-            "expectancy_r": expectancy,
-            "total_r": round(float(np.sum(rs)), 2) if rs else None,
-            "med_days_held": int(np.median(days_list)) if days_list else None,
+            "entry_type": chosen,
+            "by_entry": {"stop": s_stop, "open": s_open},
+            "fills": cs["fills"],
+            "win_rate_pct": cs["win_rate_pct"],
+            "expectancy_r": cs["expectancy_r"],
+            "total_r": cs["total_r"],
+            "med_days_held": cs["med_days_held"],
             "passed": False,
             "reject_reason": None,
         }
         if events < VAL_MIN_EVENTS:
             result["reject_reason"] = f"solo {events} setups históricos (mín {VAL_MIN_EVENTS})"
-        elif fills < VAL_MIN_FILLS:
-            result["reject_reason"] = f"solo {fills} ejecuciones históricas (mín {VAL_MIN_FILLS})"
-        elif expectancy is None or expectancy < VAL_MIN_EXPECTANCY:
-            result["reject_reason"] = (f"expectancy {expectancy}R < {VAL_MIN_EXPECTANCY}R — "
-                                       "la acción no explotó así en el pasado")
-        elif win_rate is not None and win_rate < VAL_MIN_WINRATE:
-            result["reject_reason"] = f"win rate {win_rate}% < {VAL_MIN_WINRATE}%"
+        elif cs["fills"] < VAL_MIN_FILLS:
+            result["reject_reason"] = f"solo {cs['fills']} ejecuciones históricas (mín {VAL_MIN_FILLS})"
+        elif cs["expectancy_r"] is None or cs["expectancy_r"] < VAL_MIN_EXPECTANCY:
+            result["reject_reason"] = (f"expectancy {cs['expectancy_r']}R < {VAL_MIN_EXPECTANCY}R "
+                                       "(en ambos modos de entrada) — la acción no explotó así en el pasado")
+        elif cs["win_rate_pct"] is not None and cs["win_rate_pct"] < VAL_MIN_WINRATE:
+            result["reject_reason"] = f"win rate {cs['win_rate_pct']}% < {VAL_MIN_WINRATE}%"
         else:
             result["passed"] = True
         return result
@@ -1242,6 +1513,13 @@ class UltimatePredictorEngine:
         prob_txt = ""
         if cand.get("surge_prob_pct") is not None:
             prob_txt = f" La red neuronal le asigna {cand['surge_prob_pct']}% de probabilidad de explosión."
+        if cand.get("entry_type") == "open":
+            side_txt = side_txt.replace("sobre el quiebre del high de 10 días",
+                                        "a mercado en la apertura")
+            side_txt = side_txt.replace("sobre el quiebre del low del último día",
+                                        "a mercado en la apertura")
+            prob_txt += (" Su propia historia pagó mejor entrando al open que esperando "
+                         "el quiebre, así que el plan usa entrada a mercado en la apertura.")
         own = cand.get("own_surges") or 0
         own_txt = f" Este símbolo ya tuvo {own} movimientos así en el último año." if own >= 2 else ""
         top = sorted(cand["score_breakdown"], key=lambda p: p["points"] / max(p["max"], 1e-9),
@@ -1253,6 +1531,13 @@ class UltimatePredictorEngine:
 
     # ── G. Orquestación ───────────────────────────────────────────────────────
     def run_predict(self, cfg: Dict[str, Any], progress) -> Dict[str, Any]:
+        self._busy = True
+        try:
+            return self._run_predict_inner(cfg, progress)
+        finally:
+            self._busy = False
+
+    def _run_predict_inner(self, cfg: Dict[str, Any], progress) -> Dict[str, Any]:
         t0 = time.time()
         warnings: List[str] = [
             "Universo point-in-time del screener → sesgo de supervivencia/look-ahead.",
@@ -1402,6 +1687,18 @@ class UltimatePredictorEngine:
                                                f"({dilution.get('label')}) — overhang EDGAR"})
                     continue
 
+            # si su propia historia paga mejor entrando al open, se adapta el plan
+            cand["entry_type"] = val["entry_type"]
+            if val["entry_type"] == "open":
+                o_arr, h_arr, lo_arr, c_arr = cand["_arrays"]
+                ref = float(c_arr[-1])
+                raw_stop = (float(np.min(lo_arr[-STOP_BARS_LONG:])) if cand["side"] == "long"
+                            else float(np.max(h_arr[-STOP_BARS_SHORT:])))
+                stop, target, risk, rr = _plan_levels(cand["side"], ref, raw_stop,
+                                                      float(cand["exp_move_pct"]))
+                cand.update({"entry": _px(ref), "stop": stop, "target": target,
+                             "rr": rr, "risk_pct": round(risk / ref * 100, 1)})
+
             cand["validation"] = val
             cand["dilution"] = dilution
             if cand["side"] == "short" and dilution and (dilution.get("score") or 0) >= 60:
@@ -1447,14 +1744,15 @@ class UltimatePredictorEngine:
                     conn.execute(
                         "INSERT INTO predictions (run_id, created_at, for_date, symbol, "
                         "side, entry, stop, target, score, expectancy_r, features, "
-                        "exp_move_pct, surge_prob_pct, pattern, vol_ratio, dilution_score) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "exp_move_pct, surge_prob_pct, pattern, vol_ratio, dilution_score, "
+                        "entry_type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (run_id, now_str, for_date, cand["symbol"], cand["side"],
                          cand["entry"], cand["stop"], cand["target"], cand["score"],
                          cand["validation"]["expectancy_r"], feats_json,
                          cand["exp_move_pct"], cand.get("surge_prob_pct"),
                          cand.get("pattern"), cand.get("vol_ratio"),
-                         (cand.get("dilution") or {}).get("score")))
+                         (cand.get("dilution") or {}).get("score"),
+                         cand.get("entry_type", "stop")))
         except Exception as e:  # noqa: BLE001
             warnings.append(f"No se pudo persistir la corrida en la base local: {e}")
 
@@ -1557,12 +1855,15 @@ def get_history() -> Dict[str, Any]:
         runs = conn.execute(
             "SELECT * FROM runs ORDER BY created_at DESC LIMIT 12").fetchall()
     return {"track_record": track, "runs": [dict(r) for r in runs],
-            "model": engine.model_info()}
+            "model": engine.model_info(), "insights": engine.insights(),
+            "learning_log": engine.learning_log()}
 
 
 def grade_now() -> Dict[str, Any]:
-    """Califica bajo demanda las predicciones vencidas (POST /backtest/ultimate/grade)."""
-    return get_ultimate_predictor_engine().grade_now()
+    """Ciclo de aprendizaje bajo demanda (POST /backtest/ultimate/grade):
+    califica, escribe post-mortems, actualiza insights y re-entrena si hay
+    feedback nuevo suficiente."""
+    return get_ultimate_predictor_engine().auto_learn()
 
 
 def start_job(raw_config: Dict[str, Any]) -> str:

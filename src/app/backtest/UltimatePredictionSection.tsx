@@ -32,10 +32,17 @@ interface UltimateConfig {
 
 interface ScorePart { key: string; max: number; points: number; detail: string }
 
+interface EntryStats {
+  fills: number; win_rate_pct: number | null; expectancy_r: number | null;
+  total_r: number | null; med_days_held: number | null;
+}
+
 interface Validation {
   events: number; fills: number; win_rate_pct: number | null;
   expectancy_r: number | null; total_r: number | null;
   med_days_held: number | null; passed: boolean; reject_reason: string | null;
+  entry_type: 'stop' | 'open';
+  by_entry?: { stop: EntryStats; open: EntryStats };
 }
 
 interface Pick {
@@ -54,7 +61,20 @@ interface Pick {
   dilution: { score: number | null; label: string | null; dilution_1y_pct: number | null } | null;
   dilution_note?: string;
   rationale: string; exp_hold_days: number;
+  entry_type?: 'stop' | 'open';
 }
+
+interface Insights {
+  n: number;
+  fill_rate_pct?: number; missed_move_rate_pct?: number;
+  avg_r_filled?: number | null; avg_r_open_counterfactual?: number | null;
+  vol_threshold?: { above_1_5x: { n: number; avg_r: number }; below_1_5x: { n: number; avg_r: number } };
+  by_pattern?: Array<{ pattern: string; n: number; avg_r: number }>;
+  prob_buckets?: { p_ge_75: { n: number; avg_r: number }; p_lt_75: { n: number; avg_r: number } };
+  recent_verdicts: Array<{ symbol: string; for_date: string; side: string; verdict: string }>;
+}
+
+interface LearningEntry { created_at: string; kind: string; message: string }
 
 interface Rejected {
   symbol: string; side: string; score: number; stage: string; reason: string;
@@ -93,12 +113,14 @@ interface TrackRecord {
     target: number; score: number; status: string; outcome: string | null;
     outcome_r: number | null; exit_price: number | null; days_held: number | null;
     pattern?: string | null; surge_prob_pct?: number | null;
+    entry_type?: string | null;
   }>;
 }
 
 interface GradeResponse {
   as_of: string; graded_now: number; feedback_rows: number;
   pending_future: number; track_record: TrackRecord;
+  insights?: Insights; learning_log?: LearningEntry[];
 }
 
 interface UltimateResult {
@@ -284,8 +306,10 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4">
         <div><p className="text-[10px] uppercase tracking-wider text-gray-500">Último cierre</p>
           <p className="font-mono font-bold text-gray-200">${pick.price}</p></div>
-        <div><p className="text-[10px] uppercase tracking-wider text-gray-500">Entrada ({long ? 'buy stop' : 'sell stop'})</p>
-          <p className="font-mono font-bold text-amber-300">${pick.entry}</p></div>
+        <div><p className="text-[10px] uppercase tracking-wider text-gray-500">
+            {pick.entry_type === 'open' ? 'Entrada (al open · adaptativa)' : `Entrada (${long ? 'buy stop' : 'sell stop'})`}
+          </p>
+          <p className="font-mono font-bold text-amber-300">${pick.entry}{pick.entry_type === 'open' && <span className="text-[10px] text-gray-500"> ref.</span>}</p></div>
         <div><p className="text-[10px] uppercase tracking-wider text-gray-500">Stop loss</p>
           <p className="font-mono font-bold text-rose-400">${pick.stop} <span className="text-[10px] text-gray-500">(−{pick.risk_pct}%)</span></p></div>
         <div><p className="text-[10px] uppercase tracking-wider text-gray-500">Target ({long ? '+' : '−'}{pick.exp_move_pct}% · {pick.rr}R)</p>
@@ -304,6 +328,12 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
           <span>Win rate <b className="text-gray-100">{fmt(v.win_rate_pct, '%')}</b></span>
           <span>Expectancy <b className={v.expectancy_r != null && v.expectancy_r > 0 ? 'text-emerald-400' : 'text-rose-400'}>{fmt(v.expectancy_r, 'R')}</b>/trade</span>
           <span>R total <b className="text-gray-100">{fmt(v.total_r, 'R')}</b></span>
+          {v.by_entry && (
+            <span className="text-gray-500">
+              entrada elegida: <b className="text-cyan-300">{v.entry_type === 'open' ? 'al open' : 'stop en disparo'}</b>
+              {' '}(stop {fmt(v.by_entry.stop.expectancy_r, 'R')} vs open {fmt(v.by_entry.open.expectancy_r, 'R')})
+            </span>
+          )}
         </div>
       </div>
 
@@ -678,6 +708,7 @@ export default function UltimatePredictionSection() {
                       <td className="pr-3 text-right font-mono">${r.target}</td>
                       <td className="pr-3">
                         {r.status === 'pending' ? <span className="text-yellow-400/80">pendiente</span>
+                          : r.status === 'open' ? <span className="text-cyan-300">en curso</span>
                           : r.outcome === 'no_fill' ? <span className="text-gray-500">sin fill</span>
                           : <span className={r.outcome?.startsWith('win') ? 'text-emerald-400' : 'text-rose-400'}>{r.outcome}</span>}
                       </td>
@@ -689,6 +720,69 @@ export default function UltimatePredictionSection() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Aprendizaje autónomo: post-mortems, insights y diario */}
+      {gradeInfo?.insights && gradeInfo.insights.n > 0 && (
+        <div className="mt-6 rounded-2xl border border-violet-500/20 bg-gray-900/40 p-5">
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <h3 className="text-sm font-bold text-violet-300">🧬 Aprendizaje autónomo</h3>
+            <p className="text-[11px] text-gray-500">
+              el motor hace un post-mortem de cada predicción (¿ejecutó? ¿el movimiento ocurrió igual?
+              ¿qué daba la entrada al open?) y ajusta su comportamiento — también corre solo cada hora en el backend
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard label="Post-mortems" value={String(gradeInfo.insights.n)} hint="predicciones analizadas" />
+            <StatCard label="Fill rate real" value={fmt(gradeInfo.insights.fill_rate_pct, '%')}
+              tone={(gradeInfo.insights.fill_rate_pct ?? 100) < 45 ? 'neg' : 'neutral'} />
+            <StatCard label="Movimientos perdidos" value={fmt(gradeInfo.insights.missed_move_rate_pct, '%')}
+              tone={(gradeInfo.insights.missed_move_rate_pct ?? 0) >= 40 ? 'neg' : 'neutral'}
+              hint="sin fill pero la explosión ocurrió" />
+            <StatCard label="R real vs contrafactual open" value={`${fmt(gradeInfo.insights.avg_r_filled)} / ${fmt(gradeInfo.insights.avg_r_open_counterfactual)}`}
+              hint="con esto elige el modo de entrada" />
+          </div>
+          {gradeInfo.insights.vol_threshold && (
+            <p className="mt-3 text-xs text-gray-400">
+              Umbral de volumen de sesión: ≥1.5× → <b className="text-gray-200">{gradeInfo.insights.vol_threshold.above_1_5x.avg_r}R</b> medio
+              ({gradeInfo.insights.vol_threshold.above_1_5x.n}) · &lt;1.5× → <b className="text-gray-200">{gradeInfo.insights.vol_threshold.below_1_5x.avg_r}R</b> ({gradeInfo.insights.vol_threshold.below_1_5x.n})
+            </p>
+          )}
+          {gradeInfo.insights.prob_buckets && (
+            <p className="mt-1 text-xs text-gray-400">
+              ¿La P(explosión) discrimina? P≥75% → <b className="text-gray-200">{gradeInfo.insights.prob_buckets.p_ge_75.avg_r}R</b> medio
+              ({gradeInfo.insights.prob_buckets.p_ge_75.n}) · P&lt;75% → <b className="text-gray-200">{gradeInfo.insights.prob_buckets.p_lt_75.avg_r}R</b> ({gradeInfo.insights.prob_buckets.p_lt_75.n})
+            </p>
+          )}
+          {gradeInfo.insights.recent_verdicts.length > 0 && (
+            <div className="mt-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-violet-300/70 mb-1.5">Post-mortems recientes (el motor se pregunta por qué)</p>
+              <ul className="space-y-1.5">
+                {gradeInfo.insights.recent_verdicts.map((pm, i) => (
+                  <li key={i} className="text-xs text-gray-400">
+                    <span className="font-mono text-gray-300">{pm.symbol}</span>
+                    <span className={`ml-1.5 font-semibold ${pm.side === 'long' ? 'text-emerald-400/70' : 'text-rose-400/70'}`}>{pm.side.toUpperCase()}</span>
+                    <span className="text-gray-600"> · {pm.for_date} — </span>{pm.verdict}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {(gradeInfo.learning_log?.length ?? 0) > 0 && (
+            <div className="mt-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-violet-300/70 mb-1.5">Diario de aprendizaje</p>
+              <ul className="space-y-1.5">
+                {gradeInfo.learning_log!.map((l, i) => (
+                  <li key={i} className="text-xs text-gray-400">
+                    <span className="text-gray-600">{l.created_at} · </span>
+                    <span className={`font-semibold ${l.kind === 'retrain' ? 'text-violet-300' : l.kind === 'grade' ? 'text-cyan-300' : 'text-amber-300'}`}>{l.kind}</span>
+                    <span className="text-gray-600"> — </span>{l.message}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
