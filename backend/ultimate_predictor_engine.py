@@ -560,6 +560,13 @@ class UltimatePredictorEngine:
                 "DELETE FROM predictions WHERE status='pending' AND id NOT IN ("
                 "SELECT MAX(id) FROM predictions WHERE status='pending' "
                 "GROUP BY for_date, symbol, side)")
+            # calificaciones basura de versiones previas (stop inválido por gap):
+            # se reabren para re-calificarse con la lógica de gap corregida
+            conn.execute(
+                "UPDATE predictions SET status='pending', outcome=NULL, outcome_r=NULL, "
+                "exit_price=NULL, days_held=NULL, evaluated_at=NULL "
+                "WHERE outcome LIKE '%stop_invalid%'")
+            conn.execute("DELETE FROM post_mortems WHERE outcome LIKE '%stop_invalid%'")
 
     # ── Modelo: load / save / predict ────────────────────────────────────────
     def _load_model(self) -> None:
@@ -874,19 +881,44 @@ class UltimatePredictorEngine:
                 side = row["side"]
                 entry_type = (row["entry_type"] if "entry_type" in row.keys()
                               and row["entry_type"] else "stop")
-                if entry_type == "open":
-                    fill = float(o[idx])  # orden a mercado en la apertura
-                else:
-                    fill = _try_fill(side, float(row["entry"]),
-                                     float(o[idx]), float(h[idx]), float(lo[idx]))
+                entry_ref = float(row["entry"])
+                stop_lvl, target_lvl = float(row["stop"]), float(row["target"])
+                prev_close = float(c[idx - 1])
+                gap = (float(o[idx]) / prev_close - 1.0) * 100 if prev_close > 0 else 0.0
                 now = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+                # Gap gigante en la apertura ⇒ split / oferta / dato anómalo: los
+                # niveles calculados sobre el cierre previo dejan de tener sentido.
+                # Se marca sin fill (no contamina R ni el aprendizaje con basura).
+                if abs(gap) > 40:
+                    upd = ("graded", f"no_fill:gap_anomalo_{round(gap)}pct",
+                           None, None, 0, now, row["id"])
+                    graded += 1
+                    with self._db_lock, closing(self._db()) as conn, conn:
+                        conn.execute(
+                            "UPDATE predictions SET status=?, outcome=?, outcome_r=?, "
+                            "exit_price=?, days_held=?, evaluated_at=? WHERE id=?", upd)
+                    continue
+                if entry_type == "open":
+                    # entrada a mercado en la apertura: stop/target se recalculan a
+                    # la MISMA distancia relativa desde el fill real (no absolutos
+                    # sobre el cierre previo, que un gap dejaría inválidos)
+                    fill = float(o[idx])
+                    if entry_ref > 0 and fill > 0:
+                        stop_frac = abs(entry_ref - stop_lvl) / entry_ref
+                        tgt_frac = abs(target_lvl - entry_ref) / entry_ref
+                        if side == "long":
+                            stop_lvl, target_lvl = fill * (1 - stop_frac), fill * (1 + tgt_frac)
+                        else:
+                            stop_lvl, target_lvl = fill * (1 + stop_frac), fill * (1 - tgt_frac)
+                else:
+                    fill = _try_fill(side, entry_ref,
+                                     float(o[idx]), float(h[idx]), float(lo[idx]))
                 if fill is None:
                     upd = ("graded", "no_fill", None, None, 0, now, row["id"])
                     graded += 1
                 else:
                     r, reason, days, exit_px = _sim_trade(
-                        side, fill, float(row["stop"]), float(row["target"]),
-                        h, lo, c, idx)
+                        side, fill, stop_lvl, target_lvl, h, lo, c, idx)
                     if r is None:
                         # ejecutó y sigue en curso — visible como "en curso"
                         upd = ("open", None, None, _px(exit_px), days, now, row["id"])
