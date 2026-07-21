@@ -759,6 +759,97 @@ class UltimatePredictorEngine:
         return {"trained": True, "rows": n, **metrics}
 
     # ── A. Grading de predicciones anteriores (feedback a la red) ────────────
+    # ── Intradía: cerrar el ciclo de aprendizaje el MISMO día ────────────────
+    # FMP publica la barra diaria (EOD) horas después del cierre — a veces
+    # recién a la mañana siguiente. Para calificar apenas cierra el mercado se
+    # sintetiza la barra diaria de la sesión a partir de las velas de 1 minuto
+    # (sesión regular 9:30–16:00 ET), que sí están disponibles enseguida.
+    def _session_ohlc_from_intraday(self, symbol: str, day: str) -> Optional[Dict]:
+        data = self.finder._fetch_json(
+            "historical-chart/1min",
+            {"symbol": symbol, "from": day, "to": day, "extended": "true"})
+        if not isinstance(data, list) or not data:
+            return None
+        rows: List[Tuple[str, float, float, float, float, float, int]] = []
+        for b in data:
+            try:
+                t = str(b["date"])
+                hhmm = t.split(" ")[1]
+                mm = int(hhmm[:2]) * 60 + int(hhmm[3:5])
+                if mm < 570 or mm > 960:  # solo sesión regular (RTH)
+                    continue
+                rows.append((t, float(b["open"]), float(b["high"]), float(b["low"]),
+                             float(b["close"]), float(b.get("volume") or 0), mm))
+            except (KeyError, TypeError, ValueError, IndexError):
+                continue
+        if not rows:
+            return None
+        rows.sort(key=lambda x: x[0])
+        return {
+            "date": day,
+            "open": rows[0][1],
+            "high": max(r[2] for r in rows),
+            "low": min(r[3] for r in rows),
+            "close": rows[-1][4],
+            "volume": sum(r[5] for r in rows),
+            "closed": rows[-1][6] >= 955,  # llegó al final de la sesión (15:55+)
+        }
+
+    def _advance_as_of(self, eod_as_of: Optional[str]) -> str:
+        """Avanza el corte al último día cuya sesión regular YA cerró, mirando
+        SPY intradía, aunque FMP todavía no haya publicado su barra EOD."""
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        base = eod_as_of or (datetime.utcnow() - timedelta(days=5)).strftime("%Y-%m-%d")
+        if base >= today:
+            return base
+        latest = base
+        probe = datetime.strptime(base, "%Y-%m-%d")
+        for _ in range(6):
+            probe += timedelta(days=1)
+            d = probe.strftime("%Y-%m-%d")
+            if d > today:
+                break
+            if probe.weekday() >= 5:
+                continue
+            bar = self._session_ohlc_from_intraday("SPY", d)
+            if bar and bar["closed"]:
+                latest = d
+            elif bar is None and d < today:
+                latest = d  # feriado/sin datos: no bloquea el avance
+        return latest
+
+    def _series_through(self, symbol: str, d_from: str, as_of: str
+                        ) -> Tuple[List[str], np.ndarray, np.ndarray,
+                                   np.ndarray, np.ndarray, np.ndarray]:
+        """Barras diarias EOD extendidas con sesiones recientes sintetizadas
+        desde intradía (las que EOD aún no publicó, hasta `as_of`)."""
+        hist = self.finder._daily_history(symbol, d_from, as_of)
+        dates, o, h, lo, c, v = self.finder._parse_bars(hist)
+        last_eod = dates[-1] if dates else None
+        if last_eod is not None and last_eod >= as_of:
+            return dates, o, h, lo, c, v
+        ed, eo, eh, el, ec, ev = [], [], [], [], [], []
+        probe = (datetime.strptime(last_eod, "%Y-%m-%d") if last_eod
+                 else datetime.strptime(as_of, "%Y-%m-%d") - timedelta(days=SURGE_DAYS + 3))
+        end = datetime.strptime(as_of, "%Y-%m-%d")
+        while probe < end:
+            probe += timedelta(days=1)
+            if probe.weekday() >= 5:
+                continue
+            d = probe.strftime("%Y-%m-%d")
+            if last_eod is not None and d <= last_eod:
+                continue
+            bar = self._session_ohlc_from_intraday(symbol, d)
+            if bar:
+                ed.append(d); eo.append(bar["open"]); eh.append(bar["high"])
+                el.append(bar["low"]); ec.append(bar["close"]); ev.append(bar["volume"])
+        if not ed:
+            return dates, o, h, lo, c, v
+        return (list(dates) + ed,
+                np.concatenate([o, eo]), np.concatenate([h, eh]),
+                np.concatenate([lo, el]), np.concatenate([c, ec]),
+                np.concatenate([v, ev]))
+
     def _grade_pending(self, as_of: str) -> Tuple[int, List[Tuple]]:
         """Califica pending/abiertas vencidas, marca 'open' las que ejecutaron y
         siguen en curso, y escribe el POST-MORTEM de cada calificada (¿ejecutó?
@@ -774,8 +865,9 @@ class UltimatePredictorEngine:
             try:
                 d_from = (datetime.strptime(row["for_date"], "%Y-%m-%d")
                           - timedelta(days=60)).strftime("%Y-%m-%d")
-                hist = self.finder._daily_history(row["symbol"], d_from, as_of)
-                dates, o, h, lo, c, v = self.finder._parse_bars(hist)
+                # barras EOD + sesiones recientes sintetizadas desde intradía,
+                # para poder calificar el mismo día que cierra el mercado
+                dates, o, h, lo, c, v = self._series_through(row["symbol"], d_from, as_of)
                 idx = next((i for i, dt in enumerate(dates) if dt >= row["for_date"]), None)
                 if idx is None or idx == 0:
                     continue  # la sesión objetivo aún no tiene barra
@@ -892,7 +984,10 @@ class UltimatePredictorEngine:
         d_to = today.strftime("%Y-%m-%d")
         hist = self.finder._daily_history("SPY", d_from, d_to)
         dates, _o, _h, _l, _c, _v = self.finder._parse_bars(hist)
-        as_of = dates[-1] if dates else d_to
+        eod_as_of = dates[-1] if dates else None
+        # avanza el corte a hoy si la sesión regular ya cerró (vía SPY intradía),
+        # aunque FMP todavía no haya publicado la barra EOD del día
+        as_of = self._advance_as_of(eod_as_of)
         graded, feedback = self._grade_pending(as_of)
         fed = self._upsert_training(feedback, "grade-now")
         with self._db_lock, closing(self._db()) as conn, conn:
@@ -1577,12 +1672,20 @@ class UltimatePredictorEngine:
         if ctx["as_of"] is None:
             ctx["as_of"] = today.strftime("%Y-%m-%d")
             warnings.append("No se pudo leer SPY; la fecha de corte es la de hoy (UTC).")
-        for_date = _next_trading_day(ctx["as_of"])
+        # corte real: avanza a hoy si la sesión ya cerró (SPY intradía), para no
+        # publicar picks de una sesión que ya pasó ni dejar de calificar
+        market_as_of = self._advance_as_of(ctx["as_of"])
+        if market_as_of > ctx["as_of"]:
+            warnings.append(
+                f"La sesión del {market_as_of} ya cerró (leída por intradía; EOD de FMP "
+                f"aún no publicado) — los picks son para la sesión siguiente y ya se "
+                f"calificó lo vencido con datos de 1 minuto.")
+        for_date = _next_trading_day(market_as_of)
 
         progress(4, "Calificando predicciones anteriores (feedback a la red)")
         graded_now, feedback_rows = 0, []
         try:
-            graded_now, feedback_rows = self._grade_pending(ctx["as_of"])
+            graded_now, feedback_rows = self._grade_pending(market_as_of)
         except Exception as e:  # noqa: BLE001
             warnings.append(f"No se pudo calificar el historial previo: {e}")
         track = self.track_record()
@@ -1814,7 +1917,8 @@ class UltimatePredictorEngine:
         }
         meta = {
             "run_id": run_id,
-            "as_of": ctx["as_of"],
+            "as_of": market_as_of,
+            "eod_as_of": ctx["as_of"],
             "for_date": for_date,
             "universe_full": full_universe,
             "surge_days": SURGE_DAYS,
