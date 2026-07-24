@@ -127,8 +127,12 @@ CRASH_PCT_MIN = 25.0       # espejo bajista: −25% del cierre base al low míni
 # ── Mecánica del trade (D+1, barras diarias, conservador) ────────────────────
 MAX_HOLD_DAYS = SURGE_DAYS # salida forzada al cierre del 5º día
 MAX_CHASE_PCT = 5.0        # si abre >5% pasado el nivel de entrada → sin fill
-MIN_RISK_PCT = 1.0         # clamp del riesgo (stop) como % de la entrada
-MAX_RISK_PCT = 12.0
+MIN_RISK_PCT = 1.0         # piso duro del riesgo (%)
+MAX_RISK_PCT = 18.0        # techo del riesgo (%) — nombres explosivos necesitan aire
+# El stop NUNCA debe quedar más ajustado que el ruido diario: un stop dentro del
+# ATR se barre casi siempre (era la causa de la epidemia de −1R). El riesgo
+# mínimo efectivo es max(MIN_RISK_PCT, ATR_STOP_MULT × ATR% diario).
+ATR_STOP_MULT = 1.3
 STOP_BARS_LONG = 5         # stop long = low de las últimas 5 sesiones
 STOP_BARS_SHORT = 2        # stop short = high de las últimas 2 sesiones
 MIN_RR = 1.5               # estructura mínima: (target−entry)/riesgo
@@ -251,17 +255,22 @@ def _px(x: float) -> float:
 
 
 def _plan_levels(side: str, entry: float, raw_stop: float,
-                 exp_move_pct: float) -> Tuple[float, float, float, float]:
-    """(stop, target, risk, rr) — stop clamped a [1%,12%] de la entrada y
-    target = movimiento explosivo esperado (no un múltiplo fijo de R)."""
+                 exp_move_pct: float, atr_pct: float = 0.0
+                 ) -> Tuple[float, float, float, float]:
+    """(stop, target, risk, rr) — el stop respeta la estructura (low/high
+    reciente) PERO nunca queda más ajustado que ATR_STOP_MULT×ATR (para no ser
+    barrido por el ruido); riesgo acotado a [min, MAX_RISK_PCT]. El target es el
+    movimiento explosivo esperado, no un múltiplo fijo de R."""
+    min_risk = max(MIN_RISK_PCT, ATR_STOP_MULT * float(atr_pct or 0.0))
+    min_risk = min(min_risk, MAX_RISK_PCT)
     if side == "long":
-        stop = min(raw_stop, entry * (1 - MIN_RISK_PCT / 100))
-        stop = max(stop, entry * (1 - MAX_RISK_PCT / 100))
+        stop = min(raw_stop, entry * (1 - min_risk / 100))   # al menos min_risk lejos
+        stop = max(stop, entry * (1 - MAX_RISK_PCT / 100))    # pero no más que el techo
         risk = entry - stop
         target = entry * (1 + exp_move_pct / 100)
         rr = (target - entry) / risk if risk > 0 else 0.0
     else:
-        stop = max(raw_stop, entry * (1 + MIN_RISK_PCT / 100))
+        stop = max(raw_stop, entry * (1 + min_risk / 100))
         stop = min(stop, entry * (1 + MAX_RISK_PCT / 100))
         risk = stop - entry
         target = entry * (1 - exp_move_pct / 100)
@@ -546,10 +555,20 @@ class UltimatePredictorEngine:
                     kind TEXT,
                     message TEXT
                 )""")
-            try:
-                conn.execute("ALTER TABLE predictions ADD COLUMN entry_type TEXT DEFAULT 'stop'")
-            except sqlite3.OperationalError:
-                pass
+            # columnas de razonamiento del post-mortem (aditivas, no borran nada)
+            for ddl in ("ALTER TABLE predictions ADD COLUMN entry_type TEXT DEFAULT 'stop'",
+                        "ALTER TABLE post_mortems ADD COLUMN vol_vs_prior_day REAL",
+                        "ALTER TABLE post_mortems ADD COLUMN vol_vs_prior_week REAL",
+                        "ALTER TABLE post_mortems ADD COLUMN high_time_min INTEGER",
+                        "ALTER TABLE post_mortems ADD COLUMN low_time_min INTEGER",
+                        "ALTER TABLE post_mortems ADD COLUMN pm_gap_pct REAL",
+                        "ALTER TABLE post_mortems ADD COLUMN pm_range_pct REAL",
+                        "ALTER TABLE post_mortems ADD COLUMN first30_range_pct REAL",
+                        "ALTER TABLE post_mortems ADD COLUMN pattern TEXT"):
+                try:
+                    conn.execute(ddl)
+                except sqlite3.OperationalError:
+                    pass
             # al cambiar la versión de features, el dataset viejo se descarta
             # (se vuelve a cosechar con la versión nueva en la próxima corrida)
             conn.execute("DELETE FROM training_data WHERE feat_version IS NULL "
@@ -802,6 +821,58 @@ class UltimatePredictorEngine:
             "closed": rows[-1][6] >= 955,  # llegó al final de la sesión (15:55+)
         }
 
+    def _session_stats_intraday(self, symbol: str, day: str) -> Optional[Dict]:
+        """Estadísticas ricas de la sesión desde 1-min: hora del high/low, gap y
+        rango del premarket, y rango de los primeros 30 minutos. Alimenta el
+        razonamiento de los post-mortems (¿a qué hora explota? ¿cómo venía el
+        premarket de los ganadores?). Una sola llamada por símbolo calificado."""
+        data = self.finder._fetch_json(
+            "historical-chart/1min",
+            {"symbol": symbol, "from": day, "to": day, "extended": "true"})
+        if not isinstance(data, list) or not data:
+            return None
+        rth: List[Tuple[int, float, float, float, float, float]] = []
+        pm: List[Tuple[float, float, float, float]] = []  # premarket H, L, C, V
+        for b in data:
+            try:
+                t = str(b["date"]); hhmm = t.split(" ")[1]
+                mm = int(hhmm[:2]) * 60 + int(hhmm[3:5])
+                hi, lowv = float(b["high"]), float(b["low"])
+                vol = float(b.get("volume") or 0)
+                if mm < 570:  # premarket (antes de 9:30)
+                    pm.append((hi, lowv, float(b["close"]), vol))
+                elif mm <= 960:
+                    rth.append((mm, float(b["open"]), hi, lowv, float(b["close"]), vol))
+            except (KeyError, TypeError, ValueError, IndexError):
+                continue
+        if not rth:
+            return None
+        rth.sort(key=lambda x: x[0])
+        session_open = rth[0][1]
+        hi_bar = max(rth, key=lambda x: x[2])
+        lo_bar = min(rth, key=lambda x: x[3])
+        first30 = [r for r in rth if r[0] <= 600]  # 9:30–10:00
+        out: Dict[str, Any] = {
+            "high_time_min": hi_bar[0],
+            "low_time_min": lo_bar[0],
+            "first30_range_pct": (round((max(r[2] for r in first30) - min(r[3] for r in first30))
+                                        / session_open * 100, 2)
+                                  if first30 and session_open > 0 else None),
+            "pm_gap_pct": None, "pm_range_pct": None,
+        }
+        if pm and session_open > 0:
+            pm_high = max(p[0] for p in pm); pm_low = min(p[1] for p in pm)
+            pm_last = pm[-1][2]
+            out["pm_gap_pct"] = round((session_open / pm_last - 1.0) * 100, 2) if pm_last > 0 else None
+            out["pm_range_pct"] = round((pm_high - pm_low) / session_open * 100, 2)
+        return out
+
+    @staticmethod
+    def _hhmm(minutes: Optional[int]) -> Optional[str]:
+        if minutes is None:
+            return None
+        return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
     def _advance_as_of(self, eod_as_of: Optional[str]) -> str:
         """Avanza el corte al último día cuya sesión regular YA cerró, mirando
         SPY intradía, aunque FMP todavía no haya publicado su barra EOD."""
@@ -967,6 +1038,15 @@ class UltimatePredictorEngine:
         va = v[max(0, idx - 20):idx]
         session_vol_ratio = (round(float(v[idx]) / float(np.mean(va)), 2)
                              if va.size >= 5 and float(np.mean(va)) > 0 else None)
+        # ── Preguntas que se hace el motor (razonamiento del post-mortem) ────
+        # ¿el volumen venía subiendo respecto del día / de la semana previa?
+        vol_vs_prior_day = (round(float(v[idx]) / float(v[idx - 1]), 2)
+                            if idx >= 1 and float(v[idx - 1]) > 0 else None)
+        vw = v[max(0, idx - 5):idx]
+        vol_vs_prior_week = (round(float(v[idx]) / float(np.mean(vw)), 2)
+                             if vw.size >= 3 and float(np.mean(vw)) > 0 else None)
+        # ¿a qué hora explotó? ¿cómo venía el premarket? (velas de 1 min)
+        istats = self._session_stats_intraday(row["symbol"], dates[idx]) or {}
         # contrafactual: entrada a mercado en el open, misma distancia de stop/target
         entry_ref = float(row["entry"])
         risk_frac = abs(entry_ref - float(row["stop"])) / entry_ref if entry_ref > 0 else 0.05
@@ -987,7 +1067,9 @@ class UltimatePredictorEngine:
         elif outcome == "no_fill":
             verdict = f"Sin fill y el movimiento nunca vino (máx {mv}%) — el filtro de entrada protegió."
         elif outcome.startswith("win"):
-            verdict = f"Acierto: {round(r or 0, 2)}R (movimiento máx {mv}%, vol sesión {session_vol_ratio}×)."
+            hora = self._hhmm(istats.get("high_time_min" if side == "long" else "low_time_min"))
+            verdict = (f"Acierto: {round(r or 0, 2)}R (movimiento máx {mv}%, vol sesión "
+                       f"{session_vol_ratio}×{f', extremo ~{hora} ET' if hora else ''}).")
         elif "stop" in outcome and abs(gap_pct) >= 3 and ((side == "long") == (gap_pct < 0)):
             verdict = f"Stop con gap en contra de {gap_pct}% en la apertura — riesgo de gap, no de tesis."
         elif outcome.startswith("loss"):
@@ -999,12 +1081,20 @@ class UltimatePredictorEngine:
             conn.execute(
                 "INSERT OR REPLACE INTO post_mortems (pred_id, symbol, for_date, side, "
                 "filled, outcome, r, r_open, move_pct, missed, gap_pct, "
-                "session_vol_ratio, verdict, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "session_vol_ratio, verdict, created_at, vol_vs_prior_day, "
+                "vol_vs_prior_week, high_time_min, low_time_min, pm_gap_pct, "
+                "pm_range_pct, first30_range_pct, pattern) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (row["id"], row["symbol"], row["for_date"], side,
                  int(fill is not None), outcome, r,
                  round(r_open, 3) if r_open is not None else None,
                  round(move_pct, 1), missed, gap_pct, session_vol_ratio, verdict,
-                 datetime.utcnow().strftime("%Y-%m-%d %H:%M")))
+                 datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+                 vol_vs_prior_day, vol_vs_prior_week,
+                 istats.get("high_time_min"), istats.get("low_time_min"),
+                 istats.get("pm_gap_pct"), istats.get("pm_range_pct"),
+                 istats.get("first30_range_pct"),
+                 row["pattern"] if "pattern" in row.keys() else None))
 
     def grade_now(self) -> Dict[str, Any]:
         """Calificación bajo demanda (sin correr una predicción completa):
@@ -1128,6 +1218,56 @@ class UltimatePredictorEngine:
                 "p_lt_75": {"n": len(lo_p), "avg_r": round(float(np.mean(lo_p)), 3)},
             }
 
+        # ── Razonamiento sobre la "previa" (volumen, hora, premarket) ────────
+        def key(r):  # noqa: ANN001 — helper local
+            return "win" if (r["r"] or 0) > 0 else "loss"
+        winners = [r for r in filled if (r["r"] or 0) > 0]
+        losers = [r for r in filled if (r["r"] or 0) <= 0]
+
+        def avg(rows, col):  # noqa: ANN001
+            xs = [r[col] for r in rows if col in r.keys() and r[col] is not None]
+            return round(float(np.mean(xs)), 2) if xs else None
+
+        reasoning: Dict[str, Any] = {}
+        # ¿el volumen venía subiendo vs día/semana previa en los ganadores?
+        if len(winners) >= 3:
+            reasoning["winners_vol_vs_prior_day"] = avg(winners, "vol_vs_prior_day")
+            reasoning["winners_vol_vs_prior_week"] = avg(winners, "vol_vs_prior_week")
+            reasoning["losers_vol_vs_prior_day"] = avg(losers, "vol_vs_prior_day")
+            wd, ld = avg(winners, "vol_vs_prior_day"), avg(losers, "vol_vs_prior_day")
+            if wd is not None and ld is not None and wd > ld * 1.2:
+                self._log_learning("insight", (
+                    f"La previa importa: los ganadores traían {wd}× el volumen del día previo "
+                    f"vs {ld}× los perdedores — el volumen creciente antes del disparo anticipa la explosión."))
+            # ¿a qué hora explotan? (mediana de la hora del extremo favorable)
+            times = [(r["high_time_min"] if r["side"] == "long" else r["low_time_min"])
+                     for r in winners
+                     if (r["high_time_min"] if r["side"] == "long" else r["low_time_min"]) is not None]
+            if len(times) >= 3:
+                med_t = int(np.median(times))
+                reasoning["winners_median_move_time"] = self._hhmm(med_t)
+                bucket = ("primera hora (open drive)" if med_t <= 630 else
+                          "media mañana" if med_t <= 720 else
+                          "mediodía/tarde temprano" if med_t <= 840 else "cierre (power hour)")
+                self._log_learning("insight", (
+                    f"Timing: los movimientos ganadores tienden a marcar su extremo hacia "
+                    f"~{self._hhmm(med_t)} ET ({bucket})."))
+            # premarket de los ganadores
+            pmg = avg(winners, "pm_gap_pct"); pmr = avg(winners, "pm_range_pct")
+            if pmg is not None or pmr is not None:
+                reasoning["winners_pm_gap_pct"] = pmg
+                reasoning["winners_pm_range_pct"] = pmr
+        out["reasoning"] = reasoning
+        # snapshot de las últimas previas (para mostrar el detalle en la UI)
+        out["recent_previews"] = [{
+            "symbol": r["symbol"], "for_date": r["for_date"], "side": r["side"],
+            "outcome": r["outcome"], "r": r["r"],
+            "vol_vs_prior_day": r["vol_vs_prior_day"] if "vol_vs_prior_day" in r.keys() else None,
+            "vol_vs_prior_week": r["vol_vs_prior_week"] if "vol_vs_prior_week" in r.keys() else None,
+            "move_time": self._hhmm((r["high_time_min"] if r["side"] == "long"
+                                     else r["low_time_min"]) if "high_time_min" in r.keys() else None),
+            "pm_gap_pct": r["pm_gap_pct"] if "pm_gap_pct" in r.keys() else None,
+        } for r in pms[:12]]
         return out
 
     # ── Loop autónomo: aprende solo, cada hora, mientras el backend corre ────
@@ -1386,6 +1526,24 @@ class UltimatePredictorEngine:
         exp_up = round(float(np.median(surge_mags)), 1) if len(surge_mags) >= 2 else SURGE_PCT_MIN
         exp_down = round(float(np.median(crash_mags)), 1) if len(crash_mags) >= 2 else CRASH_PCT_MIN
 
+        # ── Pedigrí de surge (alineación con Edge Finder) ────────────────────
+        # El Edge Finder muestra que los +100% dejan huella: nombres con
+        # historial de movimientos GRANDES tienen más chance de repetirlos. Se
+        # premia en el ranking a los que ya explotaron fuerte y seguido, y se
+        # castiga a los de surge chico (lo que el usuario marcó como problema).
+        def pedigree_of(mags: List[float]) -> Tuple[float, float]:
+            mx = float(max(mags)) if mags else 0.0
+            ped = 0.65
+            if len(mags) >= 2:
+                ped += 0.10
+            if len(mags) >= 4:
+                ped += 0.10
+            if mx >= 50:
+                ped += 0.15
+            if mx >= 100:  # movers a escala Edge Finder
+                ped += 0.25
+            return round(min(ped, 1.35), 3), round(mx, 1)
+
         def score_of(weights: Dict[str, float], comps: Dict[str, Tuple[float, str]],
                      side: str) -> Tuple[float, List[Dict]]:
             parts, total = [], 0.0
@@ -1429,7 +1587,7 @@ class UltimatePredictorEngine:
             score, parts = score_of(LONG_W, comps, "long")
             entry = _px(trigger)
             stop, target, risk, rr = _plan_levels(
-                "long", entry, float(np.min(lo[-STOP_BARS_LONG:])), exp_up)
+                "long", entry, float(np.min(lo[-STOP_BARS_LONG:])), exp_up, atr_pct)
             if rr >= MIN_RR:
                 candidates_here.append({
                     "side": "long", "score": score, "score_breakdown": parts,
@@ -1437,6 +1595,8 @@ class UltimatePredictorEngine:
                     "rr": rr, "risk_pct": round(risk / entry * 100, 1),
                     "exp_move_pct": exp_up,
                     "own_surges": len(surge_mags),
+                    "pedigree": pedigree_of(surge_mags)[0],
+                    "own_surge_max": pedigree_of(surge_mags)[1],
                     "status": "breaking" if breaking else "ready",
                 })
 
@@ -1468,7 +1628,7 @@ class UltimatePredictorEngine:
             score, parts = score_of(SHORT_W, comps, "short")
             entry = _px(float(lo[-1]))
             stop, target, risk, rr = _plan_levels(
-                "short", entry, float(np.max(h[-STOP_BARS_SHORT:])), exp_down)
+                "short", entry, float(np.max(h[-STOP_BARS_SHORT:])), exp_down, atr_pct)
             if rr >= MIN_RR:
                 candidates_here.append({
                     "side": "short", "score": score, "score_breakdown": parts,
@@ -1476,6 +1636,8 @@ class UltimatePredictorEngine:
                     "rr": rr, "risk_pct": round(risk / entry * 100, 1),
                     "exp_move_pct": exp_down,
                     "own_surges": len(crash_mags),
+                    "pedigree": pedigree_of(crash_mags)[0],
+                    "own_surge_max": pedigree_of(crash_mags)[1],
                     "status": "ready",
                 })
 
@@ -1524,6 +1686,8 @@ class UltimatePredictorEngine:
         n = len(c)
         side = cand["side"]
         exp_move = float(cand["exp_move_pct"])
+        # ATR% por barra para dimensionar el stop igual que en vivo (sin ruido)
+        tr_all = (h - lo) / np.where(c > 0, c, 1.0) * 100.0
         events = 0
         mode: Dict[str, Dict[str, List]] = {
             "stop": {"rs": [], "days": [], "wins": []},
@@ -1553,9 +1717,10 @@ class UltimatePredictorEngine:
 
             events += 1
             step_days = None
+            atr_i = float(np.mean(tr_all[max(0, i - 13):i + 1]))
             # (a) entrada con orden stop en el disparo
             entry = _px(level)
-            stop, target, _risk, _rr = _plan_levels(side, entry, raw_stop, exp_move)
+            stop, target, _risk, _rr = _plan_levels(side, entry, raw_stop, exp_move, atr_i)
             fill = _try_fill(side, entry, float(o[i + 1]), float(h[i + 1]), float(lo[i + 1]))
             if fill is not None:
                 r, _reason, days, _exit = _sim_trade(side, fill, stop, target, h, lo, c, i + 1)
@@ -1567,7 +1732,7 @@ class UltimatePredictorEngine:
             # (b) entrada a mercado en el open del D+1
             eo = float(o[i + 1])
             if eo > 0:
-                stop_o, target_o, _r2, _rr2 = _plan_levels(side, eo, raw_stop, exp_move)
+                stop_o, target_o, _r2, _rr2 = _plan_levels(side, eo, raw_stop, exp_move, atr_i)
                 r_o, _reason_o, days_o, _exit_o = _sim_trade(side, eo, stop_o, target_o,
                                                              h, lo, c, i + 1)
                 if r_o is not None:
@@ -1799,6 +1964,11 @@ class UltimatePredictorEngine:
                     cand["_rank"] = -1.0
                 else:
                     cand["_rank"] = cand["score"] / 100.0 * bias[cand["side"]]
+        # pedigrí de surge: nombres con historial de movimientos GRANDES suben,
+        # los de surge chico bajan (Edge Finder → prioriza los verdaderos movers)
+        for cand in prelim:
+            if cand.get("_rank", -1) > 0:
+                cand["_rank"] *= float(cand.get("pedigree", 1.0))
         prelim = [x for x in prelim if x.get("_rank", -1) > 0]
         prelim.sort(key=lambda x: x["_rank"], reverse=True)
         pool_cands = prelim[:PRELIM_POOL]
@@ -1850,7 +2020,8 @@ class UltimatePredictorEngine:
                 raw_stop = (float(np.min(lo_arr[-STOP_BARS_LONG:])) if cand["side"] == "long"
                             else float(np.max(h_arr[-STOP_BARS_SHORT:])))
                 stop, target, risk, rr = _plan_levels(cand["side"], ref, raw_stop,
-                                                      float(cand["exp_move_pct"]))
+                                                      float(cand["exp_move_pct"]),
+                                                      float(cand.get("atr_pct") or 0.0))
                 cand.update({"entry": _px(ref), "stop": stop, "target": target,
                              "rr": rr, "risk_pct": round(risk / ref * 100, 1)})
 

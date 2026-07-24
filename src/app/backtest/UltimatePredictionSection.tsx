@@ -55,6 +55,7 @@ interface Pick {
   sector_etf: string | null; sector_ret20_pct: number | null; sector_hot_now: boolean | null;
   entry: number; stop: number; target: number; rr: number; risk_pct: number;
   exp_move_pct: number; own_surges: number;
+  pedigree?: number; own_surge_max?: number;
   surge_prob_pct: number | null; p_up_pct: number | null; p_down_pct: number | null;
   score: number; score_breakdown: ScorePart[];
   validation: Validation;
@@ -71,6 +72,16 @@ interface Insights {
   vol_threshold?: { above_1_5x: { n: number; avg_r: number }; below_1_5x: { n: number; avg_r: number } };
   by_pattern?: Array<{ pattern: string; n: number; avg_r: number }>;
   prob_buckets?: { p_ge_75: { n: number; avg_r: number }; p_lt_75: { n: number; avg_r: number } };
+  reasoning?: {
+    winners_vol_vs_prior_day?: number | null; winners_vol_vs_prior_week?: number | null;
+    losers_vol_vs_prior_day?: number | null; winners_median_move_time?: string | null;
+    winners_pm_gap_pct?: number | null; winners_pm_range_pct?: number | null;
+  };
+  recent_previews?: Array<{
+    symbol: string; for_date: string; side: string; outcome: string | null; r: number | null;
+    vol_vs_prior_day: number | null; vol_vs_prior_week: number | null;
+    move_time: string | null; pm_gap_pct: number | null;
+  }>;
   recent_verdicts: Array<{ symbol: string; for_date: string; side: string; verdict: string }>;
 }
 
@@ -281,6 +292,12 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
         </span>
         <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">{pick.sector}</span>
         <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">{fmtCap(pick.market_cap)}</span>
+        {pick.own_surge_max != null && pick.own_surge_max >= 50 && (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-fuchsia-500/15 border border-fuchsia-500/40 text-fuchsia-300"
+            title={`Historial: ${pick.own_surges} movimientos, máx ${pick.own_surge_max}% — pedigrí ${pick.pedigree}`}>
+            🚀 mover {pick.own_surge_max >= 100 ? '100%+' : `${Math.round(pick.own_surge_max)}%`}
+          </span>
+        )}
         {pick.status === 'breaking' && (
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300">EN CURSO</span>
         )}
@@ -778,6 +795,26 @@ export default function UltimatePredictionSection() {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+          {gradeInfo.insights.reasoning && (gradeInfo.insights.reasoning.winners_vol_vs_prior_day != null || gradeInfo.insights.reasoning.winners_median_move_time != null) && (
+            <div className="mt-4 rounded-xl bg-gray-950/60 border border-violet-500/15 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-violet-300/80 mb-1.5">La previa de los ganadores (razonamiento sobre volumen · hora · premarket)</p>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-300">
+                {gradeInfo.insights.reasoning.winners_vol_vs_prior_day != null && (
+                  <span>Volumen vs día previo: ganadores <b className="text-emerald-400">{gradeInfo.insights.reasoning.winners_vol_vs_prior_day}×</b>
+                    {gradeInfo.insights.reasoning.losers_vol_vs_prior_day != null && <> · perdedores <b className="text-rose-400">{gradeInfo.insights.reasoning.losers_vol_vs_prior_day}×</b></>}</span>
+                )}
+                {gradeInfo.insights.reasoning.winners_vol_vs_prior_week != null && (
+                  <span>Vol vs semana previa (gan.): <b className="text-gray-100">{gradeInfo.insights.reasoning.winners_vol_vs_prior_week}×</b></span>
+                )}
+                {gradeInfo.insights.reasoning.winners_median_move_time && (
+                  <span>Hora típica del extremo: <b className="text-gray-100">{gradeInfo.insights.reasoning.winners_median_move_time} ET</b></span>
+                )}
+                {gradeInfo.insights.reasoning.winners_pm_gap_pct != null && (
+                  <span>Premarket gap medio (gan.): <b className="text-gray-100">{gradeInfo.insights.reasoning.winners_pm_gap_pct}%</b></span>
+                )}
+              </div>
             </div>
           )}
           {(gradeInfo.learning_log?.length ?? 0) > 0 && (
