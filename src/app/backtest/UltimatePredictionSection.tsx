@@ -56,6 +56,7 @@ interface Pick {
   entry: number; stop: number; target: number; rr: number; risk_pct: number;
   exp_move_pct: number; own_surges: number;
   pedigree?: number; own_surge_max?: number;
+  entry_reach_pct?: number | null; entry_reach_atr?: number | null;
   surge_prob_pct: number | null; p_up_pct: number | null; p_down_pct: number | null;
   score: number; score_breakdown: ScorePart[];
   validation: Validation;
@@ -327,7 +328,10 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
         <div><p className="text-[10px] uppercase tracking-wider text-gray-500">
             {pick.entry_type === 'open' ? 'Entrada (al open · adaptativa)' : `Entrada (${long ? 'buy stop' : 'sell stop'})`}
           </p>
-          <p className="font-mono font-bold text-amber-300">${pick.entry}{pick.entry_type === 'open' && <span className="text-[10px] text-gray-500"> ref.</span>}</p></div>
+          <p className="font-mono font-bold text-amber-300">${pick.entry}{pick.entry_type === 'open' && <span className="text-[10px] text-gray-500"> ref.</span>}</p>
+          {pick.entry_type !== 'open' && pick.entry_reach_pct != null && (
+            <p className="text-[9px] text-gray-500">a {pick.entry_reach_pct}% del cierre{pick.entry_reach_atr != null && ` · ${pick.entry_reach_atr}× ATR`} → alcanzable mañana</p>
+          )}</div>
         <div><p className="text-[10px] uppercase tracking-wider text-gray-500">Stop loss</p>
           <p className="font-mono font-bold text-rose-400">${pick.stop} <span className="text-[10px] text-gray-500">(−{pick.risk_pct}%)</span></p></div>
         <div><p className="text-[10px] uppercase tracking-wider text-gray-500">Target ({long ? '+' : '−'}{pick.exp_move_pct}% · {pick.rr}R)</p>

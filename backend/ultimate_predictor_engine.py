@@ -145,7 +145,13 @@ STOP_BARS_SHORT = 2        # stop short = high de las últimas 2 sesiones
 MIN_RR = 1.5               # estructura mínima: (target−entry)/riesgo
 
 # ── Elegibilidad de setups al último cierre ──────────────────────────────────
-LONG_NEAR_TRIGGER_PCT = 8.0    # cierre a ≤8% del high de 10 días
+# La entrada (buy/sell stop) debe ser ALCANZABLE en la próxima sesión: si está a
+# más de ENTRY_ATR_MULT× el ATR diario del cierre, el precio no llega mañana y
+# el trade nunca dispara (era la causa de tantos "sin fill" y de picks cuyo
+# movimiento no era para el día siguiente).
+ENTRY_ATR_MULT = 1.5
+ENTRY_REACH_FLOOR_PCT = 3.0    # piso: siempre se permite al menos 3% de alcance
+LONG_NEAR_TRIGGER_PCT = 8.0    # (legacy) tope duro además del gate por ATR
 LONG_MIN_RET10 = -10.0         # no comprar cuchillos en caída libre
 SHORT_RET10_MIN = 20.0         # sobre-extensión: +20% en 10 días…
 SHORT_CONSEC_GREEN_MIN = 3     # …o 3+ días verdes seguidos
@@ -1568,8 +1574,13 @@ class UltimatePredictorEngine:
 
         candidates_here: List[Dict] = []
 
+        # alcance máximo de la entrada para que dispare en la próxima sesión:
+        # ≤1.5× ATR del cierre (con piso de 3% y techo de 20%)
+        reach_cap = min(20.0, max(ENTRY_REACH_FLOOR_PCT, ENTRY_ATR_MULT * atr_pct))
+
         # LONG: breakout inminente del high de 10 días → surge esperado
-        long_ok = (breaking or prox >= -LONG_NEAR_TRIGGER_PCT) and ret10 > LONG_MIN_RET10
+        long_reach = round((trigger - price) / price * 100.0, 2) if price > 0 else 999.0
+        long_ok = (breaking or long_reach <= reach_cap) and ret10 > LONG_MIN_RET10
         if long_ok and trigger > 0:
             comps = {
                 "trigger": ((1.0, "cerró sobre el high de 10 días — breakout en curso") if breaking
@@ -1604,11 +1615,17 @@ class UltimatePredictorEngine:
                     "own_surges": len(surge_mags),
                     "pedigree": pedigree_of(surge_mags)[0],
                     "own_surge_max": pedigree_of(surge_mags)[1],
+                    "entry_reach_pct": long_reach,
+                    "entry_reach_atr": round(long_reach / atr_pct, 2) if atr_pct > 0 else None,
                     "status": "breaking" if breaking else "ready",
                 })
 
-        # SHORT: sobre-extensión parabólica → desplome esperado
-        short_ok = ret10 >= SHORT_RET10_MIN or consec_green >= SHORT_CONSEC_GREEN_MIN
+        # SHORT: sobre-extensión parabólica → desplome esperado. La entrada
+        # (quiebre del low del último día) también debe ser alcanzable mañana.
+        short_entry_lvl = float(lo[-1])
+        short_reach = round((price - short_entry_lvl) / price * 100.0, 2) if price > 0 else 999.0
+        short_ok = (ret10 >= SHORT_RET10_MIN or consec_green >= SHORT_CONSEC_GREEN_MIN) \
+            and short_reach <= reach_cap
         if short_ok:
             comps = {
                 "overext": (min(1.0, max(0.0, (ret10 - SHORT_RET10_MIN) / 40.0 + 0.5))
@@ -1645,6 +1662,8 @@ class UltimatePredictorEngine:
                     "own_surges": len(crash_mags),
                     "pedigree": pedigree_of(crash_mags)[0],
                     "own_surge_max": pedigree_of(crash_mags)[1],
+                    "entry_reach_pct": short_reach,
+                    "entry_reach_atr": round(short_reach / atr_pct, 2) if atr_pct > 0 else None,
                     "status": "ready",
                 })
 
@@ -1703,20 +1722,27 @@ class UltimatePredictorEngine:
         i = 60
         while i < n - 1:
             setup = False
+            px_i = float(c[i])
+            atr_i = float(np.mean(tr_all[max(0, i - 13):i + 1]))
+            # mismo gate de alcance que en vivo: la entrada debe poder dispararse
+            # en la sesión siguiente (≤1.5× ATR del cierre)
+            reach_cap_i = min(20.0, max(ENTRY_REACH_FLOOR_PCT, ENTRY_ATR_MULT * atr_i))
             if side == "long":
                 trig = float(np.max(h[i - PRE_BARS + 1:i + 1]))
-                if trig > 0 and float(c[i - PRE_BARS + 1]) > 0:
-                    prox = (float(c[i]) - trig) / trig * 100.0
-                    r10 = (float(c[i]) / float(c[i - PRE_BARS + 1]) - 1.0) * 100.0
-                    setup = prox >= -LONG_NEAR_TRIGGER_PCT and r10 > LONG_MIN_RET10
+                if trig > 0 and float(c[i - PRE_BARS + 1]) > 0 and px_i > 0:
+                    reach = (trig - px_i) / px_i * 100.0
+                    r10 = (px_i / float(c[i - PRE_BARS + 1]) - 1.0) * 100.0
+                    setup = reach <= reach_cap_i and r10 > LONG_MIN_RET10
                 level = trig
                 raw_stop = float(np.min(lo[i - STOP_BARS_LONG + 1:i + 1]))
             else:
-                r10 = (float(c[i]) / float(c[i - PRE_BARS + 1]) - 1.0) * 100.0 \
+                r10 = (px_i / float(c[i - PRE_BARS + 1]) - 1.0) * 100.0 \
                     if float(c[i - PRE_BARS + 1]) > 0 else 0.0
                 _red, green = EdgeFinderEngine._consecutive(c[i - PRE_BARS:i + 1])
-                setup = r10 >= SHORT_RET10_MIN or green >= SHORT_CONSEC_GREEN_MIN
                 level = float(lo[i])
+                reach = (px_i - level) / px_i * 100.0 if px_i > 0 else 999.0
+                setup = (r10 >= SHORT_RET10_MIN or green >= SHORT_CONSEC_GREEN_MIN) \
+                    and reach <= reach_cap_i
                 raw_stop = float(np.max(h[i - STOP_BARS_SHORT + 1:i + 1]))
             if not setup or level <= 0:
                 i += 1
@@ -1724,7 +1750,6 @@ class UltimatePredictorEngine:
 
             events += 1
             step_days = None
-            atr_i = float(np.mean(tr_all[max(0, i - 13):i + 1]))
             # (a) entrada con orden stop en el disparo
             entry = _px(level)
             stop, target, _risk, _rr = _plan_levels(side, entry, raw_stop, exp_move, atr_i)
@@ -1835,6 +1860,12 @@ class UltimatePredictorEngine:
                          "el quiebre, así que el plan usa entrada a mercado en la apertura.")
         own = cand.get("own_surges") or 0
         own_txt = f" Este símbolo ya tuvo {own} movimientos así en el último año." if own >= 2 else ""
+        reach = cand.get("entry_reach_pct")
+        reach_txt = ""
+        if cand.get("entry_type") != "open" and reach is not None:
+            reach_txt = (f" La entrada está a {reach}% del cierre (~{cand.get('entry_reach_atr')}× "
+                         f"el ATR diario): alcanzable en la próxima sesión.")
+            own_txt += reach_txt
         top = sorted(cand["score_breakdown"], key=lambda p: p["points"] / max(p["max"], 1e-9),
                      reverse=True)[:2]
         drivers = "; ".join(p["detail"] for p in top)
