@@ -451,11 +451,29 @@ export default function UltimatePredictionSection() {
   const run = useCallback(async () => {
     setError(''); setResult(null); setJob(null); setRunning(true);
     stopPolling();
+    // el backend puede estar ocupado (entrenando la red en su ciclo horario);
+    // se reintenta el arranque unas veces con timeout generoso antes de rendirse
+    const startJob = async (): Promise<string> => {
+      let lastErr: any;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const { job_id } = await postBackend<{ job_id: string }>(
+            '/backtest/ultimate/start', cfg, 30000);
+          return job_id;
+        } catch (e: any) {
+          lastErr = e;
+          await new Promise((r) => setTimeout(r, 2500 * attempt));
+        }
+      }
+      throw lastErr;
+    };
     try {
-      const { job_id } = await postBackend<{ job_id: string }>('/backtest/ultimate/start', cfg);
+      const job_id = await startJob();
+      let pollErrors = 0; // se toleran fallos transitorios de polling
       pollRef.current = setInterval(async () => {
         try {
-          const snap = await getBackend<JobStatus>(`/backtest/ultimate/status/${job_id}`, 20000);
+          const snap = await getBackend<JobStatus>(`/backtest/ultimate/status/${job_id}`, 30000);
+          pollErrors = 0;
           setJob(snap);
           if (snap.status === 'done') {
             stopPolling(); setRunning(false);
@@ -466,14 +484,23 @@ export default function UltimatePredictionSection() {
             stopPolling(); setRunning(false);
             setError(snap.error || 'Error en la predicción');
           }
-        } catch (e: any) {
-          stopPolling(); setRunning(false);
-          setError(e?.message || 'Error consultando el estado del job');
+        } catch {
+          // el backend puede tardar mientras entrena/valida — no abortar por un
+          // fallo puntual; recién se corta tras varios seguidos
+          pollErrors += 1;
+          if (pollErrors >= 6) {
+            stopPolling(); setRunning(false);
+            setError('Se perdió la conexión con el backend mientras corría la predicción. '
+              + 'La corrida puede seguir en el servidor — reabrí la pestaña en un minuto para ver el resultado.');
+          }
         }
-      }, 2000);
+      }, 2500);
     } catch (e: any) {
       setRunning(false);
-      setError(e?.message || 'No se pudo iniciar la predicción');
+      const msg = String(e?.message || '');
+      setError(/abort/i.test(msg)
+        ? 'El backend está ocupado (probablemente entrenando la red neuronal). Esperá unos segundos y volvé a intentar.'
+        : (e?.message || 'No se pudo iniciar la predicción'));
     }
   }, [cfg, stopPolling, gradeNow]);
 

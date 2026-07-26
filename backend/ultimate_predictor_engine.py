@@ -98,6 +98,13 @@ try:
     import torch
     import torch.nn as nn
     TORCH_AVAILABLE = True
+    # El backend web y el entrenamiento comparten proceso: limitar los hilos de
+    # torch evita que el entrenamiento sature la CPU y ahogue al servidor HTTP
+    # (era la causa de los "signal is aborted" intermitentes al arrancar corridas).
+    try:
+        torch.set_num_threads(1)
+    except Exception:  # noqa: BLE001
+        pass
 except Exception:  # noqa: BLE001
     TORCH_AVAILABLE = False
 
