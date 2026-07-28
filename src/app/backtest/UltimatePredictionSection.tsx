@@ -71,6 +71,7 @@ interface Insights {
   n: number;
   fill_rate_pct?: number; missed_move_rate_pct?: number;
   avg_r_filled?: number | null; avg_r_open_counterfactual?: number | null;
+  avg_mfe_r?: number; pct_reached_1r?: number; pct_reached_2r?: number; losers_avg_mfe_r?: number;
   vol_threshold?: { above_1_5x: { n: number; avg_r: number }; below_1_5x: { n: number; avg_r: number } };
   by_pattern?: Array<{ pattern: string; n: number; avg_r: number }>;
   prob_buckets?: { p_ge_75: { n: number; avg_r: number }; p_lt_75: { n: number; avg_r: number } };
@@ -137,7 +138,7 @@ interface TrackRecord {
     target: number; score: number; status: string; outcome: string | null;
     outcome_r: number | null; exit_price: number | null; days_held: number | null;
     pattern?: string | null; surge_prob_pct?: number | null;
-    entry_type?: string | null;
+    entry_type?: string | null; cur_r?: number | null; max_r?: number | null;
   }>;
 }
 
@@ -819,12 +820,17 @@ export default function UltimatePredictionSection() {
                       <td className="pr-3 text-right font-mono">${r.target}</td>
                       <td className="pr-3">
                         {r.status === 'pending' ? <span className="text-yellow-400/80">pendiente</span>
-                          : r.status === 'open' ? <span className="text-cyan-300">en curso</span>
-                          : r.outcome === 'no_fill' ? <span className="text-gray-500">sin fill</span>
+                          : r.status === 'open' ? (
+                            <span className="text-cyan-300">en curso{r.cur_r != null && <> · <b className={r.cur_r > 0 ? 'text-emerald-400' : 'text-rose-400'}>{r.cur_r > 0 ? '+' : ''}{r.cur_r}R</b></>}{r.max_r != null && r.max_r > 0 && <span className="text-gray-500"> (máx +{r.max_r}R)</span>}</span>
+                          )
+                          : r.outcome === 'no_fill' || r.outcome?.startsWith('no_fill') ? <span className="text-gray-500">sin fill</span>
                           : <span className={r.outcome?.startsWith('win') ? 'text-emerald-400' : 'text-rose-400'}>{r.outcome}</span>}
                       </td>
                       <td className={`pr-3 text-right font-mono ${(r.outcome_r ?? 0) > 0 ? 'text-emerald-400' : (r.outcome_r ?? 0) < 0 ? 'text-rose-400' : ''}`}>
-                        {r.outcome_r != null ? r.outcome_r : '–'}
+                        {r.outcome_r != null ? r.outcome_r : (r.status === 'open' && r.cur_r != null ? `${r.cur_r > 0 ? '+' : ''}${r.cur_r}` : '–')}
+                        {r.status === 'graded' && r.max_r != null && r.max_r > (r.outcome_r ?? 0) + 0.3 && (
+                          <span className="text-gray-500 text-[10px]"> (llegó +{r.max_r})</span>
+                        )}
                       </td>
                       <td className="text-right font-mono">{r.days_held ?? '–'}</td>
                     </tr>
@@ -856,6 +862,19 @@ export default function UltimatePredictionSection() {
             <StatCard label="R real vs contrafactual open" value={`${fmt(gradeInfo.insights.avg_r_filled)} / ${fmt(gradeInfo.insights.avg_r_open_counterfactual)}`}
               hint="con esto elige el modo de entrada" />
           </div>
+          {gradeInfo.insights.avg_mfe_r != null && (
+            <div className="mt-3 rounded-xl bg-gray-950/60 border border-amber-500/15 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300/80 mb-1.5">Máxima ganancia alcanzada (MFE) — ¿el target es demasiado ambicioso?</p>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-300">
+                <span>MFE medio: <b className="text-gray-100">+{gradeInfo.insights.avg_mfe_r}R</b></span>
+                <span>Tocaron +1R: <b className="text-gray-100">{gradeInfo.insights.pct_reached_1r}%</b></span>
+                <span>Tocaron +2R: <b className="text-gray-100">{gradeInfo.insights.pct_reached_2r}%</b></span>
+                {gradeInfo.insights.losers_avg_mfe_r != null && (
+                  <span>Perdedores llegaron a: <b className={gradeInfo.insights.losers_avg_mfe_r >= 1 ? 'text-amber-400' : 'text-gray-100'}>+{gradeInfo.insights.losers_avg_mfe_r}R</b> antes de revertir</span>
+                )}
+              </div>
+            </div>
+          )}
           {gradeInfo.insights.vol_threshold && (
             <p className="mt-3 text-xs text-gray-400">
               Umbral de volumen de sesión: ≥1.5× → <b className="text-gray-200">{gradeInfo.insights.vol_threshold.above_1_5x.avg_r}R</b> medio

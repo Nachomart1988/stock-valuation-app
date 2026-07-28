@@ -305,30 +305,38 @@ def _try_fill(side: str, level: float, o: float, h: float, lo: float) -> Optiona
 
 def _sim_trade(side: str, fill: float, stop: float, target: float,
                h: np.ndarray, lo: np.ndarray, c: np.ndarray,
-               start: int) -> Tuple[Optional[float], str, int, float]:
+               start: int) -> Tuple[Optional[float], str, int, float, float, float]:
     """Simula desde la barra de fill (inclusive), conservador (stop primero).
-    r es None si aún faltan barras para resolver (grading en vivo)."""
+    Devuelve (r, motivo, días, precio_salida, mfe_r, cur_r):
+      - r: R realizado; None si el trade aún no cerró (grading en vivo).
+      - mfe_r: máxima excursión FAVORABLE en R hasta ahora (¿cuánto llegó a ganar?).
+      - cur_r: R al último precio disponible (no realizado si sigue en curso).
+    El MFE es clave para aprender si el target es demasiado ambicioso."""
     risk = (fill - stop) if side == "long" else (stop - fill)
     if risk <= 0:
-        return -1.0, "stop_invalid", 0, stop
+        return -1.0, "stop_invalid", 0, stop, 0.0, -1.0
     n = len(c)
     last = min(start + MAX_HOLD_DAYS - 1, n - 1)
+    mfe_r = 0.0
     for j in range(start, last + 1):
+        fav = (float(h[j]) - fill) / risk if side == "long" else (fill - float(lo[j])) / risk
+        if fav > mfe_r:
+            mfe_r = fav
         if side == "long":
             if lo[j] <= stop:
-                return (stop - fill) / risk, "stop", j - start + 1, stop
+                return (stop - fill) / risk, "stop", j - start + 1, stop, round(mfe_r, 2), (stop - fill) / risk
             if h[j] >= target:
-                return (target - fill) / risk, "target", j - start + 1, target
+                return (target - fill) / risk, "target", j - start + 1, target, round(mfe_r, 2), (target - fill) / risk
         else:
             if h[j] >= stop:
-                return (fill - stop) / risk, "stop", j - start + 1, stop
+                return (fill - stop) / risk, "stop", j - start + 1, stop, round(mfe_r, 2), (fill - stop) / risk
             if lo[j] <= target:
-                return (fill - target) / risk, "target", j - start + 1, target
-    if last < start + MAX_HOLD_DAYS - 1:
-        return None, "open", last - start + 1, float(c[last])  # aún en curso
+                return (fill - target) / risk, "target", j - start + 1, target, round(mfe_r, 2), (fill - target) / risk
     exit_px = float(c[last])
-    r = (exit_px - fill) / risk if side == "long" else (fill - exit_px) / risk
-    return r, "time", MAX_HOLD_DAYS, exit_px
+    cur = (exit_px - fill) / risk if side == "long" else (fill - exit_px) / risk
+    if last < start + MAX_HOLD_DAYS - 1:
+        return None, "open", last - start + 1, exit_px, round(mfe_r, 2), round(cur, 2)  # en curso
+    return cur, "time", MAX_HOLD_DAYS, exit_px, round(mfe_r, 2), round(cur, 2)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -570,6 +578,9 @@ class UltimatePredictorEngine:
                 )""")
             # columnas de razonamiento del post-mortem (aditivas, no borran nada)
             for ddl in ("ALTER TABLE predictions ADD COLUMN entry_type TEXT DEFAULT 'stop'",
+                        "ALTER TABLE predictions ADD COLUMN cur_r REAL",
+                        "ALTER TABLE predictions ADD COLUMN max_r REAL",
+                        "ALTER TABLE post_mortems ADD COLUMN mfe_r REAL",
                         "ALTER TABLE post_mortems ADD COLUMN vol_vs_prior_day REAL",
                         "ALTER TABLE post_mortems ADD COLUMN vol_vs_prior_week REAL",
                         "ALTER TABLE post_mortems ADD COLUMN high_time_min INTEGER",
@@ -997,27 +1008,29 @@ class UltimatePredictorEngine:
                 else:
                     fill = _try_fill(side, entry_ref,
                                      float(o[idx]), float(h[idx]), float(lo[idx]))
+                mfe_r = cur_r = None
                 if fill is None:
-                    upd = ("graded", "no_fill", None, None, 0, now, row["id"])
+                    upd = ("graded", "no_fill", None, None, 0, None, None, now, row["id"])
                     graded += 1
                 else:
-                    r, reason, days, exit_px = _sim_trade(
+                    r, reason, days, exit_px, mfe_r, cur_r = _sim_trade(
                         side, fill, stop_lvl, target_lvl, h, lo, c, idx)
                     if r is None:
-                        # ejecutó y sigue en curso — visible como "en curso"
-                        upd = ("open", None, None, _px(exit_px), days, now, row["id"])
+                        # ejecutó y sigue en curso — con R actual y R máximo (MFE)
+                        upd = ("open", None, None, _px(exit_px), days, cur_r, mfe_r, now, row["id"])
                     else:
                         outcome = "win" if r > 0 else ("loss" if r < 0 else "flat")
                         upd = ("graded", f"{outcome}:{reason}", round(r, 3),
-                               _px(exit_px), days, now, row["id"])
+                               _px(exit_px), days, round(r, 3), mfe_r, now, row["id"])
                         graded += 1
                 with self._db_lock, closing(self._db()) as conn, conn:
                     conn.execute(
                         "UPDATE predictions SET status=?, outcome=?, outcome_r=?, "
-                        "exit_price=?, days_held=?, evaluated_at=? WHERE id=?", upd)
+                        "exit_price=?, days_held=?, cur_r=?, max_r=?, evaluated_at=? "
+                        "WHERE id=?", upd)
                 if upd[0] == "graded":
                     self._write_post_mortem(row, dates, o, h, lo, c, v, idx,
-                                            fill, upd[1], upd[2])
+                                            fill, upd[1], upd[2], mfe_r)
                     # feedback: etiqueta verdadera anclada al día previo
                     feats = row["features"] if "features" in row.keys() else None
                     lab = _labels_at(c, h, lo, idx - 1)
@@ -1033,7 +1046,8 @@ class UltimatePredictorEngine:
     def _write_post_mortem(self, row: sqlite3.Row, dates: List[str], o: np.ndarray,
                            h: np.ndarray, lo: np.ndarray, c: np.ndarray,
                            v: np.ndarray, idx: int, fill: Optional[float],
-                           outcome: str, r: Optional[float]) -> None:
+                           outcome: str, r: Optional[float],
+                           mfe_r: Optional[float] = None) -> None:
         side = row["side"]
         prev_close = float(c[idx - 1])
         end = min(idx + SURGE_DAYS, len(c))
@@ -1066,11 +1080,11 @@ class UltimatePredictorEngine:
         tgt_frac = abs(float(row["target"]) - entry_ref) / entry_ref if entry_ref > 0 else 0.3
         eo = float(o[idx])
         if side == "long":
-            r_open, _, _, _ = _sim_trade("long", eo, eo * (1 - risk_frac),
-                                         eo * (1 + tgt_frac), h, lo, c, idx)
+            r_open, _, _, _, _, _ = _sim_trade("long", eo, eo * (1 - risk_frac),
+                                               eo * (1 + tgt_frac), h, lo, c, idx)
         else:
-            r_open, _, _, _ = _sim_trade("short", eo, eo * (1 + risk_frac),
-                                         eo * (1 - tgt_frac), h, lo, c, idx)
+            r_open, _, _, _, _, _ = _sim_trade("short", eo, eo * (1 + risk_frac),
+                                               eo * (1 - tgt_frac), h, lo, c, idx)
         # veredicto en español (esto es lo que "se pregunta" el motor)
         mv = round(move_pct, 1)
         if outcome == "no_fill" and missed:
@@ -1086,18 +1100,25 @@ class UltimatePredictorEngine:
         elif "stop" in outcome and abs(gap_pct) >= 3 and ((side == "long") == (gap_pct < 0)):
             verdict = f"Stop con gap en contra de {gap_pct}% en la apertura — riesgo de gap, no de tesis."
         elif outcome.startswith("loss"):
+            # ¿el trade llegó a ganar antes de revertir? (MFE) — clave para el target
+            mfe_txt = ""
+            if mfe_r is not None and mfe_r >= 1.0:
+                mfe_txt = (f" Llegó a +{mfe_r}R antes de revertir al stop — el target de "
+                           f"+{round(exp_move, 1)}% fue demasiado ambicioso; un exit parcial "
+                           f"en +{mfe_r}R habría capturado ganancia.")
             verdict = (f"Fallo: {round(r or 0, 2)}R. Movimiento máx {mv}% vs esperado {round(exp_move, 1)}% "
-                       f"— {'la explosión no llegó' if move_pct < exp_move * 0.5 else 'llegó tarde o se revirtió'}.")
+                       f"— {'la explosión no llegó' if move_pct < exp_move * 0.5 else 'llegó tarde o se revirtió'}."
+                       f"{mfe_txt}")
         else:
-            verdict = f"Salida por tiempo: {round(r or 0, 2)}R (movimiento máx {mv}%)."
+            verdict = f"Salida por tiempo: {round(r or 0, 2)}R (movimiento máx {mv}%, máx favorable +{mfe_r}R)."
         with self._db_lock, closing(self._db()) as conn, conn:
             conn.execute(
                 "INSERT OR REPLACE INTO post_mortems (pred_id, symbol, for_date, side, "
                 "filled, outcome, r, r_open, move_pct, missed, gap_pct, "
                 "session_vol_ratio, verdict, created_at, vol_vs_prior_day, "
                 "vol_vs_prior_week, high_time_min, low_time_min, pm_gap_pct, "
-                "pm_range_pct, first30_range_pct, pattern) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "pm_range_pct, first30_range_pct, pattern, mfe_r) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (row["id"], row["symbol"], row["for_date"], side,
                  int(fill is not None), outcome, r,
                  round(r_open, 3) if r_open is not None else None,
@@ -1107,7 +1128,7 @@ class UltimatePredictorEngine:
                  istats.get("high_time_min"), istats.get("low_time_min"),
                  istats.get("pm_gap_pct"), istats.get("pm_range_pct"),
                  istats.get("first30_range_pct"),
-                 row["pattern"] if "pattern" in row.keys() else None))
+                 row["pattern"] if "pattern" in row.keys() else None, mfe_r))
 
     def grade_now(self) -> Dict[str, Any]:
         """Calificación bajo demanda (sin correr una predicción completa):
@@ -1174,6 +1195,25 @@ class UltimatePredictorEngine:
         out["missed_move_rate_pct"] = round(100.0 * len(missed) / n, 1)
         out["avg_r_filled"] = round(float(np.mean(rs)), 3) if rs else None
         out["avg_r_open_counterfactual"] = round(float(np.mean(r_opens)), 3) if r_opens else None
+
+        # ── MFE: ¿cuánto llegaron a ganar antes de cerrar? (aprender el exit) ──
+        # Si los perdedores llegaron a +Nr de máximo, el target es demasiado
+        # ambicioso y convendría tomar ganancia parcial / mover el stop.
+        mfes = [r["mfe_r"] for r in filled if "mfe_r" in r.keys() and r["mfe_r"] is not None]
+        losers_mfe = [r["mfe_r"] for r in filled
+                      if "mfe_r" in r.keys() and r["mfe_r"] is not None and (r["r"] or 0) <= 0]
+        if mfes:
+            out["avg_mfe_r"] = round(float(np.mean(mfes)), 2)
+            out["pct_reached_1r"] = round(100.0 * sum(1 for x in mfes if x >= 1.0) / len(mfes), 1)
+            out["pct_reached_2r"] = round(100.0 * sum(1 for x in mfes if x >= 2.0) / len(mfes), 1)
+        if len(losers_mfe) >= 5:
+            avg_lm = float(np.mean(losers_mfe))
+            out["losers_avg_mfe_r"] = round(avg_lm, 2)
+            if avg_lm >= 1.0:
+                self._log_learning("insight", (
+                    f"Exit: los trades perdedores llegaron a +{round(avg_lm, 1)}R de máximo antes "
+                    f"de revertir — el target explosivo es demasiado ambicioso; tomar ganancia "
+                    f"parcial en +1/+2R o mover el stop a breakeven mejoraría el resultado."))
 
         if n >= 5:
             if out["missed_move_rate_pct"] >= 40:
@@ -1416,7 +1456,7 @@ class UltimatePredictorEngine:
             recent = conn.execute(
                 "SELECT for_date, symbol, side, entry, stop, target, score, status, "
                 "outcome, outcome_r, exit_price, days_held, pattern, surge_prob_pct, "
-                "entry_type FROM predictions ORDER BY id DESC LIMIT 60").fetchall()
+                "entry_type, cur_r, max_r FROM predictions ORDER BY id DESC LIMIT 60").fetchall()
 
         def _stats(subset: List[sqlite3.Row]) -> Dict[str, Any]:
             fills = [r for r in subset if r["outcome"] != "no_fill"]
@@ -1848,7 +1888,7 @@ class UltimatePredictorEngine:
             stop, target, _risk, _rr = _plan_levels(side, entry, raw_stop, exp_move, atr_i)
             fill = _try_fill(side, entry, float(o[i + 1]), float(h[i + 1]), float(lo[i + 1]))
             if fill is not None:
-                r, _reason, days, _exit = _sim_trade(side, fill, stop, target, h, lo, c, i + 1)
+                r, _reason, days, _exit, _mfe, _cur = _sim_trade(side, fill, stop, target, h, lo, c, i + 1)
                 if r is not None:
                     mode["stop"]["rs"].append(min(max(r, -3.0), 12.0))
                     mode["stop"]["days"].append(days)
@@ -1858,8 +1898,8 @@ class UltimatePredictorEngine:
             eo = float(o[i + 1])
             if eo > 0:
                 stop_o, target_o, _r2, _rr2 = _plan_levels(side, eo, raw_stop, exp_move, atr_i)
-                r_o, _reason_o, days_o, _exit_o = _sim_trade(side, eo, stop_o, target_o,
-                                                             h, lo, c, i + 1)
+                r_o, _reason_o, days_o, _exit_o, _mfe_o, _cur_o = _sim_trade(
+                    side, eo, stop_o, target_o, h, lo, c, i + 1)
                 if r_o is not None:
                     mode["open"]["rs"].append(min(max(r_o, -3.0), 12.0))
                     mode["open"]["days"].append(days_o)
