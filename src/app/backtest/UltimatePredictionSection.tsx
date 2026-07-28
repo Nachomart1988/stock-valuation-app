@@ -57,6 +57,7 @@ interface Pick {
   exp_move_pct: number; own_surges: number;
   pedigree?: number; own_surge_max?: number;
   entry_reach_pct?: number | null; entry_reach_atr?: number | null;
+  learned_factor?: number; learned_notes?: string[];
   surge_prob_pct: number | null; p_up_pct: number | null; p_down_pct: number | null;
   score: number; score_breakdown: ScorePart[];
   validation: Validation;
@@ -87,6 +88,16 @@ interface Insights {
 }
 
 interface LearningEntry { created_at: string; kind: string; message: string }
+
+interface LearnedPriors {
+  active: boolean;
+  n_filled: number;
+  baseline_r: number | null;
+  patterns: Record<string, { factor: number; n: number; avg_r: number }>;
+  relvol: { threshold: number; hi_factor: number; lo_factor: number; hi_n: number; lo_n: number; hi_avg_r: number; lo_avg_r: number } | null;
+  prob: { hi_factor: number; lo_factor: number; hi_n: number; lo_n: number; hi_avg_r: number; lo_avg_r: number } | null;
+  notes: string[];
+}
 
 interface Rejected {
   symbol: string; side: string; score: number; stage: string; reason: string;
@@ -133,7 +144,7 @@ interface TrackRecord {
 interface GradeResponse {
   as_of: string; graded_now: number; feedback_rows: number;
   pending_future: number; track_record: TrackRecord;
-  insights?: Insights; learning_log?: LearningEntry[];
+  insights?: Insights; learning_log?: LearningEntry[]; learned?: LearnedPriors;
 }
 
 interface UltimateResult {
@@ -150,6 +161,7 @@ interface UltimateResult {
     cold_sectors: Array<{ etf: string; ret20_pct: number }>;
   };
   model: ModelInfo;
+  learned?: LearnedPriors;
   picks: Pick[];
   rejected: Rejected[];
   track_record: TrackRecord;
@@ -398,6 +410,12 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
             {pick.p_up_pct != null && <span>P(↑surge)/P(↓crash): <b className="text-gray-300">{pick.p_up_pct}% / {pick.p_down_pct}%</b></span>}
             <span>Score heurístico: <b className="text-gray-300">{pick.score}</b></span>
           </div>
+          {pick.learned_factor != null && pick.learned_notes && pick.learned_notes.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-gray-800">
+              <span className="text-[11px] text-teal-300/90">🎯 Ajuste aprendido al ranking: <b className={pick.learned_factor > 1.02 ? 'text-emerald-400' : pick.learned_factor < 0.98 ? 'text-rose-400' : 'text-gray-300'}>×{pick.learned_factor}</b></span>
+              <span className="text-[11px] text-gray-500"> — {pick.learned_notes.join(' · ')}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -629,6 +647,42 @@ export default function UltimatePredictionSection() {
               </p>
             )}
           </div>
+
+          {/* Ajustes aprendidos aplicados al ranking (loop aprendizaje→decisión) */}
+          {result.learned && (
+            <div className="rounded-2xl border border-teal-500/25 bg-gray-900/40 p-5">
+              <div className="flex flex-wrap items-center gap-3 mb-1">
+                <h3 className="text-sm font-bold text-teal-300">🎯 Ajustes aprendidos aplicados al ranking</h3>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${result.learned.active ? 'bg-teal-500/15 border-teal-500/40 text-teal-300' : 'bg-gray-500/15 border-gray-500/30 text-gray-400'}`}>
+                  {result.learned.active ? `activo · ${result.learned.n_filled} trades` : 'en espera'}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 mb-3">el track record calificado reordena las oportunidades nuevas: patrones que pagaron suben, los que no bajan (todo acotado y con shrinkage)</p>
+              {!result.learned.active ? (
+                <p className="text-xs text-gray-500">{result.learned.notes[0]}</p>
+              ) : (
+                <div className="space-y-2">
+                  {Object.keys(result.learned.patterns).length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(result.learned.patterns).sort((a, b) => b[1].factor - a[1].factor).map(([pat, p]) => (
+                        <span key={pat} className={`text-[11px] px-2.5 py-1 rounded-lg border ${p.factor > 1.02 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : p.factor < 0.98 ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-gray-700 bg-gray-800/50 text-gray-400'}`}>
+                          {pat.split(' ')[0]} ×{p.factor} <span className="text-gray-500">({p.avg_r}R · {p.n})</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-400">
+                    {result.learned.relvol && (
+                      <span>Volumen ≥1.5×: <b className={result.learned.relvol.hi_factor > 1 ? 'text-emerald-400' : 'text-rose-400'}>×{result.learned.relvol.hi_factor}</b> ({result.learned.relvol.hi_avg_r}R) · &lt;1.5×: <b>×{result.learned.relvol.lo_factor}</b></span>
+                    )}
+                    {result.learned.prob && (
+                      <span>P(explosión) ≥75%: <b className={result.learned.prob.hi_factor > 1 ? 'text-emerald-400' : 'text-rose-400'}>×{result.learned.prob.hi_factor}</b> ({result.learned.prob.hi_avg_r}R) · &lt;75%: <b>×{result.learned.prob.lo_factor}</b></span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

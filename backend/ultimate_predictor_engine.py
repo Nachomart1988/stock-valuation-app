@@ -1283,6 +1283,99 @@ class UltimatePredictorEngine:
         } for r in pms[:12]]
         return out
 
+    # ── Ajustes APRENDIDOS: convierten el track record en factores de ranking ─
+    # Cierra el loop que faltaba: lo que el motor aprende (qué patrón paga, si el
+    # volumen relativo discrimina, si la P(explosión) está calibrada) SE USA para
+    # reordenar las oportunidades nuevas. Todo con shrinkage por tamaño de muestra
+    # y acotado a [0.75, 1.30] para que el ruido de pocas muestras no domine.
+    LEARN_MIN_FILLED = 12      # mínimo de trades calificados para activar el layer
+    LEARN_MIN_BUCKET = 4       # mínimo por bucket (patrón / régimen de volumen)
+    LEARN_BOUND = (0.75, 1.30)
+
+    def _learned_priors(self) -> Dict[str, Any]:
+        with self._db_lock, closing(self._db()) as conn, conn:
+            rows = conn.execute(
+                "SELECT pm.r AS r, pm.filled AS filled, p.pattern AS pattern, "
+                "p.vol_ratio AS vol_ratio, p.surge_prob_pct AS prob "
+                "FROM post_mortems pm JOIN predictions p ON p.id = pm.pred_id "
+                "WHERE pm.filled = 1 AND pm.r IS NOT NULL "
+                "ORDER BY pm.for_date DESC LIMIT 500").fetchall()
+        priors: Dict[str, Any] = {"active": False, "n_filled": len(rows),
+                                  "baseline_r": None, "patterns": {},
+                                  "relvol": None, "prob": None, "notes": []}
+        if len(rows) < self.LEARN_MIN_FILLED:
+            priors["notes"].append(
+                f"Layer en espera: {len(rows)}/{self.LEARN_MIN_FILLED} trades calificados "
+                f"— hacen falta más resultados reales para ajustar el ranking.")
+            return priors
+        priors["active"] = True
+        lo_b, hi_b = self.LEARN_BOUND
+        base = float(np.mean([r["r"] for r in rows]))
+        priors["baseline_r"] = round(base, 3)
+
+        def factor(rs: List[float], scale: float = 0.30) -> float:
+            k = len(rs) / (len(rs) + 6.0)                 # shrinkage por muestra
+            adv = float(np.mean(rs)) - base
+            return float(np.clip(1.0 + adv * scale * k, lo_b, hi_b))
+
+        # 1) ¿qué PATRÓN previo realmente paga? (coil / momentum / pullback…)
+        by_pat: Dict[str, List[float]] = {}
+        for r in rows:
+            if r["pattern"]:
+                by_pat.setdefault(r["pattern"], []).append(r["r"])
+        for pat, rs in by_pat.items():
+            if len(rs) >= self.LEARN_MIN_BUCKET:
+                priors["patterns"][pat] = {
+                    "factor": round(factor(rs), 3), "n": len(rs),
+                    "avg_r": round(float(np.mean(rs)), 3)}
+
+        # 2) ¿el VOLUMEN relativo (vs 20d) al seleccionar discrimina ganadores?
+        hi = [r["r"] for r in rows if (r["vol_ratio"] or 0) >= 1.5]
+        low = [r["r"] for r in rows if 0 < (r["vol_ratio"] or 0) < 1.5]
+        if len(hi) >= self.LEARN_MIN_BUCKET and len(low) >= self.LEARN_MIN_BUCKET:
+            priors["relvol"] = {
+                "threshold": 1.5,
+                "hi_factor": round(factor(hi), 3), "hi_n": len(hi),
+                "lo_factor": round(factor(low), 3), "lo_n": len(low),
+                "hi_avg_r": round(float(np.mean(hi)), 3),
+                "lo_avg_r": round(float(np.mean(low)), 3)}
+
+        # 3) ¿la P(explosión) de la red está CALIBRADA? (¿los ≥75% rinden más?)
+        hp = [r["r"] for r in rows if (r["prob"] or 0) >= 75]
+        lp = [r["r"] for r in rows if 0 < (r["prob"] or 0) < 75]
+        if len(hp) >= self.LEARN_MIN_BUCKET and len(lp) >= self.LEARN_MIN_BUCKET:
+            priors["prob"] = {
+                "hi_factor": round(factor(hp), 3), "hi_n": len(hp),
+                "lo_factor": round(factor(lp), 3), "lo_n": len(lp),
+                "hi_avg_r": round(float(np.mean(hp)), 3),
+                "lo_avg_r": round(float(np.mean(lp)), 3)}
+        return priors
+
+    def _apply_priors(self, cand: Dict, priors: Dict[str, Any]) -> Tuple[float, List[str]]:
+        """Factor multiplicativo total para el ranking de un candidato + detalle."""
+        if not priors.get("active"):
+            return 1.0, []
+        f = 1.0
+        notes: List[str] = []
+        pat = priors["patterns"].get(cand.get("pattern"))
+        if pat:
+            f *= pat["factor"]
+            notes.append(f"patrón «{cand.get('pattern')}» ×{pat['factor']} "
+                         f"({pat['avg_r']}R en {pat['n']} trades)")
+        rv = priors.get("relvol")
+        if rv and cand.get("vol_ratio") is not None:
+            hi = float(cand["vol_ratio"]) >= rv["threshold"]
+            fac = rv["hi_factor"] if hi else rv["lo_factor"]
+            f *= fac
+            notes.append(f"volumen {'≥' if hi else '<'}1.5× ×{fac}")
+        pb = priors.get("prob")
+        if pb and cand.get("surge_prob_pct") is not None:
+            hi = float(cand["surge_prob_pct"]) >= 75
+            fac = pb["hi_factor"] if hi else pb["lo_factor"]
+            f *= fac
+            notes.append(f"P(explosión) {'≥' if hi else '<'}75% ×{fac}")
+        return round(f, 3), notes
+
     # ── Loop autónomo: aprende solo, cada hora, mientras el backend corre ────
     def auto_learn(self) -> Dict[str, Any]:
         """Grade + post-mortems + insights + retrain si hay feedback nuevo.
@@ -2007,8 +2100,25 @@ class UltimatePredictorEngine:
         for cand in prelim:
             if cand.get("_rank", -1) > 0:
                 cand["_rank"] *= float(cand.get("pedigree", 1.0))
+        # AJUSTES APRENDIDOS: lo que el track record enseñó (qué patrón paga, si
+        # el volumen relativo discrimina, si la P está calibrada) reordena AHORA
+        # las oportunidades nuevas — cierra el loop aprendizaje→decisión.
+        priors = self._learned_priors()
+        for cand in prelim:
+            if cand.get("_rank", -1) > 0:
+                lf, notes = self._apply_priors(cand, priors)
+                cand["learned_factor"] = lf
+                cand["learned_notes"] = notes
+                cand["_rank"] *= lf
         prelim = [x for x in prelim if x.get("_rank", -1) > 0]
         prelim.sort(key=lambda x: x["_rank"], reverse=True)
+        if priors.get("active"):
+            npat = len(priors.get("patterns") or {})
+            warnings.append(
+                f"Ajustes aprendidos aplicados al ranking: {npat} patrones calibrados"
+                f"{', volumen' if priors.get('relvol') else ''}"
+                f"{', P(explosión)' if priors.get('prob') else ''} "
+                f"(sobre {priors['n_filled']} trades calificados).")
         pool_cands = prelim[:PRELIM_POOL]
         n_long = sum(1 for x in prelim if x["side"] == "long")
         n_short = len(prelim) - n_long
@@ -2169,9 +2279,20 @@ class UltimatePredictorEngine:
             "runtime_s": round(time.time() - t0, 1),
             "warnings": warnings,
         }
+        # diario: qué enseñó el track record y cómo movió el ranking
+        if priors.get("active") and priors.get("patterns"):
+            ranked_pats = sorted(priors["patterns"].items(),
+                                 key=lambda kv: kv[1]["factor"], reverse=True)
+            best_p = ranked_pats[0]
+            if abs(best_p[1]["factor"] - 1.0) >= 0.05:
+                self._log_learning("apply", (
+                    f"Ajuste aprendido aplicado: patrón «{best_p[0]}» ×{best_p[1]['factor']} "
+                    f"en el ranking ({best_p[1]['avg_r']}R realizado en {best_p[1]['n']} trades)."))
+
         progress(100, "Listo")
         return {"kpis": kpis, "market": ctx, "model": model, "picks": picks,
-                "rejected": rejected[:20], "track_record": track, "meta": meta}
+                "rejected": rejected[:20], "track_record": track,
+                "learned": priors, "meta": meta}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2228,6 +2349,7 @@ def get_history() -> Dict[str, Any]:
             "SELECT * FROM runs ORDER BY created_at DESC LIMIT 12").fetchall()
     return {"track_record": track, "runs": [dict(r) for r in runs],
             "model": engine.model_info(), "insights": engine.insights(),
+            "learned": engine._learned_priors(),
             "learning_log": engine.learning_log()}
 
 
