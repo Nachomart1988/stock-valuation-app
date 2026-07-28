@@ -480,6 +480,10 @@ class UltimatePredictorEngine:
         self.version = "2.0"
         # comparte sesión FMP + caché de históricos con el Edge Finder
         self.finder: EdgeFinderEngine = get_edge_finder_engine()
+        # caché de sesiones intradía ya cerradas (símbolo:día → OHLCV): evita
+        # re-bajar 2000+ tickers en corridas repetidas del mismo día
+        self._intra_cache: Dict[str, Optional[Dict]] = {}
+        self._intra_lock = threading.Lock()
         self._db_lock = threading.Lock()
         self._init_db()
         self._model = None
@@ -815,6 +819,10 @@ class UltimatePredictorEngine:
     # sintetiza la barra diaria de la sesión a partir de las velas de 1 minuto
     # (sesión regular 9:30–16:00 ET), que sí están disponibles enseguida.
     def _session_ohlc_from_intraday(self, symbol: str, day: str) -> Optional[Dict]:
+        ckey = f"{symbol}:{day}"
+        with self._intra_lock:
+            if ckey in self._intra_cache:
+                return self._intra_cache[ckey]
         data = self.finder._fetch_json(
             "historical-chart/1min",
             {"symbol": symbol, "from": day, "to": day, "extended": "true"})
@@ -835,7 +843,7 @@ class UltimatePredictorEngine:
         if not rows:
             return None
         rows.sort(key=lambda x: x[0])
-        return {
+        out = {
             "date": day,
             "open": rows[0][1],
             "high": max(r[2] for r in rows),
@@ -844,6 +852,10 @@ class UltimatePredictorEngine:
             "volume": sum(r[5] for r in rows),
             "closed": rows[-1][6] >= 955,  # llegó al final de la sesión (15:55+)
         }
+        if out["closed"]:  # sesión cerrada = dato final → cacheable
+            with self._intra_lock:
+                self._intra_cache[ckey] = out
+        return out
 
     def _session_stats_intraday(self, symbol: str, day: str) -> Optional[Dict]:
         """Estadísticas ricas de la sesión desde 1-min: hora del high/low, gap y
@@ -1554,10 +1566,12 @@ class UltimatePredictorEngine:
                      ) -> Tuple[Optional[Dict], List[Tuple], List[float]]:
         """Devuelve (candidato|None, filas_entrenamiento, magnitudes_surge)."""
         symbol = meta["symbol"]
-        hist = self.finder._daily_history(symbol, cfg["_hist_from"], cfg["_hist_to"])
-        if len(hist) < MIN_BARS:
-            return None, [], []
-        dates, o, h, lo, c, v = self.finder._parse_bars(hist)
+        # barras EOD + la sesión de HOY sintetizada desde intradía si el mercado
+        # ya cerró pero FMP todavía no publicó su barra diaria — así, después del
+        # cierre, el análisis refleja el cierre de hoy y NO da lo mismo que a la
+        # mañana (los picks salen basados en la sesión que acaba de cerrar).
+        dates, o, h, lo, c, v = self._series_through(
+            symbol, cfg["_hist_from"], cfg["_market_as_of"])
         n = len(dates)
         if n < MIN_BARS:
             return None, [], []
@@ -2043,11 +2057,13 @@ class UltimatePredictorEngine:
         # corte real: avanza a hoy si la sesión ya cerró (SPY intradía), para no
         # publicar picks de una sesión que ya pasó ni dejar de calificar
         market_as_of = self._advance_as_of(ctx["as_of"])
+        cfg["_market_as_of"] = market_as_of   # el escaneo usa este corte (incluye hoy)
         if market_as_of > ctx["as_of"]:
             warnings.append(
-                f"La sesión del {market_as_of} ya cerró (leída por intradía; EOD de FMP "
-                f"aún no publicado) — los picks son para la sesión siguiente y ya se "
-                f"calificó lo vencido con datos de 1 minuto.")
+                f"La sesión del {market_as_of} ya cerró — el análisis usa el cierre de HOY "
+                f"(sintetizado desde velas de 1 minuto, porque FMP aún no publicó la barra "
+                f"diaria); por eso los picks difieren de los de esta mañana y son para la "
+                f"próxima sesión. Esto hace la corrida más lenta (baja intradía del universo).")
         for_date = _next_trading_day(market_as_of)
 
         progress(4, "Calificando predicciones anteriores (feedback a la red)")
