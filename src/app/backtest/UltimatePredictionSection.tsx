@@ -4,8 +4,8 @@
  * Ultimate Prediction v2 — sección de /backtest (GOD MODE).
  *
  * El usuario elige SOLO precio + market cap. El motor busca MOVIMIENTOS
- * EXPLOSIVOS (surges +30% / desplomes −25% en ≤5 días, definición Edge
- * Finder): una red neuronal PyTorch —que se re-entrena en cada corrida con el
+ * EXPLOSIVOS (surges de +80% y superiores / desplomes −50% en ≤5 días, escala
+ * Edge Finder): una red neuronal PyTorch —que se re-entrena en cada corrida con el
  * dataset local acumulado y con el resultado real de sus propias predicciones—
  * asigna P(explosión) a cada setup; cada candidato se VALIDA con un backtest
  * propio sobre su historia y los longs chicos pasan el veto de dilución EDGAR.
@@ -79,6 +79,16 @@ interface Insights {
     winners_vol_vs_prior_day?: number | null; winners_vol_vs_prior_week?: number | null;
     losers_vol_vs_prior_day?: number | null; winners_median_move_time?: string | null;
     winners_pm_gap_pct?: number | null; winners_pm_range_pct?: number | null;
+    winners_first5_fav_pct?: number | null; losers_first5_fav_pct?: number | null;
+    winners_first5_relvol?: number | null; losers_first5_relvol?: number | null;
+  };
+  market_context?: {
+    long_spy_green: { n: number; avg_r: number };
+    long_spy_red: { n: number; avg_r: number };
+  };
+  sector_context?: {
+    with_sector: { n: number; avg_r: number };
+    against_sector: { n: number; avg_r: number };
   };
   recent_previews?: Array<{
     symbol: string; for_date: string; side: string; outcome: string | null; r: number | null;
@@ -93,10 +103,12 @@ interface LearningEntry { created_at: string; kind: string; message: string }
 interface LearnedPriors {
   active: boolean;
   n_filled: number;
+  n_graded?: number;
   baseline_r: number | null;
   patterns: Record<string, { factor: number; n: number; avg_r: number }>;
   relvol: { threshold: number; hi_factor: number; lo_factor: number; hi_n: number; lo_n: number; hi_avg_r: number; lo_avg_r: number } | null;
   prob: { hi_factor: number; lo_factor: number; hi_n: number; lo_n: number; hi_avg_r: number; lo_avg_r: number } | null;
+  vetoes?: Array<{ key: string; side: string; pattern: string; n: number; fills: number; avg_r: number; r_per_pick: number }>;
   notes: string[];
 }
 
@@ -151,7 +163,8 @@ interface GradeResponse {
 interface UltimateResult {
   kpis: {
     universe: number; setups_long: number; setups_short: number; validated: number;
-    rejected_backtest: number; rejected_dilution: number; graded_this_run: number;
+    rejected_backtest: number; rejected_dilution: number; rejected_learned?: number;
+    graded_this_run: number;
     dataset_rows: number; avg_expectancy_r: number | null;
     avg_surge_prob_pct: number | null;
   };
@@ -570,9 +583,10 @@ export default function UltimatePredictionSection() {
             {running ? 'Buscando el Top 5…' : '🏆 Buscar Top 5 para la próxima sesión'}
           </button>
           <p className="text-xs text-gray-500 max-w-xl">
-            Objetivo: movimientos explosivos (+30% / −25% en ≤5 días). Una red neuronal
-            re-entrenada en cada corrida asigna P(explosión); cada candidato se valida con
-            backtest propio y veto de dilución. La corrida puede tardar varios minutos —
+            Objetivo: movimientos VERDADERAMENTE explosivos (+80% y superiores / −50% en
+            ≤5 días). Una red neuronal re-entrenada en cada corrida asigna P(explosión);
+            cada candidato se valida con backtest propio, veto de dilución y veto de
+            setups que ya demostraron perder. La corrida puede tardar varios minutos —
             el dataset y la red mejoran con cada día que corras el motor.
           </p>
         </div>
@@ -658,11 +672,20 @@ export default function UltimatePredictionSection() {
                   {result.learned.active ? `activo · ${result.learned.n_filled} trades` : 'en espera'}
                 </span>
               </div>
-              <p className="text-[11px] text-gray-500 mb-3">el track record calificado reordena las oportunidades nuevas: patrones que pagaron suben, los que no bajan (todo acotado y con shrinkage)</p>
+              <p className="text-[11px] text-gray-500 mb-3">el track record calificado reordena las oportunidades nuevas: setups que pagaron suben, los que no bajan, y los demostrados perdedores se ELIMINAN (R por pick publicado; sin fill = 0R)</p>
               {!result.learned.active ? (
                 <p className="text-xs text-gray-500">{result.learned.notes[0]}</p>
               ) : (
                 <div className="space-y-2">
+                  {(result.learned.vetoes?.length ?? 0) > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {result.learned.vetoes!.map((v) => (
+                        <span key={v.key} className="text-[11px] px-2.5 py-1 rounded-lg border border-rose-500/40 bg-rose-500/15 text-rose-300 font-semibold">
+                          🚫 {v.side} «{v.pattern}» eliminado <span className="text-rose-400/70">({v.avg_r}R en {v.fills} trades · {v.n} picks)</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {Object.keys(result.learned.patterns).length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(result.learned.patterns).sort((a, b) => b[1].factor - a[1].factor).map(([pat, p]) => (
@@ -692,6 +715,9 @@ export default function UltimatePredictionSection() {
             <StatCard label="Aprobados" value={`${result.kpis.validated}/5`} tone={result.kpis.validated >= 5 ? 'pos' : 'neg'} />
             <StatCard label="Rechazados backtest" value={String(result.kpis.rejected_backtest)} hint="no pasaron su propia historia" />
             <StatCard label="Vetados dilución" value={String(result.kpis.rejected_dilution)} hint="overhang EDGAR" />
+            {(result.kpis.rejected_learned ?? 0) > 0 && (
+              <StatCard label="Vetados por aprendizaje" value={String(result.kpis.rejected_learned)} tone="neg" hint="setups demostrados perdedores" />
+            )}
             <StatCard label={result.kpis.avg_surge_prob_pct != null ? 'P(explosión) media' : 'Expectancy media'}
               value={result.kpis.avg_surge_prob_pct != null ? `${result.kpis.avg_surge_prob_pct}%` : fmt(result.kpis.avg_expectancy_r, 'R')}
               tone="pos" hint="del Top 5" />
@@ -728,7 +754,7 @@ export default function UltimatePredictionSection() {
                         <td className={`pr-3 font-semibold ${r.side === 'long' ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{r.side.toUpperCase()}</td>
                         <td className="pr-3 text-right font-mono">{r.surge_prob_pct != null ? `${r.surge_prob_pct}%` : '–'}</td>
                         <td className="pr-3 text-right font-mono">{r.score}</td>
-                        <td className="pr-3">{r.stage === 'dilution' ? 'Dilución' : 'Backtest'}</td>
+                        <td className="pr-3">{r.stage === 'dilution' ? 'Dilución' : r.stage === 'aprendizaje' ? 'Veto aprendido' : 'Backtest'}</td>
                         <td>{r.reason}</td>
                       </tr>
                     ))}
@@ -918,6 +944,29 @@ export default function UltimatePredictionSection() {
                 {gradeInfo.insights.reasoning.winners_pm_gap_pct != null && (
                   <span>Premarket gap medio (gan.): <b className="text-gray-100">{gradeInfo.insights.reasoning.winners_pm_gap_pct}%</b></span>
                 )}
+                {gradeInfo.insights.reasoning.winners_first5_fav_pct != null && (
+                  <span>Primeros 5 min (a favor del lado): ganadores <b className="text-emerald-400">{gradeInfo.insights.reasoning.winners_first5_fav_pct > 0 ? '+' : ''}{gradeInfo.insights.reasoning.winners_first5_fav_pct}%</b>
+                    {gradeInfo.insights.reasoning.losers_first5_fav_pct != null && <> · perdedores <b className="text-rose-400">{gradeInfo.insights.reasoning.losers_first5_fav_pct > 0 ? '+' : ''}{gradeInfo.insights.reasoning.losers_first5_fav_pct}%</b></>}</span>
+                )}
+                {gradeInfo.insights.reasoning.winners_first5_relvol != null && (
+                  <span>Vol primeros 5 min (gan.): <b className="text-gray-100">{gradeInfo.insights.reasoning.winners_first5_relvol}×</b> lo normal
+                    {gradeInfo.insights.reasoning.losers_first5_relvol != null && <> · perd. <b className="text-gray-400">{gradeInfo.insights.reasoning.losers_first5_relvol}×</b></>}</span>
+                )}
+              </div>
+            </div>
+          )}
+          {(gradeInfo.insights.market_context || gradeInfo.insights.sector_context) && (
+            <div className="mt-4 rounded-xl bg-gray-950/60 border border-violet-500/15 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-violet-300/80 mb-1.5">¿Cómo estaba el mercado y el sector el día del trade?</p>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-300">
+                {gradeInfo.insights.market_context && (
+                  <span>Longs con SPY verde: <b className="text-emerald-400">{gradeInfo.insights.market_context.long_spy_green.avg_r}R</b> ({gradeInfo.insights.market_context.long_spy_green.n})
+                    {' '}· con SPY rojo: <b className="text-rose-400">{gradeInfo.insights.market_context.long_spy_red.avg_r}R</b> ({gradeInfo.insights.market_context.long_spy_red.n})</span>
+                )}
+                {gradeInfo.insights.sector_context && (
+                  <span>Sector a favor: <b className="text-emerald-400">{gradeInfo.insights.sector_context.with_sector.avg_r}R</b> ({gradeInfo.insights.sector_context.with_sector.n})
+                    {' '}· en contra: <b className="text-rose-400">{gradeInfo.insights.sector_context.against_sector.avg_r}R</b> ({gradeInfo.insights.sector_context.against_sector.n})</span>
+                )}
               </div>
             </div>
           )}
@@ -928,7 +977,7 @@ export default function UltimatePredictionSection() {
                 {gradeInfo.learning_log!.map((l, i) => (
                   <li key={i} className="text-xs text-gray-400">
                     <span className="text-gray-600">{l.created_at} · </span>
-                    <span className={`font-semibold ${l.kind === 'retrain' ? 'text-violet-300' : l.kind === 'grade' ? 'text-cyan-300' : 'text-amber-300'}`}>{l.kind}</span>
+                    <span className={`font-semibold ${l.kind === 'retrain' ? 'text-violet-300' : l.kind === 'grade' ? 'text-cyan-300' : l.kind === 'veto' ? 'text-rose-300' : l.kind === 'migration' ? 'text-sky-300' : 'text-amber-300'}`}>{l.kind}</span>
                     <span className="text-gray-600"> — </span>{l.message}
                   </li>
                 ))}

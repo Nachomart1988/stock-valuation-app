@@ -5,8 +5,8 @@ Ultimate Predictor Engine v2 — predictor de movimientos explosivos
 La pieza más ambiciosa del /backtest (GOD MODE): el usuario elige SOLO un rango
 de precio y un rango de market cap, y el motor produce el **Top 5 de trades
 para la próxima sesión** apuntando a MOVIMIENTOS EXPLOSIVOS — surges al estilo
-Edge Finder (+30% en ≤5 días) al alza, y desplomes espejo a la baja — cada uno
-validado por un backtest propio antes de ser publicado.
+Edge Finder (+80% y superiores en ≤5 días) al alza, y desplomes espejo a la
+baja — cada uno validado por un backtest propio antes de ser publicado.
 
 Novedad v2 — **red neuronal con aprendizaje día a día**:
 
@@ -126,10 +126,17 @@ EPHEMERAL_STORAGE = os.environ.get("ULTIMATE_DATA_DIR") is None and (
     os.environ.get("RAILWAY_ENVIRONMENT") is not None
     or os.environ.get("RENDER") is not None)
 
-# ── Objetivo: movimientos explosivos (misma definición que el Edge Finder) ───
+# ── Objetivo: movimientos VERDADERAMENTE explosivos ──────────────────────────
+# El usuario fue explícito: +30% no es una explosión — el objetivo son los
+# movimientos de +80% Y SUPERIORES en ≤5 días (escala Edge Finder de los
+# verdaderos movers). El espejo bajista usa −50%: en términos logarítmicos
+# ×1.8 al alza equivale a ÷1.8 ≈ −45% a la baja (redondeado a 50 para exigir
+# un desplome real). Al cambiar la definición, _init_db RE-ETIQUETA el dataset
+# acumulado en el lugar (sin borrarlo) — ver migración v2.4.
 SURGE_DAYS = 5             # ventana del movimiento explosivo (3-5 días)
-SURGE_PCT_MIN = 30.0       # surge alcista: +30% del cierre base al high máximo
-CRASH_PCT_MIN = 25.0       # espejo bajista: −25% del cierre base al low mínimo
+SURGE_PCT_MIN = 80.0       # surge alcista: +80% del cierre base al high máximo
+CRASH_PCT_MIN = 50.0       # espejo bajista: −50% del cierre base al low mínimo
+LABEL_VERSION = "s80c50"   # versión de las ETIQUETAS (el modelo .pt la valida)
 
 # ── Mecánica del trade (D+1, barras diarias, conservador) ────────────────────
 MAX_HOLD_DAYS = SURGE_DAYS # salida forzada al cierre del 5º día
@@ -167,7 +174,7 @@ MIN_BARS = 90                  # historia mínima para escanear + validar
 VAL_MIN_EVENTS = 5
 VAL_MIN_FILLS = 4
 VAL_MIN_EXPECTANCY = 0.05  # R promedio por trade ejecutado
-VAL_MIN_WINRATE = 12.0     # % (target ~5R: 20% ya es muy rentable)
+VAL_MIN_WINRATE = 8.0      # % (target ≥80% ≈ 10R+: un win cada 10 ya paga)
 
 PRELIM_POOL = 60           # candidatos que entran a la fase de validación
 TOP_N = 5                  # SIEMPRE se buscan 5 picks
@@ -584,6 +591,8 @@ class UltimatePredictorEngine:
             for ddl in ("ALTER TABLE predictions ADD COLUMN entry_type TEXT DEFAULT 'stop'",
                         "ALTER TABLE predictions ADD COLUMN cur_r REAL",
                         "ALTER TABLE predictions ADD COLUMN max_r REAL",
+                        "ALTER TABLE predictions ADD COLUMN sector_etf TEXT",
+                        "ALTER TABLE training_data ADD COLUMN crash_pct REAL",
                         "ALTER TABLE post_mortems ADD COLUMN mfe_r REAL",
                         "ALTER TABLE post_mortems ADD COLUMN vol_vs_prior_day REAL",
                         "ALTER TABLE post_mortems ADD COLUMN vol_vs_prior_week REAL",
@@ -592,7 +601,13 @@ class UltimatePredictorEngine:
                         "ALTER TABLE post_mortems ADD COLUMN pm_gap_pct REAL",
                         "ALTER TABLE post_mortems ADD COLUMN pm_range_pct REAL",
                         "ALTER TABLE post_mortems ADD COLUMN first30_range_pct REAL",
-                        "ALTER TABLE post_mortems ADD COLUMN pattern TEXT"):
+                        "ALTER TABLE post_mortems ADD COLUMN pattern TEXT",
+                        "ALTER TABLE post_mortems ADD COLUMN first5_ret_pct REAL",
+                        "ALTER TABLE post_mortems ADD COLUMN first5_relvol REAL",
+                        "ALTER TABLE post_mortems ADD COLUMN first5_json TEXT",
+                        "ALTER TABLE post_mortems ADD COLUMN spy_day_pct REAL",
+                        "ALTER TABLE post_mortems ADD COLUMN sector_day_pct REAL",
+                        "ALTER TABLE post_mortems ADD COLUMN sector_prev5_pct REAL"):
                 try:
                     conn.execute(ddl)
                 except sqlite3.OperationalError:
@@ -601,6 +616,30 @@ class UltimatePredictorEngine:
             # (se vuelve a cosechar con la versión nueva en la próxima corrida)
             conn.execute("DELETE FROM training_data WHERE feat_version IS NULL "
                          "OR feat_version != ?", (FEAT_VERSION,))
+            # ── Migración v2.4: objetivo pasa de +30% a +80% ─────────────────
+            # El dataset acumulado NO se borra (regla del usuario): se
+            # RE-ETIQUETA en el lugar. Los positivos alcistas cuyo surge quedó
+            # corto (<80%) pasan a negativos VÁLIDOS (movieron, pero no fue una
+            # explosión — exactamente lo que la red debe aprender a distinguir).
+            # Los positivos bajistas viejos no guardaron su magnitud de crash:
+            # se quitan y la próxima cosecha los re-etiqueta con la definición
+            # nueva (el harvest re-escanea ~420 días en cada corrida).
+            cur = conn.execute(
+                "UPDATE training_data SET label_up=0 "
+                "WHERE label_up=1 AND surge_pct < ?", (SURGE_PCT_MIN,))
+            relabeled = cur.rowcount or 0
+            cur = conn.execute(
+                "DELETE FROM training_data WHERE label_down=1 AND crash_pct IS NULL")
+            dropped_down = cur.rowcount or 0
+            if relabeled > 0 or dropped_down > 0:
+                conn.execute(
+                    "INSERT INTO learning_log (created_at, kind, message) VALUES (?,?,?)",
+                    (datetime.utcnow().strftime("%Y-%m-%d %H:%M"), "migration",
+                     f"Objetivo recalibrado a explosiones ≥ +{SURGE_PCT_MIN:.0f}% / "
+                     f"−{CRASH_PCT_MIN:.0f}%: {relabeled} ejemplos re-etiquetados como "
+                     f"'movió pero no explotó' y {dropped_down} bajistas a re-cosechar "
+                     f"con la definición nueva. La red se re-entrena desde cero sobre "
+                     f"el mismo dataset (nada se pierde)."))
             # dedupe histórico: si una corrida repetida insertó el mismo pick
             # pendiente varias veces, queda solo el más reciente
             conn.execute(
@@ -623,6 +662,10 @@ class UltimatePredictorEngine:
             blob = torch.load(MODEL_PATH, map_location="cpu", weights_only=False)
             if blob.get("version") != FEAT_VERSION:
                 logger.warning("[Ultimate] modelo con feat_version distinta — se re-entrenará")
+                return
+            if blob.get("labels") != LABEL_VERSION:
+                logger.warning("[Ultimate] modelo entrenado con el objetivo viejo "
+                               "(surge <80%%) — se re-entrenará con las etiquetas nuevas")
                 return
             model = SurgeNet()
             model.load_state_dict(blob["state"])
@@ -670,8 +713,10 @@ class UltimatePredictorEngine:
     # ── Dataset: upsert + carga + entrenamiento ──────────────────────────────
     def _upsert_training(self, rows: List[Tuple], run_id: str) -> int:
         """rows: (symbol, date, features_json, label_up, label_down, surge_pct,
-        weight). INSERT OR REPLACE si el peso nuevo es mayor (los ejemplos de
-        picks calificados ×3 pisan a los cosechados ×1, nunca al revés).
+        crash_pct, weight). INSERT OR REPLACE si el peso nuevo es mayor (los
+        ejemplos de picks calificados ×3 pisan a los cosechados ×1, nunca al
+        revés). Se guardan AMBAS magnitudes para poder re-etiquetar el dataset
+        si el umbral de explosión vuelve a cambiar (migración v2.4).
         Features con dimensión distinta a la versión vigente se descartan."""
         if not rows:
             return 0
@@ -688,12 +733,13 @@ class UltimatePredictorEngine:
                     "SELECT weight FROM training_data WHERE symbol=? AND date=?",
                     (r[0], r[1]))
                 old = cur.fetchone()
-                if old is not None and float(old["weight"]) >= float(r[6]):
+                if old is not None and float(old["weight"]) >= float(r[7]):
                     continue
                 conn.execute(
                     "INSERT OR REPLACE INTO training_data "
                     "(symbol, date, features, label_up, label_down, surge_pct, "
-                    "weight, run_id, added_at, feat_version) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    "crash_pct, weight, run_id, added_at, feat_version) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     (*r, run_id, now, FEAT_VERSION))
                 added += 1
         return added
@@ -743,9 +789,11 @@ class UltimatePredictorEngine:
         val_idx, tr_idx = perm[:n_val], perm[n_val:]
 
         def pos_weight(col: int) -> float:
+            # explosiones ≥80% son MUY raras (clase minoritaria extrema): el
+            # techo del pos_weight sube a 200 para que la red no las ignore
             pos = float(np.sum(w[tr_idx] * y[tr_idx, col]))
             neg = float(np.sum(w[tr_idx] * (1 - y[tr_idx, col])))
-            return float(np.clip(neg / max(pos, 1.0), 1.0, 50.0))
+            return float(np.clip(neg / max(pos, 1.0), 1.0, 200.0))
 
         pw = torch.tensor([pos_weight(0), pos_weight(1)], dtype=torch.float32)
         model = SurgeNet()
@@ -803,7 +851,8 @@ class UltimatePredictorEngine:
         trained_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
         try:
             torch.save({"state": model.state_dict(), "mean": mean, "std": std_safe,
-                        "version": FEAT_VERSION, "metrics": metrics,
+                        "version": FEAT_VERSION, "labels": LABEL_VERSION,
+                        "metrics": metrics,
                         "trained_at": trained_at, "rows": n}, MODEL_PATH)
         except Exception as e:  # noqa: BLE001
             logger.warning("[Ultimate] no se pudo guardar el modelo: %s", e)
@@ -857,11 +906,14 @@ class UltimatePredictorEngine:
                 self._intra_cache[ckey] = out
         return out
 
-    def _session_stats_intraday(self, symbol: str, day: str) -> Optional[Dict]:
+    def _session_stats_intraday(self, symbol: str, day: str,
+                                vol_avg20: Optional[float] = None) -> Optional[Dict]:
         """Estadísticas ricas de la sesión desde 1-min: hora del high/low, gap y
-        rango del premarket, y rango de los primeros 30 minutos. Alimenta el
-        razonamiento de los post-mortems (¿a qué hora explota? ¿cómo venía el
-        premarket de los ganadores?). Una sola llamada por símbolo calificado."""
+        rango del premarket, rango de los primeros 30 minutos y — clave para la
+        introspección — los PRIMEROS 5 MINUTOS minuto a minuto (retorno, rango y
+        volumen nominal + relativo al promedio 20d). Alimenta el razonamiento de
+        los post-mortems (¿a qué hora explota? ¿los primeros minutos ya avisaban
+        que el trade nacía muerto?). Una sola llamada por símbolo calificado."""
         data = self.finder._fetch_json(
             "historical-chart/1min",
             {"symbol": symbol, "from": day, "to": day, "extended": "true"})
@@ -895,12 +947,30 @@ class UltimatePredictorEngine:
                                         / session_open * 100, 2)
                                   if first30 and session_open > 0 else None),
             "pm_gap_pct": None, "pm_range_pct": None,
+            "first5": None, "first5_ret_pct": None,
+            "first5_vol": None, "first5_relvol": None,
         }
         if pm and session_open > 0:
             pm_high = max(p[0] for p in pm); pm_low = min(p[1] for p in pm)
             pm_last = pm[-1][2]
             out["pm_gap_pct"] = round((session_open / pm_last - 1.0) * 100, 2) if pm_last > 0 else None
             out["pm_range_pct"] = round((pm_high - pm_low) / session_open * 100, 2)
+        # ── Primeros 5 minutos, minuto a minuto (9:30–9:34) ──────────────────
+        # ¿Cómo abrió? ¿Con cuánto volumen? El volumen relativo compara los
+        # 5 minutos contra lo que un día promedio opera en 5 minutos (avg20/78).
+        first5 = [r for r in rth if r[0] < 575]
+        if first5 and session_open > 0:
+            out["first5"] = [{
+                "t": self._hhmm(r[0]),
+                "ret_pct": round((r[4] / session_open - 1.0) * 100, 2),
+                "range_pct": round((r[2] - r[3]) / session_open * 100, 2),
+                "vol": int(r[5]),
+            } for r in first5]
+            f5_vol = float(sum(r[5] for r in first5))
+            out["first5_ret_pct"] = round((first5[-1][4] / session_open - 1.0) * 100, 2)
+            out["first5_vol"] = int(f5_vol)
+            if vol_avg20 and vol_avg20 > 0:
+                out["first5_relvol"] = round(f5_vol / (vol_avg20 * 5.0 / 390.0), 2)
         return out
 
     @staticmethod
@@ -908,6 +978,27 @@ class UltimatePredictorEngine:
         if minutes is None:
             return None
         return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+    def _etf_day_context(self, etf: str, day: str
+                         ) -> Tuple[Optional[float], Optional[float]]:
+        """(retorno del día, retorno acumulado de los 5 días PREVIOS) de un
+        ETF/índice — responde «¿cómo estaba el mercado/sector ese día y cómo
+        venía?» en los post-mortems. Usa _series_through para poder responder
+        el mismo día del cierre (sesión sintetizada desde intradía)."""
+        try:
+            d_from = (datetime.strptime(day, "%Y-%m-%d")
+                      - timedelta(days=25)).strftime("%Y-%m-%d")
+            dts, _o, _h, _l, cc, _v = self._series_through(etf, d_from, day)
+            i = next((k for k, dt in enumerate(dts) if dt == day), None)
+            if i is None or i == 0:
+                return None, None
+            day_ret = (round((float(cc[i]) / float(cc[i - 1]) - 1.0) * 100, 2)
+                       if float(cc[i - 1]) > 0 else None)
+            prev5 = (round((float(cc[i - 1]) / float(cc[i - 6]) - 1.0) * 100, 2)
+                     if i >= 6 and float(cc[i - 6]) > 0 else None)
+            return day_ret, prev5
+        except Exception:  # noqa: BLE001
+            return None, None
 
     def _advance_as_of(self, eod_as_of: Optional[str]) -> str:
         """Avanza el corte al último día cuya sesión regular YA cerró, mirando
@@ -1047,9 +1138,9 @@ class UltimatePredictorEngine:
                     feats = row["features"] if "features" in row.keys() else None
                     lab = _labels_at(c, h, lo, idx - 1)
                     if feats and lab is not None:
-                        up, down, s_pct, _c_pct = lab
+                        up, down, s_pct, c_pct = lab
                         feedback.append((row["symbol"], dates[idx - 1], feats,
-                                         up, down, s_pct, GRADED_SAMPLE_WEIGHT))
+                                         up, down, s_pct, c_pct, GRADED_SAMPLE_WEIGHT))
             except Exception as e:  # noqa: BLE001
                 logger.debug("[Ultimate] grading %s failed: %s", row["symbol"], e)
         return graded, feedback
@@ -1084,8 +1175,16 @@ class UltimatePredictorEngine:
         vw = v[max(0, idx - 5):idx]
         vol_vs_prior_week = (round(float(v[idx]) / float(np.mean(vw)), 2)
                              if vw.size >= 3 and float(np.mean(vw)) > 0 else None)
-        # ¿a qué hora explotó? ¿cómo venía el premarket? (velas de 1 min)
-        istats = self._session_stats_intraday(row["symbol"], dates[idx]) or {}
+        # ¿a qué hora explotó? ¿cómo venía el premarket? ¿qué dijeron los
+        # PRIMEROS 5 MINUTOS, minuto a minuto? (velas de 1 min)
+        va20 = float(np.mean(va)) if va.size >= 5 else None
+        istats = self._session_stats_intraday(row["symbol"], dates[idx], va20) or {}
+        # ¿cómo estaba el MERCADO ese día? ¿y el SECTOR, ese día y los previos?
+        spy_day, _spy_prev5 = self._etf_day_context("SPY", dates[idx])
+        sec_etf = row["sector_etf"] if "sector_etf" in row.keys() else None
+        sec_day = sec_prev5 = None
+        if sec_etf:
+            sec_day, sec_prev5 = self._etf_day_context(sec_etf, dates[idx])
         # contrafactual: entrada a mercado en el open, misma distancia de stop/target
         entry_ref = float(row["entry"])
         risk_frac = abs(entry_ref - float(row["stop"])) / entry_ref if entry_ref > 0 else 0.05
@@ -1123,14 +1222,41 @@ class UltimatePredictorEngine:
                        f"{mfe_txt}")
         else:
             verdict = f"Salida por tiempo: {round(r or 0, 2)}R (movimiento máx {mv}%, máx favorable +{mfe_r}R)."
+        # ── Contexto que agrava o explica el resultado (se suma al veredicto) ──
+        f5_ret = istats.get("first5_ret_pct")
+        f5_rv = istats.get("first5_relvol")
+        bits: List[str] = []
+        if outcome.startswith("loss") or outcome == "no_fill":
+            if f5_ret is not None:
+                fav5 = f5_ret if side == "long" else -f5_ret
+                if fav5 <= -1.0:
+                    bits.append(f"los primeros 5 min ya iban en contra "
+                                f"({f5_ret:+}%{f', {f5_rv}× vol' if f5_rv is not None else ''})")
+                elif f5_rv is not None and f5_rv < 1.0:
+                    bits.append(f"los primeros 5 min abrieron sin volumen ({f5_rv}× lo normal)")
+            if spy_day is not None and abs(spy_day) >= 0.8 and ((side == "long") == (spy_day < 0)):
+                bits.append(f"SPY {spy_day:+}% en contra ese día")
+            if sec_day is not None and abs(sec_day) >= 1.0 and ((side == "long") == (sec_day < 0)):
+                came = (f" y venía {sec_prev5:+}% los 5 días previos"
+                        if sec_prev5 is not None and ((side == "long") == (sec_prev5 < 0)) else "")
+                bits.append(f"el sector ({sec_etf}) {sec_day:+}% en contra{came}")
+        elif outcome.startswith("win") and f5_ret is not None:
+            fav5 = f5_ret if side == "long" else -f5_ret
+            if fav5 >= 1.0:
+                bits.append(f"los primeros 5 min ya confirmaban ({f5_ret:+}%"
+                            f"{f', {f5_rv}× vol' if f5_rv is not None else ''})")
+        if bits:
+            verdict += " Contexto: " + "; ".join(bits) + "."
         with self._db_lock, closing(self._db()) as conn, conn:
             conn.execute(
                 "INSERT OR REPLACE INTO post_mortems (pred_id, symbol, for_date, side, "
                 "filled, outcome, r, r_open, move_pct, missed, gap_pct, "
                 "session_vol_ratio, verdict, created_at, vol_vs_prior_day, "
                 "vol_vs_prior_week, high_time_min, low_time_min, pm_gap_pct, "
-                "pm_range_pct, first30_range_pct, pattern, mfe_r) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "pm_range_pct, first30_range_pct, pattern, mfe_r, "
+                "first5_ret_pct, first5_relvol, first5_json, "
+                "spy_day_pct, sector_day_pct, sector_prev5_pct) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (row["id"], row["symbol"], row["for_date"], side,
                  int(fill is not None), outcome, r,
                  round(r_open, 3) if r_open is not None else None,
@@ -1140,7 +1266,10 @@ class UltimatePredictorEngine:
                  istats.get("high_time_min"), istats.get("low_time_min"),
                  istats.get("pm_gap_pct"), istats.get("pm_range_pct"),
                  istats.get("first30_range_pct"),
-                 row["pattern"] if "pattern" in row.keys() else None, mfe_r))
+                 row["pattern"] if "pattern" in row.keys() else None, mfe_r,
+                 f5_ret, f5_rv,
+                 json.dumps(istats.get("first5")) if istats.get("first5") else None,
+                 spy_day, sec_day, sec_prev5))
 
     def grade_now(self) -> Dict[str, Any]:
         """Calificación bajo demanda (sin correr una predicción completa):
@@ -1164,7 +1293,8 @@ class UltimatePredictorEngine:
                 "AND for_date > ?", (as_of,)).fetchone()["n"]
         return {"as_of": as_of, "graded_now": graded, "feedback_rows": fed,
                 "pending_future": pending_future, "track_record": self.track_record(),
-                "insights": self.insights(), "learning_log": self.learning_log()}
+                "insights": self.insights(), "learned": self._learned_priors(),
+                "learning_log": self.learning_log()}
 
     # ── Diario de aprendizaje ────────────────────────────────────────────────
     def _log_learning(self, kind: str, message: str) -> None:
@@ -1322,7 +1452,65 @@ class UltimatePredictorEngine:
             if pmg is not None or pmr is not None:
                 reasoning["winners_pm_gap_pct"] = pmg
                 reasoning["winners_pm_range_pct"] = pmr
+
+        # ¿qué decían los PRIMEROS 5 MINUTOS? (favorable = a favor del lado)
+        def fav5(r):  # noqa: ANN001
+            f5 = r["first5_ret_pct"] if "first5_ret_pct" in r.keys() else None
+            if f5 is None:
+                return None
+            return float(f5) if r["side"] == "long" else -float(f5)
+        w5 = [x for x in (fav5(r) for r in winners) if x is not None]
+        l5 = [x for x in (fav5(r) for r in losers) if x is not None]
+        if len(w5) >= 3 and len(l5) >= 3:
+            reasoning["winners_first5_fav_pct"] = round(float(np.mean(w5)), 2)
+            reasoning["losers_first5_fav_pct"] = round(float(np.mean(l5)), 2)
+            reasoning["winners_first5_relvol"] = avg(winners, "first5_relvol")
+            reasoning["losers_first5_relvol"] = avg(losers, "first5_relvol")
+            if float(np.mean(w5)) > float(np.mean(l5)) + 0.8:
+                self._log_learning("insight", (
+                    f"Primeros 5 minutos: los ganadores abren a favor "
+                    f"({round(float(np.mean(w5)), 1):+}% con "
+                    f"{reasoning.get('winners_first5_relvol') or 's/d'}× el volumen normal) y los "
+                    f"perdedores en contra ({round(float(np.mean(l5)), 1):+}%) — si los primeros "
+                    f"minutos van en contra, el trade nace muerto: no perseguir la entrada."))
         out["reasoning"] = reasoning
+
+        # ── ¿Cómo estaba el MERCADO y el SECTOR ese día? ─────────────────────
+        def bucket_r(rows_, cond):  # noqa: ANN001
+            return [r["r"] for r in rows_ if r["r"] is not None
+                    and "spy_day_pct" in r.keys() and cond(r)]
+        lg = [r for r in filled if r["side"] == "long"]
+        long_green = bucket_r(lg, lambda r: (r["spy_day_pct"] or None) is not None and r["spy_day_pct"] > 0)
+        long_red = bucket_r(lg, lambda r: (r["spy_day_pct"] or None) is not None and r["spy_day_pct"] <= 0)
+        if len(long_green) >= 4 and len(long_red) >= 4:
+            out["market_context"] = {
+                "long_spy_green": {"n": len(long_green), "avg_r": round(float(np.mean(long_green)), 3)},
+                "long_spy_red": {"n": len(long_red), "avg_r": round(float(np.mean(long_red)), 3)},
+            }
+            if float(np.mean(long_green)) > float(np.mean(long_red)) + 0.3:
+                self._log_learning("insight", (
+                    f"Mercado: los longs pagan con SPY verde ({round(float(np.mean(long_green)), 2)}R "
+                    f"medio) y pierden con SPY rojo ({round(float(np.mean(long_red)), 2)}R) — en días "
+                    f"de mercado en contra conviene bajar el tamaño o saltear los longs."))
+        # sector a favor vs en contra (día del trade)
+        def sec_fav(r):  # noqa: ANN001
+            sd = r["sector_day_pct"] if "sector_day_pct" in r.keys() else None
+            if sd is None:
+                return None
+            return float(sd) if r["side"] == "long" else -float(sd)
+        sf = [(sec_fav(r), r["r"]) for r in filled if r["r"] is not None]
+        sec_with = [rr for f, rr in sf if f is not None and f > 0]
+        sec_against = [rr for f, rr in sf if f is not None and f <= 0]
+        if len(sec_with) >= 4 and len(sec_against) >= 4:
+            out["sector_context"] = {
+                "with_sector": {"n": len(sec_with), "avg_r": round(float(np.mean(sec_with)), 3)},
+                "against_sector": {"n": len(sec_against), "avg_r": round(float(np.mean(sec_against)), 3)},
+            }
+            if float(np.mean(sec_with)) > float(np.mean(sec_against)) + 0.3:
+                self._log_learning("insight", (
+                    f"Sector: con el sector a favor el día del trade el R medio es "
+                    f"{round(float(np.mean(sec_with)), 2)} vs {round(float(np.mean(sec_against)), 2)} "
+                    f"en contra — el viento sectorial del día importa tanto como el setup."))
         # snapshot de las últimas previas (para mostrar el detalle en la UI)
         out["recent_previews"] = [{
             "symbol": r["symbol"], "for_date": r["for_date"], "side": r["side"],
@@ -1338,31 +1526,52 @@ class UltimatePredictorEngine:
     # ── Ajustes APRENDIDOS: convierten el track record en factores de ranking ─
     # Cierra el loop que faltaba: lo que el motor aprende (qué patrón paga, si el
     # volumen relativo discrimina, si la P(explosión) está calibrada) SE USA para
-    # reordenar las oportunidades nuevas. Todo con shrinkage por tamaño de muestra
-    # y acotado a [0.75, 1.30] para que el ruido de pocas muestras no domine.
+    # reordenar las oportunidades nuevas. Dos niveles:
+    #   1) FACTORES continuos con shrinkage, sobre el R POR PICK PUBLICADO
+    #      (sin fill = 0R): un setup que no dispara no se disfraza de bueno ni
+    #      de malo — vale exactamente lo que dio.
+    #   2) VETO duro: un bucket (lado × patrón) con muestra suficiente y R por
+    #      pick claramente negativo queda ELIMINADO de la selección — el motor
+    #      deja de repetir el error demostrado. El veto mira una ventana de
+    #      VETO_WINDOW_DAYS: cuando esos trades envejecen, el setup puede
+    #      volver a intentarlo (los mercados cambian; los vetos no son eternos).
     LEARN_MIN_FILLED = 12      # mínimo de trades calificados para activar el layer
     LEARN_MIN_BUCKET = 4       # mínimo por bucket (patrón / régimen de volumen)
-    LEARN_BOUND = (0.75, 1.30)
+    LEARN_BOUND = (0.55, 1.45)
+    VETO_WINDOW_DAYS = 120     # el veto se calcula sobre los últimos N días
+    VETO_MIN_N = 8             # picks calificados mínimos del bucket
+    VETO_MIN_FILLS = 4         # de los cuales al menos éstos ejecutaron
+    VETO_RPP = -0.20           # R por pick ≤ esto ⇒ el setup pierde plata: fuera
 
     def _learned_priors(self) -> Dict[str, Any]:
         with self._db_lock, closing(self._db()) as conn, conn:
             rows = conn.execute(
-                "SELECT pm.r AS r, pm.filled AS filled, p.pattern AS pattern, "
+                "SELECT pm.r AS r, pm.filled AS filled, pm.side AS side, "
+                "pm.for_date AS for_date, p.pattern AS pattern, "
                 "p.vol_ratio AS vol_ratio, p.surge_prob_pct AS prob "
                 "FROM post_mortems pm JOIN predictions p ON p.id = pm.pred_id "
-                "WHERE pm.filled = 1 AND pm.r IS NOT NULL "
+                "WHERE pm.outcome NOT LIKE 'no_fill:gap_anomalo%' "
                 "ORDER BY pm.for_date DESC LIMIT 500").fetchall()
-        priors: Dict[str, Any] = {"active": False, "n_filled": len(rows),
-                                  "baseline_r": None, "patterns": {},
-                                  "relvol": None, "prob": None, "notes": []}
-        if len(rows) < self.LEARN_MIN_FILLED:
+        filled_n = sum(1 for r in rows if r["filled"] and r["r"] is not None)
+        priors: Dict[str, Any] = {"active": False, "n_filled": filled_n,
+                                  "n_graded": len(rows), "baseline_r": None,
+                                  "patterns": {}, "relvol": None, "prob": None,
+                                  "vetoes": [], "notes": []}
+        if filled_n < self.LEARN_MIN_FILLED:
             priors["notes"].append(
-                f"Layer en espera: {len(rows)}/{self.LEARN_MIN_FILLED} trades calificados "
+                f"Layer en espera: {filled_n}/{self.LEARN_MIN_FILLED} trades calificados "
                 f"— hacen falta más resultados reales para ajustar el ranking.")
             return priors
         priors["active"] = True
+        priors["notes"].append(
+            "R medido POR PICK PUBLICADO (sin fill = 0R): un setup que no dispara "
+            "no suma ni resta — solo cuenta lo que realmente dio.")
         lo_b, hi_b = self.LEARN_BOUND
-        base = float(np.mean([r["r"] for r in rows]))
+
+        def rpp(r) -> float:  # noqa: ANN001 — R por pick publicado
+            return float(r["r"]) if (r["filled"] and r["r"] is not None) else 0.0
+
+        base = float(np.mean([rpp(r) for r in rows]))
         priors["baseline_r"] = round(base, 3)
 
         def factor(rs: List[float], scale: float = 0.30) -> float:
@@ -1370,20 +1579,20 @@ class UltimatePredictorEngine:
             adv = float(np.mean(rs)) - base
             return float(np.clip(1.0 + adv * scale * k, lo_b, hi_b))
 
-        # 1) ¿qué PATRÓN previo realmente paga? (coil / momentum / pullback…)
+        # 1) ¿qué PATRÓN previo realmente paga, por lado? (long·coil ≠ short·coil)
         by_pat: Dict[str, List[float]] = {}
         for r in rows:
             if r["pattern"]:
-                by_pat.setdefault(r["pattern"], []).append(r["r"])
-        for pat, rs in by_pat.items():
+                by_pat.setdefault(f"{r['side']}·{r['pattern']}", []).append(rpp(r))
+        for key, rs in by_pat.items():
             if len(rs) >= self.LEARN_MIN_BUCKET:
-                priors["patterns"][pat] = {
+                priors["patterns"][key] = {
                     "factor": round(factor(rs), 3), "n": len(rs),
                     "avg_r": round(float(np.mean(rs)), 3)}
 
         # 2) ¿el VOLUMEN relativo (vs 20d) al seleccionar discrimina ganadores?
-        hi = [r["r"] for r in rows if (r["vol_ratio"] or 0) >= 1.5]
-        low = [r["r"] for r in rows if 0 < (r["vol_ratio"] or 0) < 1.5]
+        hi = [rpp(r) for r in rows if (r["vol_ratio"] or 0) >= 1.5]
+        low = [rpp(r) for r in rows if 0 < (r["vol_ratio"] or 0) < 1.5]
         if len(hi) >= self.LEARN_MIN_BUCKET and len(low) >= self.LEARN_MIN_BUCKET:
             priors["relvol"] = {
                 "threshold": 1.5,
@@ -1393,27 +1602,63 @@ class UltimatePredictorEngine:
                 "lo_avg_r": round(float(np.mean(low)), 3)}
 
         # 3) ¿la P(explosión) de la red está CALIBRADA? (¿los ≥75% rinden más?)
-        hp = [r["r"] for r in rows if (r["prob"] or 0) >= 75]
-        lp = [r["r"] for r in rows if 0 < (r["prob"] or 0) < 75]
+        hp = [rpp(r) for r in rows if (r["prob"] or 0) >= 75]
+        lp = [rpp(r) for r in rows if 0 < (r["prob"] or 0) < 75]
         if len(hp) >= self.LEARN_MIN_BUCKET and len(lp) >= self.LEARN_MIN_BUCKET:
             priors["prob"] = {
                 "hi_factor": round(factor(hp), 3), "hi_n": len(hp),
                 "lo_factor": round(factor(lp), 3), "lo_n": len(lp),
                 "hi_avg_r": round(float(np.mean(hp)), 3),
                 "lo_avg_r": round(float(np.mean(lp)), 3)}
+
+        # 4) VETO: setups que YA demostraron perder plata quedan eliminados
+        cutoff = (datetime.utcnow()
+                  - timedelta(days=self.VETO_WINDOW_DAYS)).strftime("%Y-%m-%d")
+        recent_bkt: Dict[str, List] = {}
+        for r in rows:
+            if r["pattern"] and r["for_date"] >= cutoff:
+                recent_bkt.setdefault(f"{r['side']}·{r['pattern']}", []).append(r)
+        for key, rs_ in recent_bkt.items():
+            fills = [r for r in rs_ if r["filled"] and r["r"] is not None]
+            if len(rs_) < self.VETO_MIN_N or len(fills) < self.VETO_MIN_FILLS:
+                continue
+            avg_rpp = float(np.mean([rpp(r) for r in rs_]))
+            avg_fill_r = float(np.mean([float(r["r"]) for r in fills]))
+            if avg_rpp <= self.VETO_RPP:
+                side_, pat_ = key.split("·", 1)
+                priors["vetoes"].append({
+                    "key": key, "side": side_, "pattern": pat_,
+                    "n": len(rs_), "fills": len(fills),
+                    "avg_r": round(avg_fill_r, 3),
+                    "r_per_pick": round(avg_rpp, 3)})
+                self._log_learning("veto", (
+                    f"Setup ELIMINADO por resultados reales: {side_.upper()} con patrón "
+                    f"«{pat_}» dio {round(avg_fill_r, 2)}R medio en {len(fills)} trades "
+                    f"({len(rs_)} picks en {self.VETO_WINDOW_DAYS} días). No se vuelve a "
+                    f"publicar hasta que esos resultados envejezcan — no se repite un "
+                    f"error demostrado."))
         return priors
 
     def _apply_priors(self, cand: Dict, priors: Dict[str, Any]) -> Tuple[float, List[str]]:
-        """Factor multiplicativo total para el ranking de un candidato + detalle."""
+        """Factor multiplicativo total para el ranking de un candidato + detalle.
+        Devuelve 0.0 si el bucket (lado × patrón) está VETADO por el track
+        record — el candidato se elimina de la selección."""
         if not priors.get("active"):
             return 1.0, []
+        key = f"{cand.get('side')}·{cand.get('pattern')}"
+        for vt in priors.get("vetoes") or []:
+            if vt["key"] == key:
+                return 0.0, [
+                    f"VETADO por aprendizaje: {cand.get('side')} «{cand.get('pattern')}» "
+                    f"dio {vt['avg_r']}R medio en {vt['fills']} trades reales "
+                    f"({vt['r_per_pick']}R por pick) — este setup demostró no funcionar"]
         f = 1.0
         notes: List[str] = []
-        pat = priors["patterns"].get(cand.get("pattern"))
+        pat = priors["patterns"].get(key)
         if pat:
             f *= pat["factor"]
-            notes.append(f"patrón «{cand.get('pattern')}» ×{pat['factor']} "
-                         f"({pat['avg_r']}R en {pat['n']} trades)")
+            notes.append(f"setup «{key}» ×{pat['factor']} "
+                         f"({pat['avg_r']}R/pick en {pat['n']} publicados)")
         rv = priors.get("relvol")
         if rv and cand.get("vol_ratio") is not None:
             hi = float(cand["vol_ratio"]) >= rv["threshold"]
@@ -1503,12 +1748,14 @@ class UltimatePredictorEngine:
 
     @staticmethod
     def _side_bias(track: Dict[str, Any]) -> Dict[str, float]:
-        """Sesgo del track record real sobre el ranking (n≥8 fills por lado)."""
+        """Sesgo del track record real sobre el ranking (n≥8 fills por lado).
+        Rango ampliado: con avg_r muy negativo el lado entero pesa mucho menos
+        (el usuario pidió que los errores repetidos tengan consecuencias)."""
         bias = {"long": 1.0, "short": 1.0}
         for side in ("long", "short"):
             st = track.get(side) or {}
             if (st.get("fills") or 0) >= 8 and st.get("avg_r") is not None:
-                bias[side] = float(np.clip(1.0 + st["avg_r"] * 0.15, 0.85, 1.15))
+                bias[side] = float(np.clip(1.0 + st["avg_r"] * 0.25, 0.70, 1.20))
         return bias
 
     # ── B. Contexto de mercado + mapas por-fecha para features ───────────────
@@ -1607,16 +1854,16 @@ class UltimatePredictorEngine:
         for idx, lab in pos_idx[:MAX_ROWS_PER_SYMBOL]:
             vec = _feature_vector(dates, o, h, lo, c, v, idx, spy_map, etf_map, mcap)
             if vec is not None:
-                up, down, s_pct, _ = lab
+                up, down, s_pct, c_pct = lab
                 train_rows.append((symbol, dates[idx],
                                    json.dumps([round(float(x), 4) for x in vec]),
-                                   up, down, s_pct, 1.0))
+                                   up, down, s_pct, c_pct, 1.0))
         for idx in sampled_neg[:MAX_ROWS_PER_SYMBOL]:
             vec = _feature_vector(dates, o, h, lo, c, v, int(idx), spy_map, etf_map, mcap)
             if vec is not None:
                 train_rows.append((symbol, dates[int(idx)],
                                    json.dumps([round(float(x), 4) for x in vec]),
-                                   0, 0, 0.0, 1.0))
+                                   0, 0, 0.0, 0.0, 1.0))
 
         # ── Candidato al último cierre ────────────────────────────────────────
         cand = self._build_candidate(meta, cfg, ctx, dates, o, h, lo, c, v,
@@ -1688,9 +1935,9 @@ class UltimatePredictorEngine:
 
         # ── Pedigrí de surge (alineación con Edge Finder) ────────────────────
         # El Edge Finder muestra que los +100% dejan huella: nombres con
-        # historial de movimientos GRANDES tienen más chance de repetirlos. Se
-        # premia en el ranking a los que ya explotaron fuerte y seguido, y se
-        # castiga a los de surge chico (lo que el usuario marcó como problema).
+        # historial de movimientos GRANDES tienen más chance de repetirlos.
+        # Con el objetivo en ≥80%, las magnitudes cosechadas ya arrancan en 80:
+        # el pedigrí premia repetición y escala (100%+/150%+).
         def pedigree_of(mags: List[float]) -> Tuple[float, float]:
             mx = float(max(mags)) if mags else 0.0
             ped = 0.65
@@ -1698,9 +1945,9 @@ class UltimatePredictorEngine:
                 ped += 0.10
             if len(mags) >= 4:
                 ped += 0.10
-            if mx >= 50:
+            if mx >= 100:
                 ped += 0.15
-            if mx >= 100:  # movers a escala Edge Finder
+            if mx >= 150:  # movers a escala Edge Finder
                 ped += 0.25
             return round(min(ped, 1.35), 3), round(mx, 1)
 
@@ -2158,30 +2405,46 @@ class UltimatePredictorEngine:
                 cand["_rank"] *= float(cand.get("pedigree", 1.0))
         # AJUSTES APRENDIDOS: lo que el track record enseñó (qué patrón paga, si
         # el volumen relativo discrimina, si la P está calibrada) reordena AHORA
-        # las oportunidades nuevas — cierra el loop aprendizaje→decisión.
+        # las oportunidades nuevas — cierra el loop aprendizaje→decisión. Los
+        # setups VETADOS (demostrados perdedores) se eliminan directamente.
+        rejected: List[Dict] = []
         priors = self._learned_priors()
         for cand in prelim:
             if cand.get("_rank", -1) > 0:
                 lf, notes = self._apply_priors(cand, priors)
                 cand["learned_factor"] = lf
                 cand["learned_notes"] = notes
-                cand["_rank"] *= lf
+                if lf <= 0:
+                    cand["_rank"] = -1.0
+                    rejected.append({"symbol": cand["symbol"], "side": cand["side"],
+                                     "score": cand["score"],
+                                     "surge_prob_pct": cand.get("surge_prob_pct"),
+                                     "stage": "aprendizaje",
+                                     "reason": notes[0] if notes else
+                                     "setup vetado por el track record"})
+                else:
+                    cand["_rank"] *= lf
         prelim = [x for x in prelim if x.get("_rank", -1) > 0]
         prelim.sort(key=lambda x: x["_rank"], reverse=True)
+        if priors.get("vetoes"):
+            veto_txt = ", ".join(f"{v['side']} «{v['pattern']}» ({v['avg_r']}R en "
+                                 f"{v['fills']} trades)" for v in priors["vetoes"])
+            warnings.append(
+                f"Setups ELIMINADOS por resultados reales (no se repite un error "
+                f"demostrado): {veto_txt}.")
         if priors.get("active"):
             npat = len(priors.get("patterns") or {})
             warnings.append(
-                f"Ajustes aprendidos aplicados al ranking: {npat} patrones calibrados"
+                f"Ajustes aprendidos aplicados al ranking: {npat} setups calibrados"
                 f"{', volumen' if priors.get('relvol') else ''}"
                 f"{', P(explosión)' if priors.get('prob') else ''} "
-                f"(sobre {priors['n_filled']} trades calificados).")
+                f"(sobre {priors['n_filled']} trades calificados; sin fill cuenta 0R).")
         pool_cands = prelim[:PRELIM_POOL]
         n_long = sum(1 for x in prelim if x["side"] == "long")
         n_short = len(prelim) - n_long
 
         progress(74, f"Validando candidatos con backtest propio ({len(pool_cands)} en cola)")
         picks: List[Dict] = []
-        rejected: List[Dict] = []
         dilution_budget = DILUTION_TIME_BUDGET_S
         dilution_checks = 0
         for k, cand in enumerate(pool_cands):
@@ -2275,14 +2538,14 @@ class UltimatePredictorEngine:
                         "INSERT INTO predictions (run_id, created_at, for_date, symbol, "
                         "side, entry, stop, target, score, expectancy_r, features, "
                         "exp_move_pct, surge_prob_pct, pattern, vol_ratio, dilution_score, "
-                        "entry_type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "entry_type, sector_etf) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (run_id, now_str, for_date, cand["symbol"], cand["side"],
                          cand["entry"], cand["stop"], cand["target"], cand["score"],
                          cand["validation"]["expectancy_r"], feats_json,
                          cand["exp_move_pct"], cand.get("surge_prob_pct"),
                          cand.get("pattern"), cand.get("vol_ratio"),
                          (cand.get("dilution") or {}).get("score"),
-                         cand.get("entry_type", "stop")))
+                         cand.get("entry_type", "stop"), cand.get("sector_etf")))
         except Exception as e:  # noqa: BLE001
             warnings.append(f"No se pudo persistir la corrida en la base local: {e}")
 
@@ -2313,6 +2576,7 @@ class UltimatePredictorEngine:
             "validated": len(picks),
             "rejected_backtest": sum(1 for r in rejected if r["stage"] == "backtest"),
             "rejected_dilution": sum(1 for r in rejected if r["stage"] == "dilution"),
+            "rejected_learned": sum(1 for r in rejected if r["stage"] == "aprendizaje"),
             "graded_this_run": graded_now,
             "dataset_rows": model["dataset_rows"],
             "avg_expectancy_r": (round(float(np.mean(
