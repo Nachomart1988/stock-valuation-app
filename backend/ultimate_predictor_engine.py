@@ -69,6 +69,7 @@ import uuid
 import sqlite3
 import logging
 import threading
+from collections import Counter
 from contextlib import closing
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -185,6 +186,31 @@ DILUTION_REJECT_SCORE = 70
 DILUTION_TIME_BUDGET_S = 90.0
 DILUTION_MAX_CHECKS = 8
 
+# ── Análisis PROFUNDO por finalista (el pináculo orquesta los otros motores) ─
+# El usuario pidió que Ultimate Prediction corra la artillería pesada sobre
+# cada pick seleccionado, aunque tarde más. Cada finalista que supera la
+# validación recibe:
+#   1) DOSSIER DE EXPLOSIONES (estilo Edge Finder, ~2 años de historia diaria):
+#      cada surge/desplome previo con magnitud, días al pico, patrón previo y
+#      volumen de la víspera — "cómo fueron sus explosiones anteriores".
+#   2) RADIOGRAFÍA FUNDAMENTAL (FMP profile + ratios TTM + key metrics, como
+#      los motores de /analizar): caja, deuda, márgenes, P/S, IPO reciente —
+#      el combustible (o el lastre) detrás del mover.
+DEEP_DIVE_LOOKBACK_DAYS = 760    # ~2 años de barras diarias para el dossier
+DEEP_DIVE_CONTEXT_PCT = 50.0     # explosiones "de contexto" (≥50%) además de ≥80%
+DEEP_DIVE_CRASH_CTX_PCT = 30.0   # espejo bajista del contexto para shorts
+DEEP_DIVE_TIME_BUDGET_S = 180.0  # presupuesto total del análisis profundo
+
+# ── Momentum REAL (definición del usuario) ───────────────────────────────────
+# El clasificador de 10 días rotula «Momentum previo (ya corría)» con apenas
+# +12% en 2 semanas — para el usuario eso NO es momentum: momentum es haber
+# subido +100% O MÁS en 3/6/9/12 meses. Si el rótulo corto no viene confirmado
+# por la historia larga, se re-etiqueta como subida corta (bucket propio en el
+# aprendizaje, para que los vetos no mezclen peras con manzanas).
+PAT_POP = "Subida corta (sin momentum real)"
+MOMENTUM_CONFIRM_PCT = 100.0
+MOMENTUM_LOOKBACKS = (63, 126, 189, 252)   # ~3/6/9/12 meses en ruedas
+
 # ── Red neuronal ─────────────────────────────────────────────────────────────
 PATTERN_ORDER = [PAT_CAPITULATION, PAT_PULLBACK, PAT_MOMENTUM, PAT_UPTREND,
                  PAT_COIL, PAT_FLAT, PAT_CHOPPY]
@@ -213,8 +239,29 @@ SHORT_W = {"overext": 25.0, "fatigue": 20.0, "volume": 15.0, "sector": 10.0,
 
 PATTERN_LONG_QUALITY = {
     PAT_COIL: 1.0, PAT_FLAT: 1.0, PAT_UPTREND: 0.85, PAT_PULLBACK: 0.7,
-    PAT_MOMENTUM: 0.6, PAT_CHOPPY: 0.4, PAT_CAPITULATION: 0.2,
+    PAT_MOMENTUM: 0.6, PAT_POP: 0.45, PAT_CHOPPY: 0.4, PAT_CAPITULATION: 0.2,
 }
+
+
+def _confirmed_momentum(c: np.ndarray, i: int) -> bool:
+    """Momentum REAL: +100% o más en alguna ventana de 3/6/9/12 meses."""
+    px = float(c[i])
+    if px <= 0:
+        return False
+    for k in MOMENTUM_LOOKBACKS:
+        if i >= k:
+            prev = float(c[i - k])
+            if prev > 0 and (px / prev - 1.0) * 100 >= MOMENTUM_CONFIRM_PCT:
+                return True
+    return False
+
+
+def _requalify_pattern(pattern: str, c: np.ndarray, i: int) -> str:
+    """El rótulo «ya corría» de 10 días solo se mantiene si la historia larga
+    lo confirma (definición del usuario); si no, es una subida corta."""
+    if pattern == PAT_MOMENTUM and not _confirmed_momentum(c, i):
+        return PAT_POP
+    return pattern
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -371,6 +418,7 @@ def _feature_vector(dates: List[str], o: np.ndarray, h: np.ndarray,
     pre_h = h[i - PRE_BARS + 1:i + 1]
     pre_l = lo[i - PRE_BARS + 1:i + 1]
     pattern, ret10, compression, _ = EdgeFinderEngine._classify_pattern(pre_c, pre_h, pre_l)
+    pattern = _requalify_pattern(pattern, c, i)
 
     va = v[i - VOL_AVG_WINDOW:i]
     vol_avg20 = float(np.mean(va)) if va.size >= 5 else 0.0
@@ -484,7 +532,7 @@ def _auc(y: np.ndarray, p: np.ndarray) -> Optional[float]:
 # ═══════════════════════════════════════════════════════════════════════════
 class UltimatePredictorEngine:
     def __init__(self) -> None:
-        self.version = "2.0"
+        self.version = "2.5"
         # comparte sesión FMP + caché de históricos con el Edge Finder
         self.finder: EdgeFinderEngine = get_edge_finder_engine()
         # caché de sesiones intradía ya cerradas (símbolo:día → OHLCV): evita
@@ -681,9 +729,11 @@ class UltimatePredictorEngine:
         info = {
             "torch_available": TORCH_AVAILABLE,
             "status": "trained" if self._model is not None else "heuristic",
+            "engine_version": getattr(self, "version", None),
             "data_dir": _DATA_DIR,
             "ephemeral_storage": EPHEMERAL_STORAGE,
             "feat_version": FEAT_VERSION,
+            "label_version": LABEL_VERSION,
             "n_features": N_FEATURES,
             "trained_at": self._model_meta.get("trained_at"),
             "rows": self._model_meta.get("rows"),
@@ -1903,6 +1953,13 @@ class UltimatePredictorEngine:
         pre_c, pre_h, pre_l = c[-PRE_BARS:], h[-PRE_BARS:], lo[-PRE_BARS:]
         pattern, ret10, compression, _avg_tr = \
             EdgeFinderEngine._classify_pattern(pre_c, pre_h, pre_l)
+        pattern = _requalify_pattern(pattern, c, n - 1)
+        # corrida larga máxima (3/6/9/12 meses) — el "momentum real" del usuario
+        long_run_max = None
+        for _lb in MOMENTUM_LOOKBACKS:
+            if n > _lb and float(c[-1 - _lb]) > 0:
+                _run = (price / float(c[-1 - _lb]) - 1.0) * 100
+                long_run_max = _run if long_run_max is None else max(long_run_max, _run)
         consec_red, consec_green = EdgeFinderEngine._consecutive(c[-(PRE_BARS + 1):])
 
         lb_l, lb_h = lo[-252:], h[-252:]
@@ -2082,6 +2139,7 @@ class UltimatePredictorEngine:
             "vol_ratio": vol_ratio,
             "consec_red": consec_red,
             "consec_green": consec_green,
+            "long_run_max_pct": round(long_run_max, 1) if long_run_max is not None else None,
             "dist_52w_low_pct": dist_low,
             "dist_52w_high_pct": dist_high,
             "sector_etf": etf,
@@ -2233,6 +2291,137 @@ class UltimatePredictorEngine:
             logger.debug("[Ultimate] dilution check %s failed: %s", symbol, e)
             return None
 
+    # ── Análisis profundo 1: dossier de explosiones previas (~2 años) ────────
+    def _surge_dossier(self, symbol: str, side: str, as_of: str
+                       ) -> Optional[Dict[str, Any]]:
+        """Cada explosión previa del símbolo (estilo Edge Finder, pero por
+        símbolo y con 2 años de historia): magnitud, días al pico, patrón
+        previo y volumen de la víspera. Responde «¿cómo fueron sus surges
+        anteriores?» ANTES de publicar el pick."""
+        d_from = (datetime.strptime(as_of, "%Y-%m-%d")
+                  - timedelta(days=DEEP_DIVE_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+        hist = self.finder._daily_history(symbol, d_from, as_of)
+        dates, o, h, lo, c, v = self.finder._parse_bars(hist)
+        n = len(dates)
+        if n < MIN_BARS:
+            return None
+        thr_ctx = DEEP_DIVE_CONTEXT_PCT if side == "long" else DEEP_DIVE_CRASH_CTX_PCT
+        thr_main = SURGE_PCT_MIN if side == "long" else CRASH_PCT_MIN
+        events: List[Dict[str, Any]] = []
+        i = PRE_BARS
+        while i < n - 1:
+            base = float(c[i])
+            if base <= 0:
+                i += 1
+                continue
+            end = min(i + 1 + SURGE_DAYS, n)
+            if side == "long":
+                seg = h[i + 1:end]
+                k_ext = int(np.argmax(seg))
+                mag = (float(seg[k_ext]) - base) / base * 100
+                started = float(c[i + 1]) > base
+            else:
+                seg = lo[i + 1:end]
+                k_ext = int(np.argmin(seg))
+                mag = (base - float(seg[k_ext])) / base * 100
+                started = float(c[i + 1]) < base
+            if started and mag >= thr_ctx:
+                pat, _r, _cmp, _t = EdgeFinderEngine._classify_pattern(
+                    c[i - PRE_BARS + 1:i + 1], h[i - PRE_BARS + 1:i + 1],
+                    lo[i - PRE_BARS + 1:i + 1])
+                pat = _requalify_pattern(pat, c, i)
+                va = v[max(0, i - VOL_AVG_WINDOW):i]
+                vr = (round(float(v[i]) / float(np.mean(va)), 2)
+                      if va.size >= 5 and float(np.mean(va)) > 0 else None)
+                events.append({"date": dates[i + 1], "magnitude_pct": round(mag, 1),
+                               "days_to_peak": k_ext + 1, "pre_pattern": pat,
+                               "vol_pre": vr, "is_main": bool(mag >= thr_main)})
+                i += SURGE_DAYS
+                continue
+            i += 1
+        out: Dict[str, Any] = {
+            "side": side,
+            "lookback_days": DEEP_DIVE_LOOKBACK_DAYS,
+            "threshold_context_pct": thr_ctx,
+            "threshold_main_pct": thr_main,
+            "n_context": len(events),
+            "n_main": sum(1 for e in events if e["is_main"]),
+            "events": [],
+        }
+        if events:
+            mags = [e["magnitude_pct"] for e in events]
+            out.update({
+                "best_pct": round(max(mags), 1),
+                "median_pct": round(float(np.median(mags)), 1),
+                "median_days_to_peak": int(np.median([e["days_to_peak"] for e in events])),
+                "top_pre_pattern": Counter(e["pre_pattern"] for e in events).most_common(1)[0][0],
+                "last_event_date": events[-1]["date"],
+                "events": events[-8:][::-1],   # los más recientes primero
+            })
+        return out
+
+    # ── Análisis profundo 2: radiografía fundamental (motores de /analizar) ──
+    def _fundamental_snapshot(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Profile + ratios TTM + key metrics de FMP condensados en flags de
+        trader: caja, deuda, márgenes, valuación vs ventas, IPO reciente."""
+        def first(d: Any) -> Dict:
+            if isinstance(d, list):
+                return d[0] if d and isinstance(d[0], dict) else {}
+            return d if isinstance(d, dict) else {}
+
+        def num(d: Dict, *keys: str) -> Optional[float]:
+            for k in keys:
+                val = d.get(k)
+                if isinstance(val, (int, float)):
+                    return float(val)
+            return None
+
+        prof = first(self.finder._fetch_json("profile", {"symbol": symbol}))
+        ratios = first(self.finder._fetch_json("ratios-ttm", {"symbol": symbol}))
+        km = first(self.finder._fetch_json("key-metrics-ttm", {"symbol": symbol}))
+        if not prof and not ratios:
+            return None
+        current = num(ratios, "currentRatioTTM", "currentRatio")
+        net_margin = num(ratios, "netProfitMarginTTM", "netProfitMargin")
+        gross = num(ratios, "grossProfitMarginTTM", "grossProfitMargin")
+        de = num(ratios, "debtToEquityRatioTTM", "debtEquityRatioTTM",
+                 "debtToEquityTTM", "debtEquityRatio")
+        ps = num(ratios, "priceToSalesRatioTTM", "priceToSalesRatio")
+        ipo = prof.get("ipoDate") or None
+        flags: List[str] = []
+        if current is not None and current < 1.0:
+            flags.append(f"caja apretada (current ratio {round(current, 2)}) — "
+                         "riesgo de raise/dilución")
+        if net_margin is not None and net_margin < 0:
+            flags.append("pierde plata (margen neto negativo)")
+        if gross is not None and gross >= 0.6:
+            flags.append(f"márgenes brutos altos ({round(gross * 100)}%)")
+        if de is not None and de > 2:
+            flags.append(f"deuda alta (D/E {round(de, 1)})")
+        if ps is not None and 0 < ps < 1:
+            flags.append(f"barato vs ventas (P/S {round(ps, 2)})")
+        try:
+            if ipo and (datetime.utcnow()
+                        - datetime.strptime(str(ipo)[:10], "%Y-%m-%d")).days <= 730:
+                flags.append(f"IPO reciente ({str(ipo)[:10]}) — flotante joven, "
+                             "típico de movers")
+        except ValueError:
+            pass
+        return {
+            "name": prof.get("companyName") or prof.get("name"),
+            "industry": prof.get("industry"),
+            "country": prof.get("country"),
+            "ipo_date": str(ipo)[:10] if ipo else None,
+            "beta": num(prof, "beta"),
+            "current_ratio": current,
+            "net_margin": net_margin,
+            "gross_margin": gross,
+            "debt_to_equity": de,
+            "price_to_sales": ps,
+            "net_debt_to_ebitda": num(km, "netDebtToEBITDATTM", "netDebtToEBITDA"),
+            "flags": flags,
+        }
+
     # ── Rationale en español ─────────────────────────────────────────────────
     @staticmethod
     def _rationale(cand: Dict, val: Dict) -> str:
@@ -2254,6 +2443,17 @@ class UltimatePredictorEngine:
                          "el quiebre, así que el plan usa entrada a mercado en la apertura.")
         own = cand.get("own_surges") or 0
         own_txt = f" Este símbolo ya tuvo {own} movimientos así en el último año." if own >= 2 else ""
+        dd = cand.get("surge_dossier")
+        if dd and dd.get("n_context"):
+            verbo = "explosiones" if cand["side"] == "long" else "desplomes"
+            own_txt += (f" Dossier 2 años: {dd['n_context']} {verbo} "
+                        f"≥{int(dd['threshold_context_pct'])}% ({dd['n_main']} "
+                        f"≥{int(dd['threshold_main_pct'])}%), mediana {dd['median_pct']}% "
+                        f"con pico en ~{dd['median_days_to_peak']} días, típicamente "
+                        f"desde «{dd['top_pre_pattern']}».")
+        fund = cand.get("fundamentals")
+        if fund and fund.get("flags"):
+            own_txt += f" Fundamentals: {fund['flags'][0]}."
         reach = cand.get("entry_reach_pct")
         reach_txt = ""
         if cand.get("entry_type") != "open" and reach is not None:
@@ -2447,6 +2647,8 @@ class UltimatePredictorEngine:
         picks: List[Dict] = []
         dilution_budget = DILUTION_TIME_BUDGET_S
         dilution_checks = 0
+        deep_budget = DEEP_DIVE_TIME_BUDGET_S
+        deep_dived = 0
         for k, cand in enumerate(pool_cands):
             if len(picks) >= TOP_N:
                 break
@@ -2501,6 +2703,27 @@ class UltimatePredictorEngine:
                     and dilution["score"] >= 40):
                 cand["_rank"] *= 1.0 - (dilution["score"] - 40) / 100.0
                 cand["dilution_note"] = "dilución moderada — ranking penalizado"
+            # ── ANÁLISIS PROFUNDO del finalista (dossier + fundamentals) ─────
+            # El pináculo orquesta los otros motores: 2 años de explosiones
+            # previas (estilo Edge Finder) + radiografía fundamental (como en
+            # /analizar). Toma más tiempo a propósito — el usuario lo pidió.
+            if deep_budget > 5:
+                t_dd = time.time()
+                progress(74 + int(18 * k / max(len(pool_cands), 1)),
+                         f"Análisis profundo de {cand['symbol']}: explosiones "
+                         f"previas (2 años) + fundamentals FMP")
+                try:
+                    cand["surge_dossier"] = self._surge_dossier(
+                        cand["symbol"], cand["side"], market_as_of)
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("[Ultimate] dossier %s: %s", cand["symbol"], e)
+                try:
+                    cand["fundamentals"] = self._fundamental_snapshot(cand["symbol"])
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("[Ultimate] fundamentals %s: %s", cand["symbol"], e)
+                if cand.get("surge_dossier") or cand.get("fundamentals"):
+                    deep_dived += 1
+                deep_budget -= time.time() - t_dd
             cand["rationale"] = self._rationale(cand, val)
             cand["exp_hold_days"] = val["med_days_held"] or MAX_HOLD_DAYS
             picks.append(cand)
@@ -2510,6 +2733,11 @@ class UltimatePredictorEngine:
                 f"Solo {len(picks)} de {TOP_N} candidatos superaron la validación con estos "
                 "filtros — amplía el rango de precio/market cap o espera otro contexto."
             )
+        if deep_dived:
+            warnings.append(
+                f"Análisis profundo aplicado a {deep_dived} finalistas: dossier de "
+                f"explosiones previas (2 años, estilo Edge Finder) + radiografía "
+                f"fundamental FMP — por diseño hace la corrida más lenta.")
 
         # ranking final: prob (o score) × expectancy validada
         picks.sort(key=lambda x: x["_rank"] * max(x["validation"]["expectancy_r"] or 0, 0.01),
@@ -2577,6 +2805,7 @@ class UltimatePredictorEngine:
             "rejected_backtest": sum(1 for r in rejected if r["stage"] == "backtest"),
             "rejected_dilution": sum(1 for r in rejected if r["stage"] == "dilution"),
             "rejected_learned": sum(1 for r in rejected if r["stage"] == "aprendizaje"),
+            "deep_dived": deep_dived,
             "graded_this_run": graded_now,
             "dataset_rows": model["dataset_rows"],
             "avg_expectancy_r": (round(float(np.mean(

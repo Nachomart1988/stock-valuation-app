@@ -45,12 +45,38 @@ interface Validation {
   by_entry?: { stop: EntryStats; open: EntryStats };
 }
 
+interface SurgeDossierEvent {
+  date: string; magnitude_pct: number; days_to_peak: number;
+  pre_pattern: string; vol_pre: number | null; is_main: boolean;
+}
+
+interface SurgeDossier {
+  side: string; lookback_days: number;
+  threshold_context_pct: number; threshold_main_pct: number;
+  n_context: number; n_main: number;
+  best_pct?: number; median_pct?: number; median_days_to_peak?: number;
+  top_pre_pattern?: string; last_event_date?: string;
+  events: SurgeDossierEvent[];
+}
+
+interface Fundamentals {
+  name: string | null; industry: string | null; country: string | null;
+  ipo_date: string | null; beta: number | null;
+  current_ratio: number | null; net_margin: number | null; gross_margin: number | null;
+  debt_to_equity: number | null; price_to_sales: number | null;
+  net_debt_to_ebitda: number | null;
+  flags: string[];
+}
+
 interface Pick {
   symbol: string; side: 'long' | 'short'; sector: string; industry: string | null;
   exchange: string | null; market_cap: number | null;
   as_of: string; price: number; status: string; pattern: string;
   ret10_pct: number; atr_pct: number; vol_ratio: number | null;
   consec_red: number; consec_green: number;
+  long_run_max_pct?: number | null;
+  surge_dossier?: SurgeDossier | null;
+  fundamentals?: Fundamentals | null;
   dist_52w_low_pct: number | null; dist_52w_high_pct: number | null;
   sector_etf: string | null; sector_ret20_pct: number | null; sector_hot_now: boolean | null;
   entry: number; stop: number; target: number; rr: number; risk_pct: number;
@@ -385,6 +411,56 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
         </div>
       </div>
 
+      {/* Dossier de explosiones previas (análisis profundo, ~2 años) */}
+      {pick.surge_dossier && pick.surge_dossier.n_context > 0 && (
+        <div className="mt-3 rounded-xl bg-gray-950/60 border border-amber-500/15 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-300/80 mb-1">
+            🧨 {long ? 'Explosiones' : 'Desplomes'} previos (2 años · estilo Edge Finder)
+          </p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-300 mb-2">
+            <span><b className="text-amber-300">{pick.surge_dossier.n_context}</b> de ≥{pick.surge_dossier.threshold_context_pct}% · <b className="text-amber-300">{pick.surge_dossier.n_main}</b> de ≥{pick.surge_dossier.threshold_main_pct}%</span>
+            {pick.surge_dossier.best_pct != null && <span>Mejor: <b className="text-gray-100">{long ? '+' : '−'}{pick.surge_dossier.best_pct}%</b></span>}
+            {pick.surge_dossier.median_pct != null && <span>Mediana: <b className="text-gray-100">{long ? '+' : '−'}{pick.surge_dossier.median_pct}%</b> en ~{pick.surge_dossier.median_days_to_peak}d al pico</span>}
+            {pick.surge_dossier.top_pre_pattern && <span>Patrón previo típico: <b className="text-gray-100">{pick.surge_dossier.top_pre_pattern}</b></span>}
+          </div>
+          {pick.surge_dossier.events.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {pick.surge_dossier.events.map((e, i) => (
+                <span key={e.date + i} title={`patrón previo: ${e.pre_pattern}${e.vol_pre != null ? ` · vol víspera ${e.vol_pre}×` : ''}`}
+                  className={`text-[10px] px-2 py-0.5 rounded-md border font-mono ${e.is_main ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' : 'border-gray-700 bg-gray-800/50 text-gray-400'}`}>
+                  {e.date} {long ? '+' : '−'}{e.magnitude_pct}% ({e.days_to_peak}d)
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Radiografía fundamental (motores de /analizar) */}
+      {pick.fundamentals && (
+        <div className="mt-2 rounded-xl bg-gray-950/60 border border-sky-500/15 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-300/80 mb-1">
+            🔬 Fundamentals {pick.fundamentals.name ? `· ${pick.fundamentals.name}` : ''}
+          </p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-gray-400">
+            {pick.fundamentals.current_ratio != null && <span>Current ratio <b className={pick.fundamentals.current_ratio < 1 ? 'text-rose-300' : 'text-gray-200'}>{pick.fundamentals.current_ratio.toFixed(2)}</b></span>}
+            {pick.fundamentals.gross_margin != null && <span>Margen bruto <b className="text-gray-200">{Math.round(pick.fundamentals.gross_margin * 100)}%</b></span>}
+            {pick.fundamentals.net_margin != null && <span>Margen neto <b className={pick.fundamentals.net_margin < 0 ? 'text-rose-300' : 'text-gray-200'}>{Math.round(pick.fundamentals.net_margin * 100)}%</b></span>}
+            {pick.fundamentals.debt_to_equity != null && <span>D/E <b className="text-gray-200">{pick.fundamentals.debt_to_equity.toFixed(1)}</b></span>}
+            {pick.fundamentals.price_to_sales != null && <span>P/S <b className="text-gray-200">{pick.fundamentals.price_to_sales.toFixed(2)}</b></span>}
+            {pick.fundamentals.beta != null && <span>Beta <b className="text-gray-200">{pick.fundamentals.beta.toFixed(2)}</b></span>}
+            {pick.fundamentals.ipo_date && <span>IPO <b className="text-gray-200">{pick.fundamentals.ipo_date}</b></span>}
+          </div>
+          {pick.fundamentals.flags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {pick.fundamentals.flags.map((f, i) => (
+                <span key={i} className="text-[10px] px-2 py-0.5 rounded-md border border-sky-500/30 bg-sky-500/10 text-sky-200">{f}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Dilución */}
       {pick.dilution && (
         <p className="mt-2 text-xs text-gray-400">
@@ -414,6 +490,7 @@ function PickCard({ pick, rank, onChart }: { pick: Pick; rank: number; onChart: 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-1 pt-2 text-[11px] text-gray-500">
             <span>Patrón: <b className="text-gray-300">{pick.pattern}</b></span>
             <span>Ret 10d: <b className="text-gray-300">{pick.ret10_pct}%</b></span>
+            {pick.long_run_max_pct != null && <span>Run máx 3-12m: <b className={pick.long_run_max_pct >= 100 ? 'text-amber-300' : 'text-gray-300'}>{pick.long_run_max_pct > 0 ? '+' : ''}{pick.long_run_max_pct}%</b>{pick.long_run_max_pct >= 100 && ' 🚀'}</span>}
             <span>ATR: <b className="text-gray-300">{pick.atr_pct}%</b></span>
             <span>Vol: <b className="text-gray-300">{fmt(pick.vol_ratio, '×')}</b></span>
             <span>Δ52w low: <b className="text-gray-300">{fmt(pick.dist_52w_low_pct, '%')}</b></span>
