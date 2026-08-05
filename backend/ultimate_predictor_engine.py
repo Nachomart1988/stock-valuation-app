@@ -66,6 +66,7 @@ import os
 import json
 import time
 import uuid
+import zlib
 import sqlite3
 import logging
 import threading
@@ -232,10 +233,14 @@ TRAIN_PATIENCE = 6
 TRAIN_BATCH = 512
 
 # ── Pesos del score heurístico (drivers explicativos + fallback) ─────────────
-LONG_W = {"trigger": 25.0, "pattern": 15.0, "volume": 15.0, "sector": 15.0,
-          "trend": 15.0, "risk": 15.0}
-SHORT_W = {"overext": 25.0, "fatigue": 20.0, "volume": 15.0, "sector": 10.0,
-           "high52": 15.0, "risk": 15.0}
+# Playbook TraderLion/traderCharlieM: "accumulation" premia que el volumen de
+# los últimos 10 días esté del lado comprador (big blue, small pink) y "rs" la
+# fuerza relativa vs SPY — los líderes outperforman MIENTRAS el mercado
+# consolida. En shorts, "distribution" premia lo inverso. Suman 100 como antes.
+LONG_W = {"trigger": 22.0, "pattern": 13.0, "volume": 13.0, "sector": 12.0,
+          "trend": 12.0, "risk": 8.0, "accumulation": 12.0, "rs": 8.0}
+SHORT_W = {"overext": 22.0, "fatigue": 18.0, "volume": 13.0, "sector": 9.0,
+           "high52": 13.0, "risk": 10.0, "distribution": 15.0}
 
 PATTERN_LONG_QUALITY = {
     PAT_COIL: 1.0, PAT_FLAT: 1.0, PAT_UPTREND: 0.85, PAT_PULLBACK: 0.7,
@@ -1986,6 +1991,17 @@ class UltimatePredictorEngine:
         day_range = float(h[-1] - lo[-1])
         close_pos = (price - float(lo[-1])) / day_range if day_range > 0 else 0.5
 
+        # ── Playbook TraderLion: acumulación/distribución + RS vs SPY ────────
+        # Share del volumen de 10 días que cayó en días verdes ("volume on up
+        # days bigger than volume on down days" = acumulación institucional).
+        v10_, c10_, o10_ = v[-10:], c[-10:], o[-10:]
+        green10 = c10_ > o10_
+        tot_v10 = float(np.sum(v10_))
+        upvol_share = float(np.sum(v10_[green10])) / tot_v10 if tot_v10 > 0 else 0.5
+        ret20 = (price / float(c[-21]) - 1.0) * 100 if n >= 21 and float(c[-21]) > 0 else None
+        rs_vs_spy = (round(ret20 - spy20, 1)
+                     if (ret20 is not None and spy20 is not None) else None)
+
         # movimiento explosivo esperado: mediana de SUS propios surges/crashes
         exp_up = round(float(np.median(surge_mags)), 1) if len(surge_mags) >= 2 else SURGE_PCT_MIN
         exp_down = round(float(np.median(crash_mags)), 1) if len(crash_mags) >= 2 else CRASH_PCT_MIN
@@ -2052,6 +2068,14 @@ class UltimatePredictorEngine:
                 "risk": ((1.0, f"ATR {atr_pct}% — rango operable") if 2 <= atr_pct <= 10 else
                          (0.7, f"ATR {atr_pct}%") if atr_pct <= 15 else
                          (0.3, f"ATR {atr_pct}% — volatilidad extrema")),
+                "accumulation": (max(0.0, min(1.0, (upvol_share - 0.35) / 0.40)),
+                                 f"{round(upvol_share * 100)}% del volumen de 10d en días verdes"
+                                 + (" — acumulación" if upvol_share >= 0.60 else
+                                    " — distribución" if upvol_share <= 0.40 else "")),
+                "rs": ((0.5, "RS vs SPY s/d — neutro") if rs_vs_spy is None else
+                       (max(0.0, min(1.0, 0.5 + rs_vs_spy / 30.0)),
+                        f"RS 20d {round(ret20, 1):+}% vs SPY {round(spy20, 1):+}%"
+                        + (" — líder" if rs_vs_spy >= 10 else ""))),
             }
             score, parts = score_of(LONG_W, comps, "long")
             entry = _px(trigger)
@@ -2099,6 +2123,10 @@ class UltimatePredictorEngine:
                            else (0.5, "máximo 52w s/d")),
                 "risk": ((1.0, f"ATR {atr_pct}% — rango operable") if 3 <= atr_pct <= 12 else
                          (0.6, f"ATR {atr_pct}%")),
+                "distribution": (max(0.0, min(1.0, (0.65 - upvol_share) / 0.40)),
+                                 f"{round(upvol_share * 100)}% del volumen de 10d en días verdes"
+                                 + (" — los vendedores dominan" if upvol_share <= 0.40 else
+                                    " — todavía compran fuerte" if upvol_share >= 0.60 else "")),
             }
             score, parts = score_of(SHORT_W, comps, "short")
             entry = _px(float(lo[-1]))
@@ -2142,6 +2170,9 @@ class UltimatePredictorEngine:
             "long_run_max_pct": round(long_run_max, 1) if long_run_max is not None else None,
             "dist_52w_low_pct": dist_low,
             "dist_52w_high_pct": dist_high,
+            "upvol_share10": round(upvol_share, 2),
+            "ret20_pct": round(ret20, 1) if ret20 is not None else None,
+            "rs_vs_spy_pct": rs_vs_spy,
             "sector_etf": etf,
             "sector_ret20_pct": sec_ret,
             "sector_hot_now": hot_now,
@@ -2543,8 +2574,11 @@ class UltimatePredictorEngine:
         all_surge_mags: List[float] = []
         done = 0
         with ThreadPoolExecutor(max_workers=10) as pool:
+            # crc32, NO hash(): el hash() de str está salteado por proceso
+            # (PYTHONHASHSEED), así que cada restart del backend muestreaba
+            # negativos distintos → dataset no reproducible entre deploys.
             futs = {pool.submit(self._scan_symbol, m, cfg, ctx, spy_map, etf_maps,
-                                np.random.default_rng(hash(m["symbol"]) % 2**31)):
+                                np.random.default_rng(zlib.crc32(m["symbol"].encode()) % 2**31)):
                     m["symbol"] for m in universe}
             for fut in as_completed(futs):
                 done += 1
