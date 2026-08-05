@@ -168,15 +168,47 @@ interface SideStats {
   win_rate_pct: number | null; avg_r: number | null; total_r: number | null;
 }
 
+interface TrackRow {
+  id?: number;
+  for_date: string; symbol: string; side: string; entry: number; stop: number;
+  target: number; score: number; status: string; outcome: string | null;
+  outcome_r: number | null; exit_price: number | null; days_held: number | null;
+  pattern?: string | null; surge_prob_pct?: number | null;
+  entry_type?: string | null; cur_r?: number | null; max_r?: number | null;
+}
+
 interface TrackRecord {
   overall: SideStats; long: SideStats; short: SideStats;
   by_pattern?: Array<SideStats & { pattern: string }>;
-  recent: Array<{
-    for_date: string; symbol: string; side: string; entry: number; stop: number;
-    target: number; score: number; status: string; outcome: string | null;
-    outcome_r: number | null; exit_price: number | null; days_held: number | null;
-    pattern?: string | null; surge_prob_pct?: number | null;
-    entry_type?: string | null; cur_r?: number | null; max_r?: number | null;
+  recent: TrackRow[];
+  total?: number;
+}
+
+interface PredictionDetail {
+  prediction: TrackRow & {
+    run_id?: string; created_at?: string; expectancy_r?: number | null;
+    exp_move_pct?: number | null; vol_ratio?: number | null;
+    dilution_score?: number | null; sector_etf?: string | null;
+    evaluated_at?: string | null;
+  };
+  trigger: {
+    score_breakdown: ScorePart[];
+    rationale: string | null;
+    setup: Record<string, unknown>;
+    validation: Partial<Validation>;
+  };
+  post_mortem: {
+    filled?: number | null; outcome?: string | null; r?: number | null;
+    mfe_r?: number | null; move_pct?: number | null; missed?: number | null;
+    gap_pct?: number | null; session_vol_ratio?: number | null;
+    verdict?: string | null; high_time_min?: number | null;
+    low_time_min?: number | null; first5_ret_pct?: number | null;
+    first5_relvol?: number | null; spy_day_pct?: number | null;
+    sector_day_pct?: number | null;
+  } | null;
+  bars: Array<{
+    date: string; open: number; high: number; low: number; close: number;
+    volume: number; phase: 'previa' | 'trade'; event: string | null;
   }>;
 }
 
@@ -528,6 +560,34 @@ export default function UltimatePredictionSection() {
   const [chartBars, setChartBars] = useState<ChartBar[] | null>(null);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState('');
+
+  // Detalle de un pick del track record (disparador + trade)
+  const [detailRow, setDetailRow] = useState<TrackRow | null>(null);
+  const [detail, setDetail] = useState<PredictionDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  // Filtros de la tabla del track record (ahora trae el historial completo)
+  const [trackFilter, setTrackFilter] = useState<'all' | 'graded' | 'open' | 'pending'>('all');
+  const [trackSide, setTrackSide] = useState<'all' | 'long' | 'short'>('all');
+  const [trackQuery, setTrackQuery] = useState('');
+  const [trackLimit, setTrackLimit] = useState(100);
+
+  const openDetail = useCallback(async (row: TrackRow) => {
+    setDetailRow(row); setDetail(null); setDetailError('');
+    if (row.id == null) {
+      setDetailError('Este pick es anterior al guardado del disparador — no hay detalle.');
+      return;
+    }
+    setDetailLoading(true);
+    try {
+      setDetail(await getBackend<PredictionDetail>(
+        `/backtest/ultimate/prediction/${row.id}`, 30000));
+    } catch (e) {
+      setDetailError(e instanceof Error ? e.message : 'No se pudo cargar el detalle');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
 
   const set = <K extends keyof UltimateConfig>(k: K, v: UltimateConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }));
@@ -900,8 +960,47 @@ export default function UltimatePredictionSection() {
               </div>
             </div>
           )}
-          {showTrack && (
-            <div className="overflow-x-auto mt-4">
+          {showTrack && (() => {
+            const q = trackQuery.trim().toUpperCase();
+            const filtered = track.recent.filter((r) => {
+              if (trackFilter === 'graded' && r.status !== 'graded') return false;
+              if (trackFilter === 'open' && r.status !== 'open') return false;
+              if (trackFilter === 'pending' && r.status !== 'pending') return false;
+              if (trackSide !== 'all' && r.side !== trackSide) return false;
+              if (q && !r.symbol.toUpperCase().includes(q)) return false;
+              return true;
+            });
+            const shown = filtered.slice(0, trackLimit);
+            const chip = (active: boolean) =>
+              `px-2 py-0.5 rounded-md text-[11px] font-semibold border transition ${
+                active ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
+                       : 'border-gray-700 bg-gray-800/40 text-gray-400 hover:text-gray-200'}`;
+            return (
+            <div className="mt-4">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="text-[11px] text-gray-500">
+                  Historial completo: <b className="text-gray-300">{track.recent.length}</b> predicciones
+                  {filtered.length !== track.recent.length && <> · {filtered.length} tras filtrar</>}
+                </span>
+                <div className="flex items-center gap-1 ml-auto">
+                  {(['all', 'graded', 'open', 'pending'] as const).map((f) => (
+                    <button key={f} onClick={() => { setTrackFilter(f); setTrackLimit(100); }} className={chip(trackFilter === f)}>
+                      {f === 'all' ? 'Todas' : f === 'graded' ? 'Calificadas' : f === 'open' ? 'En curso' : 'Pendientes'}
+                    </button>
+                  ))}
+                  <span className="w-px h-4 bg-gray-700 mx-1" />
+                  {(['all', 'long', 'short'] as const).map((s) => (
+                    <button key={s} onClick={() => { setTrackSide(s); setTrackLimit(100); }} className={chip(trackSide === s)}>
+                      {s === 'all' ? 'Ambos' : s.toUpperCase()}
+                    </button>
+                  ))}
+                  <input value={trackQuery} onChange={(e) => { setTrackQuery(e.target.value); setTrackLimit(100); }}
+                    placeholder="Símbolo…"
+                    className="ml-1 w-24 px-2 py-0.5 rounded-md text-[11px] bg-gray-800/60 border border-gray-700 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-cyan-500/40" />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-600 mb-1.5">Clic en el símbolo para ver su disparador y el trade que salió.</p>
+              <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead><tr className="text-left text-gray-500 border-b border-gray-800">
                   <th className="py-1.5 pr-3">Sesión</th><th className="pr-3">Símbolo</th><th className="pr-3">Lado</th>
@@ -911,10 +1010,15 @@ export default function UltimatePredictionSection() {
                   <th className="pr-3 text-right">R</th><th className="text-right">Días</th>
                 </tr></thead>
                 <tbody>
-                  {track.recent.map((r, i) => (
-                    <tr key={i} className="border-b border-gray-800/50 text-gray-400">
+                  {shown.map((r, i) => (
+                    <tr key={r.id ?? i} className="border-b border-gray-800/50 text-gray-400 hover:bg-cyan-500/5">
                       <td className="py-1.5 pr-3">{r.for_date}</td>
-                      <td className="pr-3 font-mono text-gray-300">{r.symbol}</td>
+                      <td className="pr-3">
+                        <button onClick={() => openDetail(r)}
+                          className="font-mono text-cyan-300 hover:text-cyan-200 hover:underline font-semibold">
+                          {r.symbol}
+                        </button>
+                      </td>
                       <td className={`pr-3 font-semibold ${r.side === 'long' ? 'text-emerald-400/80' : 'text-rose-400/80'}`}>{r.side.toUpperCase()}</td>
                       <td className="pr-3 text-gray-500">{r.pattern ? r.pattern.split(' ')[0] : '–'}</td>
                       <td className="pr-3 text-right font-mono">{r.surge_prob_pct != null ? `${r.surge_prob_pct}%` : '–'}</td>
@@ -938,10 +1042,23 @@ export default function UltimatePredictionSection() {
                       <td className="text-right font-mono">{r.days_held ?? '–'}</td>
                     </tr>
                   ))}
+                  {shown.length === 0 && (
+                    <tr><td colSpan={11} className="py-4 text-center text-gray-600">
+                      Ninguna predicción coincide con el filtro.
+                    </td></tr>
+                  )}
                 </tbody>
               </table>
+              </div>
+              {filtered.length > shown.length && (
+                <button onClick={() => setTrackLimit((n) => n + 250)}
+                  className="mt-2 w-full py-1.5 rounded-lg text-[11px] font-semibold bg-gray-800/50 border border-gray-700 text-gray-400 hover:text-cyan-300 hover:border-cyan-500/30 transition">
+                  Mostrar 250 más ({filtered.length - shown.length} restantes)
+                </button>
+              )}
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
@@ -1101,6 +1218,154 @@ export default function UltimatePredictionSection() {
             )}
             {chartBars && chartBars.length === 0 && (
               <p className="text-sm text-gray-400 py-16 text-center">Sin datos de gráfico para este símbolo.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Detalle de un pick del track record: disparador + trade */}
+      {detailRow && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 overflow-y-auto"
+          onClick={() => { setDetailRow(null); setDetail(null); }}>
+          <div className="bg-gray-900 border border-cyan-500/25 rounded-2xl p-5 w-full max-w-4xl my-8"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-black text-cyan-300">
+                  {detailRow.symbol}
+                  <span className={`ml-2 text-sm font-bold ${detailRow.side === 'long' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {detailRow.side.toUpperCase()}
+                  </span>
+                  <span className="text-gray-500 text-sm font-normal"> · sesión {detailRow.for_date}</span>
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Entrada ${detailRow.entry} · stop ${detailRow.stop} · target ${detailRow.target}
+                  {detailRow.entry_type && <> · entrada por {detailRow.entry_type === 'open' ? 'apertura' : 'stop'}</>}
+                  {' · '}score {detailRow.score}
+                </p>
+              </div>
+              <button onClick={() => { setDetailRow(null); setDetail(null); }}
+                className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
+            </div>
+
+            {detailLoading && <p className="text-sm text-gray-400 py-12 text-center">Cargando el disparador y el trade…</p>}
+            {detailError && <p className="text-sm text-amber-300/90 py-8 text-center">{detailError}</p>}
+
+            {detail && (
+              <div className="space-y-5">
+                {/* ── EL DISPARADOR ── */}
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-300/70 mb-2">
+                    🎯 El disparador — por qué se publicó
+                  </h4>
+                  {detail.trigger.rationale && (
+                    <p className="text-xs text-gray-300 leading-relaxed mb-3 bg-gray-800/40 rounded-lg p-3 border border-gray-700/50">
+                      {detail.trigger.rationale}
+                    </p>
+                  )}
+                  {detail.trigger.score_breakdown.length > 0 ? (
+                    <div className="space-y-1">
+                      {detail.trigger.score_breakdown.map((p) => (
+                        <div key={p.key} className="flex items-center gap-2 text-[11px]">
+                          <span className="w-24 shrink-0 font-semibold text-gray-400">{p.key}</span>
+                          <div className="w-28 shrink-0 h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                            <div className="h-full bg-cyan-500/60 rounded-full"
+                              style={{ width: `${Math.max(0, Math.min(100, (p.points / p.max) * 100))}%` }} />
+                          </div>
+                          <span className="w-16 shrink-0 font-mono text-gray-400">{p.points}/{p.max}</span>
+                          <span className="text-gray-500 truncate">{p.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-gray-600">
+                      Este pick se publicó antes de que el motor guardara el desglose del disparador.
+                    </p>
+                  )}
+                  {Object.keys(detail.trigger.setup).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-3">
+                      {Object.entries(detail.trigger.setup).map(([k, v]) => (
+                        <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800/60 border border-gray-700/60 text-gray-400">
+                          {k}: <b className="text-gray-300">{typeof v === 'boolean' ? (v ? 'sí' : 'no') : String(v)}</b>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {detail.trigger.validation?.expectancy_r != null && (
+                    <p className="text-[11px] text-gray-500 mt-2">
+                      Validación previa sobre su propia historia: {detail.trigger.validation.fills} fills ·
+                      WR {fmt(detail.trigger.validation.win_rate_pct, '%')} ·
+                      expectancy <b className="text-gray-300">{fmt(detail.trigger.validation.expectancy_r, 'R')}</b>
+                    </p>
+                  )}
+                </div>
+
+                {/* ── EL TRADE ── */}
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-300/70 mb-2">
+                    📈 El trade — qué pasó realmente
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                    <StatCard label="Resultado" value={detailRow.outcome ?? detailRow.status}
+                      tone={detailRow.outcome?.startsWith('win') ? 'pos'
+                        : detailRow.outcome?.startsWith('loss') ? 'neg' : 'neutral'} />
+                    <StatCard label="R realizado" value={fmt(detailRow.outcome_r, 'R')}
+                      tone={(detailRow.outcome_r ?? 0) > 0 ? 'pos' : (detailRow.outcome_r ?? 0) < 0 ? 'neg' : 'neutral'} />
+                    <StatCard label="R máximo alcanzado" value={fmt(detail.post_mortem?.mfe_r ?? detailRow.max_r, 'R')}
+                      hint="cuánto llegó a dar" />
+                    <StatCard label="Días en el trade" value={detailRow.days_held != null ? String(detailRow.days_held) : '–'} />
+                  </div>
+                  {detail.post_mortem && (
+                    <div className="text-[11px] text-gray-400 bg-gray-800/40 rounded-lg p-3 border border-gray-700/50 space-y-1">
+                      {detail.post_mortem.verdict && (
+                        <p className="text-gray-300"><b>Veredicto del motor:</b> {detail.post_mortem.verdict}</p>
+                      )}
+                      <p>
+                        {detail.post_mortem.filled ? 'Ejecutó la entrada' : 'No llegó a ejecutar'}
+                        {detail.post_mortem.gap_pct != null && <> · gap de apertura {detail.post_mortem.gap_pct}%</>}
+                        {detail.post_mortem.session_vol_ratio != null && <> · volumen de la sesión {detail.post_mortem.session_vol_ratio}× el promedio</>}
+                        {detail.post_mortem.move_pct != null && <> · el movimiento fue {detail.post_mortem.move_pct}%</>}
+                      </p>
+                      {(detail.post_mortem.spy_day_pct != null || detail.post_mortem.sector_day_pct != null) && (
+                        <p className="text-gray-500">
+                          Contexto de ese día: SPY {fmt(detail.post_mortem.spy_day_pct, '%')}
+                          {detail.post_mortem.sector_day_pct != null && <> · sector {fmt(detail.post_mortem.sector_day_pct, '%')}</>}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {detail.bars.length > 0 && (
+                    <div className="overflow-x-auto mt-3">
+                      <table className="w-full text-[11px]">
+                        <thead><tr className="text-left text-gray-600 border-b border-gray-800">
+                          <th className="py-1 pr-3">Fecha</th><th className="pr-3 text-right">Apertura</th>
+                          <th className="pr-3 text-right">Máx</th><th className="pr-3 text-right">Mín</th>
+                          <th className="pr-3 text-right">Cierre</th><th>Evento</th>
+                        </tr></thead>
+                        <tbody>
+                          {detail.bars.map((b) => (
+                            <tr key={b.date} className={`border-b border-gray-800/40 ${
+                              b.phase === 'previa' ? 'text-gray-600' : 'text-gray-400'}`}>
+                              <td className="py-1 pr-3 font-mono">{b.date}</td>
+                              <td className="pr-3 text-right font-mono">{b.open}</td>
+                              <td className="pr-3 text-right font-mono">{b.high}</td>
+                              <td className="pr-3 text-right font-mono">{b.low}</td>
+                              <td className="pr-3 text-right font-mono">{b.close}</td>
+                              <td>
+                                {b.event === 'entrada' ? <span className="text-amber-300 font-semibold">▶ entrada</span>
+                                  : b.event === 'target' ? <span className="text-emerald-400 font-semibold">✓ target</span>
+                                  : b.event === 'stop' ? <span className="text-rose-400 font-semibold">✗ stop</span>
+                                  : b.event === 'sin_fill_gap' ? <span className="text-gray-500">abrió pasado el nivel — no se persigue</span>
+                                  : b.phase === 'previa' ? <span className="text-gray-700">previa</span> : ''}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>

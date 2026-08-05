@@ -219,6 +219,7 @@ try:
         get_job as ultimate_get_job,
         get_history as ultimate_get_history,
         grade_now as ultimate_grade_now,
+        get_prediction_detail as ultimate_get_prediction_detail,
     )
     ULTIMATE_PREDICTOR_AVAILABLE = True
 except ImportError:
@@ -227,6 +228,7 @@ except ImportError:
     ultimate_get_job = None
     ultimate_get_history = None
     ultimate_grade_now = None
+    ultimate_get_prediction_detail = None
 
 try:
     from weekly_report_engine import start_job as weekly_report_start_job, get_job as weekly_report_get_job
@@ -2950,6 +2952,25 @@ async def ultimate_predictor_history():
         return numpy_safe_response(data)
     except Exception as e:
         print(f"[Ultimate] history error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/backtest/ultimate/prediction/{pred_id}")
+async def ultimate_prediction_detail(pred_id: int):
+    """Un pick del track record en detalle: el disparador con el que se publicó
+    (desglose del score, racional y foto del setup) y el trade que salió
+    (post-mortem + barras diarias desde la entrada hasta stop/target)."""
+    if not ULTIMATE_PREDICTOR_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Ultimate predictor engine not available")
+    try:
+        data = await asyncio.to_thread(ultimate_get_prediction_detail, pred_id)
+        if 'error' in data:
+            raise HTTPException(status_code=404, detail=data['error'])
+        return numpy_safe_response(data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Ultimate] prediction detail error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

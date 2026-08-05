@@ -660,7 +660,13 @@ class UltimatePredictorEngine:
                         "ALTER TABLE post_mortems ADD COLUMN first5_json TEXT",
                         "ALTER TABLE post_mortems ADD COLUMN spy_day_pct REAL",
                         "ALTER TABLE post_mortems ADD COLUMN sector_day_pct REAL",
-                        "ALTER TABLE post_mortems ADD COLUMN sector_prev5_pct REAL"):
+                        "ALTER TABLE post_mortems ADD COLUMN sector_prev5_pct REAL",
+                        # v2.6: el "por qué" de cada pick queda guardado con él,
+                        # para poder abrir un pick viejo y ver su disparador.
+                        "ALTER TABLE predictions ADD COLUMN score_breakdown TEXT",
+                        "ALTER TABLE predictions ADD COLUMN rationale TEXT",
+                        "ALTER TABLE predictions ADD COLUMN setup_json TEXT",
+                        "ALTER TABLE predictions ADD COLUMN validation_json TEXT"):
                 try:
                     conn.execute(ddl)
                 except sqlite3.OperationalError:
@@ -1760,15 +1766,19 @@ class UltimatePredictorEngine:
             time.sleep(3600)
 
     def track_record(self) -> Dict[str, Any]:
-        """KPIs del historial calificado + últimas predicciones (para la UI)."""
+        """KPIs del historial calificado + TODAS las predicciones (para la UI).
+
+        `recent` trae el historial completo — el usuario audita el track record
+        entero, no una ventana. Se envían solo las columnas que la tabla usa
+        (el detalle pesado de cada pick se pide aparte con prediction_detail)."""
         with self._db_lock, closing(self._db()) as conn, conn:
             rows = conn.execute(
                 "SELECT * FROM predictions WHERE status='graded' "
-                "ORDER BY for_date DESC LIMIT 400").fetchall()
+                "ORDER BY for_date DESC").fetchall()
             recent = conn.execute(
-                "SELECT for_date, symbol, side, entry, stop, target, score, status, "
+                "SELECT id, for_date, symbol, side, entry, stop, target, score, status, "
                 "outcome, outcome_r, exit_price, days_held, pattern, surge_prob_pct, "
-                "entry_type, cur_r, max_r FROM predictions ORDER BY id DESC LIMIT 60").fetchall()
+                "entry_type, cur_r, max_r FROM predictions ORDER BY id DESC").fetchall()
 
         def _stats(subset: List[sqlite3.Row]) -> Dict[str, Any]:
             fills = [r for r in subset if r["outcome"] != "no_fill"]
@@ -1799,6 +1809,97 @@ class UltimatePredictorEngine:
             "short": _stats([r for r in rows if r["side"] == "short"]),
             "by_pattern": by_pattern,
             "recent": [dict(r) for r in recent],
+            "total": len(recent),
+        }
+
+    def prediction_detail(self, pred_id: int) -> Dict[str, Any]:
+        """Todo lo de un pick: el disparador que lo publicó y el trade que salió.
+
+        El disparador viene de la foto guardada al publicarlo (score_breakdown,
+        rationale, setup); el trade, del post-mortem + el replay diario desde
+        la sesión de entrada, para poder ver la operación barra a barra."""
+        with self._db_lock, closing(self._db()) as conn, conn:
+            row = conn.execute("SELECT * FROM predictions WHERE id=?", (pred_id,)).fetchone()
+            if row is None:
+                return {"error": f"predicción {pred_id} inexistente"}
+            pm = conn.execute("SELECT * FROM post_mortems WHERE pred_id=?", (pred_id,)).fetchone()
+
+        pred = dict(row)
+
+        def _loads(key: str, default: Any) -> Any:
+            raw = pred.pop(key, None)
+            if not raw:
+                return default
+            try:
+                return json.loads(raw)
+            except (ValueError, TypeError):
+                return default
+
+        breakdown = _loads("score_breakdown", [])
+        setup = _loads("setup_json", {})
+        validation = _loads("validation_json", {})
+        pred.pop("features", None)   # el vector crudo no aporta a la lectura
+
+        # ── Replay del trade: barras desde la sesión de entrada ──────────────
+        bars: List[Dict[str, Any]] = []
+        try:
+            d_from = (datetime.strptime(pred["for_date"], "%Y-%m-%d")
+                      - timedelta(days=20)).strftime("%Y-%m-%d")
+            as_of = self._advance_as_of(None)
+            dates, o, h, lo, c, v = self._series_through(pred["symbol"], d_from, as_of)
+            start = next((i for i, d in enumerate(dates) if d >= pred["for_date"]), None)
+            if start is not None:
+                entry, stop, target = pred["entry"], pred["stop"], pred["target"]
+                side = pred["side"]
+                filled = False
+                # 5 ruedas de previa (el contexto del setup) y hasta 40 de trade
+                for i in range(max(0, start - 5), min(len(dates), start + 40)):
+                    is_pre = dates[i] < pred["for_date"]
+                    hit = None
+                    if not is_pre:
+                        if not filled:
+                            if _try_fill(side, entry, float(o[i]), float(h[i]), float(lo[i])) is not None:
+                                filled = True
+                                hit = "entrada"
+                            elif i == start:
+                                # abrió tan pasado el nivel que no se persigue
+                                gap_ok = (float(o[i]) > entry if side == "long"
+                                          else float(o[i]) < entry)
+                                if gap_ok:
+                                    hit = "sin_fill_gap"
+                        else:
+                            if side == "long":
+                                if float(lo[i]) <= stop:
+                                    hit = "stop"
+                                elif float(h[i]) >= target:
+                                    hit = "target"
+                            else:
+                                if float(h[i]) >= stop:
+                                    hit = "stop"
+                                elif float(lo[i]) <= target:
+                                    hit = "target"
+                    bars.append({
+                        "date": dates[i], "open": round(float(o[i]), 2),
+                        "high": round(float(h[i]), 2), "low": round(float(lo[i]), 2),
+                        "close": round(float(c[i]), 2), "volume": float(v[i]),
+                        "phase": "previa" if is_pre else "trade",
+                        "event": hit,
+                    })
+                    if hit in ("stop", "target"):
+                        break
+        except Exception as e:  # noqa: BLE001
+            logger.debug("[Ultimate] replay %s: %s", pred.get("symbol"), e)
+
+        return {
+            "prediction": pred,
+            "trigger": {
+                "score_breakdown": breakdown,
+                "rationale": pred.pop("rationale", None),
+                "setup": setup,
+                "validation": validation,
+            },
+            "post_mortem": dict(pm) if pm is not None else None,
+            "bars": bars,
         }
 
     @staticmethod
@@ -2836,18 +2937,40 @@ class UltimatePredictorEngine:
                         "DELETE FROM predictions WHERE status='pending' AND "
                         "for_date=? AND symbol=? AND side=?",
                         (for_date, cand["symbol"], cand["side"]))
+                    # Foto del disparador tal como se veía cuando se publicó
+                    # el pick: sin esto, un pick viejo no se puede auditar.
+                    setup_snapshot = {
+                        k: cand.get(k) for k in (
+                            "price", "atr_pct", "ret10_pct", "compression",
+                            "consec_red", "consec_green", "long_run_max_pct",
+                            "dist_52w_low_pct", "dist_52w_high_pct",
+                            "sector", "sector_etf", "sector_ret20_pct", "sector_hot_now",
+                            "market_cap", "rr", "risk_pct", "status",
+                            "entry_reach_pct", "entry_reach_atr", "exp_move_pct",
+                            "own_surges", "own_surge_max", "pedigree",
+                            "p_up_pct", "p_down_pct", "upvol_share10", "ret20_pct",
+                            "rs_vs_spy_pct", "three_weeks_tight", "distribution_days",
+                            "climax_risk", "weeks_since_low", "as_of",
+                        ) if cand.get(k) is not None
+                    }
                     conn.execute(
                         "INSERT INTO predictions (run_id, created_at, for_date, symbol, "
                         "side, entry, stop, target, score, expectancy_r, features, "
                         "exp_move_pct, surge_prob_pct, pattern, vol_ratio, dilution_score, "
-                        "entry_type, sector_etf) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "entry_type, sector_etf, score_breakdown, rationale, setup_json, "
+                        "validation_json) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (run_id, now_str, for_date, cand["symbol"], cand["side"],
                          cand["entry"], cand["stop"], cand["target"], cand["score"],
                          cand["validation"]["expectancy_r"], feats_json,
                          cand["exp_move_pct"], cand.get("surge_prob_pct"),
                          cand.get("pattern"), cand.get("vol_ratio"),
                          (cand.get("dilution") or {}).get("score"),
-                         cand.get("entry_type", "stop"), cand.get("sector_etf")))
+                         cand.get("entry_type", "stop"), cand.get("sector_etf"),
+                         json.dumps(cand.get("score_breakdown") or [], ensure_ascii=False),
+                         cand.get("rationale"),
+                         json.dumps(setup_snapshot, ensure_ascii=False),
+                         json.dumps(cand.get("validation") or {}, ensure_ascii=False)))
         except Exception as e:  # noqa: BLE001
             warnings.append(f"No se pudo persistir la corrida en la base local: {e}")
 
@@ -2981,6 +3104,11 @@ def grade_now() -> Dict[str, Any]:
     califica, escribe post-mortems, actualiza insights y re-entrena si hay
     feedback nuevo suficiente."""
     return get_ultimate_predictor_engine().auto_learn()
+
+
+def get_prediction_detail(pred_id: int) -> Dict[str, Any]:
+    """Disparador + trade de un pick (GET /backtest/ultimate/prediction/{id})."""
+    return get_ultimate_predictor_engine().prediction_detail(pred_id)
 
 
 def start_job(raw_config: Dict[str, Any]) -> str:
