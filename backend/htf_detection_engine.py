@@ -7,10 +7,19 @@ import logging
 import numpy as np
 import os
 import requests
+import threading
+import time
 import warnings
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from scipy import stats
+from requests.adapters import HTTPAdapter
+
+try:
+    from urllib3.util.retry import Retry
+    URLLIB3_RETRY_AVAILABLE = True
+except ImportError:
+    URLLIB3_RETRY_AVAILABLE = False
 
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
@@ -33,9 +42,20 @@ class HTFDetectionEngine:
     Hedge-fund grade High-Tight Flag detector — tuned against real Notion FLAGS.
     """
 
-    # Class-level ML model cache
+    # Class-level ML model cache. _ml_lock serializes training: without it,
+    # N scan workers train N models concurrently over the GLOBAL numpy RNG,
+    # interleaving draws — each worker ends up with a different synthetic
+    # dataset (and model) on every run, which made scan scores non-deterministic.
     _shared_ml_model = None
     _shared_scaler = None
+    _ml_lock = threading.Lock()
+
+    # Class-level SPY cache: one fetch per process per TTL instead of one per
+    # ticker (a 3000-ticker scan was re-downloading SPY hundreds of times,
+    # multiplying rate-limit failures).
+    _spy_cache: Dict[int, Tuple[float, Optional[np.ndarray]]] = {}
+    _spy_lock = threading.Lock()
+    _SPY_TTL_SECONDS = 900.0
 
     def __init__(
         self,
@@ -59,6 +79,21 @@ class HTFDetectionEngine:
         self.ignore_vol_dryup = ignore_vol_dryup
         self.max_flag_end_age_weeks = max_flag_end_age_weeks
         self._session = requests.Session()
+        # Retry transient FMP failures (429 rate limits, 5xx, connection drops).
+        # Without this, a busy scan silently dropped whichever tickers happened
+        # to fail that run — the main source of "same inputs, different results".
+        if URLLIB3_RETRY_AVAILABLE:
+            retry = Retry(
+                total=3, connect=2, read=2,
+                backoff_factor=0.6,
+                status_forcelist=(429, 500, 502, 503, 504),
+                allowed_methods=frozenset(['GET']),
+                raise_on_status=False,
+                respect_retry_after_header=True,
+            )
+            adapter = HTTPAdapter(pool_connections=4, pool_maxsize=64, max_retries=retry)
+            self._session.mount('https://', adapter)
+            self._session.mount('http://', adapter)
         self._ml_model = HTFDetectionEngine._shared_ml_model
         self._scaler = HTFDetectionEngine._shared_scaler
 
@@ -105,12 +140,44 @@ class HTFDetectionEngine:
         }
 
     def _fetch_spy_prices(self, days: int = 756) -> Optional[np.ndarray]:
-        data = self._fetch_daily_prices('SPY', days)
-        return data['close'] if data else None
+        # Single-flight: the first caller fetches while holding the lock, so a
+        # burst of scan workers shares one SPY download instead of racing N.
+        cls = HTFDetectionEngine
+        with cls._spy_lock:
+            now = time.monotonic()
+            hit = cls._spy_cache.get(days)
+            if hit is not None and now - hit[0] < cls._SPY_TTL_SECONDS and hit[1] is not None:
+                return hit[1]
+            data = self._fetch_daily_prices('SPY', days)
+            closes = data['close'] if data else None
+            # Never overwrite a good cached copy with a failed fetch.
+            if closes is not None or days not in cls._spy_cache:
+                cls._spy_cache[days] = (now, closes)
+            return closes
 
     def _fetch_earnings(self, ticker: str) -> List[Dict]:
-        data = self._fetch_json('earnings-surprises', {'symbol': ticker})
-        return data if data and isinstance(data, list) else []
+        # FMP retired `earnings-surprises` on the stable API (it now 404s for
+        # every symbol, so no catalyst was ever matched). `earnings` is the
+        # replacement; normalize its fields to the shape _match_catalyst expects.
+        data = self._fetch_json('earnings', {'symbol': ticker})
+        if not data or not isinstance(data, list):
+            return []
+        out: List[Dict] = []
+        for ep in data:
+            if not isinstance(ep, dict):
+                continue
+            actual = ep.get('epsActual', ep.get('actualEarningResult'))
+            estimated = ep.get('epsEstimated', ep.get('estimatedEarning'))
+            if actual is None:
+                continue
+            out.append({
+                'date': ep.get('date', ''),
+                'actualEarningResult': actual,
+                'estimatedEarning': estimated if estimated is not None else 0,
+                'revenueActual': ep.get('revenueActual'),
+                'revenueEstimated': ep.get('revenueEstimated'),
+            })
+        return out
 
     def _fetch_quote(self, ticker: str) -> Optional[Dict]:
         data = self._fetch_json('quote', {'symbol': ticker})
@@ -681,34 +748,53 @@ class HTFDetectionEngine:
             1.0 if catalyst and catalyst.get('beat') else 0.0,
         ])
 
+    def _ensure_ml_model(self) -> None:
+        """Train (once per process, deterministically) and bind the shared model.
+
+        Double-checked locking: only one thread ever trains, everyone else
+        waits and reuses the exact same model, so a given feature vector maps
+        to the same ml_prob on every run."""
+        if not self.ml_mode:
+            return
+        cls = HTFDetectionEngine
+        if cls._shared_ml_model is None:
+            with cls._ml_lock:
+                if cls._shared_ml_model is None:
+                    self._train_synthetic_model()
+        self._ml_model = cls._shared_ml_model
+        self._scaler = cls._shared_scaler
+
     def _train_synthetic_model(self):
         if not SKLEARN_AVAILABLE:
             return
-        np.random.seed(42)
+        # Local RandomState — the global np.random.seed() pattern was shared
+        # across scan threads, so concurrent draws interleaved and every run
+        # trained a slightly different model.
+        rng = np.random.RandomState(42)
         n_samples = 500
         pos = np.column_stack([
-            np.random.uniform(0.8, 3.0, n_samples),
-            np.random.uniform(3, 12, n_samples),
-            np.random.uniform(0.02, 0.10, n_samples),
-            np.random.uniform(2, 8, n_samples),
-            np.random.uniform(0.2, 0.5, n_samples),
-            np.random.binomial(1, 0.8, n_samples),
-            np.random.uniform(0.7, 1.0, n_samples),
-            np.random.binomial(1, 0.7, n_samples),
-            np.random.uniform(0.1, 0.8, n_samples),
-            np.random.binomial(1, 0.75, n_samples),
+            rng.uniform(0.8, 3.0, n_samples),
+            rng.uniform(3, 12, n_samples),
+            rng.uniform(0.02, 0.10, n_samples),
+            rng.uniform(2, 8, n_samples),
+            rng.uniform(0.2, 0.5, n_samples),
+            rng.binomial(1, 0.8, n_samples),
+            rng.uniform(0.7, 1.0, n_samples),
+            rng.binomial(1, 0.7, n_samples),
+            rng.uniform(0.1, 0.8, n_samples),
+            rng.binomial(1, 0.75, n_samples),
         ])
         neg = np.column_stack([
-            np.random.uniform(0.3, 1.5, n_samples),
-            np.random.uniform(1, 20, n_samples),
-            np.random.uniform(0.08, 0.30, n_samples),
-            np.random.uniform(1, 15, n_samples),
-            np.random.uniform(0.5, 1.2, n_samples),
-            np.random.binomial(1, 0.3, n_samples),
-            np.random.uniform(0.2, 0.7, n_samples),
-            np.random.binomial(1, 0.2, n_samples),
-            np.random.uniform(-0.3, 0.3, n_samples),
-            np.random.binomial(1, 0.3, n_samples),
+            rng.uniform(0.3, 1.5, n_samples),
+            rng.uniform(1, 20, n_samples),
+            rng.uniform(0.08, 0.30, n_samples),
+            rng.uniform(1, 15, n_samples),
+            rng.uniform(0.5, 1.2, n_samples),
+            rng.binomial(1, 0.3, n_samples),
+            rng.uniform(0.2, 0.7, n_samples),
+            rng.binomial(1, 0.2, n_samples),
+            rng.uniform(-0.3, 0.3, n_samples),
+            rng.binomial(1, 0.3, n_samples),
         ])
         X = np.vstack([pos, neg])
         y = np.concatenate([np.ones(n_samples), np.zeros(n_samples)])
@@ -755,6 +841,122 @@ class HTFDetectionEngine:
             score += catalyst * 0.10
         return float(min(max(score, 0), 1.0))
 
+    # ── Playbook quality metrics (TraderLion Model Book / traderCharlieM) ──
+    # Computed from the daily bars already fetched — zero extra API calls.
+    #   · U/D volume ratio in the flag  → "big blue, small pink" accumulation
+    #   · Tight closes                  → "super tight closes are constructive"
+    #   · 23-EMA respect                → stocks that respect it are holdable
+    #   · Close vs 50-DMA               → closing below it is the sell signal
+    #   · RS new high BEFORE price      → the strongest RS signature (RSNHBP)
+    #   · Pocket pivot                  → up-day volume > any down-day vol (10d)
+
+    @staticmethod
+    def _ema(values: np.ndarray, period: int) -> np.ndarray:
+        alpha = 2.0 / (period + 1.0)
+        out = np.empty_like(values, dtype=float)
+        out[0] = values[0]
+        for i in range(1, len(values)):
+            out[i] = alpha * values[i] + (1 - alpha) * out[i - 1]
+        return out
+
+    def _compute_playbook(self, daily: Dict, flag: Optional[Dict],
+                          rs: Dict) -> Dict[str, Any]:
+        closes = daily['close']
+        volumes = daily['volume']
+        dates = daily['dates']
+        n = len(closes)
+        empty = {
+            'ud_vol_ratio': None, 'tight_closes_pct': None,
+            'ma23_respect_pct': None, 'above_50dma': None,
+            'rs_nhbp': False, 'pocket_pivot': False,
+            'bonus': 0.0, 'notes': [],
+        }
+        if flag is None or n < 60:
+            return empty
+
+        # Daily indices inside the flag window (weekly dates are the last
+        # trading day of each ISO week, so a simple date range works).
+        start_d, end_d = flag['start_date'], flag['end_date']
+        idx = [i for i, d in enumerate(dates) if start_d < d <= end_d]
+        if len(idx) < 3:
+            idx = list(range(max(0, n - 10), n))
+
+        # 1. Up/Down volume ratio inside the flag (accumulation signature)
+        up_vol = down_vol = 0.0
+        for i in idx:
+            if i == 0:
+                continue
+            if closes[i] > closes[i - 1]:
+                up_vol += volumes[i]
+            elif closes[i] < closes[i - 1]:
+                down_vol += volumes[i]
+        ud_ratio = (up_vol / down_vol) if down_vol > 0 else (2.0 if up_vol > 0 else 1.0)
+
+        # 2. Tightness of the most recent closes in the flag
+        tail = [closes[i] for i in idx[-10:]]
+        tail_mean = float(np.mean(tail)) if tail else 0.0
+        tight_pct = (float(np.std(tail)) / tail_mean * 100.0) if tail_mean > 0 else 99.0
+
+        # 3. Respect for the 23-EMA during the flag
+        ema23 = self._ema(closes, 23)
+        above = sum(1 for i in idx if closes[i] >= ema23[i])
+        ma23_respect = above / len(idx) * 100.0
+
+        # 4. Current close vs 50-DMA (a live flag shouldn't be below it)
+        sma50 = float(np.mean(closes[-50:])) if n >= 50 else float(np.mean(closes))
+        above_50dma = bool(closes[-1] >= sma50)
+
+        # 5. RS line at new highs while price still below the flag high
+        rs_nhbp = bool(rs.get('rs_new_high')) and closes[-1] < flag['flag_high']
+
+        # 6. Pocket pivot in the last 10 sessions
+        pocket = False
+        for i in range(max(11, n - 10), n):
+            if closes[i] <= closes[i - 1]:
+                continue
+            prior_down = [volumes[j] for j in range(i - 10, i)
+                          if closes[j] < closes[j - 1]]
+            if prior_down and volumes[i] > max(prior_down):
+                pocket = True
+                break
+
+        bonus = 0.0
+        notes: List[str] = []
+        if rs_nhbp:
+            bonus += 2.0; notes.append("RS en máximos ANTES que el precio (RSNHBP) ✓")
+        if ud_ratio >= 1.3:
+            bonus += 2.0; notes.append(f"Acumulación: vol. en subas {ud_ratio:.2f}× el de bajas ✓")
+        elif ud_ratio >= 1.1:
+            bonus += 1.0; notes.append(f"Vol. en subas {ud_ratio:.2f}× el de bajas")
+        elif ud_ratio <= 0.75:
+            bonus -= 2.0; notes.append(f"Distribución: vol. en bajas domina ({ud_ratio:.2f}×) ✗")
+        if tight_pct <= 2.5:
+            bonus += 2.0; notes.append(f"Cierres súper tight ({tight_pct:.1f}%) ✓")
+        elif tight_pct <= 4.0:
+            bonus += 1.0; notes.append(f"Cierres tight ({tight_pct:.1f}%)")
+        elif tight_pct >= 8.0:
+            bonus -= 2.0; notes.append(f"Acción wide & loose ({tight_pct:.1f}%) ✗")
+        if ma23_respect >= 70.0:
+            bonus += 1.0; notes.append(f"Respeta su 23-EMA ({ma23_respect:.0f}% de los días) ✓")
+        elif ma23_respect <= 40.0:
+            bonus -= 1.0; notes.append(f"No respeta su 23-EMA ({ma23_respect:.0f}%) ✗")
+        if not above_50dma:
+            bonus -= 2.0; notes.append("Cierra debajo de su 50-DMA — señal de venta del playbook ✗")
+        if pocket:
+            bonus += 1.0; notes.append("Pocket pivot en las últimas 10 ruedas ✓")
+        bonus = float(max(-8.0, min(8.0, bonus)))
+
+        return {
+            'ud_vol_ratio': round(float(ud_ratio), 2),
+            'tight_closes_pct': round(float(tight_pct), 2),
+            'ma23_respect_pct': round(float(ma23_respect), 1),
+            'above_50dma': above_50dma,
+            'rs_nhbp': rs_nhbp,
+            'pocket_pivot': pocket,
+            'bonus': bonus,
+            'notes': notes,
+        }
+
     def _breakout_proximity(self, daily: Dict, flag: Optional[Dict]) -> Dict:
         if flag is None:
             return {'proximity_pct': 0, 'breakout_triggered': False, 'vol_confirmation': False, 'flag_high': 0, 'vol_ratio': 0}
@@ -776,7 +978,8 @@ class HTFDetectionEngine:
             'vol_ratio': round(float(current_vol / avg_vol_20) if avg_vol_20 > 0 else 0, 2),
         }
 
-    def _fusion_score(self, metrics_score: float, ml_prob: float, breakout: Dict) -> float:
+    def _fusion_score(self, metrics_score: float, ml_prob: float, breakout: Dict,
+                      playbook_bonus: float = 0.0) -> float:
         proximity_score = 0
         if breakout['breakout_triggered'] and breakout['vol_confirmation']:
             proximity_score = 1.0
@@ -787,7 +990,8 @@ class HTFDetectionEngine:
         elif breakout['proximity_pct'] > -5:
             proximity_score = 0.3
         raw = metrics_score * 0.40 + ml_prob * 0.30 + proximity_score * 0.30
-        return round(raw * 100, 1)
+        score = raw * 100 + playbook_bonus
+        return round(float(max(0.0, min(100.0, score))), 1)
 
     def _generate_narrative(self, ticker: str, surge: Dict, flag: Optional[Dict],
                             catalyst: Optional[Dict], rs: Dict,
@@ -869,10 +1073,6 @@ class HTFDetectionEngine:
                 'ticker': ticker,
             }
 
-        spy_closes = self._fetch_spy_prices(days=756)
-        earnings = self._fetch_earnings(ticker)
-        quote = self._fetch_quote(ticker)
-
         weekly = self._to_weekly(daily['dates'], daily['close'], daily['high'],
                                  daily['low'], daily['volume'])
 
@@ -891,8 +1091,13 @@ class HTFDetectionEngine:
                 'analysis_date': daily['dates'][-1],
             }
 
-        if self.ml_mode and self._ml_model is None:
-            self._train_synthetic_model()
+        # Only tickers with a surge pay for the extra API calls (most of a
+        # scan universe exits above, cutting FMP pressure ~4x).
+        spy_closes = self._fetch_spy_prices(days=756)
+        earnings = self._fetch_earnings(ticker)
+        quote = self._fetch_quote(ticker)
+
+        self._ensure_ml_model()
 
         rs = self._compute_rs(daily['close'], spy_closes) if spy_closes is not None else \
              {'rs_current': 0, 'rs_new_high': False, 'rs_percentile': 50}
@@ -912,15 +1117,20 @@ class HTFDetectionEngine:
                 metrics_score = 0.1
 
             breakout = self._breakout_proximity(daily, flag)
-            score = float(self._fusion_score(metrics_score, ml_prob, breakout))
+            playbook = self._compute_playbook(daily, flag, rs)
+            score = float(self._fusion_score(metrics_score, ml_prob, breakout,
+                                             playbook['bonus']))
 
             narrative = self._generate_narrative(ticker, surge, flag, catalyst, rs, breakout, score)
+            if playbook['notes']:
+                narrative += "\nPlaybook: " + " · ".join(playbook['notes'])
 
             pattern = {
                 'surge': surge,
                 'flag': flag,
                 'catalyst': catalyst,
                 'breakout': breakout,
+                'playbook': playbook,
                 'ml_probability': round(float(ml_prob), 3),
                 'fusion_score': score,
                 'narrative': narrative,

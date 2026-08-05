@@ -299,7 +299,7 @@ function ScreenerPageInner() {
   const [htfResults, setHtfResults] = useState<HTFScanResult[]>([]);
   const [htfLoading, setHtfLoading] = useState(false);
   const [htfError, setHtfError] = useState<string | null>(null);
-  const [htfStats, setHtfStats] = useState({ total: 0, scanned: 0 });
+  const [htfStats, setHtfStats] = useState({ total: 0, scanned: 0, failed: 0 });
   const [htfFilters, setHtfFilters] = useState({
     priceMin: '5',
     priceMax: '500',
@@ -566,7 +566,7 @@ function ScreenerPageInner() {
     setHtfLoading(true);
     setHtfError(null);
     setHtfResults([]);
-    setHtfStats({ total: 0, scanned: 0 });
+    setHtfStats({ total: 0, scanned: 0, failed: 0 });
 
     try {
       const params = new URLSearchParams({
@@ -586,7 +586,7 @@ function ScreenerPageInner() {
       }
 
       const data = await res.json();
-      setHtfStats({ total: data.total || 0, scanned: data.scanned || 0 });
+      setHtfStats({ total: data.total || 0, scanned: data.scanned || 0, failed: data.failedCount || 0 });
 
       if (!data.results?.length) {
         setHtfError('No HTF patterns detected in the current filter range.');
@@ -1253,6 +1253,9 @@ function ScreenerPageInner() {
               {!htfLoading && htfStats.total > 0 && (
                 <div className="mt-3 text-[11px] text-rose-400/50">
                   {htfStats.total} stocks screened · {htfStats.scanned} analyzed for HTF patterns
+                  {htfStats.failed > 0 && (
+                    <span className="text-amber-400/70"> · {htfStats.failed} failed (data errors — results may be incomplete)</span>
+                  )}
                 </div>
               )}
 

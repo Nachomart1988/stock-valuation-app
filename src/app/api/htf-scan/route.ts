@@ -38,23 +38,28 @@ export async function GET(req: NextRequest) {
   });
 
   let stocks: any[] = [];
-  try {
-    const res = await fetch(`${FMP_BASE}/stable/company-screener?${params}`, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) stocks = data;
-    }
-  } catch { /* skip */ }
+  for (let attempt = 0; attempt < 2 && stocks.length === 0; attempt++) {
+    try {
+      const res = await fetch(`${FMP_BASE}/stable/company-screener?${params}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) stocks = data;
+      }
+    } catch { /* retry once */ }
+  }
 
-  // Deduplicate & validate
+  // Deduplicate & validate. Sorted by symbol so the backend always receives the
+  // same universe in the same order regardless of FMP's response ordering.
   const seen = new Set<string>();
-  const valid = stocks.filter((s: any) => {
-    if (!s.symbol || !s.price || s.price <= 0 || s.isEtf || s.isFund) return false;
-    if (s.symbol.includes('.')) return false;
-    if (seen.has(s.symbol)) return false;
-    seen.add(s.symbol);
-    return true;
-  });
+  const valid = stocks
+    .filter((s: any) => {
+      if (!s.symbol || !s.price || s.price <= 0 || s.isEtf || s.isFund) return false;
+      if (s.symbol.includes('.')) return false;
+      if (seen.has(s.symbol)) return false;
+      seen.add(s.symbol);
+      return true;
+    })
+    .sort((a: any, b: any) => String(a.symbol).localeCompare(String(b.symbol)));
 
   if (valid.length === 0) {
     return NextResponse.json({ results: [], total: 0, scanned: 0 });
@@ -97,6 +102,8 @@ export async function GET(req: NextRequest) {
       results: data.results || [],
       total: data.total ?? valid.length,
       scanned: data.scanned ?? 0,
+      failedCount: data.failed_count ?? 0,
+      failed: data.failed || [],
     });
   } catch (e: any) {
     return NextResponse.json(

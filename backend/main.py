@@ -38,7 +38,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 import numpy as np
 import json
 import os
@@ -2116,29 +2116,44 @@ class HTFScanRequest(BaseModel):
 async def htf_scan(req: HTFScanRequest):
     """Batch HTF scanner — fans out across tickers internally so Vercel can stay
     under its 300s function-invocation cap. Returns the flattened, sorted, top-N
-    results that the screener UI expects."""
+    results that the screener UI expects.
+
+    Determinism: one shared engine (one HTTP session with retries, one ML model
+    trained before the fan-out), failed tickers are retried once and reported
+    instead of silently dropped, and ties sort by symbol."""
     if not HTF_AVAILABLE:
         raise HTTPException(status_code=503, detail="HTF detection engine not available")
     from htf_detection_engine import HTFDetectionEngine
     from concurrent.futures import ThreadPoolExecutor
 
-    def scan_one(t: HTFScanTicker) -> Optional[Dict[str, Any]]:
+    engine = HTFDetectionEngine(
+        min_surge=req.min_surge,
+        max_flag_range=req.max_flag_range,
+        surge_lookback_months=req.surge_lookback_months,
+        ignore_vol_dryup=req.ignore_vol_dryup,
+        max_flag_end_age_weeks=req.max_flag_end_age_weeks,
+    )
+    # Train the (deterministic) ML model once, before any worker needs it.
+    try:
+        engine._ensure_ml_model()
+    except Exception as e:
+        print(f"[HTF Scan] ML pre-train failed (heuristic fallback): {e}")
+
+    def scan_one(t: HTFScanTicker) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """→ (result | None, error_reason | None). (None, None) = analyzed, no pattern."""
         try:
-            engine = HTFDetectionEngine(
-                min_surge=req.min_surge,
-                max_flag_range=req.max_flag_range,
-                surge_lookback_months=req.surge_lookback_months,
-                ignore_vol_dryup=req.ignore_vol_dryup,
-                max_flag_end_age_weeks=req.max_flag_end_age_weeks,
-            )
             data = engine.analyze(t.symbol)
-            if not data or 'error' in data or data.get('score', 0) <= 0:
-                return None
+            if not data or 'error' in data:
+                err = data.get('error') if isinstance(data, dict) else 'no data'
+                return None, str(err or 'no data')
+            if data.get('score', 0) <= 0:
+                return None, None
             bp = data.get('best_pattern')
             if not bp or not bp.get('surge') or not bp.get('flag'):
-                return None
+                return None, None
             surge = bp['surge']; flag = bp['flag']
             breakout = bp.get('breakout') or {}
+            playbook = bp.get('playbook') or {}
             triggered = breakout.get('breakout_triggered')
             vol_conf = breakout.get('vol_confirmation')
             prox = breakout.get('proximity_pct')
@@ -2168,6 +2183,14 @@ async def htf_scan(req: HTFScanRequest):
                 'cup_low': flag.get('cup_low'),
                 'cup_weeks': flag.get('cup_weeks'),
                 'handle_weeks': flag.get('handle_weeks'),
+                # Playbook quality (TraderLion / traderCharlieM material)
+                'ud_vol_ratio': playbook.get('ud_vol_ratio'),
+                'tight_closes_pct': playbook.get('tight_closes_pct'),
+                'ma23_respect_pct': playbook.get('ma23_respect_pct'),
+                'above_50dma': playbook.get('above_50dma'),
+                'rs_nhbp': playbook.get('rs_nhbp'),
+                'pocket_pivot': playbook.get('pocket_pivot'),
+                'playbook_bonus': playbook.get('bonus'),
             }
             narrative = data.get('narrative') or ''
             return {
@@ -2179,24 +2202,49 @@ async def htf_scan(req: HTFScanRequest):
                 'score': data.get('score', 0),
                 'detected': data.get('detected', False),
                 'bestPattern': flat_bp,
-                'narrative': narrative[:200],
+                'narrative': narrative[:300],
                 'patternsCount': len(data.get('patterns') or []),
-            }
+            }, None
         except Exception as e:
             print(f"[HTF Scan] {t.symbol} failed: {e}")
-            return None
+            return None, str(e)
 
     loop = asyncio.get_running_loop()
     max_workers = max(1, min(req.max_workers, 48))
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        tasks = [loop.run_in_executor(ex, scan_one, t) for t in req.tickers]
-        raw = await asyncio.gather(*tasks, return_exceptions=False)
-    results = [r for r in raw if r is not None]
-    results.sort(key=lambda x: x.get('score', 0), reverse=True)
+
+    async def sweep(tickers: List[HTFScanTicker], workers: int):
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            tasks = [loop.run_in_executor(ex, scan_one, t) for t in tickers]
+            return await asyncio.gather(*tasks, return_exceptions=False)
+
+    raw = await sweep(req.tickers, max_workers)
+    results: List[Dict[str, Any]] = []
+    failed: List[Dict[str, str]] = []
+    retry_list: List[HTFScanTicker] = []
+    for t, (res, err) in zip(req.tickers, raw):
+        if res is not None:
+            results.append(res)
+        elif err is not None:
+            retry_list.append(t)
+
+    # One gentler retry pass for transient failures (rate limits, timeouts) so
+    # a busy moment doesn't change which tickers make the list.
+    if retry_list:
+        raw2 = await sweep(retry_list, min(8, max_workers))
+        for t, (res, err) in zip(retry_list, raw2):
+            if res is not None:
+                results.append(res)
+            elif err is not None:
+                failed.append({'symbol': t.symbol, 'reason': err[:120]})
+
+    results.sort(key=lambda x: (-x.get('score', 0), x.get('symbol', '')))
+    failed.sort(key=lambda f: f['symbol'])
     return numpy_safe_response({
         'results': results[:req.top_n],
         'total': len(req.tickers),
-        'scanned': len(req.tickers),
+        'scanned': len(req.tickers) - len(failed),
+        'failed_count': len(failed),
+        'failed': failed[:50],
     })
 
 
