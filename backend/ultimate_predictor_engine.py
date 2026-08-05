@@ -2002,6 +2002,32 @@ class UltimatePredictorEngine:
         rs_vs_spy = (round(ret20 - spy20, 1)
                      if (ret20 is not None and spy20 is not None) else None)
 
+        # ── Reglas semanales de O'Neil (IBD model charts) ────────────────────
+        # "3 weeks tight closes" = el punto de compra que marca en casi todos
+        # los charts modelo; sobre barras diarias son ~15 ruedas con cierres
+        # dentro del 1.5%.
+        tight_3w = False
+        if n >= 15:
+            wk_closes = [float(c[-1]), float(c[-6]), float(c[-11])]
+            hi_, lo2_ = max(wk_closes), min(wk_closes)
+            tight_3w = bool(lo2_ > 0 and (hi_ - lo2_) / lo2_ <= 0.015)
+        # "Largest volume days of the pullback were down days" = distribución.
+        distribution = False
+        if n >= 20:
+            idxs = sorted(range(n - 15, n), key=lambda i: float(v[i]), reverse=True)[:3]
+            distribution = sum(1 for i in idxs if c[i] < c[i - 1]) >= 2
+        # Climax: O'Neil exige >18 semanas (~90 ruedas) desde el breakout para
+        # llamarlo clímax. Antes de eso, un +100% no es señal de venta.
+        weeks_since_low = None
+        if n >= 90:
+            lb = c[-90:]
+            weeks_since_low = round(float(np.argmax(lb == np.max(lb))) / 5.0, 1)
+        climax_risk = bool(
+            long_run_max is not None and long_run_max >= 100
+            and dist_high is not None and dist_high > -3
+            and weeks_since_low is not None and weeks_since_low >= 18
+        )
+
         # movimiento explosivo esperado: mediana de SUS propios surges/crashes
         exp_up = round(float(np.median(surge_mags)), 1) if len(surge_mags) >= 2 else SURGE_PCT_MIN
         exp_down = round(float(np.median(crash_mags)), 1) if len(crash_mags) >= 2 else CRASH_PCT_MIN
@@ -2068,10 +2094,14 @@ class UltimatePredictorEngine:
                 "risk": ((1.0, f"ATR {atr_pct}% — rango operable") if 2 <= atr_pct <= 10 else
                          (0.7, f"ATR {atr_pct}%") if atr_pct <= 15 else
                          (0.3, f"ATR {atr_pct}% — volatilidad extrema")),
-                "accumulation": (max(0.0, min(1.0, (upvol_share - 0.35) / 0.40)),
-                                 f"{round(upvol_share * 100)}% del volumen de 10d en días verdes"
-                                 + (" — acumulación" if upvol_share >= 0.60 else
-                                    " — distribución" if upvol_share <= 0.40 else "")),
+                "accumulation": (
+                    max(0.0, min(1.0, (upvol_share - 0.35) / 0.40))
+                    + (0.15 if tight_3w else 0.0) - (0.30 if distribution else 0.0),
+                    f"{round(upvol_share * 100)}% del volumen de 10d en días verdes"
+                    + (" — acumulación" if upvol_share >= 0.60 else
+                       " — distribución" if upvol_share <= 0.40 else "")
+                    + (" · 3 semanas de cierres tight ✓" if tight_3w else "")
+                    + (" · los días de mayor volumen fueron bajistas ✗" if distribution else "")),
                 "rs": ((0.5, "RS vs SPY s/d — neutro") if rs_vs_spy is None else
                        (max(0.0, min(1.0, 0.5 + rs_vs_spy / 30.0)),
                         f"RS 20d {round(ret20, 1):+}% vs SPY {round(spy20, 1):+}%"
@@ -2123,10 +2153,16 @@ class UltimatePredictorEngine:
                            else (0.5, "máximo 52w s/d")),
                 "risk": ((1.0, f"ATR {atr_pct}% — rango operable") if 3 <= atr_pct <= 12 else
                          (0.6, f"ATR {atr_pct}%")),
-                "distribution": (max(0.0, min(1.0, (0.65 - upvol_share) / 0.40)),
-                                 f"{round(upvol_share * 100)}% del volumen de 10d en días verdes"
-                                 + (" — los vendedores dominan" if upvol_share <= 0.40 else
-                                    " — todavía compran fuerte" if upvol_share >= 0.60 else "")),
+                "distribution": (
+                    max(0.0, min(1.0, (0.65 - upvol_share) / 0.40))
+                    + (0.25 if climax_risk else 0.0) + (0.15 if distribution else 0.0),
+                    f"{round(upvol_share * 100)}% del volumen de 10d en días verdes"
+                    + (" — los vendedores dominan" if upvol_share <= 0.40 else
+                       " — todavía compran fuerte" if upvol_share >= 0.60 else "")
+                    + (f" · clímax: +{round(long_run_max)}% y {weeks_since_low} semanas "
+                       "desde el piso — la regla de O'Neil habilita la venta"
+                       if climax_risk else "")
+                    + (" · los días de mayor volumen fueron bajistas ✓" if distribution else "")),
             }
             score, parts = score_of(SHORT_W, comps, "short")
             entry = _px(float(lo[-1]))
@@ -2173,6 +2209,10 @@ class UltimatePredictorEngine:
             "upvol_share10": round(upvol_share, 2),
             "ret20_pct": round(ret20, 1) if ret20 is not None else None,
             "rs_vs_spy_pct": rs_vs_spy,
+            "three_weeks_tight": tight_3w,
+            "distribution_days": distribution,
+            "climax_risk": climax_risk,
+            "weeks_since_low": weeks_since_low,
             "sector_etf": etf,
             "sector_ret20_pct": sec_ret,
             "sector_hot_now": hot_now,

@@ -2183,13 +2183,20 @@ async def htf_scan(req: HTFScanRequest):
                 'cup_low': flag.get('cup_low'),
                 'cup_weeks': flag.get('cup_weeks'),
                 'handle_weeks': flag.get('handle_weeks'),
-                # Playbook quality (TraderLion / traderCharlieM material)
+                # Playbook quality (TraderLion model books + O'Neil/IBD rules)
                 'ud_vol_ratio': playbook.get('ud_vol_ratio'),
                 'tight_closes_pct': playbook.get('tight_closes_pct'),
                 'ma23_respect_pct': playbook.get('ma23_respect_pct'),
                 'above_50dma': playbook.get('above_50dma'),
                 'rs_nhbp': playbook.get('rs_nhbp'),
                 'pocket_pivot': playbook.get('pocket_pivot'),
+                'oneil_canonical': playbook.get('oneil_canonical'),
+                'distribution_in_base': playbook.get('distribution_in_base'),
+                'new_high_low_volume': playbook.get('new_high_low_volume'),
+                'three_weeks_tight': playbook.get('three_weeks_tight'),
+                'upper_half_closes_pct': playbook.get('upper_half_closes_pct'),
+                'stall_week': playbook.get('stall_week'),
+                'base_stage': playbook.get('base_stage'),
                 'playbook_bonus': playbook.get('bonus'),
             }
             narrative = data.get('narrative') or ''

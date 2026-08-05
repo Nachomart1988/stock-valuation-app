@@ -859,8 +859,101 @@ class HTFDetectionEngine:
             out[i] = alpha * values[i] + (1 - alpha) * out[i - 1]
         return out
 
+    def _weekly_playbook(self, weekly: Dict, surge: Dict,
+                         flag: Dict) -> Dict[str, Any]:
+        """O'Neil's weekly-bar rules from the IBD model charts.
+
+        Canonical high tight flag (TASER 2003 writeup): "a fast runup of 100%
+        or more in only 4 to 8 weeks followed by 3 to 5 weeks of sideways
+        action holding most of the huge gain" — a rare pattern, 1-2 per bull
+        market year. Plus the hard "do not buy" vetoes O'Neil repeats across
+        the model charts."""
+        w_high = weekly['high']
+        w_low = weekly['low']
+        w_close = weekly['close']
+        w_vol = weekly['volume']
+        peak_idx = flag['start_idx']
+        end_idx = flag['end_idx']
+        base = list(range(peak_idx + 1, end_idx + 1))
+
+        out: Dict[str, Any] = {
+            'oneil_canonical': False, 'distribution_in_base': False,
+            'new_high_low_volume': False, 'three_weeks_tight': False,
+            'upper_half_closes_pct': None, 'stall_week': False,
+            'base_stage': None,
+        }
+        if not base:
+            return out
+
+        # 1. Canonical O'Neil HTF window: 100%+ in 4-8w, then 3-5w sideways.
+        surge_w = int(surge.get('weeks', 0))
+        flag_w = int(flag.get('weeks', 0))
+        out['oneil_canonical'] = bool(
+            surge.get('surge_pct', 0) >= 1.00
+            and 4 <= surge_w <= 8 and 3 <= flag_w <= 5
+            and flag.get('pullback_pct', 100) <= 25.0
+        )
+
+        # 2. "Largest volume weeks in base were down weeks" → distribution.
+        if len(base) >= 4:
+            by_vol = sorted(base, key=lambda i: float(w_vol[i]), reverse=True)[:2]
+            down = [i for i in by_vol if i > 0 and w_close[i] < w_close[i - 1]]
+            out['distribution_in_base'] = len(down) == 2
+
+        # 3. "New high on very low volume" → do not buy.
+        last = end_idx
+        if last > 0 and len(base) >= 2:
+            prior_high = float(np.max(w_high[peak_idx + 1:last])) if last > peak_idx + 1 else 0.0
+            base_vol = [float(w_vol[i]) for i in base[:-1]]
+            avg_base_vol = float(np.mean(base_vol)) if base_vol else 0.0
+            out['new_high_low_volume'] = bool(
+                prior_high > 0 and float(w_high[last]) > prior_high
+                and avg_base_vol > 0 and float(w_vol[last]) < avg_base_vol * 0.80
+            )
+
+        # 4. "3 weeks tight closes" — the buy/add signal O'Neil marks on nearly
+        #    every model chart (closes within ~1.5% of each other).
+        if len(base) >= 3:
+            tail = [float(w_close[i]) for i in base[-3:]]
+            hi, lo_ = max(tail), min(tail)
+            out['three_weeks_tight'] = bool(lo_ > 0 and (hi - lo_) / lo_ <= 0.015)
+
+        # 5. Closes in the upper half of the weekly spread = support action;
+        #    a close in the bottom 19% of the spread is O'Neil's stall week.
+        pos = []
+        for i in base:
+            rng = float(w_high[i] - w_low[i])
+            pos.append((float(w_close[i]) - float(w_low[i])) / rng if rng > 0 else 0.5)
+        if pos:
+            out['upper_half_closes_pct'] = round(
+                sum(1 for p in pos if p >= 0.5) / len(pos) * 100, 1)
+            out['stall_week'] = bool(pos[-1] <= 0.19)
+
+        # 6. Base stage: how many consolidations since THIS advance began.
+        #    O'Neil counts from the start of the major move (after the last
+        #    deep correction), not from the start of the chart — counting from
+        #    bar 0 would label every multi-year name a late-stage base.
+        origin = 0
+        run_peak = float(w_high[peak_idx])
+        for i in range(peak_idx, 0, -1):
+            if w_low[i] <= run_peak * 0.65:   # a >35% drawdown resets the count
+                origin = i
+                break
+        stage, in_base = 1, False
+        run_high = float(w_high[origin])
+        for i in range(origin + 1, peak_idx + 1):
+            if w_high[i] > run_high:
+                run_high = float(w_high[i])
+                in_base = False
+            elif not in_base and w_low[i] < run_high * 0.88:
+                stage += 1
+                in_base = True
+        out['base_stage'] = int(min(stage, 5))
+        return out
+
     def _compute_playbook(self, daily: Dict, flag: Optional[Dict],
-                          rs: Dict) -> Dict[str, Any]:
+                          rs: Dict, weekly: Optional[Dict] = None,
+                          surge: Optional[Dict] = None) -> Dict[str, Any]:
         closes = daily['close']
         volumes = daily['volume']
         dates = daily['dates']
@@ -869,6 +962,10 @@ class HTFDetectionEngine:
             'ud_vol_ratio': None, 'tight_closes_pct': None,
             'ma23_respect_pct': None, 'above_50dma': None,
             'rs_nhbp': False, 'pocket_pivot': False,
+            'oneil_canonical': False, 'distribution_in_base': False,
+            'new_high_low_volume': False, 'three_weeks_tight': False,
+            'upper_half_closes_pct': None, 'stall_week': False,
+            'base_stage': None,
             'bonus': 0.0, 'notes': [],
         }
         if flag is None or n < 60:
@@ -920,11 +1017,51 @@ class HTFDetectionEngine:
                 pocket = True
                 break
 
+        wk = (self._weekly_playbook(weekly, surge, flag)
+              if weekly is not None and surge is not None
+              else {k: empty[k] for k in ('oneil_canonical', 'distribution_in_base',
+                                          'new_high_low_volume', 'three_weeks_tight',
+                                          'upper_half_closes_pct', 'stall_week',
+                                          'base_stage')})
+
         bonus = 0.0
         notes: List[str] = []
+        # ── O'Neil's canonical high tight flag ────────────────────────────
+        if wk.get('oneil_canonical'):
+            bonus += 4.0
+            notes.append("HTF CANÓNICO O'Neil: +100% en 4-8 semanas y 3-5 de lateral ✓✓")
+        # ── Hard "do not buy" vetoes from the IBD model charts ────────────
+        if wk.get('distribution_in_base'):
+            bonus -= 4.0
+            notes.append("Las 2 semanas de mayor volumen de la base fueron BAJISTAS — distribución ✗✗")
+        if wk.get('new_high_low_volume'):
+            bonus -= 3.0
+            notes.append("Nuevo máximo con volumen muy bajo — 'do not buy' de O'Neil ✗")
+        if wk.get('stall_week'):
+            bonus -= 2.0
+            notes.append("Semana de stall: cierra en el 19% inferior de su rango ✗")
+        # ── Constructive weekly signatures ────────────────────────────────
+        if wk.get('three_weeks_tight'):
+            bonus += 3.0
+            notes.append("3 semanas de cierres tight — el punto de compra clásico ✓")
+        uh = wk.get('upper_half_closes_pct')
+        if uh is not None:
+            if uh >= 65.0:
+                bonus += 1.0
+                notes.append(f"Cierra en la mitad alta de su rango el {uh:.0f}% de las semanas ✓")
+            elif uh <= 30.0:
+                bonus -= 1.0
+                notes.append(f"Cierra en la mitad baja el {100 - uh:.0f}% de las semanas ✗")
+        stage = wk.get('base_stage')
+        if stage is not None and stage >= 3:
+            bonus -= 2.0
+            notes.append(f"Base de {stage}º escalón — las tardías fallan más ✗")
+
         if rs_nhbp:
             bonus += 2.0; notes.append("RS en máximos ANTES que el precio (RSNHBP) ✓")
-        if ud_ratio >= 1.3:
+        if ud_ratio >= 1.5:
+            bonus += 2.5; notes.append(f"Acumulación fuerte: U/D volumen {ud_ratio:.2f}× (umbral O'Neil 1.5) ✓")
+        elif ud_ratio >= 1.3:
             bonus += 2.0; notes.append(f"Acumulación: vol. en subas {ud_ratio:.2f}× el de bajas ✓")
         elif ud_ratio >= 1.1:
             bonus += 1.0; notes.append(f"Vol. en subas {ud_ratio:.2f}× el de bajas")
@@ -944,7 +1081,7 @@ class HTFDetectionEngine:
             bonus -= 2.0; notes.append("Cierra debajo de su 50-DMA — señal de venta del playbook ✗")
         if pocket:
             bonus += 1.0; notes.append("Pocket pivot en las últimas 10 ruedas ✓")
-        bonus = float(max(-8.0, min(8.0, bonus)))
+        bonus = float(max(-15.0, min(15.0, bonus)))
 
         return {
             'ud_vol_ratio': round(float(ud_ratio), 2),
@@ -953,6 +1090,7 @@ class HTFDetectionEngine:
             'above_50dma': above_50dma,
             'rs_nhbp': rs_nhbp,
             'pocket_pivot': pocket,
+            **wk,
             'bonus': bonus,
             'notes': notes,
         }
@@ -1117,7 +1255,7 @@ class HTFDetectionEngine:
                 metrics_score = 0.1
 
             breakout = self._breakout_proximity(daily, flag)
-            playbook = self._compute_playbook(daily, flag, rs)
+            playbook = self._compute_playbook(daily, flag, rs, weekly, surge)
             score = float(self._fusion_score(metrics_score, ml_prob, breakout,
                                              playbook['bonus']))
 
