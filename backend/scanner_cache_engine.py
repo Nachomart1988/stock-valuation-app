@@ -41,10 +41,45 @@ MIN_BARS = 20                   # need at least this many bars to compute metric
 ATR_PERIOD = 14
 ZSCORE_WINDOW = 20
 WEEKS_52_DAYS = 252
+AVG_VOLUME_WINDOW = 50
 FETCH_WORKERS = 10              # concurrency for per-ticker history fetch
 FETCH_RETRIES = 2
 
 STALE_AFTER_HOURS = 20          # consider cache stale after this many hours
+
+# ── Deviation scanner (over-extension vs moving average) ────────
+# For each MA period we store how far price sits from that MA, expressed three
+# ways: in standard deviations (σ), in %, and in ATR units.
+#
+# σ here is the distance to the MA divided by the stock's own typical daily move
+# (stdev of daily returns over VOL_WINDOW bars), NOT the Bollinger z-score of the
+# closes inside the MA window. Bollinger's version saturates at sqrt(p-1) — only
+# 3.0σ for a 10-day MA — so the most extended names would all pile up against the
+# ceiling and the ranking would collapse. Normalising by trailing return vol keeps
+# the scale unbounded and comparable, so "XYZ está a 20 desvíos de su MA de 10"
+# means what a trader expects: 20 typical daily moves away from the average.
+DEV_MA_PERIODS = (10, 20, 50, 100, 200)
+MA_SLOPE_LOOKBACK = 10          # bars used to measure whether the MA itself rises
+VOL_WINDOW = 100                # bars of daily returns used for the σ unit
+MIN_VOL_BARS = 20               # need at least this many returns for a usable σ
+MIN_DAILY_VOL = 0.0005          # 0.05% — below this the stock is too stale to score
+SIGMA_CAP = 99.0                # clamp so a near-zero σ can't produce absurd values
+
+BASE_COLUMNS = [
+    'symbol', 'company_name', 'sector', 'exchange', 'country',
+    'market_cap', 'price',
+    'red_streak', 'green_streak', 'compression_days',
+    'latest_range_pct', 'widest_range_pct',
+    'atr', 'atr_pct', 'zscore', 'mean_price',
+    'low_52w', 'rise_from_low_pct',
+]
+DEV_COLUMNS = [
+    f'{metric}_{p}'
+    for p in DEV_MA_PERIODS
+    for metric in ('ma', 'dev_sigma', 'dev_pct', 'dev_atr', 'ma_slope')
+]
+EXTRA_COLUMNS = ['volume', 'avg_volume', 'rvol', 'high_52w', 'drop_from_high_pct']
+ALL_COLUMNS = BASE_COLUMNS + DEV_COLUMNS + EXTRA_COLUMNS
 
 
 class ScannerCacheEngine:
@@ -96,6 +131,13 @@ class ScannerCacheEngine:
                 );
                 """
             )
+            # Migrate older DBs: add any column the current schema knows about.
+            existing = {r['name'] for r in conn.execute("PRAGMA table_info(scanner_metrics)")}
+            for col in ALL_COLUMNS:
+                if col not in existing:
+                    conn.execute(f"ALTER TABLE scanner_metrics ADD COLUMN {col} REAL")
+            for p in DEV_MA_PERIODS:
+                conn.execute(f"CREATE INDEX IF NOT EXISTS idx_dev_{p} ON scanner_metrics(dev_sigma_{p})")
             conn.commit()
         finally:
             conn.close()
@@ -178,6 +220,7 @@ class ScannerCacheEngine:
                 'l': float(d.get('low') or close or 0),
                 'c': float(close or 0),
                 'ac': float(d.get('adjClose', close) or 0),
+                'v': float(d.get('volume') or 0),
             })
         return bars
 
@@ -247,6 +290,54 @@ class ScannerCacheEngine:
         widest = float(np.max(rng[-streak:])) if streak > 0 else latest
         return streak, latest, widest
 
+    @staticmethod
+    def _daily_vol(adj_close: np.ndarray) -> float:
+        """Stdev of daily returns over the last VOL_WINDOW bars — the σ unit."""
+        window = adj_close[-(VOL_WINDOW + 1):]
+        if len(window) < MIN_VOL_BARS + 1:
+            return 0.0
+        prev = window[:-1]
+        rets = np.diff(window)[prev > 0] / prev[prev > 0]
+        if len(rets) < MIN_VOL_BARS:
+            return 0.0
+        return float(np.std(rets))
+
+    @staticmethod
+    def _deviation(adj_close: np.ndarray, atr: float, price_scale: float,
+                   daily_vol: float) -> List[Optional[float]]:
+        """Per-MA-period extension metrics, flattened in DEV_COLUMNS order.
+
+        Everything is computed on adjusted closes; the MA itself is rescaled to
+        raw-price space so it lines up with the quoted price in the UI.
+        """
+        out: List[Optional[float]] = []
+        last = float(adj_close[-1]) if len(adj_close) else 0.0
+        for p in DEV_MA_PERIODS:
+            if len(adj_close) < p or last <= 0:
+                out.extend([None] * 5)
+                continue
+            ma = float(np.mean(adj_close[-p:]))
+            if ma <= 0:
+                out.extend([None] * 5)
+                continue
+
+            # One σ = one typical daily move, priced off the MA.
+            dev_sigma = None
+            if daily_vol >= MIN_DAILY_VOL:
+                raw = (last - ma) / (daily_vol * ma)
+                dev_sigma = round(max(-SIGMA_CAP, min(SIGMA_CAP, raw)), 2)
+            dev_pct = round((last - ma) / ma * 100.0, 2)
+            dev_atr = round((last - ma) / atr, 2) if atr > 0 else None
+
+            ma_slope = None
+            if len(adj_close) >= p + MA_SLOPE_LOOKBACK:
+                prev_ma = float(np.mean(adj_close[-(p + MA_SLOPE_LOOKBACK):-MA_SLOPE_LOOKBACK]))
+                if prev_ma > 0:
+                    ma_slope = round((ma - prev_ma) / prev_ma * 100.0, 2)
+
+            out.extend([round(ma * price_scale, 4), dev_sigma, dev_pct, dev_atr, ma_slope])
+        return out
+
     def _compute_row(self, sym: str, meta: Dict, bars: List[Dict]) -> Optional[tuple]:
         if len(bars) < MIN_BARS:
             return None
@@ -255,6 +346,7 @@ class ScannerCacheEngine:
         adj_close = np.array([b['ac'] for b in bars], dtype=float)
         highs = np.array([b['h'] for b in bars], dtype=float)
         lows = np.array([b['l'] for b in bars], dtype=float)
+        volumes = np.array([b.get('v', 0.0) for b in bars], dtype=float)
 
         current_price = float(raw_close[-1]) if raw_close[-1] > 0 else meta['price']
         red, green = self._streaks(opens, raw_close)
@@ -267,14 +359,30 @@ class ScannerCacheEngine:
         low_52w = float(np.min(low_window)) if len(low_window) else current_price
         rise_from_low = ((current_price - low_52w) / low_52w * 100.0) if low_52w > 0 else 0.0
 
-        return (
+        high_window = highs[-WEEKS_52_DAYS:] if len(highs) >= WEEKS_52_DAYS else highs
+        high_52w = float(np.max(high_window)) if len(high_window) else current_price
+        drop_from_high = ((current_price - high_52w) / high_52w * 100.0) if high_52w > 0 else 0.0
+
+        volume = float(volumes[-1]) if len(volumes) else 0.0
+        vol_window = volumes[-AVG_VOLUME_WINDOW:]
+        avg_volume = float(np.mean(vol_window)) if len(vol_window) else 0.0
+        rvol = round(volume / avg_volume, 2) if avg_volume > 0 else 0.0
+
+        # MA math runs on adjusted closes; rescale to raw-price space for display.
+        price_scale = (current_price / float(adj_close[-1])) if adj_close[-1] > 0 else 1.0
+        dev_values = self._deviation(adj_close, atr, price_scale, self._daily_vol(adj_close))
+
+        return tuple([
             sym, meta['company_name'], meta['sector'], meta['exchange'], meta['country'],
             meta['market_cap'], round(current_price, 4),
             int(red), int(green), int(comp_days),
             round(latest_rng, 2), round(widest_rng, 2),
             round(atr, 4), round(atr_pct, 2), round(zscore, 2), round(mean_price, 4),
             round(low_52w, 4), round(rise_from_low, 2),
-        )
+        ] + dev_values + [
+            round(volume, 0), round(avg_volume, 0), rvol,
+            round(high_52w, 4), round(drop_from_high, 2),
+        ])
 
     # ── refresh ──────────────────────────────────────────────────
 
@@ -317,7 +425,8 @@ class ScannerCacheEngine:
             try:
                 conn.execute("DELETE FROM scanner_metrics")
                 conn.executemany(
-                    "INSERT INTO scanner_metrics VALUES (" + ",".join(["?"] * 18) + ")",
+                    f"INSERT INTO scanner_metrics ({','.join(ALL_COLUMNS)}) "
+                    f"VALUES ({','.join(['?'] * len(ALL_COLUMNS))})",
                     rows,
                 )
                 self._set_meta(conn, 'last_refresh', dt.datetime.utcnow().isoformat())
@@ -351,6 +460,20 @@ class ScannerCacheEngine:
                 stale = age_hours >= STALE_AFTER_HOURS
             except Exception:
                 pass
+        # A cache built before the deviation columns existed has rows but no MA
+        # data — the deviation scanner needs a rebuild before it can answer.
+        deviation_ready = False
+        try:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT 1 FROM scanner_metrics WHERE dev_sigma_20 IS NOT NULL LIMIT 1"
+                ).fetchone()
+                deviation_ready = row is not None
+            finally:
+                conn.close()
+        except Exception:
+            pass
         return {
             'last_refresh': last,
             'age_hours': age_hours,
@@ -358,6 +481,7 @@ class ScannerCacheEngine:
             'building': self._building,
             'row_count': int(rows) if rows else 0,
             'ready': bool(rows and int(rows) > 0),
+            'deviation_ready': deviation_ready,
         }
 
     def _apply_common_filters(self, where: List[str], args: List,
@@ -414,6 +538,50 @@ class ScannerCacheEngine:
         finally:
             conn.close()
         return [dict(r) for r in rows]
+
+    def query_deviation(self, ma_period=20, direction='above', min_sigma=0.0,
+                        price_min=None, price_max=None, mcap_min=None, mcap_max=None,
+                        sector=None, limit=300) -> List[Dict]:
+        """Stocks ranked by how many σ they trade away from the chosen MA."""
+        p = int(ma_period) if int(ma_period) in DEV_MA_PERIODS else 20
+        sigma_col = f'dev_sigma_{p}'
+        where = [f"{sigma_col} IS NOT NULL"]
+        args: List = []
+        min_sigma = abs(float(min_sigma or 0.0))
+
+        if direction == 'below':
+            where.append(f"{sigma_col} <= ?"); args.append(-min_sigma)
+            order = f"{sigma_col} ASC"
+        elif direction == 'both':
+            where.append(f"ABS({sigma_col}) >= ?"); args.append(min_sigma)
+            order = f"ABS({sigma_col}) DESC"
+        else:
+            where.append(f"{sigma_col} >= ?"); args.append(min_sigma)
+            order = f"{sigma_col} DESC"
+
+        self._apply_common_filters(where, args, price_min, price_max, mcap_min, mcap_max, sector)
+        sql = (
+            f"SELECT * FROM scanner_metrics WHERE {' AND '.join(where)} "
+            f"ORDER BY {order}, ABS(dev_pct_{p}) DESC LIMIT ?"
+        )
+        args.append(int(limit))
+        conn = self._connect()
+        try:
+            rows = conn.execute(sql, args).fetchall()
+        finally:
+            conn.close()
+
+        out = []
+        for r in rows:
+            d = dict(r)
+            d['ma_period'] = p
+            d['ma'] = d.get(f'ma_{p}')
+            d['dev_sigma'] = d.get(sigma_col)
+            d['dev_pct'] = d.get(f'dev_pct_{p}')
+            d['dev_atr'] = d.get(f'dev_atr_{p}')
+            d['ma_slope'] = d.get(f'ma_slope_{p}')
+            out.append(d)
+        return out
 
 
 # Singleton

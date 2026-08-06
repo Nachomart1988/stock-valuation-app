@@ -208,6 +208,30 @@ interface CompressionScanResult {
   meanPrice: number;
 }
 
+interface DeviationScanResult {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  exchange: string;
+  marketCap: number;
+  currentPrice: number;
+  maPeriod: number;
+  ma: number;
+  devSigma: number;
+  devPct: number;
+  devAtr: number | null;
+  maSlope: number | null;
+  atr: number;
+  atrPct: number;
+  rvol: number;
+  volume: number;
+  avgVolume: number;
+  high52w: number;
+  dropFromHighPct: number;
+  low52w: number;
+  riseFromLowPct: number;
+}
+
 interface ScreenerFilters {
   marketCapMoreThan: string;
   marketCapLowerThan: string;
@@ -241,6 +265,19 @@ const MKTCAP_BUCKETS: { value: string; label: string; min: string; max: string }
   { value: 'large', label: 'Large (> $10B)', min: '10000000000', max: '' },
 ];
 const mktCapBucket = (value: string) => MKTCAP_BUCKETS.find(b => b.value === value) || MKTCAP_BUCKETS[0];
+
+// Ordered market-cap tiers for the min/max pair of selects in the Deviation scanner.
+// `floor` is used when the tier is picked as minimum, `ceiling` when picked as maximum.
+const MKTCAP_TIERS: { value: string; label: string; floor: string; ceiling: string }[] = [
+  { value: 'nano', label: 'Nano (< $50M)', floor: '', ceiling: '50000000' },
+  { value: 'micro', label: 'Micro ($50M–$300M)', floor: '50000000', ceiling: '300000000' },
+  { value: 'small', label: 'Small ($300M–$2B)', floor: '300000000', ceiling: '2000000000' },
+  { value: 'mid', label: 'Mid ($2B–$10B)', floor: '2000000000', ceiling: '10000000000' },
+  { value: 'large', label: 'Large ($10B–$200B)', floor: '10000000000', ceiling: '200000000000' },
+  { value: 'mega', label: 'Mega (> $200B)', floor: '200000000000', ceiling: '' },
+];
+const mktCapTier = (value: string) => MKTCAP_TIERS.find(t => t.value === value) || MKTCAP_TIERS[0];
+const DEV_MA_PERIODS = [10, 20, 50, 100, 200];
 
 const fmtMktCap = (v: number) => {
   if (!v) return '–';
@@ -428,6 +465,22 @@ function ScreenerPageInner() {
     minCompressionDays: '5',
   });
 
+  // Deviation Scanner state (GODMODE only)
+  const [devResults, setDevResults] = useState<DeviationScanResult[]>([]);
+  const [devLoading, setDevLoading] = useState(false);
+  const [devError, setDevError] = useState<string | null>(null);
+  const [devStats, setDevStats] = useState({ total: 0, scanned: 0 });
+  const [devFilters, setDevFilters] = useState({
+    maPeriod: '20',
+    priceMin: '0',
+    priceMax: '',
+    mcapMinTier: 'nano',
+    mcapMaxTier: 'mega',
+    sector: '',
+    direction: 'above' as 'above' | 'below' | 'both',
+    minSigma: '0',
+  });
+
   // ── Persist scanner results in sessionStorage so they survive tab switches ──
   const SS_KEY = 'screener_cache';
 
@@ -447,6 +500,7 @@ function ScreenerPageInner() {
       if (c.cbkResults?.length) { setCbkResults(c.cbkResults); setCbkStats(c.cbkStats ?? { total: 0, scanned: 0 }); }
       if (c.cdResults?.length) { setCdResults(c.cdResults); setCdStats(c.cdStats ?? { total: 0, scanned: 0 }); }
       if (c.cmpResults?.length) { setCmpResults(c.cmpResults); setCmpStats(c.cmpStats ?? { total: 0, scanned: 0 }); }
+      if (c.devResults?.length) { setDevResults(c.devResults); setDevStats(c.devStats ?? { total: 0, scanned: 0 }); }
     } catch { /* ignore corrupt cache */ }
   }, []);
 
@@ -463,9 +517,10 @@ function ScreenerPageInner() {
       cbkResults, cbkStats,
       cdResults, cdStats,
       cmpResults, cmpStats,
+      devResults, devStats,
     };
     try { sessionStorage.setItem(SS_KEY, JSON.stringify(cache)); } catch { /* quota */ }
-  }, [screenerResults, screenerPage, topOpportunities, prismoStats, htfResults, htfStats, epResults, epStats, mabResults, mabStats, sqzResults, sqzStats, frlResults, frlStats, cbkResults, cbkStats, cdResults, cdStats, cmpResults, cmpStats]);
+  }, [screenerResults, screenerPage, topOpportunities, prismoStats, htfResults, htfStats, epResults, epStats, mabResults, mabStats, sqzResults, sqzStats, frlResults, frlStats, cbkResults, cbkStats, cdResults, cdStats, cmpResults, cmpStats, devResults, devStats]);
 
   // ── Watchlist add helper (accumulates array in localStorage) ──
   const [watchlistAdded, setWatchlistAdded] = useState<Set<string>>(new Set());
@@ -880,6 +935,51 @@ function ScreenerPageInner() {
       setCmpLoading(false);
     }
   }, [cmpFilters]);
+
+  const scanDeviation = useCallback(async () => {
+    setDevLoading(true);
+    setDevError(null);
+    setDevResults([]);
+    setDevStats({ total: 0, scanned: 0 });
+
+    try {
+      const minTier = mktCapTier(devFilters.mcapMinTier);
+      const maxTier = mktCapTier(devFilters.mcapMaxTier);
+      const params = new URLSearchParams({
+        maPeriod: devFilters.maPeriod || '20',
+        direction: devFilters.direction,
+        minSigma: devFilters.minSigma || '0',
+        priceMin: devFilters.priceMin || '0',
+        ...(devFilters.priceMax ? { priceMax: devFilters.priceMax } : {}),
+        ...(minTier.floor ? { marketCapMin: minTier.floor } : {}),
+        ...(maxTier.ceiling ? { marketCapMax: maxTier.ceiling } : {}),
+        ...(devFilters.sector ? { sector: devFilters.sector } : {}),
+      });
+
+      const res = await fetch(`/api/deviation-scan?${params.toString()}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Error (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      setDevStats({ total: data.total || 0, scanned: data.scanned || 0 });
+
+      if (data.message === 'cache_building') {
+        setDevError('El cache diario se está construyendo, probá de nuevo en unos minutos.');
+      } else if (data.message === 'cache_empty') {
+        setDevError('El cache aún no está listo. Esperá unos minutos a que termine la primera carga.');
+      } else if (!data.results?.length) {
+        setDevError(`Ninguna acción cumple los filtros sobre la MA de ${devFilters.maPeriod}.`);
+      } else {
+        setDevResults(data.results);
+      }
+    } catch (err: any) {
+      setDevError(err.message || 'Error scanning for deviations');
+    } finally {
+      setDevLoading(false);
+    }
+  }, [devFilters]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -2925,6 +3025,249 @@ function ScreenerPageInner() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ Deviation Scanner (GODMODE ONLY) ═══════ */}
+        {isGodMode && (
+          <div className="relative mb-8 rounded-xl border border-rose-500/20 bg-gray-900/60 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-rose-500/[0.04] via-pink-500/[0.02] to-transparent" />
+            <div className="relative p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-rose-300 flex items-center gap-2">
+                    <svg className="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                    Desvíos
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 uppercase tracking-wider">
+                      God Mode
+                    </span>
+                  </h2>
+                  <p className="text-gray-400 text-sm mt-1 max-w-xl">
+                    Acciones ordenadas por cuántos desvíos estándar (σ) cotizan lejos de su media móvil — las más over-extended primero. 1σ = un movimiento diario típico de esa acción (desvío de los retornos de 100 días), así que un +40% en una acción tranquila pesa mucho más que en una volátil.
+                  </p>
+                </div>
+                <button
+                  onClick={scanDeviation}
+                  disabled={devLoading}
+                  className="shrink-0 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold rounded-xl shadow-lg shadow-rose-500/20 disabled:opacity-50 transition-all text-sm"
+                >
+                  {devLoading ? (
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                    </svg>
+                  )}
+                  {devLoading ? 'Scanning...' : 'Buscar Desvíos'}
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 mt-4 p-3 bg-gray-900/30 rounded-xl border border-rose-900/15">
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Media Móvil</label>
+                  <select
+                    value={devFilters.maPeriod}
+                    onChange={e => setDevFilters(f => ({ ...f, maPeriod: e.target.value }))}
+                    disabled={devLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  >
+                    {DEV_MA_PERIODS.map(p => <option key={p} value={String(p)}>MA {p}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Precio Mín</label>
+                  <input type="number" min="0" step="0.5" placeholder="0"
+                    value={devFilters.priceMin}
+                    onChange={e => setDevFilters(f => ({ ...f, priceMin: e.target.value }))}
+                    disabled={devLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1" title="Vacío = sin límite">Precio Máx</label>
+                  <input type="number" min="0" step="0.5" placeholder="∞"
+                    value={devFilters.priceMax}
+                    onChange={e => setDevFilters(f => ({ ...f, priceMax: e.target.value }))}
+                    disabled={devLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Mkt Cap Mín</label>
+                  <select
+                    value={devFilters.mcapMinTier}
+                    onChange={e => setDevFilters(f => ({ ...f, mcapMinTier: e.target.value }))}
+                    disabled={devLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  >
+                    {MKTCAP_TIERS.map(tier => <option key={tier.value} value={tier.value}>{tier.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Mkt Cap Máx</label>
+                  <select
+                    value={devFilters.mcapMaxTier}
+                    onChange={e => setDevFilters(f => ({ ...f, mcapMaxTier: e.target.value }))}
+                    disabled={devLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  >
+                    {MKTCAP_TIERS.map(tier => <option key={tier.value} value={tier.value}>{tier.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1" title="Por encima = over-extended al alza; por debajo = sobrevendida">Lado</label>
+                  <select
+                    value={devFilters.direction}
+                    onChange={e => setDevFilters(f => ({ ...f, direction: e.target.value as 'above' | 'below' | 'both' }))}
+                    disabled={devLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  >
+                    <option value="above">Sobre la MA</option>
+                    <option value="below">Bajo la MA</option>
+                    <option value="both">Ambos (|σ|)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-rose-400/60 uppercase tracking-wider mb-1">Sector</label>
+                  <select
+                    value={devFilters.sector}
+                    onChange={e => setDevFilters(f => ({ ...f, sector: e.target.value }))}
+                    disabled={devLoading}
+                    className="w-full bg-gray-900/60 border border-rose-900/20 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                  >
+                    {SECTORS.map(s => <option key={s} value={s}>{s || 'All'}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {devError && (
+                <div className="mt-4 bg-red-900/20 border border-red-700/40 rounded-xl px-4 py-3 text-red-400 text-sm">
+                  {devError}
+                </div>
+              )}
+
+              {devStats.total > 0 && !devLoading && (
+                <div className="mt-3 text-[11px] text-rose-400/50">
+                  {devResults.length} resultado{devResults.length !== 1 ? 's' : ''} · universo de {devStats.total.toLocaleString()} acciones en cache
+                </div>
+              )}
+
+              {devResults.length > 0 && (
+                <div className="mt-4 overflow-x-auto rounded-xl border border-rose-900/20">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-rose-900/20 text-rose-400/80 text-xs uppercase tracking-wider">
+                        <th className="text-left px-4 py-2.5">Ticker</th>
+                        <th className="text-left px-4 py-2.5">Company</th>
+                        <th className="text-left px-4 py-2.5">Exch</th>
+                        <th className="text-right px-4 py-2.5">Mkt Cap</th>
+                        <th className="text-right px-4 py-2.5">Price</th>
+                        <th className="text-right px-4 py-2.5" title={`Media móvil de ${devFilters.maPeriod} sesiones`}>MA {devFilters.maPeriod}</th>
+                        <th className="text-right px-4 py-2.5" title="Distancia a la MA medida en movimientos diarios típicos (σ de los retornos de 100 días)">Desvíos σ</th>
+                        <th className="text-right px-4 py-2.5" title="Distancia porcentual a la MA">% vs MA</th>
+                        <th className="text-right px-4 py-2.5" title="Distancia a la MA medida en ATRs (14)">ATRs</th>
+                        <th className="text-right px-4 py-2.5" title="Pendiente de la MA en las últimas 10 sesiones">Pend. MA</th>
+                        <th className="text-right px-4 py-2.5" title="Volumen de la última sesión vs promedio de 50 días">RVOL</th>
+                        <th className="text-right px-4 py-2.5" title="Distancia al máximo de 52 semanas">vs máx 52w</th>
+                        <th className="px-4 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {devResults.map((r, i) => {
+                        const absSigma = Math.abs(r.devSigma);
+                        const sigmaColor = absSigma >= 10 ? 'text-rose-400' : absSigma >= 5 ? 'text-amber-400' : 'text-gray-300';
+                        return (
+                          <tr key={r.symbol} className={`border-t border-rose-900/10 ${i % 2 === 0 ? 'bg-gray-900/30' : ''} hover:bg-rose-900/10 transition`}>
+                            <td className="px-4 py-2.5 font-bold text-rose-400">{r.symbol}</td>
+                            <td className="px-4 py-2.5 text-gray-300 max-w-[180px] truncate">{r.companyName}</td>
+                            <td className="px-4 py-2.5 text-gray-500 text-xs">{r.exchange}</td>
+                            <td className="px-4 py-2.5 text-right text-gray-400">{fmtMktCap(r.marketCap)}</td>
+                            <td className="px-4 py-2.5 text-right text-white font-mono">${r.currentPrice.toFixed(2)}</td>
+                            <td className="px-4 py-2.5 text-right text-gray-400 font-mono">${r.ma.toFixed(2)}</td>
+                            <td className="px-4 py-2.5 text-right">
+                              <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold font-mono ${absSigma >= 10 ? 'bg-rose-900/40' : ''} ${sigmaColor}`}>
+                                {r.devSigma >= 0 ? '+' : ''}{r.devSigma.toFixed(2)}σ
+                              </span>
+                            </td>
+                            <td className={`px-4 py-2.5 text-right font-mono ${r.devPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {r.devPct >= 0 ? '+' : ''}{r.devPct.toFixed(1)}%
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono text-gray-300">
+                              {r.devAtr === null ? '–' : `${r.devAtr >= 0 ? '+' : ''}${r.devAtr.toFixed(1)}`}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono">
+                              {r.maSlope === null ? (
+                                <span className="text-gray-600">–</span>
+                              ) : (
+                                <span className={r.maSlope >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}>
+                                  {r.maSlope >= 0 ? '↑' : '↓'}{Math.abs(r.maSlope).toFixed(1)}%
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono">
+                              <span className={r.rvol >= 2 ? 'text-amber-400' : 'text-gray-400'}>{r.rvol ? `${r.rvol.toFixed(1)}x` : '–'}</span>
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono text-gray-400">
+                              {r.dropFromHighPct >= -0.01 ? 'En máx' : `${r.dropFromHighPct.toFixed(1)}%`}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => router.push(`/analizar?ticker=${r.symbol}`)}
+                                  className="text-[11px] px-3 py-1 rounded-lg bg-rose-900/30 text-rose-400 border border-rose-500/20 hover:bg-rose-900/50 transition"
+                                >
+                                  Analyze
+                                </button>
+                                <button
+                                  onClick={() => setChartTarget({
+                                    symbol: r.symbol,
+                                    companyName: r.companyName,
+                                    currentPrice: r.currentPrice,
+                                    subtitle: `${r.devSigma >= 0 ? '+' : ''}${r.devSigma.toFixed(2)}σ de su MA ${r.maPeriod} ($${r.ma.toFixed(2)}) · ${r.devPct >= 0 ? '+' : ''}${r.devPct.toFixed(1)}%${r.devAtr !== null ? ` · ${r.devAtr >= 0 ? '+' : ''}${r.devAtr.toFixed(1)} ATRs` : ''} · RVOL ${r.rvol.toFixed(1)}x · ATR ${r.atrPct.toFixed(1)}%`,
+                                  })}
+                                  className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500/25 border border-rose-500/25 rounded-lg text-rose-300 text-[10px] font-semibold transition flex items-center gap-1"
+                                  title="View chart"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+                                  </svg>
+                                  Chart
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    addToWatchlist(r.symbol, r.companyName, 'Others');
+                                    const btn = e.currentTarget;
+                                    btn.classList.remove('animate-foam-press');
+                                    void btn.offsetWidth;
+                                    btn.classList.add('animate-foam-press');
+                                    if (foamTimers.current[r.symbol]) clearTimeout(foamTimers.current[r.symbol]);
+                                    foamTimers.current[r.symbol] = setTimeout(() => btn.classList.remove('animate-foam-press'), 800);
+                                  }}
+                                  className={`px-2 py-1 border rounded-lg text-[10px] font-semibold transition-colors ${
+                                    watchlistAdded.has(r.symbol)
+                                      ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                      : 'bg-cyan-500/10 hover:bg-cyan-500/25 border-cyan-500/20 text-cyan-400'
+                                  }`}
+                                  title="Add to Watchlist"
+                                >
+                                  {watchlistAdded.has(r.symbol) ? 'Added' : '+ Watch'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

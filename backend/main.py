@@ -2551,6 +2551,34 @@ async def scanner_cache_compression(
     return numpy_safe_response({"results": results, "status": st})
 
 
+@app.get("/scanner-cache/deviation")
+async def scanner_cache_deviation(
+    ma_period: int = 20,
+    direction: str = 'above',
+    min_sigma: float = 0.0,
+    price_min: Optional[float] = None,
+    price_max: Optional[float] = None,
+    mcap_min: Optional[float] = None,
+    mcap_max: Optional[float] = None,
+    sector: Optional[str] = None,
+    limit: int = 300,
+):
+    """Stocks ranked by standard deviations away from the chosen moving average."""
+    if not SCANNER_CACHE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Scanner cache not available")
+    engine = get_scanner_cache_engine()
+    st = engine.status()
+    if not st['ready'] or not st.get('deviation_ready'):
+        return {"results": [], "status": st, "building": st['building']}
+    if direction not in ('above', 'below', 'both'):
+        direction = 'above'
+    results = await asyncio.to_thread(
+        engine.query_deviation, ma_period, direction, min_sigma,
+        price_min, price_max, mcap_min, mcap_max, sector, limit,
+    )
+    return numpy_safe_response({"results": results, "status": st})
+
+
 @app.on_event("startup")
 async def _start_scanner_cache():
     """Refresh the scanner cache on boot if stale, then rebuild once a day."""
